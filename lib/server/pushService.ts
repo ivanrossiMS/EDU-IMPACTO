@@ -460,3 +460,929 @@ export async function getNotificationStats(notificationId: string): Promise<any 
     return null
   }
 }
+
+// ─── GESTÃO DE CICLO DE VIDA: LIMPEZA DE INATIVOS NO ONESIGNAL ───────────────
+
+const INACTIVE_STUDENT_STATUSES = new Set([
+  'inativo',
+  'inativa',
+  'evadido',
+  'transferido',
+  'cancelado',
+])
+
+/**
+ * Verifica se um registro de aluno está com status inativo/desligado.
+ */
+export function isStudentInactiveStatus(student: any): boolean {
+  if (!student) return false
+  if (student.inativo === true) return true
+  const rawStatus = String(student.status ?? student.dados?.status ?? '')
+    .trim()
+    .toLowerCase()
+  return INACTIVE_STUDENT_STATUSES.has(rawStatus)
+}
+
+/**
+ * Verifica se um registro de system_users pertence exclusivamente a perfil Família/Aluno
+ * (ou seja, NÃO é colaborador/professor/administrativo da escola).
+ */
+export function isFamilyOnlySystemUserRole(sysRow: any): boolean {
+  if (!sysRow) return true
+  const rawRole = String(
+    sysRow.perfil || sysRow.cargo || sysRow.dados?.perfil || sysRow.dados?.cargo || ''
+  )
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (!rawRole) return true
+  return ['responsavel', 'aluno', 'pai', 'mae', 'familia'].includes(rawRole)
+}
+
+interface OneSignalUserLookupResult {
+  found: boolean
+  onesignalId: string | null
+  externalId: string | null
+  identity: Record<string, string>
+  subscriptionIds: string[]
+  tags: Record<string, string>
+}
+
+async function fetchOneSignalUserByAlias(
+  appId: string,
+  apiKey: string,
+  aliasLabel: string,
+  aliasValue: string
+): Promise<OneSignalUserLookupResult> {
+  const empty: OneSignalUserLookupResult = {
+    found: false,
+    onesignalId: null,
+    externalId: null,
+    identity: {},
+    subscriptionIds: [],
+    tags: {},
+  }
+  if (!aliasValue || !aliasValue.trim()) return empty
+
+  try {
+    const url = `https://onesignal.com/api/v1/apps/${appId}/users/by/${encodeURIComponent(aliasLabel)}/${encodeURIComponent(aliasValue.trim())}`
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Basic ${apiKey}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    })
+    if (!res.ok) return empty
+    const data = await res.json().catch(() => null)
+    if (!data) return empty
+
+    const identity: Record<string, string> = {}
+    if (data.identity && typeof data.identity === 'object') {
+      for (const [k, v] of Object.entries(data.identity)) {
+        if (typeof v === 'string' && v.trim()) {
+          identity[k] = v.trim()
+        }
+      }
+    }
+
+    const subs = Array.isArray(data.subscriptions) ? data.subscriptions : []
+    const subscriptionIds = subs
+      .map((s: any) => (typeof s?.id === 'string' ? s.id.trim() : ''))
+      .filter(Boolean)
+
+    const tags: Record<string, string> = {}
+    if (data.properties?.tags && typeof data.properties.tags === 'object') {
+      for (const [k, v] of Object.entries(data.properties.tags)) {
+        if (v !== undefined && v !== null) {
+          tags[k] = String(v)
+        }
+      }
+    }
+
+    return {
+      found: true,
+      onesignalId: identity.onesignal_id || null,
+      externalId: identity.external_id || null,
+      identity,
+      subscriptionIds,
+      tags,
+    }
+  } catch {
+    return empty
+  }
+}
+
+/**
+ * Exclui definitivamente uma subscrição/aparelho no OneSignal (v1 Player API + v5 Subscription API).
+ */
+export async function deleteOneSignalSubscriptionById(
+  subId: string,
+  appIdOverride?: string,
+  apiKeyOverride?: string
+): Promise<boolean> {
+  const appId = appIdOverride || process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+  const apiKey = apiKeyOverride || process.env.ONESIGNAL_REST_API_KEY || ''
+  if (!appId || !apiKey || !subId) return false
+
+  const cleanSubId = subId.trim()
+  let ok = false
+
+  try {
+    const resPlayer = await fetch(
+      `https://onesignal.com/api/v1/players/${encodeURIComponent(cleanSubId)}?app_id=${encodeURIComponent(appId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Basic ${apiKey}` },
+      }
+    )
+    if (resPlayer.ok || resPlayer.status === 404) ok = true
+  } catch {}
+
+  try {
+    const resSub = await fetch(
+      `https://onesignal.com/api/v1/apps/${encodeURIComponent(appId)}/users/by/subscriptions/${encodeURIComponent(cleanSubId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Basic ${apiKey}` },
+      }
+    )
+    if (resSub.ok || resSub.status === 404) ok = true
+  } catch {}
+
+  try {
+    await fetch(
+      `https://onesignal.com/api/v1/apps/${encodeURIComponent(appId)}/subscriptions/${encodeURIComponent(cleanSubId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Basic ${apiKey}` },
+      }
+    )
+  } catch {}
+
+  return ok
+}
+
+/**
+ * Exclui o registro de Usuário (User Model v5) no OneSignal por um alias.
+ */
+export async function deleteOneSignalUserByAlias(
+  aliasLabel: string,
+  aliasValue: string,
+  appIdOverride?: string,
+  apiKeyOverride?: string
+): Promise<boolean> {
+  const appId = appIdOverride || process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+  const apiKey = apiKeyOverride || process.env.ONESIGNAL_REST_API_KEY || ''
+  if (!appId || !apiKey || !aliasLabel || !aliasValue) return false
+
+  try {
+    const res = await fetch(
+      `https://onesignal.com/api/v1/apps/${encodeURIComponent(appId)}/users/by/${encodeURIComponent(aliasLabel)}/${encodeURIComponent(aliasValue.trim())}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Basic ${apiKey}` },
+      }
+    )
+    return res.ok || res.status === 404
+  } catch {
+    return false
+  }
+}
+
+export interface InactiveStudentCleanupResult {
+  success: boolean
+  skipped?: boolean
+  studentId: string
+  studentName?: string
+  deletedSubscriptionsCount: number
+  deletedUsersCount: number
+  deletedSubscriptionIds: string[]
+  cleanedGuardianIds: string[]
+  protectedGuardianIds: string[]
+}
+
+/**
+ * Remove do OneSignal todos os aparelhos/subscrições de um aluno inativado (ou excluído)
+ * e de seus responsáveis, preservando automaticamente:
+ * 1. Responsáveis que possuam outro(s) filho(s) ATIVO(S) na escola;
+ * 2. Responsáveis que também sejam colaboradores ativos da escola (Duplo Papel).
+ */
+export async function cleanupOneSignalForInactiveStudent(
+  studentId: string,
+  options?: {
+    forceTreatAsInactive?: boolean
+    extraResponsavelIds?: string[]
+  }
+): Promise<InactiveStudentCleanupResult> {
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY || ''
+
+  const baseResult: InactiveStudentCleanupResult = {
+    success: true,
+    studentId: String(studentId || ''),
+    deletedSubscriptionsCount: 0,
+    deletedUsersCount: 0,
+    deletedSubscriptionIds: [],
+    cleanedGuardianIds: [],
+    protectedGuardianIds: [],
+  }
+
+  if (!appId || !apiKey || !studentId) {
+    return { ...baseResult, skipped: true }
+  }
+
+  try {
+    const { getAdminClient, findAuthUserByEmail } = await import('@/lib/server/supabaseAdminSingleton')
+    const supabase = getAdminClient()
+
+    const { data: student } = await supabase
+      .from('alunos')
+      .select('id, nome, matricula, status, email, dados')
+      .eq('id', String(studentId).trim())
+      .maybeSingle()
+
+    if (student?.nome) {
+      baseResult.studentName = student.nome
+    }
+
+    const treatStudentAsInactive =
+      options?.forceTreatAsInactive === true ||
+      (student ? isStudentInactiveStatus(student) : false)
+
+    const hasExtraResps = Array.isArray(options?.extraResponsavelIds) && options!.extraResponsavelIds!.length > 0
+    if (!treatStudentAsInactive && !hasExtraResps) {
+      return { ...baseResult, skipped: true }
+    }
+
+    const studentRefs = Array.from(
+      new Set(
+        [
+          studentId,
+          student?.id,
+          student?.matricula,
+          student?.dados?.codigo,
+          student?.dados?.id,
+          student?.dados?.matricula,
+        ]
+          .filter(Boolean)
+          .map(v => String(v).trim())
+          .filter(Boolean)
+      )
+    )
+    const studentRefsSet = new Set(studentRefs)
+
+    // 1. Buscar todos os vínculos de responsáveis deste aluno
+    const { data: studentLinks } = studentRefs.length > 0
+      ? await supabase
+          .from('aluno_responsavel')
+          .select('aluno_id, responsavel_id')
+          .in('aluno_id', studentRefs)
+      : { data: [] as any[] }
+
+    const candidateRespIds = new Set<string>()
+    for (const l of studentLinks || []) {
+      if (l?.responsavel_id) candidateRespIds.add(String(l.responsavel_id).trim())
+    }
+    for (const extraId of options?.extraResponsavelIds || []) {
+      if (extraId && String(extraId).trim()) candidateRespIds.add(String(extraId).trim())
+    }
+
+    // Identificadores protegidos (responsáveis com outro filho ativo ou colaboradores)
+    const protectedIdentifiers = new Set<string>()
+    const addProtected = (val: unknown) => {
+      if (val && typeof val === 'string' && val.trim()) {
+        protectedIdentifiers.add(val.trim())
+        protectedIdentifiers.add(val.trim().toLowerCase())
+      }
+    }
+
+    // Alvos elegíveis para exclusão completa no OneSignal
+    const targetAliasesToDelete: Array<{ label: string; id: string }> = []
+    const addTargetAlias = (label: string, val: unknown) => {
+      if (!val || typeof val !== 'string' || !val.trim()) return
+      const clean = label === 'email' ? val.trim().toLowerCase() : val.trim()
+      if (protectedIdentifiers.has(clean) || protectedIdentifiers.has(clean.toLowerCase())) return
+      if (!targetAliasesToDelete.some(t => t.label === label && t.id === clean)) {
+        targetAliasesToDelete.push({ label, id: clean })
+      }
+    }
+
+    // 2. Avaliar cada responsável vinculado
+    for (const respId of Array.from(candidateRespIds)) {
+      const [{ data: guardian }, { data: allRespLinks }] = await Promise.all([
+        supabase
+          .from('responsaveis')
+          .select('id, nome, email, auth_id, dados')
+          .eq('id', respId)
+          .maybeSingle(),
+        supabase
+          .from('aluno_responsavel')
+          .select('aluno_id')
+          .eq('responsavel_id', respId),
+      ])
+
+      const linkedAlunoIds = new Set<string>()
+      for (const rl of allRespLinks || []) {
+        if (rl?.aluno_id) linkedAlunoIds.add(String(rl.aluno_id).trim())
+      }
+      if (Array.isArray(guardian?.dados?.alunosVinculados)) {
+        for (const aid of guardian.dados.alunosVinculados) {
+          if (aid) linkedAlunoIds.add(String(aid).trim())
+        }
+      }
+
+      // Se o aluno atual está sendo inativado/excluído, desconsideramos ele na busca de irmãos ativos
+      const otherAlunoIds = Array.from(linkedAlunoIds).filter(aid =>
+        treatStudentAsInactive ? !studentRefsSet.has(aid) : true
+      )
+
+      let activeSiblings: any[] = []
+      if (otherAlunoIds.length > 0) {
+        const { data: otherStudents } = await supabase
+          .from('alunos')
+          .select('id, nome, matricula, status, dados')
+          .or(`id.in.(${otherAlunoIds.join(',')}),matricula.in.(${otherAlunoIds.join(',')})`)
+
+        activeSiblings = (otherStudents || []).filter(s => {
+          if (treatStudentAsInactive && studentRefsSet.has(String(s.id).trim())) return false
+          return !isStudentInactiveStatus(s)
+        })
+      }
+
+      const guardianEmail = String(guardian?.email || guardian?.dados?.email || '')
+        .trim()
+        .toLowerCase()
+      const guardianAuthId = String(
+        guardian?.auth_id || guardian?.dados?.auth_id || guardian?.dados?.user_id || ''
+      ).trim()
+
+      // Verificar se o responsável é colaborador ativo da escola
+      const sysOrConds = [`dados->>responsavel_id.eq.${respId}`, `id.eq.${respId}`]
+      if (guardianAuthId) sysOrConds.push(`id.eq.${guardianAuthId}`, `auth_id.eq.${guardianAuthId}`)
+      if (guardianEmail) sysOrConds.push(`email.ilike.${guardianEmail}`)
+
+      const [{ data: sysRows }, { data: funcRows }] = await Promise.all([
+        supabase
+          .from('system_users')
+          .select('id, auth_id, email, status, perfil, cargo, dados')
+          .or(sysOrConds.join(',')),
+        guardianEmail
+          ? supabase
+              .from('funcionarios')
+              .select('id, email, status')
+              .ilike('email', guardianEmail)
+          : Promise.resolve({ data: [] as any[] }),
+      ])
+
+      const isStaffMember =
+        (sysRows || []).some(
+          r => !isFamilyOnlySystemUserRole(r) && String(r.status || '').toLowerCase() !== 'inativo'
+        ) ||
+        (funcRows || []).some(f => String(f.status || '').toLowerCase() !== 'inativo')
+
+      const hasOtherActiveChildren = activeSiblings.length > 0
+
+      if (hasOtherActiveChildren || isStaffMember) {
+        // PROTEGIDO: Não excluir os aparelhos deste responsável!
+        baseResult.protectedGuardianIds.push(respId)
+        addProtected(respId)
+        addProtected(guardianAuthId)
+        addProtected(guardianEmail)
+        for (const sr of sysRows || []) {
+          addProtected(sr.id)
+          addProtected(sr.auth_id)
+          addProtected(sr.email)
+        }
+
+        // Se o responsável continua ativo por causa de outro filho, atualizamos o alias aluno_id
+        // para apontar para o filho ativo e limpamos a tag do filho inativado
+        if (treatStudentAsInactive) {
+          const lookupId = guardianAuthId || respId
+          const lookupLabel = guardianAuthId ? 'external_id' : 'responsavel_id'
+          try {
+            if (hasOtherActiveChildren) {
+              const activeSiblingId = String(activeSiblings[0].id).trim()
+              await fetch(
+                `https://onesignal.com/api/v1/apps/${appId}/users/by/${encodeURIComponent(lookupLabel)}/${encodeURIComponent(lookupId)}/identity`,
+                {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Basic ${apiKey}`,
+                  },
+                  body: JSON.stringify({ identity: { aluno_id: activeSiblingId } }),
+                }
+              ).catch(() => {})
+            } else if (isStaffMember) {
+              // Colaborador que não tem mais filhos ativos: remove apenas aliases familiares
+              await fetch(
+                `https://onesignal.com/api/v1/apps/${appId}/users/by/${encodeURIComponent(lookupLabel)}/${encodeURIComponent(lookupId)}/identity/aluno_id`,
+                { method: 'DELETE', headers: { Authorization: `Basic ${apiKey}` } }
+              ).catch(() => {})
+              await fetch(
+                `https://onesignal.com/api/v1/apps/${appId}/users/by/${encodeURIComponent(lookupLabel)}/${encodeURIComponent(lookupId)}/identity/responsavel_id`,
+                { method: 'DELETE', headers: { Authorization: `Basic ${apiKey}` } }
+              ).catch(() => {})
+            }
+          } catch {}
+        }
+      } else {
+        // ELEGÍVEL PARA EXCLUSÃO TOTAL NO ONESIGNAL: Sem filhos ativos e não é colaborador
+        baseResult.cleanedGuardianIds.push(respId)
+        addTargetAlias('responsavel_id', respId)
+        addTargetAlias('external_id', respId)
+        if (guardianAuthId) addTargetAlias('external_id', guardianAuthId)
+        if (guardianEmail) {
+          addTargetAlias('email', guardianEmail)
+          const foundAuth = await findAuthUserByEmail(guardianEmail).catch(() => null)
+          if (foundAuth?.id) addTargetAlias('external_id', foundAuth.id)
+        }
+        for (const sr of sysRows || []) {
+          addTargetAlias('external_id', sr.id)
+          addTargetAlias('external_id', sr.auth_id)
+          if (sr.email) addTargetAlias('email', sr.email)
+        }
+      }
+    }
+
+    // 3. Coletar identificadores do próprio aluno se ele estiver inativo/excluído
+    if (treatStudentAsInactive) {
+      for (const ref of studentRefs) {
+        addTargetAlias('aluno_id', ref)
+        addTargetAlias('external_id', ref)
+        const stripped = ref.replace(/^(?:a_|_ALU)/i, '').trim()
+        if (stripped && stripped !== ref) {
+          addTargetAlias('aluno_id', stripped)
+          addTargetAlias('external_id', stripped)
+        }
+      }
+
+      const studentAuthId = String(
+        (student as any)?.auth_id || student?.dados?.auth_id || student?.dados?.user_id || ''
+      ).trim()
+      if (studentAuthId) addTargetAlias('external_id', studentAuthId)
+
+      const studentEmail = String(
+        student?.email || student?.dados?.email || student?.dados?.emailAluno || ''
+      )
+        .trim()
+        .toLowerCase()
+
+      if (studentEmail && !protectedIdentifiers.has(studentEmail)) {
+        addTargetAlias('email', studentEmail)
+        const foundStudentAuth = await findAuthUserByEmail(studentEmail).catch(() => null)
+        if (foundStudentAuth?.id && !protectedIdentifiers.has(foundStudentAuth.id)) {
+          addTargetAlias('external_id', foundStudentAuth.id)
+        }
+      }
+
+      const matricula = student?.matricula || student?.dados?.codigo || studentId
+      if (matricula) {
+        const virtualEmail = `aluno.${String(matricula).trim().toLowerCase()}@impactoedu.local`
+        addTargetAlias('email', virtualEmail)
+        const foundVirtualAuth = await findAuthUserByEmail(virtualEmail).catch(() => null)
+        if (foundVirtualAuth?.id) {
+          addTargetAlias('external_id', foundVirtualAuth.id)
+        }
+      }
+
+      const { data: studentSysRows } = await supabase
+        .from('system_users')
+        .select('id, auth_id, email, perfil, cargo, dados')
+        .filter('dados->>aluno_id', 'eq', String(studentId).trim())
+
+      for (const sRow of studentSysRows || []) {
+        if (isFamilyOnlySystemUserRole(sRow)) {
+          addTargetAlias('external_id', sRow.id)
+          addTargetAlias('external_id', sRow.auth_id)
+          if (sRow.email) addTargetAlias('email', sRow.email)
+        }
+      }
+    }
+
+    // 4. Consultar OneSignal para todos os aliases alvo e coletar subscrições com trava de proteção
+    const subscriptionsToDelete = new Set<string>()
+    const usersToDelete = new Map<string, { label: string; id: string }>()
+
+    const lookups = await Promise.all(
+      targetAliasesToDelete.map(async target => {
+        const res = await fetchOneSignalUserByAlias(appId, apiKey, target.label, target.id)
+        return { target, res }
+      })
+    )
+
+    for (const { target, res } of lookups) {
+      if (!res.found) continue
+
+      // Trava de segurança: Verifica se o usuário retornado pelo OneSignal possui algum vínculo
+      // com um responsável protegido (que tem outro filho ativo) ou colaborador
+      const identityValues = Object.values(res.identity)
+      const isProtectedOneSignalUser =
+        Boolean(res.identity.colaborador_id) ||
+        Boolean(res.identity.system_user_id && protectedIdentifiers.has(res.identity.system_user_id)) ||
+        identityValues.some(
+          val => protectedIdentifiers.has(val) || protectedIdentifiers.has(val.toLowerCase())
+        )
+
+      if (isProtectedOneSignalUser) {
+        continue
+      }
+
+      for (const subId of res.subscriptionIds) {
+        subscriptionsToDelete.add(subId)
+      }
+
+      if (res.externalId) {
+        usersToDelete.set(`external_id:${res.externalId}`, {
+          label: 'external_id',
+          id: res.externalId,
+        })
+      }
+      usersToDelete.set(`${target.label}:${target.id}`, target)
+    }
+
+    // 5. Excluir todas as subscrições/aparelhos encontrados
+    const subIdsArray = Array.from(subscriptionsToDelete)
+    const subDeleteResults = await Promise.all(
+      subIdsArray.map(subId => deleteOneSignalSubscriptionById(subId, appId, apiKey))
+    )
+    const deletedSubsCount = subDeleteResults.filter(Boolean).length
+
+    // 6. Excluir as identidades de usuário elegíveis no OneSignal
+    const usersArray = Array.from(usersToDelete.values())
+    const userDeleteResults = await Promise.all(
+      usersArray.map(u => deleteOneSignalUserByAlias(u.label, u.id, appId, apiKey))
+    )
+    const deletedUsersCount = userDeleteResults.filter(Boolean).length
+
+    baseResult.deletedSubscriptionsCount = deletedSubsCount
+    baseResult.deletedUsersCount = deletedUsersCount
+    baseResult.deletedSubscriptionIds = subIdsArray
+
+    console.log(
+      `🧹 [OneSignal Inactive Cleanup] Aluno ${student?.nome || studentId} (${studentId}): ` +
+        `${deletedSubsCount} aparelho(s) excluído(s), ${baseResult.cleanedGuardianIds.length} responsável(is) limpo(s), ` +
+        `${baseResult.protectedGuardianIds.length} responsável(is) preservado(s) (outro filho ativo ou colaborador).`
+    )
+
+    return baseResult
+  } catch (err: any) {
+    console.error('[OneSignal Inactive Cleanup Error]:', err?.message)
+    return { ...baseResult, success: false }
+  }
+}
+
+export interface BatchInactiveCleanupResult {
+  success: boolean
+  inactiveStudentsTotal: number
+  eligibleGuardiansTotal: number
+  protectedGuardiansTotal: number
+  deletedSubscriptionsCount: number
+  deletedUsersCount: number
+  deletedSubscriptionIds: string[]
+}
+
+/**
+ * Varredura completa em lote: Identifica todos os alunos atualmente com status inativo no banco,
+ * cruza com todos os responsáveis (protegendo pais com outros filhos ativos e colaboradores)
+ * e exclui do OneSignal todos os aparelhos e registros de usuários inativos para zerar cobranças.
+ */
+export async function cleanupAllInactiveStudentsOneSignal(): Promise<BatchInactiveCleanupResult> {
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY || ''
+
+  const result: BatchInactiveCleanupResult = {
+    success: true,
+    inactiveStudentsTotal: 0,
+    eligibleGuardiansTotal: 0,
+    protectedGuardiansTotal: 0,
+    deletedSubscriptionsCount: 0,
+    deletedUsersCount: 0,
+    deletedSubscriptionIds: [],
+  }
+
+  if (!appId || !apiKey) return result
+
+  try {
+    const { getAdminClient, getAllAuthUsersCached } = await import('@/lib/server/supabaseAdminSingleton')
+    const supabase = getAdminClient()
+
+    async function fetchAllRows(table: string, cols: string): Promise<any[]> {
+      const all: any[] = []
+      let from = 0
+      const step = 1000
+      while (from < 10000) {
+        const { data, error } = await supabase
+          .from(table)
+          .select(cols)
+          .range(from, from + step - 1)
+        if (error || !data || data.length === 0) break
+        all.push(...data)
+        if (data.length < step) break
+        from += step
+      }
+      return all
+    }
+
+    const [
+      allAlunos,
+      allLinks,
+      allResponsaveis,
+      allSysUsers,
+      allFuncionarios,
+      authUsers,
+    ] = await Promise.all([
+      fetchAllRows('alunos', 'id, nome, matricula, status, email, dados'),
+      fetchAllRows('aluno_responsavel', 'aluno_id, responsavel_id'),
+      fetchAllRows('responsaveis', 'id, nome, email, auth_id, dados'),
+      fetchAllRows('system_users', 'id, auth_id, email, status, perfil, cargo, dados'),
+      fetchAllRows('funcionarios', 'id, email, status'),
+      getAllAuthUsersCached().catch(() => [] as any[]),
+    ])
+
+    const activeStudentRefs = new Set<string>()
+    const inactiveStudentRefs = new Set<string>()
+    const inactiveStudents: any[] = []
+
+    for (const a of allAlunos || []) {
+      const refs = [a.id, a.matricula, a.dados?.codigo, a.dados?.id]
+        .filter(Boolean)
+        .map(v => String(v).trim())
+      if (isStudentInactiveStatus(a)) {
+        inactiveStudents.push(a)
+        refs.forEach(r => inactiveStudentRefs.add(r))
+      } else {
+        refs.forEach(r => activeStudentRefs.add(r))
+      }
+    }
+
+    result.inactiveStudentsTotal = inactiveStudents.length
+
+    // Construir conjunto de identificadores protegidos (colaboradores ativos + responsáveis com filhos ativos)
+    const protectedIds = new Set<string>()
+    const addProt = (val: unknown) => {
+      if (val && typeof val === 'string' && val.trim()) {
+        protectedIds.add(val.trim())
+        protectedIds.add(val.trim().toLowerCase())
+      }
+    }
+
+    for (const f of allFuncionarios || []) {
+      if (String(f.status || '').toLowerCase() !== 'inativo') {
+        addProt(f.id)
+        addProt(f.email)
+      }
+    }
+
+    for (const su of allSysUsers || []) {
+      if (!isFamilyOnlySystemUserRole(su) && String(su.status || '').toLowerCase() !== 'inativo') {
+        addProt(su.id)
+        addProt(su.auth_id)
+        addProt(su.email)
+      }
+    }
+
+    // Mapear vínculos por responsável
+    const linksByResp = new Map<string, Set<string>>()
+    for (const l of allLinks || []) {
+      const rId = String(l?.responsavel_id || '').trim()
+      const aId = String(l?.aluno_id || '').trim()
+      if (!rId || !aId) continue
+      if (!linksByResp.has(rId)) linksByResp.set(rId, new Set())
+      linksByResp.get(rId)!.add(aId)
+    }
+
+    // Mapear authUsers por email e por responsavel_id / aluno_id
+    const authByEmail = new Map<string, string>()
+    const authByRespId = new Map<string, string>()
+    const authByAlunoId = new Map<string, string>()
+    for (const au of authUsers || []) {
+      if (!au?.id) continue
+      const em = String(au.email || '').trim().toLowerCase()
+      if (em) authByEmail.set(em, String(au.id))
+      const mResp = String(au.user_metadata?.responsavel_id || au.user_metadata?.responsavelId || '').trim()
+      if (mResp) authByRespId.set(mResp, String(au.id))
+      const mAluno = String(au.user_metadata?.aluno_id || au.user_metadata?.alunoId || '').trim()
+      if (mAluno) authByAlunoId.set(mAluno, String(au.id))
+    }
+
+    const eligibleAliases: Array<{ label: string; id: string }> = []
+    const eligibleFlatIds = new Set<string>()
+    const addEligible = (label: string, val: unknown) => {
+      if (!val || typeof val !== 'string' || !val.trim()) return
+      const clean = label === 'email' ? val.trim().toLowerCase() : val.trim()
+      if (protectedIds.has(clean) || protectedIds.has(clean.toLowerCase())) return
+      eligibleFlatIds.add(clean)
+      eligibleFlatIds.add(clean.toLowerCase())
+      eligibleAliases.push({ label, id: clean })
+    }
+
+    // Classificar responsáveis: primeiro passa para registrar todos os protegidos
+    const guardianClassification: Array<{ resp: any; isProtected: boolean; hasInactiveLink: boolean }> = []
+    for (const resp of allResponsaveis || []) {
+      const rId = String(resp.id || '').trim()
+      if (!rId) continue
+      const linkedSet = linksByResp.get(rId) || new Set<string>()
+      if (Array.isArray(resp.dados?.alunosVinculados)) {
+        resp.dados.alunosVinculados.forEach((aid: any) => {
+          if (aid) linkedSet.add(String(aid).trim())
+        })
+      }
+
+      const hasActiveChild = Array.from(linkedSet).some(aid => activeStudentRefs.has(aid))
+      const hasInactiveChild = Array.from(linkedSet).some(aid => inactiveStudentRefs.has(aid))
+      const rEmail = String(resp.email || resp.dados?.email || '').trim().toLowerCase()
+      const rAuthId = String(
+        resp.auth_id || resp.dados?.auth_id || resp.dados?.user_id || authByRespId.get(rId) || (rEmail ? authByEmail.get(rEmail) : '') || ''
+      ).trim()
+
+      const isAlreadyStaff =
+        protectedIds.has(rId) ||
+        (Boolean(rAuthId) && protectedIds.has(rAuthId)) ||
+        (Boolean(rEmail) && protectedIds.has(rEmail))
+
+      if (hasActiveChild || isAlreadyStaff) {
+        result.protectedGuardiansTotal++
+        addProt(rId)
+        addProt(rAuthId)
+        addProt(rEmail)
+        guardianClassification.push({ resp, isProtected: true, hasInactiveLink: hasInactiveChild })
+      } else if (hasInactiveChild || linkedSet.size === 0) {
+        guardianClassification.push({ resp, isProtected: false, hasInactiveLink: true })
+      }
+    }
+
+    // Segunda passada: registrar responsáveis elegíveis (que não têm nenhum filho ativo nem são colaboradores)
+    for (const item of guardianClassification) {
+      if (item.isProtected || !item.hasInactiveLink) continue
+      const resp = item.resp
+      const rId = String(resp.id || '').trim()
+      const rEmail = String(resp.email || resp.dados?.email || '').trim().toLowerCase()
+      const rAuthId = String(
+        resp.auth_id || resp.dados?.auth_id || resp.dados?.user_id || authByRespId.get(rId) || (rEmail ? authByEmail.get(rEmail) : '') || ''
+      ).trim()
+
+      if (
+        protectedIds.has(rId) ||
+        (Boolean(rAuthId) && protectedIds.has(rAuthId)) ||
+        (Boolean(rEmail) && protectedIds.has(rEmail))
+      ) {
+        continue
+      }
+
+      result.eligibleGuardiansTotal++
+      addEligible('responsavel_id', rId)
+      addEligible('external_id', rId)
+      if (rAuthId) addEligible('external_id', rAuthId)
+      if (rEmail) addEligible('email', rEmail)
+    }
+
+    // Registrar alunos inativos
+    for (const st of inactiveStudents) {
+      const sId = String(st.id || '').trim()
+      const mat = String(st.matricula || st.dados?.codigo || '').trim()
+      const sEmail = String(st.email || st.dados?.email || '').trim().toLowerCase()
+      const sAuthId = String(
+        st.auth_id || st.dados?.auth_id || st.dados?.user_id || authByAlunoId.get(sId) || (sEmail ? authByEmail.get(sEmail) : '') || ''
+      ).trim()
+
+      addEligible('aluno_id', sId)
+      addEligible('external_id', sId)
+      if (mat) {
+        addEligible('aluno_id', mat)
+        const vEmail = `aluno.${mat.toLowerCase()}@impactoedu.local`
+        const vAuth = authByEmail.get(vEmail)
+        if (vAuth) addEligible('external_id', vAuth)
+      }
+      if (sAuthId) addEligible('external_id', sAuthId)
+      if (sEmail) addEligible('email', sEmail)
+    }
+
+    const subscriptionsToDelete = new Set<string>()
+    const usersToDelete = new Map<string, { label: string; id: string }>()
+
+    // 1. Varredura rápida de todos os players registrados no OneSignal (paginado de 200 em 200 — limite máximo da API v1)
+    for (let offset = 0; offset < 3000; offset += 200) {
+      try {
+        const rList = await fetch(
+          `https://onesignal.com/api/v1/players?app_id=${encodeURIComponent(appId)}&limit=200&offset=${offset}`,
+          { headers: { Authorization: `Basic ${apiKey}` }, cache: 'no-store' }
+        )
+        if (!rList.ok) break
+        const listData = await rList.json().catch(() => ({}))
+        const players: any[] = Array.isArray(listData.players) ? listData.players : []
+        if (players.length === 0) break
+
+        for (const p of players) {
+          const pId = String(p.id || '').trim()
+          if (!pId) continue
+          const extId = String(p.external_user_id || '').trim()
+          const tags = p.tags && typeof p.tags === 'object' ? p.tags : {}
+          const tagRespId = String(tags.responsavel_id || '').trim()
+          const tagAlunoId = String(tags.aluno_id || tags.aluno_db_id || '').trim()
+          const tagColabId = String(tags.colaborador_id || tags.system_user_id || '').trim()
+
+          // Nunca tocar em aparelhos de colaboradores ou responsáveis protegidos
+          if (
+            Boolean(tagColabId) ||
+            tags.isMasterAdmin === 'true' ||
+            (extId && (protectedIds.has(extId) || protectedIds.has(extId.toLowerCase()))) ||
+            (tagRespId && protectedIds.has(tagRespId)) ||
+            (tagAlunoId && activeStudentRefs.has(tagAlunoId))
+          ) {
+            continue
+          }
+
+          // Checar se possui tag de algum filho ativo (ex: aluno_1234 = "true")
+          const dynamicAlunoTags = Object.keys(tags)
+            .filter(k => k.startsWith('aluno_') && k !== 'aluno_id' && k !== 'aluno_db_id' && tags[k] === 'true')
+            .map(k => k.replace(/^aluno_/, ''))
+          if (dynamicAlunoTags.some(aid => activeStudentRefs.has(aid))) {
+            continue
+          }
+
+          const matchesInactive =
+            (extId && (eligibleFlatIds.has(extId) || eligibleFlatIds.has(extId.toLowerCase()))) ||
+            (tagRespId && eligibleFlatIds.has(tagRespId)) ||
+            (tagAlunoId && inactiveStudentRefs.has(tagAlunoId)) ||
+            dynamicAlunoTags.some(aid => inactiveStudentRefs.has(aid))
+
+          if (matchesInactive) {
+            subscriptionsToDelete.add(pId)
+            if (extId) {
+              usersToDelete.set(`external_id:${extId}`, { label: 'external_id', id: extId })
+            }
+          }
+        }
+
+        const totalCount = Number(listData.total_count || 0)
+        if (players.length < 200 || (totalCount > 0 && offset + players.length >= totalCount)) break
+      } catch {
+        break
+      }
+    }
+
+    // 2. Consultar também via User Model API v5 para usuários que possuem conta Auth (UUID) ou vínculo direto
+    const priorityAliases = eligibleAliases.filter(
+      a => a.label === 'external_id' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(a.id)
+    )
+    const uniquePriority = Array.from(
+      new Map(priorityAliases.map(a => [`${a.label}:${a.id}`, a])).values()
+    )
+
+    const CHUNK = 10
+    for (let i = 0; i < uniquePriority.length; i += CHUNK) {
+      const batch = uniquePriority.slice(i, i + CHUNK)
+      const batchRes = await Promise.all(
+        batch.map(async target => ({
+          target,
+          res: await fetchOneSignalUserByAlias(appId, apiKey, target.label, target.id),
+        }))
+      )
+      for (const { target, res } of batchRes) {
+        if (!res.found) continue
+        const identityValues = Object.values(res.identity)
+        const isProt =
+          Boolean(res.identity.colaborador_id) ||
+          identityValues.some(v => protectedIds.has(v) || protectedIds.has(v.toLowerCase()))
+        if (isProt) continue
+        res.subscriptionIds.forEach(s => subscriptionsToDelete.add(s))
+        usersToDelete.set(`${target.label}:${target.id}`, target)
+      }
+    }
+
+    // 3. Executar exclusões em lotes paralelos de 10
+    const subIdsList = Array.from(subscriptionsToDelete)
+    let deletedSubs = 0
+    for (let i = 0; i < subIdsList.length; i += CHUNK) {
+      const chunk = subIdsList.slice(i, i + CHUNK)
+      const r = await Promise.all(chunk.map(id => deleteOneSignalSubscriptionById(id, appId, apiKey)))
+      deletedSubs += r.filter(Boolean).length
+    }
+
+    const usersList = Array.from(usersToDelete.values())
+    let deletedUsers = 0
+    for (let i = 0; i < usersList.length; i += CHUNK) {
+      const chunk = usersList.slice(i, i + CHUNK)
+      const r = await Promise.all(chunk.map(u => deleteOneSignalUserByAlias(u.label, u.id, appId, apiKey)))
+      deletedUsers += r.filter(Boolean).length
+    }
+
+    result.deletedSubscriptionsCount = deletedSubs
+    result.deletedUsersCount = deletedUsers
+    result.deletedSubscriptionIds = subIdsList
+
+    console.log(
+      `🧹 [OneSignal Batch Inactive Cleanup] ${inactiveStudents.length} alunos inativos verificados -> ` +
+        `${deletedSubs} aparelho(s) e ${deletedUsers} usuário(s) removidos do OneSignal.`
+    )
+
+    return result
+  } catch (err: any) {
+    console.error('[OneSignal Batch Inactive Cleanup Error]:', err?.message)
+    return { ...result, success: false }
+  }
+}
+

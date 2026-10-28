@@ -3863,18 +3863,6 @@ export default function ValoresPage() {
                         <Layers size={16} color="#2563eb" />
                         {selectedSeries.length === 1 ? 'Condições da Série' : `Opções de Valores (${selectedSeries.length} modalidades)`}
                       </span>
-                      {descontoPercent > 0 && (
-                        <PropostaBadge
-                          bg="#ecfdf5"
-                          border="#a7f3d0"
-                          color="#059669"
-                          fontSize={11}
-                          fontWeight={800}
-                          padding="3px 10px"
-                        >
-                          {descontoPercent}% de desconto ativo
-                        </PropostaBadge>
-                      )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

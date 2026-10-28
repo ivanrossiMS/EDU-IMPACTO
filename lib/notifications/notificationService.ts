@@ -470,6 +470,13 @@ class NotificationService {
     this.requestPermissionPromise = (async () => {
       const isNative = Capacitor.isNativePlatform()
 
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('edu_push_inactive_opted_out')
+          localStorage.removeItem('edu_push_needs_reactivation')
+        } catch {}
+      }
+
       if (isNative) {
         try {
           console.log('📱 [NotificationService] Solicitando permissão nativa (fallbackToSettings: false)...')
@@ -479,14 +486,17 @@ class NotificationService {
           const accepted = await OneSignalNative.Notifications.requestPermission(false)
           console.log('📱 [NotificationService] Resultado do prompt do SO:', accepted)
 
-          // REGRA CRÍTICA: NUNCA invocar OneSignalNative.User.pushSubscription.optIn() no iOS nativo.
-          // No SDK do OneSignal v5 iOS, pushSubscription.optIn() chama internamente
-          // requestPermission(nil, fallbackToSettings: true). Se o token APNs ainda não retornou
-          // da Apple (o que leva centenas de ms), o OneSignal dispara o alerta indesejado em inglês:
-          // "Open Settings / You currently have notifications turned off for this application".
-          // O SDK nativo do OneSignal já realiza o optIn automaticamente ao receber o token APNs/FCM.
+          // Se a permissão do SO está garantida (accepted === true) e a subscrição estava em optOut
+          // (por exemplo, após reativação/rematrícula de um aluno antes inativo), reativa o optIn com segurança.
+          if (accepted) {
+            const optedInNow = await OneSignalNative.User?.pushSubscription?.getOptedInAsync?.().catch(() => true)
+            if (optedInNow === false && typeof OneSignalNative.User?.pushSubscription?.optIn === 'function') {
+              await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+            }
+          }
 
           if (accepted && this.cachedUser) {
+            this.lastSyncedPayloadHash = ''
             await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
           }
 
@@ -511,6 +521,10 @@ class NotificationService {
           }
         } else {
           await Notification.requestPermission()
+        }
+        if (Notification.permission === 'granted' && this.cachedUser) {
+          this.lastSyncedPayloadHash = ''
+          await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
         }
         await this.refresh()
         return Notification.permission === 'granted'
@@ -559,13 +573,99 @@ class NotificationService {
       const res = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          platform: this.state.platform,
+        }),
       })
+      const resJson = await res.json().catch(() => ({}))
+
+      if (resJson?.inactiveCleanup === true) {
+        console.log('🧹 [NotificationService] Todos os alunos vinculados estão inativos. Desativando subscrição push neste aparelho.')
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('edu_push_inactive_opted_out', 'true')
+            localStorage.removeItem('edu_push_needs_reactivation')
+          }
+          if (Capacitor.isNativePlatform()) {
+            const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+            if (typeof OneSignalNative.User?.pushSubscription?.optOut === 'function') {
+              await OneSignalNative.User.pushSubscription.optOut().catch(() => {})
+            }
+          } else if (typeof window !== 'undefined') {
+            const OS = (window as any).OneSignal
+            const optOutFn = OS?.User?.PushSubscription?.optOut || OS?.User?.pushSubscription?.optOut
+            if (typeof optOutFn === 'function') {
+              await optOutFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
+            }
+          }
+        } catch {}
+        await this.refresh().catch(() => {})
+        return
+      }
+
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        console.warn('⚠️ [NotificationService] Falha no sync-subscription backend:', res.status, errJson)
+        console.warn('⚠️ [NotificationService] Falha no sync-subscription backend:', res.status, resJson)
       } else {
         console.log(`✅ [NotificationService] Subscrição ${payload.subscriptionId} sincronizada no backend com sucesso!`)
+        if (typeof window !== 'undefined') {
+          const wasInactive = localStorage.getItem('edu_push_inactive_opted_out') === 'true'
+          const subWasDeleted = resJson?.subscriptionDeletedNeedsReset === true
+          const wasRecreatedOnServer = Boolean(resJson?.recreatedSubscriptionId)
+
+          if (wasInactive || subWasDeleted) {
+            console.log('🔄 [NotificationService] Aparelho limpo ou aluno reativado detectado! Restaurando estado de notificações...')
+            try {
+              localStorage.removeItem('edu_push_inactive_opted_out')
+              localStorage.removeItem('edu_push_dismissed_v2')
+              sessionStorage.removeItem('edu_push_dismissed_session')
+              localStorage.setItem('edu_push_needs_reactivation', 'true')
+            } catch {}
+
+            try {
+              if (Capacitor.isNativePlatform()) {
+                const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+                const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
+                if (hasPerm && typeof OneSignalNative.User?.pushSubscription?.optIn === 'function') {
+                  if (subWasDeleted && typeof OneSignalNative.User?.pushSubscription?.optOut === 'function') {
+                    await OneSignalNative.User.pushSubscription.optOut().catch(() => {})
+                    await new Promise(r => setTimeout(r, 250))
+                  }
+                  await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+                  await OneSignalNative.login(payload.userId).catch(() => {})
+                  if (wasRecreatedOnServer) {
+                    localStorage.removeItem('edu_push_needs_reactivation')
+                  }
+                }
+              } else {
+                const OS = (window as any).OneSignal
+                if ('Notification' in window && Notification.permission === 'granted') {
+                  const pushSub = OS?.User?.PushSubscription || OS?.User?.pushSubscription
+                  const optOutFn = pushSub?.optOut
+                  const optInFn = pushSub?.optIn
+                  if (subWasDeleted && typeof optOutFn === 'function') {
+                    await optOutFn.call(pushSub).catch(() => {})
+                    await new Promise(r => setTimeout(r, 200))
+                  }
+                  if (typeof optInFn === 'function') {
+                    await optInFn.call(pushSub).catch(() => {})
+                    if (wasRecreatedOnServer) {
+                      localStorage.removeItem('edu_push_needs_reactivation')
+                    }
+                  }
+                }
+              }
+            } catch {}
+
+            window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
+            await this.refresh().catch(() => {})
+          } else {
+            try {
+              localStorage.removeItem('edu_push_inactive_opted_out')
+              localStorage.removeItem('edu_push_needs_reactivation')
+            } catch {}
+          }
+        }
       }
     } catch (e) {
       console.warn('[NotificationService] Falha de conexão no sync-subscription backend:', e)
@@ -694,8 +794,18 @@ class NotificationService {
       if (user.responsavel_id) tags['responsavel_id'] = String(user.responsavel_id)
       if (effectiveExtra?.hasDualAccess) tags['has_dual_role'] = 'true'
 
-      if (Array.isArray(effectiveExtra?.meusAlunos)) {
-        effectiveExtra.meusAlunos.forEach((s: any) => {
+      const isStudentRowInactive = (s: any): boolean => {
+        if (!s) return false
+        if (s.inativo === true) return true
+        const st = String(s.status ?? s.dados?.status ?? '').trim().toLowerCase()
+        return ['inativo', 'inativa', 'evadido', 'transferido', 'cancelado'].includes(st)
+      }
+
+      const rawMeusAlunos = Array.isArray(effectiveExtra?.meusAlunos) ? effectiveExtra.meusAlunos : null
+      const activeMeusAlunos = rawMeusAlunos ? rawMeusAlunos.filter((s: any) => !isStudentRowInactive(s)) : null
+
+      if (activeMeusAlunos) {
+        activeMeusAlunos.forEach((s: any) => {
           if (s?.id) {
             tags[`aluno_${s.id}`] = 'true'
             this.registeredDynamicTags.add(`aluno_${s.id}`)
@@ -716,11 +826,15 @@ class NotificationService {
       if (user.aluno_id) {
         aliasesToRegister.push({ label: 'aluno_id', id: String(user.aluno_id) })
       }
-      if (effectiveExtra?.alunoId && String(effectiveExtra.alunoId) !== String(user.aluno_id)) {
+      if (
+        effectiveExtra?.alunoId &&
+        String(effectiveExtra.alunoId) !== String(user.aluno_id) &&
+        (!effectiveExtra.alunoObj || !isStudentRowInactive(effectiveExtra.alunoObj))
+      ) {
         aliasesToRegister.push({ label: 'aluno_id', id: String(effectiveExtra.alunoId) })
       }
-      if (Array.isArray(effectiveExtra?.meusAlunos)) {
-        effectiveExtra.meusAlunos.forEach((s: any) => {
+      if (activeMeusAlunos) {
+        activeMeusAlunos.forEach((s: any) => {
           if (s?.id) {
             aliasesToRegister.push({ label: 'aluno_id', id: String(s.id) })
             const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
@@ -758,6 +872,46 @@ class NotificationService {
         ['família', 'familia', 'responsável', 'responsavel', 'aluno'].includes(perfilLower) ||
         ['responsável', 'responsavel', 'aluno'].includes(cargoLower)
       const isPureStaff = !isFamilyOrStudentRole && !effectiveExtra?.hasDualAccess
+
+      // Se a lista de alunos vinculados já foi carregada e TODOS estão inativos (e o usuário não é colaborador):
+      const allLoadedStudentsInactive =
+        !colabId &&
+        !isMaster &&
+        rawMeusAlunos !== null &&
+        rawMeusAlunos.length > 0 &&
+        activeMeusAlunos !== null &&
+        activeMeusAlunos.length === 0
+
+      if (allLoadedStudentsInactive && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('edu_push_inactive_opted_out', 'true')
+          localStorage.removeItem('edu_push_needs_reactivation')
+        } catch {}
+      } else if (
+        activeMeusAlunos &&
+        activeMeusAlunos.length > 0 &&
+        typeof window !== 'undefined' &&
+        localStorage.getItem('edu_push_inactive_opted_out') === 'true'
+      ) {
+        // Aluno foi rematriculado! Limpa flags de inatividade/dispensa e dispara reativação
+        try {
+          localStorage.removeItem('edu_push_inactive_opted_out')
+          localStorage.removeItem('edu_push_dismissed_v2')
+          sessionStorage.removeItem('edu_push_dismissed_session')
+          localStorage.setItem('edu_push_needs_reactivation', 'true')
+        } catch {}
+        if (isNative) {
+          try {
+            const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+            const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
+            if (hasPerm && typeof OneSignalNative.User?.pushSubscription?.optIn === 'function') {
+              await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+              localStorage.removeItem('edu_push_needs_reactivation')
+            }
+          } catch {}
+        }
+        window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
+      }
 
       // Evita chamadas redundantes se os dados forem idênticos ao último sync bem-sucedido
       const payloadHash = JSON.stringify({ userId, tags, aliasesToRegister })

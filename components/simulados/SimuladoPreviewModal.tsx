@@ -542,37 +542,37 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     >
       {/* Sidebar de Configurações (No Print) */}
       <div className="no-print sidebar-layout" style={{ width: 380, background: 'white', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px rgba(0,0,0,0.02)', zIndex: 10, flexShrink: 0 }}>
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Settings size={20} />
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Settings size={18} />
             </div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Edição</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Edição</h1>
           </div>
-          <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5, margin: 0 }}>Molde a simulado visualmente para alunos com necessidades específicas. Remova questões indesejadas e altere o tamanho da fonte global.</p>
+          <p style={{ color: '#64748b', fontSize: 12, lineHeight: 1.4, margin: 0 }}>Molde o simulado visualmente para alunos com necessidades específicas. Remova questões indesejadas e altere o tamanho da fonte global.</p>
         </div>
 
-        <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
           
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
-              <Type size={16} color="#3b82f6" /> Tamanho do Enunciado
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Type size={15} color="#3b82f6" /> Tamanho do Enunciado
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {[12, 14, 16, 18, 20, 24].map(size => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+              {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                 <button
                   key={`enunciado-${size}`}
                   onClick={() => setEnunciadoFontSize(size)}
                   style={{
-                    padding: '8px',
-                    borderRadius: 8,
+                    padding: '5px 4px',
+                    borderRadius: 7,
                     background: enunciadoFontSize === size ? '#3b82f6' : '#f8fafc',
                     color: enunciadoFontSize === size ? 'white' : '#475569',
                     border: `1px solid ${enunciadoFontSize === size ? '#3b82f6' : '#e2e8f0'}`,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontSize: 13
+                    transition: 'all 0.15s',
+                    fontSize: 11.5
                   }}
                 >
                   {size}pt
@@ -581,25 +581,25 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
-              <Type size={16} color="#3b82f6" /> Tamanho das Alternativas
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Type size={15} color="#3b82f6" /> Tamanho das Alternativas
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {[12, 14, 16, 18, 20, 24].map(size => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+              {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                 <button
                   key={`alt-${size}`}
                   onClick={() => setAlternativasFontSize(size)}
                   style={{
-                    padding: '8px',
-                    borderRadius: 8,
+                    padding: '5px 4px',
+                    borderRadius: 7,
                     background: alternativasFontSize === size ? '#3b82f6' : '#f8fafc',
                     color: alternativasFontSize === size ? 'white' : '#475569',
                     border: `1px solid ${alternativasFontSize === size ? '#3b82f6' : '#e2e8f0'}`,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontSize: 13
+                    transition: 'all 0.15s',
+                    fontSize: 11.5
                   }}
                 >
                   {size}pt
@@ -608,54 +608,54 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <LayoutList size={16} color="#3b82f6" /> Layout da Simulado
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <LayoutList size={15} color="#3b82f6" /> Layout da Simulado
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <button
                 onClick={() => setColumns(1)}
                 style={{
-                  padding: '12px', borderRadius: 12,
+                  padding: '8px 10px', borderRadius: 9,
                   background: columns === 1 ? '#3b82f6' : '#f8fafc',
                   color: columns === 1 ? 'white' : '#475569',
                   border: `1px solid ${columns === 1 ? '#3b82f6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 12.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}
               >
-                <LayoutList size={16} /> 1 Coluna
+                <LayoutList size={14} /> 1 Coluna
               </button>
               <button
                 onClick={() => setColumns(2)}
                 style={{
-                  padding: '12px', borderRadius: 12,
+                  padding: '8px 10px', borderRadius: 9,
                   background: columns === 2 ? '#3b82f6' : '#f8fafc',
                   color: columns === 2 ? 'white' : '#475569',
                   border: `1px solid ${columns === 2 ? '#3b82f6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 12.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}
               >
-                <Columns size={16} /> 2 Colunas
+                <Columns size={14} /> 2 Colunas
               </button>
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <LayoutList size={16} color="#8b5cf6" /> Layout das Alternativas
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <LayoutList size={15} color="#8b5cf6" /> Layout das Alternativas
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               <button
                 onClick={() => setAlternativasLayout('vertical')}
                 style={{
-                  padding: '12px', borderRadius: 12,
+                  padding: '8px 10px', borderRadius: 9,
                   background: alternativasLayout === 'vertical' ? '#8b5cf6' : '#f8fafc',
                   color: alternativasLayout === 'vertical' ? 'white' : '#475569',
                   border: `1px solid ${alternativasLayout === 'vertical' ? '#8b5cf6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 12.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}
               >
                 Vertical
@@ -663,12 +663,12 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               <button
                 onClick={() => setAlternativasLayout('horizontal')}
                 style={{
-                  padding: '12px', borderRadius: 12,
+                  padding: '8px 10px', borderRadius: 9,
                   background: alternativasLayout === 'horizontal' ? '#8b5cf6' : '#f8fafc',
                   color: alternativasLayout === 'horizontal' ? 'white' : '#475569',
                   border: `1px solid ${alternativasLayout === 'horizontal' ? '#8b5cf6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 12.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}
               >
                 Horizontal
@@ -676,23 +676,23 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <Move size={16} color="#3b82f6" /> Cabeçalho (Fundo PNG)
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Move size={15} color="#3b82f6" /> Cabeçalho (Fundo PNG)
             </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
                 onClick={() => setIsEditHeaderMode(!isEditHeaderMode)}
                 style={{
-                  padding: '12px', borderRadius: 12,
+                  padding: '8px 10px', borderRadius: 9,
                   background: isEditHeaderMode ? '#ef4444' : '#f8fafc',
                   color: isEditHeaderMode ? 'white' : '#475569',
                   border: `1px solid ${isEditHeaderMode ? '#ef4444' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 12.5,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                 }}
               >
-                <FileEdit size={16} />
+                <FileEdit size={14} />
                 {isEditHeaderMode ? 'Sair Edição Cabeçalho' : 'Editar Cabeçalho'}
               </button>
 
@@ -702,13 +702,13 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                      onClick={handleSaveHeaderLayout}
                      disabled={savingHeader}
                      style={{
-                       flex: 1, padding: '10px', borderRadius: 8,
+                       flex: 1, padding: '8px', borderRadius: 8,
                        background: '#10b981', color: 'white', border: 'none',
-                       fontWeight: 600, cursor: 'pointer', fontSize: 13,
+                       fontWeight: 600, cursor: 'pointer', fontSize: 12,
                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
                      }}
                   >
-                    {savingHeader ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {savingHeader ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     Salvar Posições
                   </button>
                 </div>
@@ -716,10 +716,10 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>
-                <Maximize2 size={16} color="#f59e0b" /> Margens
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', margin: 0 }}>
+                <Maximize2 size={15} color="#f59e0b" /> Margens
               </label>
               {autoSavedTime && (
                 <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>

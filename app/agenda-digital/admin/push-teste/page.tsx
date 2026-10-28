@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PushHistoryTab } from './components/PushHistoryTab'
 import { PushHistoryDetailModal } from './components/PushHistoryDetailModal'
+import { OneSignalDevicesTab } from './components/OneSignalDevicesTab'
+import type { OneSignalFleetOverviewResult } from '@/lib/server/oneSignalFleetService'
 import {
   Bell, Send, Users, Smartphone, ShieldCheck, CheckCircle2,
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
@@ -289,15 +291,38 @@ export default function ADAdminPushTestPage() {
   const { adAlert } = useAgendaDigital()
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
-  const initialTab = searchParams?.get('tab') === 'historico' ? 'historico' : 'disparador'
-  const [activeMainTab, setActiveMainTab] = useState<'disparador' | 'historico'>(initialTab)
+  const rawTab = searchParams?.get('tab')
+  const initialTab: 'disparador' | 'aparelhos' | 'historico' =
+    rawTab === 'historico' ? 'historico' : rawTab === 'aparelhos' ? 'aparelhos' : 'disparador'
+  const [activeMainTab, setActiveMainTab] = useState<'disparador' | 'aparelhos' | 'historico'>(initialTab)
 
   useEffect(() => {
     const tabParam = searchParams?.get('tab')
-    if (tabParam === 'historico' || tabParam === 'disparador') {
+    if (tabParam === 'historico' || tabParam === 'aparelhos' || tabParam === 'disparador') {
       setActiveMainTab(tabParam)
     }
   }, [searchParams])
+
+  // ── Visão Geral da Frota de Aparelhos OneSignal ──
+  const [fleetOverview, setFleetOverview] = useState<OneSignalFleetOverviewResult | null>(null)
+  const [isLoadingFleet, setIsLoadingFleet] = useState(false)
+
+  const loadFleetOverview = async () => {
+    setIsLoadingFleet(true)
+    try {
+      const res = await fetch('/api/agenda/push/test?onesignal_overview=true')
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.summary) {
+          setFleetOverview(data)
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar visão geral de aparelhos OneSignal:', e)
+    } finally {
+      setIsLoadingFleet(false)
+    }
+  }
 
   // ── Estado de Diagnóstico Local Deste Aparelho ──
   const [deviceDiagnostic, setDeviceDiagnostic] = useState<{
@@ -402,6 +427,7 @@ export default function ADAdminPushTestPage() {
   const [deletingDeviceId, setDeletingDeviceId] = useState<string | null>(null)
   const [isDeletingBatch, setIsDeletingBatch] = useState(false)
   const [isPurgingOrphans, setIsPurgingOrphans] = useState(false)
+  const [isPurgingInactiveStudents, setIsPurgingInactiveStudents] = useState(false)
 
   // ── Estados de Conteúdo da Notificação ──
   const [activeCategory, setActiveCategory] = useState<PushCategory>('frequencia')
@@ -593,6 +619,7 @@ export default function ADAdminPushTestPage() {
     loadRecentLogs()
     loadColaboradores()
     checkCurrentDevicePush()
+    loadFleetOverview()
 
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -770,6 +797,7 @@ export default function ADAdminPushTestPage() {
         toast.success(`${data.deletedCount} sessão(ões) excluída(s) com sucesso!`)
         await reloadColaboradorDevices()
         await checkCurrentDevicePush()
+        loadFleetOverview()
       } else {
         toast.error(data.error || 'Falha ao excluir sessões em lote.')
       }
@@ -818,6 +846,7 @@ export default function ADAdminPushTestPage() {
         await reloadGuardians()
         await reloadColaboradorDevices()
         await checkCurrentDevicePush()
+        loadFleetOverview()
       } else {
         toast.error(data.error || 'Falha ao excluir sessão do aparelho.')
       }
@@ -855,6 +884,7 @@ export default function ADAdminPushTestPage() {
         toast.success(`${data.deletedCount} sessão(ões) de "${guardian.nome}" excluída(s) com sucesso!`)
         await reloadGuardians()
         await checkCurrentDevicePush()
+        loadFleetOverview()
       } else {
         toast.error(data.error || 'Falha ao excluir sessões em lote.')
       }
@@ -882,6 +912,7 @@ export default function ADAdminPushTestPage() {
       if (res.ok && data.success) {
         toast.success(`${data.deletedCount} aparelho(s) órfão(s) excluído(s) com sucesso!`)
         await reloadGuardians()
+        loadFleetOverview()
       } else {
         toast.error(data.error || 'Falha ao limpar órfãos.')
       }
@@ -889,6 +920,42 @@ export default function ADAdminPushTestPage() {
       toast.error('Erro ao limpar órfãos: ' + err.message)
     } finally {
       setIsPurgingOrphans(false)
+    }
+  }
+
+  // Limpeza em lote de todos os alunos inativos e seus respectivos responsáveis no OneSignal
+  const handlePurgeInactiveStudents = async () => {
+    if (
+      !confirm(
+        'Deseja excluir do OneSignal todos os aparelhos de ALUNOS INATIVOS e de seus respectivos responsáveis?\n\n• Responsáveis que possuam outros filhos ativos ou que sejam colaboradores serão preservados automaticamente.\n• Quando um aluno for rematriculado no futuro, o app solicitará/reativará as notificações normalmente.'
+      )
+    ) {
+      return
+    }
+
+    setIsPurgingInactiveStudents(true)
+    try {
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clearInactiveStudents: true }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(
+          data.message ||
+            `${data.deletedCount || 0} aparelho(s) de alunos/responsáveis inativos excluído(s) do OneSignal!`,
+          { duration: 6000 }
+        )
+        await reloadGuardians()
+        loadFleetOverview()
+      } else {
+        toast.error(data.error || 'Falha ao limpar alunos inativos no OneSignal.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao limpar alunos inativos: ' + err.message)
+    } finally {
+      setIsPurgingInactiveStudents(false)
     }
   }
 
@@ -1082,28 +1149,15 @@ export default function ADAdminPushTestPage() {
           .push-badge-desktop-only {
             display: none !important;
           }
-          .push-device-card {
-            padding: 14px 16px !important;
-            border-radius: 16px !important;
+          .push-device-compact-bar {
+            padding: 12px 14px !important;
+            border-radius: 14px !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
           }
-          .push-device-actions {
+          .push-device-compact-left,
+          .push-device-compact-right {
             width: 100% !important;
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 8px !important;
-          }
-          .push-device-actions button {
-            width: 100% !important;
-            justify-content: center !important;
-            padding: 8px 6px !important;
-            font-size: 11px !important;
-          }
-          .push-device-actions button:last-child {
-            grid-column: span 2 !important;
-          }
-          .push-diagnostic-grid {
-            grid-template-columns: 1fr !important;
-            gap: 8px !important;
           }
           .push-simulator-grid {
             grid-template-columns: 1fr !important;
@@ -1265,9 +1319,9 @@ export default function ADAdminPushTestPage() {
           )}
 
           <button
-            onClick={() => { loadConfig(); loadRecentLogs(); checkCurrentDevicePush(); }}
+            onClick={() => { loadConfig(); loadRecentLogs(); checkCurrentDevicePush(); loadFleetOverview(); }}
             className="btn btn-ghost btn-sm"
-            title="Atualizar status e histórico"
+            title="Atualizar status, aparelhos OneSignal e histórico"
             style={{ borderRadius: 10, padding: 8 }}
           >
             <RefreshCw size={15} />
@@ -1439,7 +1493,7 @@ export default function ADAdminPushTestPage() {
         </div>
       )}
 
-      {/* ── NAVEGAÇÃO DE ABAS: SIMULADOR vs HISTÓRICO ── */}
+      {/* ── NAVEGAÇÃO DE ABAS: SIMULADOR vs APARELHOS ONESIGNAL vs HISTÓRICO ── */}
       <div className="push-main-tabs" style={{
         display: 'flex',
         alignItems: 'center',
@@ -1470,6 +1524,58 @@ export default function ADAdminPushTestPage() {
         >
           <Radio size={16} />
           <span>Disparador & Simulador</span>
+        </button>
+
+        <button
+          className="push-main-tab-btn"
+          onClick={() => setActiveMainTab('aparelhos')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            borderRadius: '12px 12px 0 0',
+            border: 'none',
+            borderBottom: activeMainTab === 'aparelhos' ? '3px solid #10b981' : '3px solid transparent',
+            background: activeMainTab === 'aparelhos' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+            color: activeMainTab === 'aparelhos' ? '#059669' : 'hsl(var(--text-muted))',
+            fontSize: 14,
+            fontWeight: activeMainTab === 'aparelhos' ? 800 : 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Smartphone size={16} />
+          <span>Aparelhos & Limpeza OneSignal</span>
+          {fleetOverview?.summary && (
+            <span style={{
+              fontSize: 10.5,
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: activeMainTab === 'aparelhos' ? '#10b981' : 'rgba(16, 185, 129, 0.15)',
+              color: activeMainTab === 'aparelhos' ? 'white' : '#059669',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}>
+              {fleetOverview.summary.activeDevices} ativos
+            </span>
+          )}
+          {(fleetOverview?.summary?.byCategory?.recommendedCleanupTotal || 0) > 0 && (
+            <span className="push-badge-desktop-only" style={{
+              fontSize: 10,
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: 'rgba(245, 158, 11, 0.18)',
+              color: '#d97706',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              fontWeight: 800,
+            }}>
+              ⚡ {fleetOverview!.summary.byCategory.recommendedCleanupTotal} p/ liberar
+            </span>
+          )}
         </button>
 
         <button
@@ -1517,173 +1623,329 @@ export default function ADAdminPushTestPage() {
             setActiveMainTab('disparador')
           }}
         />
+      ) : activeMainTab === 'aparelhos' ? (
+        <OneSignalDevicesTab
+          initialOverview={fleetOverview}
+          onOverviewUpdated={setFleetOverview}
+          currentDeviceSubId={deviceDiagnostic.pushSubId}
+        />
       ) : (
         <>
-          {/* ── STATUS DESTE APARELHO (DIAGNÓSTICO LOCAL PUSH) ── */}
-          <div className="push-device-card" style={{
-        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%)',
-        border: '1px solid rgba(99, 102, 241, 0.25)',
-        borderRadius: 18,
-        padding: '18px 22px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
-        backdropFilter: 'blur(12px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 12,
-              background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(14, 165, 233, 0.3)',
-            }}>
-              <Smartphone size={20} color="white" />
-            </div>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
-                Status Deste Aparelho
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', fontWeight: 700 }}>
-                  Diagnóstico em Tempo Real
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                Verificação da permissão e inscrição do OneSignal ativo neste smartphone ou computador.
-              </div>
-            </div>
-          </div>
-
-          <div className="push-device-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              onClick={handleResyncDevice}
-              disabled={isResyncingDevice}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
-                background: 'rgba(99, 102, 241, 0.18)', color: '#c7d2fe',
-                fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s'
-              }}
-            >
-              <RefreshCw size={13} style={isResyncingDevice ? { animation: 'spin 1s linear infinite' } : {}} />
-              {isResyncingDevice ? 'Sincronizando...' : 'Re-sincronizar'}
-            </button>
-
-            <button
-              onClick={handleResetAndPromptPermission}
-              disabled={isResyncingDevice}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 10, border: '1px solid rgba(16, 185, 129, 0.4)',
-                background: 'rgba(16, 185, 129, 0.15)', color: '#6ee7b7',
-                fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s'
-              }}
-              title="Limpa flags locais e solicita novamente a permissão nativa de notificação"
-            >
-              <RotateCcw size={13} />
-              Reiniciar Permissão
-            </button>
-
-            <button
-              onClick={handlePurgeOrphans}
-              disabled={isPurgingOrphans}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 10, border: '1px solid rgba(239, 68, 68, 0.35)',
-                background: 'rgba(239, 68, 68, 0.12)', color: '#fca5a5',
-                fontSize: 12, fontWeight: 700, cursor: isPurgingOrphans ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s'
-              }}
-              title="Exclui aparelhos antigos e anônimos sem vínculo no OneSignal"
-            >
-              <Trash2 size={13} />
-              {isPurgingOrphans ? 'Limpando...' : 'Limpar Órfãos em Lote'}
-            </button>
-          </div>
-        </div>
-
-        <div className="push-diagnostic-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          {/* Card 1: Aparelho & Sessão */}
-          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Aparelho / Plataforma
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginTop: 4 }}>
-              {deviceDiagnostic.platform}
-            </div>
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentUser?.nome || 'Usuário'} {currentUser?.id ? `(ID: ${String(currentUser.id).slice(0, 8)}...)` : ''}
-            </div>
-          </div>
-
-          {/* Card 2: Permissão no Dispositivo */}
-          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Permissão do Sistema
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              {deviceDiagnostic.permission === 'granted' ? (
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CheckCircle2 size={14} /> Concedida
-                </span>
-              ) : deviceDiagnostic.permission === 'denied' ? (
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#f87171', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <AlertTriangle size={14} /> Bloqueada no Sistema
-                </span>
-              ) : (
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={14} /> Padrão (Não solicitada)
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-              {deviceDiagnostic.permission === 'denied' ? 'Ative em Ajustes > Notificações' : 'Notificações liberadas no aparelho'}
-            </div>
-          </div>
-
-          {/* Card 3: Inscrição OneSignal */}
-          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Inscrição OneSignal
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              {deviceDiagnostic.pushOptedIn ? (
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CheckCircle2 size={14} /> Ativo (Inscrito)
-                </span>
-              ) : (
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={14} /> Não Inscrito / Pendente
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Sub ID: {deviceDiagnostic.pushSubId ? `${String(deviceDiagnostic.pushSubId).slice(0, 16)}...` : (deviceDiagnostic.pushOptedIn ? 'Ativo no Gateway' : 'Aguardando registro')}
-            </div>
-          </div>
-        </div>
-
-        {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-          <div style={{
-            fontSize: 11,
-            color: '#cbd5e1',
-            background: 'rgba(99, 102, 241, 0.1)',
-            border: '1px solid rgba(99, 102, 241, 0.25)',
-            borderRadius: 10,
-            padding: '8px 12px',
+          {/* ── BARRA COMPACTA: STATUS DESTE APARELHO & CAPACIDADE ONESIGNAL ── */}
+          <div className="push-device-compact-bar" style={{
+            background: 'hsl(var(--bg-surface))',
+            border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 14,
+            padding: '10px 14px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.04)',
             display: 'flex',
             alignItems: 'center',
-            gap: 8
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
           }}>
-            <span>💡</span>
-            <span>
-              <b>Ambiente Localhost:</b> O Web Push no navegador PC/Mac é configurado para o domínio oficial (<code>impacto-edu.net</code>). Todos os disparos feitos aqui chegam em tempo real aos <b>aplicativos instalados no iPhone (iOS) e Android</b> dos responsáveis selecionados.
-            </span>
+            {/* BLOCO ESQUERDO: Diagnóstico Deste Aparelho (Compacto e Fácil Leitura) */}
+            <div className="push-device-compact-left" style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              flex: '1 1 520px',
+              minWidth: 0,
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                paddingRight: 8,
+                borderRight: '1px solid hsl(var(--border-subtle))',
+              }}>
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Smartphone size={15} color="white" />
+                </div>
+                <div style={{ lineHeight: 1.15 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-main))', whiteSpace: 'nowrap' }}>
+                    Este Aparelho
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
+                    {deviceDiagnostic.platform.includes('iOS')
+                      ? '📱 iOS'
+                      : deviceDiagnostic.platform.includes('Android')
+                      ? '🤖 Android'
+                      : '💻 Web PC/Mac'}
+                    {currentUser?.nome ? ` • ${String(currentUser.nome).split(' ')[0]}` : ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Pill 1: Permissão OS */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '4px 9px',
+                  borderRadius: 8,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  background:
+                    deviceDiagnostic.permission === 'granted'
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : deviceDiagnostic.permission === 'denied'
+                      ? 'rgba(239, 68, 68, 0.1)'
+                      : 'rgba(245, 158, 11, 0.1)',
+                  color:
+                    deviceDiagnostic.permission === 'granted'
+                      ? '#059669'
+                      : deviceDiagnostic.permission === 'denied'
+                      ? '#dc2626'
+                      : '#d97706',
+                  border: `1px solid ${
+                    deviceDiagnostic.permission === 'granted'
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : deviceDiagnostic.permission === 'denied'
+                      ? 'rgba(239, 68, 68, 0.25)'
+                      : 'rgba(245, 158, 11, 0.25)'
+                  }`,
+                }}
+                title={
+                  deviceDiagnostic.permission === 'denied'
+                    ? 'Bloqueada nas configurações do sistema'
+                    : 'Status da permissão de notificações neste dispositivo'
+                }
+              >
+                {deviceDiagnostic.permission === 'granted' ? (
+                  <CheckCircle2 size={13} />
+                ) : deviceDiagnostic.permission === 'denied' ? (
+                  <AlertTriangle size={13} />
+                ) : (
+                  <Clock size={13} />
+                )}
+                <span>
+                  Permissão:{' '}
+                  <strong>
+                    {deviceDiagnostic.permission === 'granted'
+                      ? 'Concedida'
+                      : deviceDiagnostic.permission === 'denied'
+                      ? 'Bloqueada'
+                      : 'Pendente'}
+                  </strong>
+                </span>
+              </div>
+
+              {/* Pill 2: Inscrição OneSignal + Sub ID copiável */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 9px',
+                  borderRadius: 8,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  background: deviceDiagnostic.pushOptedIn
+                    ? 'rgba(16, 185, 129, 0.1)'
+                    : 'rgba(245, 158, 11, 0.1)',
+                  color: deviceDiagnostic.pushOptedIn ? '#059669' : '#d97706',
+                  border: `1px solid ${
+                    deviceDiagnostic.pushOptedIn
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : 'rgba(245, 158, 11, 0.25)'
+                  }`,
+                }}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: deviceDiagnostic.pushOptedIn ? '#10b981' : '#f59e0b',
+                  }}
+                />
+                <span>
+                  OneSignal: <strong>{deviceDiagnostic.pushOptedIn ? 'Inscrito' : 'Não inscrito'}</strong>
+                </span>
+                {deviceDiagnostic.pushSubId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(deviceDiagnostic.pushSubId || '')
+                      toast.success('Subscription ID copiado!')
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      padding: '1px 5px',
+                      borderRadius: 5,
+                      border: 'none',
+                      background: 'rgba(0,0,0,0.06)',
+                      color: 'inherit',
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      cursor: 'pointer',
+                    }}
+                    title={`Sub ID: ${deviceDiagnostic.pushSubId} (clique para copiar)`}
+                  >
+                    {String(deviceDiagnostic.pushSubId).slice(0, 8)}… <Copy size={10} />
+                  </button>
+                )}
+              </div>
+
+              {/* Pill 3: Indicador compacto de Localhost (se aplicável) */}
+              {typeof window !== 'undefined' &&
+                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 8px',
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: 'rgba(99, 102, 241, 0.08)',
+                      color: '#6366f1',
+                      border: '1px solid rgba(99, 102, 241, 0.2)',
+                    }}
+                    title="Em localhost o Web Push local fica atrelado ao domínio oficial, mas todos os disparos feitos aqui chegam em tempo real nos celulares iOS e Android reais."
+                  >
+                    💡 Localhost (Envio real ativo p/ iOS & Android)
+                  </span>
+                )}
+
+              {/* Ações rápidas locais */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={handleResyncDevice}
+                  disabled={isResyncingDevice}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    border: '1px solid hsl(var(--border-subtle))',
+                    background: 'hsl(var(--bg-main))',
+                    color: 'hsl(var(--text-main))',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Sincronizar este aparelho com o OneSignal"
+                >
+                  <RefreshCw size={12} style={isResyncingDevice ? { animation: 'spin 1s linear infinite' } : {}} />
+                  {isResyncingDevice ? 'Sincronizando...' : 'Sincronizar'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetAndPromptPermission}
+                  disabled={isResyncingDevice}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    border: '1px solid hsl(var(--border-subtle))',
+                    background: 'hsl(var(--bg-main))',
+                    color: 'hsl(var(--text-muted))',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Reiniciar flags locais e solicitar novamente a permissão nativa neste aparelho"
+                >
+                  <RotateCcw size={12} />
+                  Permissão
+                </button>
+              </div>
+            </div>
+
+            {/* BLOCO DIREITO: Resumo de Aparelhos Ativos no OneSignal & Atalho p/ Liberar Acessos */}
+            <div className="push-device-compact-right" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+              {fleetOverview?.summary ? (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  padding: '4px 10px',
+                  borderRadius: 10,
+                  background: 'hsl(var(--bg-main))',
+                  border: '1px solid hsl(var(--border-subtle))',
+                  fontSize: 11.5,
+                }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 800, color: '#059669' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981' }} />
+                    {fleetOverview.summary.activeDevices} ativos
+                  </span>
+                  <span style={{ color: 'hsl(var(--text-muted))', fontSize: 11 }}>
+                    de {fleetOverview.summary.totalDevices} no OneSignal (📱{fleetOverview.summary.byPlatform.ios.active} • 🤖{fleetOverview.summary.byPlatform.android.active} • 💻{fleetOverview.summary.byPlatform.web.active})
+                  </span>
+                  {fleetOverview.summary.byCategory.recommendedCleanupTotal > 0 && (
+                    <span
+                      style={{
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        background: 'rgba(245, 158, 11, 0.16)',
+                        color: '#d97706',
+                        fontWeight: 800,
+                        fontSize: 11,
+                      }}
+                      title={`${fleetOverview.summary.byCategory.inactiveStudents} de alunos inativos, ${fleetOverview.summary.byCategory.unused60d} sem uso (+60d), ${fleetOverview.summary.byCategory.duplicatesStale} duplicados, ${fleetOverview.summary.byCategory.orphans} órfãos`}
+                    >
+                      ⚡ {fleetOverview.summary.byCategory.recommendedCleanupTotal} p/ liberar
+                    </span>
+                  )}
+                </div>
+              ) : isLoadingFleet ? (
+                <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))' }}>
+                  Calculando frota OneSignal...
+                </span>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => setActiveMainTab('aparelhos')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 9,
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(99, 102, 241, 0.12))',
+                  color: '#059669',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Ver todos os aparelhos ativos no OneSignal, filtrar quem não usa, excluir alunos inativos e liberar acessos"
+              >
+                <Zap size={13} />
+                Gerenciar Acessos & Limpeza
+              </button>
+            </div>
           </div>
-        )}
-      </div>
 
       {/* ── GRID PRINCIPAL: CONTROLES & PREVIEW ── */}
       <div className="push-simulator-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>

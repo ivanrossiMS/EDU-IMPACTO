@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import {
+  isStudentInactiveStatus,
+  deleteOneSignalSubscriptionById,
+  deleteOneSignalUserByAlias,
+} from '@/lib/server/pushService'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +30,7 @@ export async function POST(request: NextRequest) {
     const {
       subscriptionId,
       pushToken,
+      platform,
       userId,
       responsavelId,
       alunoId,
@@ -95,10 +101,11 @@ export async function POST(request: NextRequest) {
 
     const [{ data: respRows }, { data: alunoRows }] = await Promise.all([
       supabase.from('responsaveis').select('id, email, dados').or(orFilters.join(',')),
-      supabase.from('alunos').select('id, dados').or(`id.eq.${user.id},dados->>email.ilike.${userEmail || '__none__'}`),
+      supabase.from('alunos').select('id, status, matricula, dados').or(`id.eq.${user.id},dados->>auth_id.eq.${user.id},dados->>user_id.eq.${user.id},dados->>email.ilike.${userEmail || '__none__'}`),
     ])
 
     const respIds: string[] = []
+    const linkedStudentIdCandidates = new Set<string>()
     for (const r of respRows || []) {
       addId(r.id)
       addId(r.dados?.auth_id)
@@ -106,11 +113,20 @@ export async function POST(request: NextRequest) {
       addEmail(r.email || r.dados?.email)
       if (r.id) respIds.push(String(r.id))
       if (Array.isArray(r.dados?.alunosVinculados)) {
-        r.dados.alunosVinculados.forEach((aid: unknown) => addId(aid))
+        r.dados.alunosVinculados.forEach((aid: unknown) => {
+          addId(aid)
+          if (aid && typeof aid === 'string' && aid.trim()) linkedStudentIdCandidates.add(aid.trim())
+        })
       }
     }
     if (user.user_metadata?.responsavel_id) {
       respIds.push(String(user.user_metadata.responsavel_id))
+    }
+    if (user.user_metadata?.aluno_id) {
+      linkedStudentIdCandidates.add(String(user.user_metadata.aluno_id).trim())
+    }
+    if (alunoId) {
+      linkedStudentIdCandidates.add(String(alunoId).trim())
     }
 
     if (respIds.length > 0) {
@@ -121,12 +137,62 @@ export async function POST(request: NextRequest) {
       for (const v of vinculos || []) {
         addId(v.aluno_id)
         addId(v.responsavel_id)
+        if (v.aluno_id) linkedStudentIdCandidates.add(String(v.aluno_id).trim())
       }
     }
 
+    const allLinkedStudentMap = new Map<string, any>()
     for (const a of alunoRows || []) {
       addId(a.id)
       addEmail(a.dados?.email)
+      if (a.id) allLinkedStudentMap.set(String(a.id).trim(), a)
+    }
+
+    const missingStudentIds = Array.from(linkedStudentIdCandidates).filter(id => !allLinkedStudentMap.has(id))
+    if (missingStudentIds.length > 0) {
+      const { data: extraAlunos } = await supabase
+        .from('alunos')
+        .select('id, status, matricula, dados')
+        .or(`id.in.(${missingStudentIds.join(',')}),matricula.in.(${missingStudentIds.join(',')})`)
+      for (const ea of extraAlunos || []) {
+        addId(ea.id)
+        if (ea.id) allLinkedStudentMap.set(String(ea.id).trim(), ea)
+      }
+    }
+
+    const allLinkedStudents = Array.from(allLinkedStudentMap.values())
+    const activeLinkedStudents = allLinkedStudents.filter(s => !isStudentInactiveStatus(s))
+    const inactiveLinkedStudents = allLinkedStudents.filter(s => isStudentInactiveStatus(s))
+
+    // Se o usuário NÃO é colaborador da escola e todos os alunos vinculados a ele estão INATIVOS,
+    // bloqueia o registro no OneSignal e exclui imediatamente o aparelho para evitar cobrança.
+    if (!isStaff && !colabIdent && allLinkedStudents.length > 0 && activeLinkedStudents.length === 0) {
+      await Promise.all([
+        deleteOneSignalSubscriptionById(cleanSubId, appId, apiKey),
+        deleteOneSignalUserByAlias('external_id', cleanUserId, appId, apiKey),
+        ...(responsavelId ? [deleteOneSignalUserByAlias('responsavel_id', String(responsavelId).trim(), appId, apiKey)] : []),
+      ]).catch(() => {})
+
+      console.log(`🧹 [Push Sync] Bloqueado e removido aparelho ${cleanSubId} do usuário inativo ${cleanUserId} (0 alunos ativos).`)
+      return NextResponse.json({
+        success: false,
+        inactiveCleanup: true,
+        subscriptionId: cleanSubId,
+        userId: cleanUserId,
+        message: 'Todos os alunos vinculados estão inativos. Aparelho removido do OneSignal.',
+      })
+    }
+
+    // Se o responsável possui tanto filho ativo quanto inativo, garante que o alias aluno_id aponte para o filho ativo
+    let effectiveAlunoId = alunoId ? String(alunoId).trim() : undefined
+    if (
+      effectiveAlunoId &&
+      activeLinkedStudents.length > 0 &&
+      inactiveLinkedStudents.some(
+        s => String(s.id).trim() === effectiveAlunoId || String(s.matricula || '').trim() === effectiveAlunoId
+      )
+    ) {
+      effectiveAlunoId = String(activeLinkedStudents[0].id).trim()
     }
 
     const isAdmin = isStaff && ['administrador', 'administrador master', 'admin', 'diretor', 'diretor geral', 'master'].includes(
@@ -168,8 +234,9 @@ export async function POST(request: NextRequest) {
 
     const authHeader = `Basic ${apiKey}`
 
-    // 0. Verifica o estado atual do player para detectar external_user_id ausente
+    // 0. Verifica o estado atual do player para detectar external_user_id ausente ou subscrição excluída
     let playerCurrentExtId: string | null = null
+    let playerNotFound = false
     try {
       const checkRes = await fetch(`https://onesignal.com/api/v1/players/${cleanSubId}?app_id=${appId}`, {
         headers: { Authorization: authHeader },
@@ -178,17 +245,26 @@ export async function POST(request: NextRequest) {
         const checkData = await checkRes.json()
         playerCurrentExtId = checkData?.external_user_id || null
         console.log(`🔍 [Push Sync] Player ${cleanSubId} estado atual — external_user_id: "${playerCurrentExtId}"`)
+      } else if (checkRes.status === 404) {
+        playerNotFound = true
       }
     } catch {}
 
+    const sanitizedIncomingTags = { ...(tags || {}) }
+    for (const inact of inactiveLinkedStudents) {
+      const inactId = String(inact.id).trim()
+      delete sanitizedIncomingTags[`aluno_${inactId}`]
+      delete sanitizedIncomingTags[`turma_${inactId}`]
+    }
+
     const tagPayload = {
-      ...tags,
+      ...sanitizedIncomingTags,
       ...(responsavelId ? { responsavel_id: String(responsavelId) } : {}),
-      ...(alunoId ? { aluno_id: String(alunoId) } : {}),
+      ...(effectiveAlunoId ? { aluno_id: String(effectiveAlunoId) } : {}),
       ...(colabIdent ? { colaborador_id: String(colabIdent) } : {}),
     }
 
-    // 1. Atualizar o player no OneSignal diretamente com external_user_id e tags
+    // 1. Atualizar o player no OneSignal diretamente com external_user_id, tags e notification_types: 1 (reativa em caso de rematrícula)
     const playerUpdateRes = await fetch(`https://onesignal.com/api/v1/players/${cleanSubId}`, {
       method: 'PUT',
       headers: {
@@ -199,10 +275,53 @@ export async function POST(request: NextRequest) {
         app_id: appId,
         external_user_id: cleanUserId,
         tags: tagPayload,
+        notification_types: 1,
+        ...(pushToken ? { identifier: pushToken } : {}),
       }),
     })
 
     const playerData = await playerUpdateRes.json().catch(() => ({}))
+    const subscriptionDeletedNeedsReset =
+      playerNotFound ||
+      playerUpdateRes.status === 404 ||
+      (Array.isArray(playerData?.errors) &&
+        playerData.errors.some((e: any) => typeof e === 'string' && e.toLowerCase().includes('not found')))
+
+    // 1b. Se a assinatura havia sido excluída na limpeza ("Liberar Acessos") mas o aparelho enviou seu pushToken,
+    // recriamos imediatamente o registro do aparelho no OneSignal via POST /api/v1/players para restaurar o push na hora!
+    let effectiveSubId = cleanSubId
+    let recreatedSubscriptionId: string | null = null
+    if (subscriptionDeletedNeedsReset && pushToken && String(pushToken).trim().length > 0) {
+      try {
+        const platLower = String(platform || '').toLowerCase()
+        const deviceType = platLower === 'ios' ? 0 : platLower === 'android' ? 1 : 5
+        const createRes = await fetch('https://onesignal.com/api/v1/players', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+          },
+          body: JSON.stringify({
+            app_id: appId,
+            device_type: deviceType,
+            identifier: String(pushToken).trim(),
+            external_user_id: cleanUserId,
+            tags: tagPayload,
+            notification_types: 1,
+          }),
+        })
+        const createData = await createRes.json().catch(() => ({}))
+        if (createRes.ok && createData?.id) {
+          recreatedSubscriptionId = String(createData.id)
+          effectiveSubId = recreatedSubscriptionId
+          console.log(
+            `🔄 [Push Sync] Aparelho anteriormente limpo foi re-registrado automaticamente no OneSignal! Novo ID: ${recreatedSubscriptionId} (usuário: ${cleanUserId})`
+          )
+        }
+      } catch (recreateErr: any) {
+        console.warn('[Push Sync] Aviso ao recriar player excluído:', recreateErr?.message)
+      }
+    }
 
     // 2. Se o player estava sem external_user_id, força re-vínculo adicional via Identity API
     // Isso corrige o estado após OneSignal.logout() que deixa o player como "anonymous"
@@ -213,7 +332,7 @@ export async function POST(request: NextRequest) {
       external_id: cleanUserId,
     }
     if (responsavelId) aliases['responsavel_id'] = String(responsavelId).trim()
-    if (alunoId) aliases['aluno_id'] = String(alunoId).trim()
+    if (effectiveAlunoId) aliases['aluno_id'] = String(effectiveAlunoId).trim()
     if (colabIdent) {
       aliases['colaborador_id'] = String(colabIdent).trim()
       aliases['system_user_id'] = String(colabIdent).trim()
@@ -297,7 +416,7 @@ export async function POST(request: NextRequest) {
     try {
       // 1. PATCH /subscriptions/{sub_id}/owner transfere ou vincula a subscrição diretamente ao external_id
       const subPatchRes = await fetch(
-        `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${cleanSubId}/owner`,
+        `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${effectiveSubId}/owner`,
         {
           method: 'PATCH',
           headers: {
@@ -318,7 +437,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
             Authorization: authHeader,
           },
-          body: JSON.stringify({ subscription: { id: cleanSubId } }),
+          body: JSON.stringify({ subscription: { id: effectiveSubId } }),
         }
       ).catch(() => {})
 
@@ -327,8 +446,9 @@ export async function POST(request: NextRequest) {
       console.warn('[Push Sync] Falha no PATCH por subscrição (não crítico):', subPatchErr?.message)
     }
 
-    console.log(`✅ [Push Sync Subscription] Aparelho ${cleanSubId} associado ao usuário ${cleanUserId}`, {
+    console.log(`✅ [Push Sync Subscription] Aparelho ${effectiveSubId} associado ao usuário ${cleanUserId}`, {
       playerStatus: playerUpdateRes.status,
+      recreatedSubscriptionId,
       identityStatus: identityRes.status,
       needsForceRelink,
       previousExtId: playerCurrentExtId || '(vazio)',
@@ -336,9 +456,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      subscriptionId: cleanSubId,
+      subscriptionId: effectiveSubId,
+      recreatedSubscriptionId,
       userId: cleanUserId,
       needsForceRelink,
+      subscriptionDeletedNeedsReset,
       playerUpdate: playerData,
       identity: identityData,
       subscriptionPatch: subscriptionPatchData,

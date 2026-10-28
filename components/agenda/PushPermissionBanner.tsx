@@ -50,6 +50,7 @@ export function PushPermissionBanner() {
     isDenied,
     isNotDetermined,
     isLoading,
+    subscription,
     requestPermission,
     openSettings,
     refresh,
@@ -146,8 +147,27 @@ export function PushPermissionBanner() {
       return
     }
 
-    if (isAuthorized) {
+    // Se todos os alunos vinculados ao usuário estão inativos, não exibe o banner de ativação
+    const isInactiveOptedOut =
+      typeof window !== 'undefined' && localStorage.getItem('edu_push_inactive_opted_out') === 'true'
+    if (isInactiveOptedOut) {
       setBannerState('hidden')
+      return
+    }
+
+    // Verifica se o aluno foi rematriculado ou se a subscrição OneSignal está desativada (optedOut) mesmo com permissão do SO
+    const needsReactivation =
+      typeof window !== 'undefined' &&
+      (localStorage.getItem('edu_push_needs_reactivation') === 'true' ||
+        (isAuthorized && subscription?.optedIn === false && Boolean(subscription?.subscriptionId)))
+
+    if (isAuthorized && !needsReactivation) {
+      setBannerState('hidden')
+      return
+    }
+
+    if (isAuthorized && needsReactivation) {
+      setBannerState('prompt')
       return
     }
 
@@ -192,7 +212,7 @@ export function PushPermissionBanner() {
     }
 
     setBannerState('hidden')
-  }, [userDismissed, isLoading, isAuthorized, isDenied, isNotDetermined, isLoggingOut, loadingPath, currentUser?.id, pathname])
+  }, [userDismissed, isLoading, isAuthorized, isDenied, isNotDetermined, subscription?.optedIn, subscription?.subscriptionId, isLoggingOut, loadingPath, currentUser?.id, pathname])
 
   const handleActivate = async () => {
     setIsActivating(true)

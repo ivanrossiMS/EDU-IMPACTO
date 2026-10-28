@@ -455,25 +455,25 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
 
         <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
           
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
-              <Type size={16} color="#3b82f6" /> Tamanho do Enunciado
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Type size={15} color="#3b82f6" /> Tamanho do Enunciado
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {[12, 14, 16, 18, 20, 24].map(size => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+              {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                 <button
                   key={`enunciado-${size}`}
                   onClick={() => setEnunciadoFontSize(size)}
                   style={{
-                    padding: '8px',
-                    borderRadius: 8,
+                    padding: '5px 4px',
+                    borderRadius: 7,
                     background: enunciadoFontSize === size ? '#3b82f6' : '#f8fafc',
                     color: enunciadoFontSize === size ? 'white' : '#475569',
                     border: `1px solid ${enunciadoFontSize === size ? '#3b82f6' : '#e2e8f0'}`,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontSize: 13
+                    transition: 'all 0.15s',
+                    fontSize: 11.5
                   }}
                 >
                   {size}pt
@@ -482,25 +482,25 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             </div>
           </div>
 
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
-              <Type size={16} color="#3b82f6" /> Tamanho das Alternativas
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Type size={15} color="#3b82f6" /> Tamanho das Alternativas
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {[12, 14, 16, 18, 20, 24].map(size => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+              {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                 <button
                   key={`alt-${size}`}
                   onClick={() => setAlternativasFontSize(size)}
                   style={{
-                    padding: '8px',
-                    borderRadius: 8,
+                    padding: '5px 4px',
+                    borderRadius: 7,
                     background: alternativasFontSize === size ? '#3b82f6' : '#f8fafc',
                     color: alternativasFontSize === size ? 'white' : '#475569',
                     border: `1px solid ${alternativasFontSize === size ? '#3b82f6' : '#e2e8f0'}`,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontSize: 13
+                    transition: 'all 0.15s',
+                    fontSize: 11.5
                   }}
                 >
                   {size}pt

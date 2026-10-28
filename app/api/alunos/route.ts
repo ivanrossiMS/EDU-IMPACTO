@@ -2,6 +2,10 @@ import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
 import {
+  cleanupOneSignalForInactiveStudent,
+  isStudentInactiveStatus,
+} from '@/lib/server/pushService'
+import {
   getAdminClient,
   findAuthUserByEmail,
   invalidateAuthUsersCache,
@@ -1977,6 +1981,11 @@ export async function PUT(request: Request) {
 
               if (guardian) {
                 const guardianEmail = (guardian.email || '').trim().toLowerCase()
+
+                // Limpa os aparelhos OneSignal do responsável órfão antes de apagar o registro no banco
+                await cleanupOneSignalForInactiveStudent(String(savedStudent.id), {
+                  extraResponsavelIds: [String(respId)],
+                }).catch(err => console.error('[OneSignal Unlink Guardian Error]', err?.message))
                 
                 // Delete from public.responsaveis
                 await supabase.from('responsaveis').delete().eq('id', respId)
@@ -2005,6 +2014,18 @@ export async function PUT(request: Request) {
     syncStudentToDevices(savedStudent.id, 'update').catch(err => 
       console.error('[Portaria Sync Error]', err.message)
     )
+
+    // Se o aluno foi inativado, remove imediatamente os aparelhos do aluno e dos responsáveis
+    // (preservando responsáveis que possuam outros filhos ativos ou sejam colaboradores)
+    if (isStudentInactiveStatus(savedStudent)) {
+      const cleanupPromise = cleanupOneSignalForInactiveStudent(String(savedStudent.id)).catch(err =>
+        console.error('[OneSignal Inactive Cleanup Error]', err?.message)
+      )
+      await Promise.race([
+        cleanupPromise,
+        new Promise(resolve => setTimeout(resolve, 3500)),
+      ])
+    }
 
     // Sincronizar grupos da Agenda Digital para garantir que o aluno esteja APENAS na turma CURSANDO
     if (savedStudent && savedStudent.id && savedStudent.turma) {
@@ -2188,6 +2209,11 @@ export async function DELETE(request: Request) {
 
       const matricula = student.matricula || student.dados?.codigo || student.id
       const studentEmail = (student.email || student.dados?.email || '').trim().toLowerCase()
+
+      // 1.5. Limpa aparelhos e subscrições no OneSignal do aluno e responsáveis (antes de remover vínculos no banco)
+      await cleanupOneSignalForInactiveStudent(String(studentId), {
+        forceTreatAsInactive: true,
+      }).catch(err => console.error('[OneSignal Student Delete Cleanup Error]', err?.message))
 
       // 2. Siblingless Guardian Deletion Cascade & Auth Account Revocation
       const { data: linkedResps } = await supabaseAdmin

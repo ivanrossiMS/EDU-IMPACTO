@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient, getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
-import { sendPushNotification, getNotificationStats } from '@/lib/server/pushService'
+import {
+  sendPushNotification,
+  getNotificationStats,
+  cleanupOneSignalForInactiveStudent,
+  cleanupAllInactiveStudentsOneSignal,
+} from '@/lib/server/pushService'
 import { AgendaPushType } from '@/lib/server/agendaNotifications'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
@@ -1296,9 +1301,17 @@ export async function GET(request: Request) {
   const wantColaboradores = searchParams.get('colaboradores') === 'true'
   const wantLogs = searchParams.get('logs') === 'true'
   const wantConfig = searchParams.get('config') === 'true'
+  const wantOneSignalOverview = searchParams.get('onesignal_overview') === 'true'
   const supabase = supabaseServer
 
   try {
+    // 0. Panorama completo de Aparelhos Ativos e Limpeza no OneSignal
+    if (wantOneSignalOverview) {
+      const { getOneSignalFleetOverview } = await import('@/lib/server/oneSignalFleetService')
+      const overview = await getOneSignalFleetOverview()
+      return NextResponse.json(overview)
+    }
+
     // 1. Status de configuração do OneSignal
     if (wantConfig) {
       const hasAppId = Boolean(process.env.ONESIGNAL_APP_ID && process.env.ONESIGNAL_APP_ID.length > 8)
@@ -2856,6 +2869,56 @@ export async function DELETE(request: Request) {
     const colabId = body.colaboradorId || body.userId || searchParams.get('colaboradorId') || searchParams.get('userId')
     const clearAllForUser = body.clearAllForUser || searchParams.get('clearAllForUser') === 'true'
     const clearAllOrphans = body.clearAllOrphans || searchParams.get('clearAllOrphans') === 'true'
+    const clearInactiveStudents = body.clearInactiveStudents || searchParams.get('clearInactiveStudents') === 'true'
+    const inactiveAlunoId = body.inactiveAlunoId || searchParams.get('inactiveAlunoId')
+    const cleanupMode = body.cleanupMode || searchParams.get('cleanupMode')
+    const minInactiveDays = body.minInactiveDays || searchParams.get('minInactiveDays')
+    const protectStaff = body.protectStaff !== undefined ? Boolean(body.protectStaff) : true
+
+    if (cleanupMode) {
+      const { executeOneSignalSmartCleanup } = await import('@/lib/server/oneSignalFleetService')
+      const smartRes = await executeOneSignalSmartCleanup({
+        mode: cleanupMode,
+        subscriptionIds,
+        minInactiveDays: minInactiveDays ? Number(minInactiveDays) : 60,
+        protectStaff,
+      })
+      return NextResponse.json(smartRes)
+    }
+
+    if (clearInactiveStudents) {
+      const batchRes = await cleanupAllInactiveStudentsOneSignal()
+      return NextResponse.json({
+        success: batchRes.success,
+        deletedCount: batchRes.deletedSubscriptionsCount,
+        deletedUsersCount: batchRes.deletedUsersCount,
+        inactiveStudentsTotal: batchRes.inactiveStudentsTotal,
+        eligibleGuardiansTotal: batchRes.eligibleGuardiansTotal,
+        protectedGuardiansTotal: batchRes.protectedGuardiansTotal,
+        deletedSubscriptionIds: batchRes.deletedSubscriptionIds,
+        message: `${batchRes.deletedSubscriptionsCount} aparelho(s) e ${batchRes.deletedUsersCount} usuário(s) inativo(s) removidos do OneSignal (${batchRes.inactiveStudentsTotal} alunos inativos verificados; ${batchRes.protectedGuardiansTotal} responsáveis preservados por possuírem outro filho ativo ou vínculo de colaborador).`,
+      })
+    }
+
+    if (clearAllOrphans) {
+      const { executeOneSignalSmartCleanup } = await import('@/lib/server/oneSignalFleetService')
+      const orphanRes = await executeOneSignalSmartCleanup({ mode: 'orphans' })
+      return NextResponse.json(orphanRes)
+    }
+
+    if (inactiveAlunoId) {
+      const singleRes = await cleanupOneSignalForInactiveStudent(String(inactiveAlunoId), {
+        forceTreatAsInactive: true,
+      })
+      return NextResponse.json({
+        success: singleRes.success,
+        deletedCount: singleRes.deletedSubscriptionsCount,
+        deletedUsersCount: singleRes.deletedUsersCount,
+        cleanedGuardianIds: singleRes.cleanedGuardianIds,
+        protectedGuardianIds: singleRes.protectedGuardianIds,
+        message: `${singleRes.deletedSubscriptionsCount} aparelho(s) excluído(s) do OneSignal para o aluno ${singleRes.studentName || inactiveAlunoId}.`,
+      })
+    }
 
     const targetsToDelete = new Set<string>(subscriptionIds.filter(Boolean))
 
@@ -2906,9 +2969,12 @@ export async function DELETE(request: Request) {
         })
 
         // b) DELETE via Subscription API (OneSignal User Model v5)
-        let resSubStatus = null
+        let resSubStatus: number | null = null
         try {
-          const resSub = await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/subscriptions/${subId}`, {
+          const subEndpoint = clearAllForUser
+            ? `https://onesignal.com/api/v1/apps/${appId}/users/by/subscriptions/${subId}`
+            : `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${subId}`
+          const resSub = await fetch(subEndpoint, {
             method: 'DELETE',
             headers: { Authorization: `Basic ${apiKey}` },
           })
@@ -2917,7 +2983,7 @@ export async function DELETE(request: Request) {
 
         deleteResults.push({
           subscriptionId: subId,
-          success: resPlayer.ok,
+          success: resPlayer.ok || resPlayer.status === 404 || (resSubStatus !== null && resSubStatus >= 200 && resSubStatus < 300),
           playerStatus: resPlayer.status,
           subscriptionStatus: resSubStatus,
         })

@@ -670,23 +670,23 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                     </label>
                     <span style={{ fontSize: 12, fontWeight: 800, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>{enunciadoFontSize}px</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
-                    {[11, 12, 14, 16, 18, 22].map(size => (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+                    {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                       <button
                         key={`enunciado-${size}`}
                         onClick={() => setEnunciadoFontSize(size)}
                         style={{
-                          padding: '7px 0',
-                          borderRadius: 8,
+                          padding: '5px 0',
+                          borderRadius: 7,
                           background: enunciadoFontSize === size ? '#2563eb' : '#f8fafc',
                           color: enunciadoFontSize === size ? 'white' : '#475569',
                           border: `1px solid ${enunciadoFontSize === size ? '#2563eb' : '#e2e8f0'}`,
                           fontWeight: 700,
                           cursor: 'pointer',
-                          fontSize: 12
+                          fontSize: 11.5
                         }}
                       >
-                        {size}
+                        {size}pt
                       </button>
                     ))}
                   </div>
@@ -700,23 +700,23 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                     </label>
                     <span style={{ fontSize: 12, fontWeight: 800, color: '#6366f1', background: '#eef2ff', padding: '2px 8px', borderRadius: 6 }}>{alternativasFontSize}px</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
-                    {[10, 11, 12, 14, 16, 20].map(size => (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+                    {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                       <button
                         key={`alt-${size}`}
                         onClick={() => setAlternativasFontSize(size)}
                         style={{
-                          padding: '7px 0',
-                          borderRadius: 8,
+                          padding: '5px 0',
+                          borderRadius: 7,
                           background: alternativasFontSize === size ? '#6366f1' : '#f8fafc',
                           color: alternativasFontSize === size ? 'white' : '#475569',
                           border: `1px solid ${alternativasFontSize === size ? '#6366f1' : '#e2e8f0'}`,
                           fontWeight: 700,
                           cursor: 'pointer',
-                          fontSize: 12
+                          fontSize: 11.5
                         }}
                       >
-                        {size}
+                        {size}pt
                       </button>
                     ))}
                   </div>

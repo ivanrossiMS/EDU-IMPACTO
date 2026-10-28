@@ -270,25 +270,25 @@ export default function AdaptarSimuladoPage() {
 
         <div style={{ padding: '32px', flex: 1, overflowY: 'auto' }}>
           
-          <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <Type size={16} color="#3b82f6" /> Tamanho da Fonte (Global)
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              <Type size={15} color="#3b82f6" /> Tamanho da Fonte (Global)
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {[12, 14, 16, 18, 20, 24].map(size => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5 }}>
+              {[10, 11, 12, 13, 14, 16, 18, 20, 24].map(size => (
                 <button
                   key={size}
                   onClick={() => setFontSize(size)}
                   style={{
-                    padding: '12px',
-                    borderRadius: 12,
+                    padding: '5px 4px',
+                    borderRadius: 7,
                     background: fontSize === size ? '#3b82f6' : '#f8fafc',
                     color: fontSize === size ? 'white' : '#475569',
                     border: `1px solid ${fontSize === size ? '#3b82f6' : '#e2e8f0'}`,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontSize: 14
+                    transition: 'all 0.15s',
+                    fontSize: 11.5
                   }}
                 >
                   {size}pt
