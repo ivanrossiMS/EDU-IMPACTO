@@ -14,6 +14,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
 import { FloatingChat } from '@/components/chat/FloatingChat'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
+import { AgendaPullToRefresh } from './components/AgendaPullToRefresh'
 import { Loader2 } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
@@ -68,6 +69,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
+  const mainScrollRef = React.useRef<HTMLDivElement>(null)
 
   // 'checking' = aguardando dados reais do Supabase
   // 'allowed'  = usuário tem acesso
@@ -261,6 +263,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             flex: 1;
             overflow-y: auto;
             overflow-x: hidden;
+            overscroll-behavior-y: contain;
             position: relative;
             background: transparent;
             min-width: 0;
@@ -385,8 +388,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="ad-main-scroll no-scrollbar">
+        <div ref={mainScrollRef} className="ad-main-scroll no-scrollbar">
           <div className="ad-mobile-status-bar" />
+          <AgendaPullToRefresh scrollContainerRef={mainScrollRef} />
           {exibirBanner && bannerUrl ? (
             <div className="ad-banner-global">
               <img 

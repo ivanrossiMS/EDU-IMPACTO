@@ -1294,7 +1294,12 @@ export default function ADFinanceiroPage() {
     }
 
     fetchFinanceiro(selectedAno)
+    const handlePullRefresh = () => {
+      fetchFinanceiro(selectedAno, true)
+    }
+    window.addEventListener('ad:pull-to-refresh', handlePullRefresh)
     return () => {
+      window.removeEventListener('ad:pull-to-refresh', handlePullRefresh)
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }

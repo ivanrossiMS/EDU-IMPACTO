@@ -393,10 +393,16 @@ export function useSupabaseCollection<T>(
       }
     }
 
+    const handlePullToRefresh = () => {
+      if (cancelled || !isMounted.current) return
+      refresh()
+    }
+
     if (typeof window !== 'undefined') {
       window.addEventListener('online', handleReconnectionOrRecovery)
       window.addEventListener('edu:auth-recovered', handleReconnectionOrRecovery)
       window.addEventListener('edu:network-reconnected', handleReconnectionOrRecovery)
+      window.addEventListener('ad:pull-to-refresh', handlePullToRefresh)
     }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityRecovery)
@@ -431,6 +437,7 @@ export function useSupabaseCollection<T>(
         window.removeEventListener('online', handleReconnectionOrRecovery)
         window.removeEventListener('edu:auth-recovered', handleReconnectionOrRecovery)
         window.removeEventListener('edu:network-reconnected', handleReconnectionOrRecovery)
+        window.removeEventListener('ad:pull-to-refresh', handlePullToRefresh)
       }
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityRecovery)

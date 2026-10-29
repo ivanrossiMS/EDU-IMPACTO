@@ -364,6 +364,11 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     }
   }, [queryClient, refetch, isRefreshing])
 
+  useEffect(() => {
+    window.addEventListener('ad:pull-to-refresh', handleRefresh)
+    return () => window.removeEventListener('ad:pull-to-refresh', handleRefresh)
+  }, [handleRefresh])
+
   // Ao entrar na tela ou alternar páginas, sincroniza de imediato
   useEffect(() => {
     refetch()
@@ -1098,16 +1103,6 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                 </button>
               )}
             </div>
-            <button
-              className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              type="button"
-              title="Atualizar"
-              aria-label="Atualizar"
-            >
-              <RotateCw size={14} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
-            </button>
             <button className="btn btn-secondary ad-com-filter-btn">
               <Filter size={15} /> Filtros
             </button>

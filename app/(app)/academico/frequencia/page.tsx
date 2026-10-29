@@ -4,6 +4,7 @@ import { useData, newId, Turma } from '@/lib/dataContext'
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { getInitials, isValidStudentPhoto } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
+import { apiFetch } from '@/lib/api/apiClient'
 import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
@@ -16,6 +17,8 @@ import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
 import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
+
+const EMPTY_ALUNOS_LIST: any[] = []
 
 const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; glow: string }> = {
   P: { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', label: 'P', glow: 'rgba(34, 197, 94, 0.2)' },
@@ -1011,6 +1014,15 @@ export default function FrequenciaPage() {
   const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string>>({})
   const [failedPhotoIds, setFailedPhotoIds] = useState<Record<string, boolean>>({})
   const fetchedPhotoIdsRef = useRef<Set<string>>(new Set())
+  const inFlightPhotoIdsRef = useRef<Set<string>>(new Set())
+  const isMountedRef = useRef<boolean>(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
   const [photoPreviewModal, setPhotoPreviewModal] = useState<{ nome: string; foto: string; id?: string; turma?: string } | null>(null)
   const [saidaModalData, setSaidaModalData] = useState<{ aluno: any; dia: string } | null>(null)
   const [saidaModalHora, setSaidaModalHora] = useState<string>('')
@@ -1241,7 +1253,7 @@ export default function FrequenciaPage() {
   }, [contextFreqs, allFreqs, freqTurma, freqDia, portariaEventsList, alunos])
 
   const alunosDaTurma = useMemo(() => {
-    if (!turmaSel) return []
+    if (!turmaSel) return EMPTY_ALUNOS_LIST
     const targetTurma = turmaObj || turmas.find(t => String(t.id) === String(turmaSel) || String(t.codigo) === String(turmaSel) || String(t.nome) === String(turmaSel)) || turmaSel
 
     const lista = alunos.filter((a: any) => {
@@ -1272,77 +1284,6 @@ export default function FrequenciaPage() {
   }, [alunosDaTurma, buscaAluno])
 
   const [absences, setAbsences] = useState<Record<string, Record<string, Record<string, PresStatus>>>>({})
-
-  // Carregamento sob demanda de fotos dos alunos visíveis (Diário da Turma, Registro Manual, Relatórios e Busca)
-  useEffect(() => {
-    const targetStudents: any[] = []
-    if (alunosDaTurma && alunosDaTurma.length > 0) {
-      targetStudents.push(...alunosDaTurma)
-    }
-    if (showRegistroManualModal && Array.isArray(alunos)) {
-      targetStudents.push(...alunos)
-    }
-    if (showRelatorioModal && Array.isArray(alunos)) {
-      if (relatorioAlunoId) {
-        const found = alunos.find((a: any) => String(a.id) === String(relatorioAlunoId))
-        if (found) targetStudents.push(found)
-      }
-      if (relatorioConsultado) {
-        targetStudents.push(...alunos)
-      }
-    }
-    if (!turmaSel && filtroBusca.trim().length >= 2 && Array.isArray(alunos)) {
-      const q = normalizeSearchText(filtroBusca)
-      const matched = alunos.filter((a: any) =>
-        normalizeSearchText(a.nome).includes(q) ||
-        normalizeSearchText(a.id).includes(q) ||
-        normalizeSearchText(a.matricula).includes(q)
-      ).slice(0, 60)
-      targetStudents.push(...matched)
-    }
-
-    const idsToFetch: string[] = []
-    for (const s of targetStudents) {
-      const sId = String(s?.id || '').trim()
-      if (!sId) continue
-      if (fetchedPhotoIdsRef.current.has(sId)) continue
-      const directPhoto = s?.foto || s?.foto_url || s?.imagem1 || s?.dados?.foto || s?.dados?.avatarUrl || s?.dados?.fotoUrl
-      if (isValidStudentPhoto(directPhoto)) {
-        fetchedPhotoIdsRef.current.add(sId)
-        continue
-      }
-      idsToFetch.push(sId)
-    }
-
-    const uniqueIds = Array.from(new Set(idsToFetch))
-    if (uniqueIds.length === 0) return
-
-    uniqueIds.forEach(id => fetchedPhotoIdsRef.current.add(id))
-
-    let cancelled = false
-    const fetchPhotosInBatches = async () => {
-      const chunkSize = 80
-      for (let i = 0; i < uniqueIds.length; i += chunkSize) {
-        if (cancelled) break
-        const chunk = uniqueIds.slice(i, i + chunkSize)
-        try {
-          const res = await fetch(`/api/alunos?photosOnly=true&ids=${encodeURIComponent(chunk.join(','))}`)
-          if (!res.ok) continue
-          const json = await res.json()
-          if (json?.photos && typeof json.photos === 'object' && !cancelled) {
-            setStudentPhotosMap(prev => ({ ...prev, ...json.photos }))
-          }
-        } catch (err) {
-          console.error('Erro ao buscar fotos dos alunos:', err)
-        }
-      }
-    }
-
-    fetchPhotosInBatches()
-    return () => {
-      cancelled = true
-    }
-  }, [alunosDaTurma, showRegistroManualModal, showRelatorioModal, relatorioAlunoId, relatorioConsultado, turmaSel, filtroBusca, alunos])
 
   const getStudentPhoto = useCallback((aluno: any): string | null => {
     if (!aluno) return null
@@ -2437,6 +2378,10 @@ export default function FrequenciaPage() {
 
         list.push({
           id: aluno.id,
+          matricula: aluno.matricula,
+          foto: aluno.foto,
+          foto_url: aluno.foto_url,
+          dados: aluno.dados,
           nome: aluno.nome,
           turmaId: aluno.turma,
           turmaNome: turmaNome,
@@ -2458,6 +2403,122 @@ export default function FrequenciaPage() {
 
     return list
   }, [alunos, turmas, turmaSel, dataSel, filtroSegmento, filtroBusca, combinedFreqs, portariaEventsList, alunosDaTurma, isSameDay])
+
+  // Carregamento sob demanda e resiliente de fotos dos alunos visíveis
+  // (Diário da Turma, Registro Manual de Não Identificados, Relatórios, Modais de Saída e Busca)
+  useEffect(() => {
+    const targetStudents: any[] = []
+
+    if (alunosDaTurma && alunosDaTurma.length > 0) {
+      targetStudents.push(...alunosDaTurma)
+    }
+    if (saidaModalData?.aluno) {
+      targetStudents.push(saidaModalData.aluno)
+    }
+    if (confirmCancelSaidaModal?.aluno) {
+      targetStudents.push(confirmCancelSaidaModal.aluno)
+    }
+    if (showRegistroManualModal && Array.isArray(alunos)) {
+      const absenteesNow = getAbsenteesList(registroManualData || dataSel)
+      targetStudents.push(...absenteesNow)
+      targetStudents.push(...alunos)
+    } else if (!turmaSel && Array.isArray(alunos) && alunos.length > 0) {
+      // Pré-carrega em background os não identificados da data ativa para abertura instantânea do modal
+      const absenteesMain = getAbsenteesList(dataSel)
+      targetStudents.push(...absenteesMain.slice(0, 120))
+    }
+    if (showRelatorioModal && Array.isArray(alunos)) {
+      if (relatorioAlunoId) {
+        const found = alunos.find((a: any) => String(a.id) === String(relatorioAlunoId))
+        if (found) targetStudents.push(found)
+      }
+      if (relatorioConsultado) {
+        targetStudents.push(...alunos)
+      }
+    }
+    if (!turmaSel && filtroBusca.trim().length >= 2 && Array.isArray(alunos)) {
+      const q = normalizeSearchText(filtroBusca)
+      const matched = alunos.filter((a: any) =>
+        normalizeSearchText(a.nome).includes(q) ||
+        normalizeSearchText(a.id).includes(q) ||
+        normalizeSearchText(a.matricula).includes(q)
+      ).slice(0, 60)
+      targetStudents.push(...matched)
+    }
+
+    const idsToFetch: string[] = []
+    for (const s of targetStudents) {
+      const sId = String(s?.id || '').trim()
+      if (!sId) continue
+      if (fetchedPhotoIdsRef.current.has(sId) || inFlightPhotoIdsRef.current.has(sId)) continue
+      const directPhoto = s?.foto || s?.foto_url || s?.imagem1 || s?.dados?.foto || s?.dados?.avatarUrl || s?.dados?.fotoUrl
+      if (isValidStudentPhoto(directPhoto)) {
+        fetchedPhotoIdsRef.current.add(sId)
+        continue
+      }
+      idsToFetch.push(sId)
+    }
+
+    const uniqueIds = Array.from(new Set(idsToFetch))
+    if (uniqueIds.length === 0) return
+
+    uniqueIds.forEach(id => inFlightPhotoIdsRef.current.add(id))
+
+    const fetchPhotosInBatches = async () => {
+      const chunkSize = 45
+      for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+        const chunk = uniqueIds.slice(i, i + chunkSize)
+        if (!isMountedRef.current) {
+          chunk.forEach(id => inFlightPhotoIdsRef.current.delete(id))
+          continue
+        }
+        try {
+          const res = await apiFetch(`/api/alunos?photosOnly=true&ids=${encodeURIComponent(chunk.join(','))}`)
+          if (!res.ok) continue
+          const json = await res.json()
+          if (json?.photos && typeof json.photos === 'object' && isMountedRef.current) {
+            const newPhotos = json.photos as Record<string, string>
+            setStudentPhotosMap(prev => ({ ...prev, ...newPhotos }))
+            const loadedKeys = Object.keys(newPhotos)
+            if (loadedKeys.length > 0) {
+              setFailedPhotoIds(prev => {
+                let changed = false
+                const next = { ...prev }
+                for (const k of loadedKeys) {
+                  if (next[k]) {
+                    delete next[k]
+                    changed = true
+                  }
+                }
+                return changed ? next : prev
+              })
+            }
+            chunk.forEach(id => fetchedPhotoIdsRef.current.add(id))
+          }
+        } catch (err) {
+          console.error('Erro ao buscar fotos dos alunos:', err)
+        } finally {
+          chunk.forEach(id => inFlightPhotoIdsRef.current.delete(id))
+        }
+      }
+    }
+
+    fetchPhotosInBatches()
+  }, [
+    alunosDaTurma,
+    showRegistroManualModal,
+    registroManualData,
+    dataSel,
+    showRelatorioModal,
+    relatorioAlunoId,
+    relatorioConsultado,
+    turmaSel,
+    filtroBusca,
+    alunos,
+    saidaModalData,
+    confirmCancelSaidaModal,
+    getAbsenteesList,
+  ])
 
   // Ação de Impressão do Relatório de Faltas
   const handlePrintRelatorio = (overrideList?: any[], overrideData?: string) => {

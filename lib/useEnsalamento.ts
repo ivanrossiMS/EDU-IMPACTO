@@ -9,7 +9,7 @@
  * - Fallback A-Z quando ensalamento não definido
  * - Nunca quebra: null é o valor seguro quando não há número
  */
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 
 export interface EnsalEntry {
   alunoId: string
@@ -51,11 +51,11 @@ export function useEnsalamento(turmaObj: any): UseEnsalamentoResult {
     return m
   }, [ensalamento])
 
-  const getNumeroChamada = (alunoId: string): number | null => {
+  const getNumeroChamada = useCallback((alunoId: string): number | null => {
     return ensalMap.get(alunoId) ?? null
-  }
+  }, [ensalMap])
 
-  const ordenarPorChamada = <T extends { id: string; nome?: string }>(lista: T[]): T[] => {
+  const ordenarPorChamada = useCallback(<T extends { id: string; nome?: string }>(lista: T[]): T[] => {
     return [...lista].sort((a, b) => {
       const ca = ensalMap.get(a.id) ?? null
       const cb = ensalMap.get(b.id) ?? null
@@ -68,12 +68,12 @@ export function useEnsalamento(turmaObj: any): UseEnsalamentoResult {
       // Nenhum tem número: A-Z pelo nome
       return (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR')
     })
-  }
+  }, [ensalMap])
 
-  const formatarNumero = (alunoId: string): string => {
+  const formatarNumero = useCallback((alunoId: string): string => {
     const n = getNumeroChamada(alunoId)
     return n !== null ? String(n).padStart(2, '0') : '—'
-  }
+  }, [getNumeroChamada])
 
   return { ensalamento, getNumeroChamada, ordenarPorChamada, formatarNumero }
 }

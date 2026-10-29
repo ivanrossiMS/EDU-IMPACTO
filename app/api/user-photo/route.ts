@@ -15,7 +15,7 @@ function returnPhoto(foto: string | null, status = 200) {
 }
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -61,12 +61,13 @@ export async function GET(request: Request) {
       // 3. Se não encontrou, busca na tabela alunos (caso seja ID de aluno)
       const { data: alunoData } = await supabaseAdmin
         .from('alunos')
-        .select('foto')
+        .select('foto, foto_url, dados_foto:dados->>foto, dados_avatar:dados->>avatarUrl, dados_foto_url:dados->>fotoUrl')
         .eq('id', id)
         .maybeSingle();
         
-      if (alunoData?.foto) {
-        return returnPhoto(alunoData.foto);
+      const resolvedAlunoFoto = alunoData?.foto || (alunoData as any)?.foto_url || (alunoData as any)?.dados_foto || (alunoData as any)?.dados_avatar || (alunoData as any)?.dados_foto_url || null;
+      if (resolvedAlunoFoto) {
+        return returnPhoto(resolvedAlunoFoto);
       }
 
       // 4. Busca na tabela responsaveis
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth();
+  const { user, errorResponse } = await requireAuth(request);
   if (errorResponse) return errorResponse;
 
   try {

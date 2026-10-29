@@ -143,10 +143,15 @@ export async function GET(request: Request) {
       const CHUNK_SIZE = 60
       for (let i = 0; i < filteredIds.length; i += CHUNK_SIZE) {
         const chunk = filteredIds.slice(i, i + CHUNK_SIZE)
-        const { data: rows } = await supabase
+        const { data: rows, error: photosErr } = await supabase
           .from('alunos')
           .select('id, matricula, foto, foto_url, dados_foto:dados->>foto, dados_avatar:dados->>avatarUrl, dados_foto_url:dados->>fotoUrl')
           .in('id', chunk)
+
+        if (photosErr) {
+          console.error('[API alunos photosOnly] Erro na consulta de fotos:', photosErr.message)
+          continue
+        }
 
         for (const r of (rows || [])) {
           const candidate = r.foto || r.foto_url || (r as any).dados_foto || (r as any).dados_avatar || (r as any).dados_foto_url || null
@@ -154,16 +159,20 @@ export async function GET(request: Request) {
             const idStr = String(r.id).trim()
             const normId = idStr.replace(/^0+/, '') || idStr
             photos[idStr] = candidate
-            photos[normId] = candidate
+            if (normId !== idStr) photos[normId] = candidate
             if (r.matricula) {
               const matStr = String(r.matricula).trim()
-              if (matStr) photos[matStr] = candidate
+              if (matStr && matStr !== idStr && matStr !== normId) photos[matStr] = candidate
             }
           }
         }
       }
 
-      return NextResponse.json({ photos })
+      return NextResponse.json({ photos }, {
+        headers: {
+          'Cache-Control': 'private, max-age=120, stale-while-revalidate=300'
+        }
+      })
     }
 
     const pageParam = url.searchParams.get('page')

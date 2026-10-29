@@ -468,6 +468,11 @@ function ColaboradorComunicadosContent() {
     }
   }, [isRefreshing, refetchComunicados])
 
+  useEffect(() => {
+    window.addEventListener('ad:pull-to-refresh', handleRefresh)
+    return () => window.removeEventListener('ad:pull-to-refresh', handleRefresh)
+  }, [handleRefresh])
+
   // Escuta de eventos em tempo real com injeção otimista em 0ms e sincronização com debounce
   useEffect(() => {
     let syncTimer: ReturnType<typeof setTimeout> | null = null
@@ -1898,16 +1903,6 @@ function ColaboradorComunicadosContent() {
             </div>
             <button className="ad-com-filter-btn" type="button">
               <Filter size={14} /> Filtros
-            </button>
-            <button
-              className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              type="button"
-              title="Atualizar"
-              aria-label="Atualizar"
-            >
-              <RotateCw size={13} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
             {!isMirroring && (
               <div ref={novoMenuRef} style={{ position: 'relative', zIndex: showNovoMenu ? 10001 : 2 }}>

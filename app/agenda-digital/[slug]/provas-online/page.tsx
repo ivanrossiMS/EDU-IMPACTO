@@ -271,7 +271,11 @@ export default function ADProvasOnlineStudentPage() {
         fetchProvas(false)
       }
     }
+    const handlePullRefresh = () => {
+      fetchProvas(true)
+    }
     document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('ad:pull-to-refresh', handlePullRefresh)
     // Polling a cada 30 segundos apenas se a aba estiver visível
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
@@ -280,6 +284,7 @@ export default function ADProvasOnlineStudentPage() {
     }, 30000)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('ad:pull-to-refresh', handlePullRefresh)
       clearInterval(interval)
     }
   }, [fetchProvas])
@@ -513,36 +518,6 @@ export default function ADProvasOnlineStudentPage() {
                   }}>
                     {isResponsavel ? 'Painel da Família' : 'Módulo Integrado'}
                   </span>
-                  <button
-                    onClick={() => fetchProvas(true)}
-                    disabled={refreshing}
-                    title="Atualizar lista de provas"
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 7,
-                      background: '#ffffff',
-                      border: '1.2px solid #cbd5e1',
-                      color: '#475569',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                      padding: 0
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#0284c7'
-                      e.currentTarget.style.color = '#0284c7'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = '#cbd5e1'
-                      e.currentTarget.style.color = '#475569'
-                    }}
-                  >
-                    <RotateCw size={12} className={refreshing ? 'animate-spin' : ''} />
-                  </button>
                 </div>
               </div>
               {!isResponsavel && (

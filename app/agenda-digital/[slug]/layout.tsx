@@ -195,6 +195,14 @@ export default function ADInnerLayout({
       }
     }
     loadProfile()
+
+    const handlePullRefresh = () => {
+      loadProfile()
+    }
+    window.addEventListener('ad:pull-to-refresh', handlePullRefresh)
+    return () => {
+      window.removeEventListener('ad:pull-to-refresh', handlePullRefresh)
+    }
   }, [hydrated, currentUser?.id, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, router])
 
   useEffect(() => {

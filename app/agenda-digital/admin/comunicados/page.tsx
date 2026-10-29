@@ -100,6 +100,11 @@ export default function ADAdminComunicados() {
     }
   }, [queryClient, isRefreshing])
 
+  useEffect(() => {
+    window.addEventListener('ad:pull-to-refresh', handleRefresh)
+    return () => window.removeEventListener('ad:pull-to-refresh', handleRefresh)
+  }, [handleRefresh])
+
   // Escuta de eventos em tempo real com injeção otimista em 0ms e sincronização com debounce
   useEffect(() => {
     let syncTimer: ReturnType<typeof setTimeout> | null = null
@@ -1508,17 +1513,6 @@ export default function ADAdminComunicados() {
             >
               <Activity size={15} />
               <span>Engajamento</span>
-            </button>
-
-            <button
-              className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              type="button"
-              title="Atualizar lista de comunicados"
-              aria-label="Atualizar lista de comunicados"
-            >
-              <RotateCw size={15} strokeWidth={2.2} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
 
             <div ref={novoMenuRef} style={{ position: 'relative', zIndex: showNovoMenu ? 10001 : 2 }}>

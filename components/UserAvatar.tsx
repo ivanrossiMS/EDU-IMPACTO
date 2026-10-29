@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 
 import { getOptimizedUrl } from '@/lib/utils/image';
+import { apiFetch } from '@/lib/api/apiClient';
 
 // In-memory cache to share across instances and avoid duplicate requests
 const photoCache: Record<string, string | null | undefined> = {};
@@ -28,7 +29,7 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
 
       if (userId && typeof userId === 'string' && userId.trim() !== '') {
         try {
-          const res = await fetch(`/api/user-photo?id=${encodeURIComponent(userId)}`);
+          const res = await apiFetch(`/api/user-photo?id=${encodeURIComponent(userId)}`);
           if (res.ok) {
             const json = await res.json();
             if (json && json.foto) foto = json.foto;
@@ -40,7 +41,7 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
 
       if (!foto && name && typeof name === 'string' && name.trim() !== '') {
         try {
-          const res = await fetch(`/api/user-photo?name=${encodeURIComponent(name.trim())}`);
+          const res = await apiFetch(`/api/user-photo?name=${encodeURIComponent(name.trim())}`);
           if (res.ok) {
             const json = await res.json();
             if (json && json.foto) foto = json.foto;
