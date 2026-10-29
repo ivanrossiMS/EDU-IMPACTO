@@ -42,12 +42,27 @@ export async function GET(request: Request) {
        })
     }
 
-    // 1. Buscar os dados essenciais do aluno
-    const { data: aluno, error: errorAluno } = await supabase
-      .from('alunos')
-      .select('id, nome, foto, turma, turno, status, matricula, dados')
-      .eq('id', slug)
-      .maybeSingle()
+    // 1. Executar buscas de aluno, turmas/grupos (cache), vínculos do aluno e irmãos do responsável em PARALELO (1 único roundtrip)
+    const [alunoRes, turmasGruposRes, linksRes, meusLinksRes] = await Promise.all([
+      supabase
+        .from('alunos')
+        .select('id, nome, foto, turma, turno, status, matricula, dados')
+        .eq('id', slug)
+        .maybeSingle(),
+      getCachedTurmasAndGrupos(),
+      supabase
+        .from('aluno_responsavel')
+        .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dias_acesso, proibido, dados)')
+        .eq('aluno_id', slug),
+      !isAlunoProfile && responsavel_id
+        ? supabase
+            .from('aluno_responsavel')
+            .select('alunos(id, nome, foto, turma, turno, status, matricula, serie, unidade, dados)')
+            .eq('responsavel_id', responsavel_id)
+        : Promise.resolve({ data: null, error: null })
+    ])
+
+    const { data: aluno, error: errorAluno } = alunoRes
 
     if (errorAluno) {
       console.error('Erro buscando aluno:', errorAluno)
@@ -60,7 +75,7 @@ export async function GET(request: Request) {
     }
 
     // 1.5. Resolver nome e turno da Turma e Modalidade Integral via cache
-    const { allTurmas, allGrupos } = await getCachedTurmasAndGrupos()
+    const { allTurmas, allGrupos } = turmasGruposRes
     let allTurmasDbData: any[] = allTurmas || []
     let allGruposDbData: any[] = allGrupos || []
 
@@ -86,15 +101,12 @@ export async function GET(request: Request) {
       (aluno as any).turno = 'Integral/Intermediário';
     }
 
-    // 2. Buscar vínculos do aluno
+    // 2. Processar vínculos do aluno
     let vinculo = null;
     let responsaveisDb: any[] = [];
     let meusAlunos: any[] = [];
     
-    const { data: links, error: linkError } = await supabase
-      .from('aluno_responsavel')
-      .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dias_acesso, proibido, dados)')
-      .eq('aluno_id', slug)
+    const { data: links, error: linkError } = linksRes
 
     if (!linkError && links && links.length > 0) {
       responsaveisDb = links.map((l: any) => {
@@ -186,14 +198,11 @@ export async function GET(request: Request) {
        }
 
         if (responsavel_id) {
-          // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
-          const { data: meusLinks } = await supabase
-            .from('aluno_responsavel')
-            .select('alunos(*)')
-            .eq('responsavel_id', responsavel_id)
+          // 3. Processar alunos vinculados ao responsável já buscados em paralelo
+          const meusLinks = meusLinksRes.data
           
           if (meusLinks && meusLinks.length > 0) {
-            meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
+            meusAlunos = meusLinks.map((l: any) => Array.isArray(l.alunos) ? l.alunos[0] : l.alunos).filter(Boolean)
 
             // Populate turma_nome for meusAlunos via cached turmas
             meusAlunos.forEach(a => {

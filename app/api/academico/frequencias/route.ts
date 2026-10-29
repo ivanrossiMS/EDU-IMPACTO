@@ -54,13 +54,13 @@ export async function GET(request: Request) {
   }
 
   const limitParam = searchParams.get('limit')
-  const limit = limitParam ? parseInt(limitParam, 10) : 10000
+  const limit = limitParam ? parseInt(limitParam, 10) : (alunoId ? 500 : 10000)
 
-  // Pre-resolve turmas and students if turma filtering is requested
+  // Pre-resolve turmas and students if turma filtering is requested (only when not already scoped to a single alunoId)
   let studentIds: string[] = []
   let turmaIds: string[] = []
 
-  if (turmaId || turmaIdsParam) {
+  if ((turmaId || turmaIdsParam) && !alunoId) {
     const rawTurmaIds = turmaIdsParam 
       ? turmaIdsParam.split(',').map(s => s.trim()).filter(Boolean)
       : (turmaId ? [turmaId.trim()] : [])
@@ -90,6 +90,7 @@ export async function GET(request: Request) {
     if (dataFimVal) q = q.lte('data', dataFimVal)
     if (alunoId) {
       q = q.eq('aluno_id', alunoId)
+      return q
     } else if (!isStaff && allowedAlunoIds) {
       q = q.in('aluno_id', Array.from(allowedAlunoIds))
     }

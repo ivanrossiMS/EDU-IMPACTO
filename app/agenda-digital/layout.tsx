@@ -91,13 +91,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, loadingPath, setLoadingPath])
 
-  // Monitor de prontidão inicial
+  // Monitor de prontidão inicial (sem delay artificial de 350ms)
   React.useEffect(() => {
     if (accessState === 'allowed' && hydrated && mounted) {
-      const timer = setTimeout(() => {
-        setInitialReady(true)
-      }, 350)
-      return () => clearTimeout(timer)
+      setInitialReady(true)
     }
   }, [accessState, hydrated, mounted])
 
@@ -151,7 +148,13 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
       return
     }
 
-    if (perfisLoading) return
+    // Se perfis ainda está carregando na rede, libera imediatamente para colaboradores autenticados
+    // e reavalia assim que a lista de perfis chegar (evitando segurar o loader de tela cheia)
+    if (perfisLoading && (!perfis || perfis.length === 0)) {
+      setAccessState('allowed')
+      clearTimeout(emergencyTimer)
+      return
+    }
 
     // Encontrar o perfil real do usuário na lista do Supabase
     const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)

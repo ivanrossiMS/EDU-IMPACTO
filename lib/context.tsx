@@ -244,7 +244,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           }
           setCurrentUserState(parsedUser)
-          // NÃO marca hydrated aqui — aguarda a sessão ser verificada/restaurada em hydrate()
+
+          // FAST-PATH: Se já temos o usuário sincronamente no localStorage e um token de sessão local válido,
+          // libera hydrated = true em 0ms para não bloquear a árvore de renderização nas pontes nativas do Capacitor.
+          const isPwdRec =
+            window.location.pathname?.startsWith('/atualizar-senha') ||
+            Boolean((window as any).__EDU_IS_PASSWORD_RECOVERY__) ||
+            window.sessionStorage?.getItem('edu_password_recovery_pending') === '1'
+          if (parsedUser?.id && !isPwdRec) {
+            const pRef = getProjectRef()
+            const hasLocalToken = Boolean(
+              window.localStorage.getItem(`sb-${pRef}-auth-token`) ||
+              window.localStorage.getItem('edu_secure_session_v3') ||
+              window.localStorage.getItem('edu_sb_session_backup_v2') ||
+              (typeof document !== 'undefined' && document.cookie.includes(`sb-${pRef}-auth-token`))
+            )
+            if (hasLocalToken) {
+              startupDiagnostics.recordMilestone('context_hydration_fast_sync')
+              setHydrated(true)
+            }
+          }
         } else if (hasBarrierSync) {
           setCurrentUserState(null)
           setCurrentUserPerfilState('')
@@ -397,28 +416,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (savedUser) {
           setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
+          setCurrentUserState(savedUser)
+          // Libera hidratação imediatamente antes de buscar fotos secundárias em background
+          if (isMounted) {
+            clearTimeout(fallbackTimer)
+            setHydrated(true)
+          }
           try {
-            const [isolatedPhoto, extraData] = await Promise.all([
+            const [isolatedPhoto, extraData, altPhotoResp, altPhoto, altPhoto2] = await Promise.all([
               loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null),
               loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null),
+              savedUser.responsavel_id ? loadSettingAsync<string | null>(`edu-user-photo-${savedUser.responsavel_id}`, null) : Promise.resolve(null),
+              savedUser.system_user_id ? loadSettingAsync<string | null>(`edu-user-photo-${savedUser.system_user_id}`, null) : Promise.resolve(null),
+              savedUser.colaborador_id ? loadSettingAsync<string | null>(`edu-user-photo-${savedUser.colaborador_id}`, null) : Promise.resolve(null),
             ])
-            if (isolatedPhoto) savedUser.foto = isolatedPhoto
-            else if (extraData && extraData.foto) savedUser.foto = extraData.foto
-
-            if (!savedUser.foto && savedUser.responsavel_id) {
-              const altPhotoResp = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.responsavel_id}`, null)
-              if (altPhotoResp) savedUser.foto = altPhotoResp
-            }
-            if (!savedUser.foto && savedUser.system_user_id) {
-              const altPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.system_user_id}`, null)
-              if (altPhoto) savedUser.foto = altPhoto
-            }
-            if (!savedUser.foto && savedUser.colaborador_id) {
-              const altPhoto2 = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.colaborador_id}`, null)
-              if (altPhoto2) savedUser.foto = altPhoto2
+            const resolvedPhoto = isolatedPhoto || extraData?.foto || altPhotoResp || altPhoto || altPhoto2
+            if (resolvedPhoto && isMounted) {
+              savedUser = { ...savedUser, foto: resolvedPhoto }
+              setCurrentUserState(savedUser)
             }
           } catch (e) {}
-          setCurrentUserState(savedUser)
         } else {
           setCurrentUserState(null)
           setCurrentUserPerfilState('')

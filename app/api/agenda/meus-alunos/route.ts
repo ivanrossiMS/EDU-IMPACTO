@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -181,26 +182,44 @@ export async function GET(request: Request) {
       return true
     })
 
-    const turmaIds = [...new Set(alunos.map((a: any) => a.turma).filter(Boolean))]
+    // Monta filtro específico dos alunos do responsável para não varrer títulos da escola inteira
+    const tituloOrConds: string[] = []
+    alunos.forEach((a: any) => {
+      if (a.id) {
+        const safeId = String(a.id).replace(/["%,]/g, '')
+        tituloOrConds.push(`aluno.eq."${safeId}"`, `dados->>alunoId.eq."${safeId}"`, `dados->>aluno_id.eq."${safeId}"`)
+      }
+      if (a.nome) {
+        const safeNome = String(a.nome).replace(/["%,]/g, '')
+        tituloOrConds.push(`aluno.eq."${safeNome}"`)
+      }
+      if (a.matricula) {
+        const safeMat = String(a.matricula).replace(/["%,]/g, '')
+        tituloOrConds.push(`aluno.eq."${safeMat}"`, `dados->>alunoId.eq."${safeMat}"`)
+      }
+    })
 
-    // Busca turmas e títulos atrasados em paralelo
-    const [turmasResult, titulosResult] = await Promise.allSettled([
-      turmaIds.length > 0
-        ? supabase.from('turmas').select('id,nome,ano,codigo').in('id', turmaIds)
-        : Promise.resolve({ data: [] }),
-      supabase
-        .from('titulos')
-        .select('id,status,aluno,dados')
-        .eq('status', 'atrasado')
-        .limit(100)
+    // Busca turmas (via cache em memória 60s) e títulos atrasados do(s) aluno(s) em paralelo
+    const [turmasGruposResult, titulosResult] = await Promise.allSettled([
+      getCachedTurmasAndGrupos(),
+      tituloOrConds.length > 0
+        ? supabase
+            .from('titulos')
+            .select('id,status,aluno,dados')
+            .eq('status', 'atrasado')
+            .or(tituloOrConds.join(','))
+            .limit(50)
+        : Promise.resolve({ data: [] })
     ])
 
-    const turmasData     = turmasResult.status === 'fulfilled'  && turmasResult.value.data  ? turmasResult.value.data  : []
+    const allTurmas      = turmasGruposResult.status === 'fulfilled' ? (turmasGruposResult.value.allTurmas || []) : []
+    const allGrupos      = turmasGruposResult.status === 'fulfilled' ? (turmasGruposResult.value.allGrupos || []) : []
     const pendingTitulos = titulosResult.status === 'fulfilled' && titulosResult.value.data ? titulosResult.value.data : []
 
     const turmasMap: Record<string, { nome: string; ano: number }> = {}
-    turmasData.forEach((t: any) => {
-      turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+    allTurmas.forEach((t: any) => {
+      if (t?.id) turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+      if (t?.codigo) turmasMap[t.codigo] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
     })
 
     const result = alunos.map((a: any) => {
@@ -213,7 +232,7 @@ export async function GET(request: Request) {
         )
       })
       const turmaInfo = turmasMap[a.turma] || { nome: a.turma || 'S/T', ano: new Date().getFullYear() }
-      const isIntegral = isAlunoIntegralIntermediario(a, turmasData || [])
+      const isIntegral = isAlunoIntegralIntermediario(a, allTurmas, allGrupos)
 
       let finalTurmaNome = turmaInfo.nome
       if (isIntegral && finalTurmaNome && !finalTurmaNome.toUpperCase().includes('INTEGRAL') && !finalTurmaNome.toUpperCase().includes('INTERMEDIÁRIO')) {

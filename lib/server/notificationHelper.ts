@@ -1132,6 +1132,9 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
   }
 }
 
+const relationshipCache = new Map<string, { allowed: boolean; expiresAt: number }>()
+const RELATIONSHIP_CACHE_TTL_MS = 60_000
+
 /**
  * Verifica se o usuário logado (authUserId) tem permissão de visualizar 
  * dados sensíveis de um aluno específico (alunoId).
@@ -1140,13 +1143,20 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 export async function checkResponsavelRelationship(authUserId: string, alunoId: string, userEmail?: string): Promise<boolean> {
   if (!authUserId || !alunoId) return false;
   try {
-    const supabase = supabaseServer;
-    
     const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
     const cleanAuthId = String(authUserId).replace(/^(a_|_ALU)/, '');
     
     // Se o próprio aluno estiver logado
     if (cleanAuthId === cleanAlunoId) return true;
+
+    const cacheKey = `${cleanAuthId}:${cleanAlunoId}:${(userEmail || '').toLowerCase().trim()}`;
+    const now = Date.now();
+    const cached = relationshipCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.allowed;
+    }
+
+    const supabase = supabaseServer;
     
     // 1. Verifica na tabela aluno_responsavel por match direto de responsavel_id
     const orMatches = [`responsavel_id.eq.${cleanAuthId}`, `responsavel_id.eq.${authUserId}`];
@@ -1157,9 +1167,13 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       .or(orMatches.join(','))
       .maybeSingle();
       
-    if (!error && data) return true;
+    if (!error && data) {
+      if (relationshipCache.size > 1000) relationshipCache.clear();
+      relationshipCache.set(cacheKey, { allowed: true, expiresAt: now + RELATIONSHIP_CACHE_TTL_MS });
+      return true;
+    }
 
-    // 2. Se authUserId for um Auth UUID ou se temos email, buscar na tabela responsaveis
+    // 2 & 3. Se authUserId for um Auth UUID ou se temos email, buscar em paralelo em responsaveis e system_users
     const candidateRespIds = new Set<string>();
     const respOrConds: string[] = [];
     if (authUserId) {
@@ -1172,21 +1186,6 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       respOrConds.push(`email.ilike.${em}`);
     }
 
-    if (respOrConds.length > 0) {
-      const { data: respRows } = await supabase
-        .from('responsaveis')
-        .select('id, dados')
-        .or(respOrConds.join(','))
-        .limit(10);
-
-      if (respRows && respRows.length > 0) {
-        respRows.forEach((r: any) => {
-          if (r.id) candidateRespIds.add(String(r.id));
-        });
-      }
-    }
-
-    // 3. Checar em system_users se existe vínculo com responsavel_id
     const sysConds: string[] = [];
     if (authUserId) {
       sysConds.push(`id.eq.${authUserId}`, `auth_id.eq.${authUserId}`);
@@ -1195,19 +1194,26 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       sysConds.push(`email.ilike.${userEmail.toLowerCase().trim()}`);
     }
 
-    if (sysConds.length > 0) {
-      const { data: sysRows } = await supabase
-        .from('system_users')
-        .select('id, dados')
-        .or(sysConds.join(','))
-        .limit(5);
+    const [respRes, sysRes] = await Promise.all([
+      respOrConds.length > 0
+        ? supabase.from('responsaveis').select('id, dados').or(respOrConds.join(',')).limit(10)
+        : Promise.resolve({ data: null }),
+      sysConds.length > 0
+        ? supabase.from('system_users').select('id, dados').or(sysConds.join(',')).limit(5)
+        : Promise.resolve({ data: null })
+    ]);
 
-      if (sysRows && sysRows.length > 0) {
-        sysRows.forEach((s: any) => {
-          const rId = s.dados?.responsavel_id || s.dados?.responsavelId;
-          if (rId) candidateRespIds.add(String(rId));
-        });
-      }
+    if (respRes.data && respRes.data.length > 0) {
+      respRes.data.forEach((r: any) => {
+        if (r.id) candidateRespIds.add(String(r.id));
+      });
+    }
+
+    if (sysRes.data && sysRes.data.length > 0) {
+      sysRes.data.forEach((s: any) => {
+        const rId = s.dados?.responsavel_id || s.dados?.responsavelId;
+        if (rId) candidateRespIds.add(String(rId));
+      });
     }
 
     if (candidateRespIds.size > 0) {
@@ -1220,9 +1226,15 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
         .limit(1)
         .maybeSingle();
 
-      if (linkMatch) return true;
+      if (linkMatch) {
+        if (relationshipCache.size > 1000) relationshipCache.clear();
+        relationshipCache.set(cacheKey, { allowed: true, expiresAt: now + RELATIONSHIP_CACHE_TTL_MS });
+        return true;
+      }
     }
     
+    if (relationshipCache.size > 1000) relationshipCache.clear();
+    relationshipCache.set(cacheKey, { allowed: false, expiresAt: now + 15_000 });
     return false;
   } catch (err) {
     console.error('[NotifHelper] Erro ao verificar vínculo de responsável:', err);

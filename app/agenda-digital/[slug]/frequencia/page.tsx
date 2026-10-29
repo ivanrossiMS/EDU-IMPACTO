@@ -91,10 +91,10 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
   // Fetch real student attendance logs from database based on turma and alunoId
   const { data: frequenciasDb = [], isLoading: isLoadingFrequencias } = useApiQuery<any[]>(
-    ['frequencias-aluno', resolvedParams.slug, aluno?.turma],
+    ['frequencias-aluno', resolvedParams.slug, aluno?.turma || ''],
     '/api/academico/frequencias',
     { aluno_id: resolvedParams.slug, turma_id: aluno?.turma || '' },
-    { enabled: !!resolvedParams.slug && !!aluno?.turma }
+    { enabled: !!resolvedParams.slug }
   )
 
   // Fallback para eventos de portaria

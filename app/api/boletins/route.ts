@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       }
     }
     
-    const accessStartDate = await getLoggedUserAccessStartDate()
+    const accessStartDate = aluno_id ? null : await getLoggedUserAccessStartDate(false, user)
 
     const buildQuery = () => {
       let q = supabase.from('boletins').select('*').order('created_at', { ascending: false })

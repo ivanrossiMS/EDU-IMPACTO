@@ -38,9 +38,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR" data-theme="light" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24' }}>
       <head>
-        {/* Preconnect para carregamento das fontes */}
+        {/* Preconnect para carregamento das fontes e conexões Supabase */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} crossOrigin="anonymous" />
+        )}
         {/* Carregamento não-bloqueante para evitar tela branca em conexões lentas ou offline */}
         <link
           href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"

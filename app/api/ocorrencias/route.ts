@@ -4,6 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 
   let query = supabase.from('ocorrencias').select('*')
   
-  const accessStartDate = await getLoggedUserAccessStartDate()
+  const accessStartDate = (alunoId || alunoIds) ? null : await getLoggedUserAccessStartDate(false, user)
   if (accessStartDate && !alunoId && !alunoIds) {
     query = query.gte('created_at', accessStartDate.toISOString())
   }
@@ -89,20 +90,27 @@ export async function GET(request: Request) {
 
   const ocorrencias = data || [];
   
-  // Buscar nomes das turmas com supabaseServer (ignora RLS que bloqueia Família)
+  // Buscar nomes das turmas via cache em memória (TTL 60s) com fallback para supabaseServer
   const turmaIds = [...new Set(ocorrencias.map(o => o.dados?.turma).filter(Boolean))];
   let turmasDict: Record<string, string> = {};
   if (turmaIds.length > 0) {
-    const { supabaseServer } = await import('@/lib/supabaseServer');
-    const { data: turmasData } = await supabaseServer
-      .from('turmas')
-      .select('id, nome')
-      .in('id', turmaIds);
-      
-    if (turmasData) {
-      turmasData.forEach(t => {
-        turmasDict[t.id] = t.nome;
-      });
+    const { allTurmas } = await getCachedTurmasAndGrupos();
+    (allTurmas || []).forEach(t => {
+      if (t?.id && t?.nome) turmasDict[t.id] = t.nome;
+    });
+    const missingIds = turmaIds.filter(id => !turmasDict[id]);
+    if (missingIds.length > 0) {
+      const { supabaseServer } = await import('@/lib/supabaseServer');
+      const { data: turmasData } = await supabaseServer
+        .from('turmas')
+        .select('id, nome')
+        .in('id', missingIds);
+        
+      if (turmasData) {
+        turmasData.forEach(t => {
+          turmasDict[t.id] = t.nome;
+        });
+      }
     }
   }
 

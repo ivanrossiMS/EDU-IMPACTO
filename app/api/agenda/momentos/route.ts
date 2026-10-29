@@ -1,5 +1,5 @@
 import { NextResponse, after } from 'next/server'
-import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff, fetchAuthoritativeSystemUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -16,7 +16,7 @@ export const revalidate = 0
 export const maxDuration = 60
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -31,18 +31,11 @@ export async function GET(request: Request) {
     const colaboradorId = searchParams.get('colaborador_id') || searchParams.get('espelhar_colaborador')
     const scopeParam = searchParams.get('scope') || searchParams.get('admin')
 
-    // VERIFICAÇÃO DE PERFIL E IDOR
+    // VERIFICAÇÃO DE PERFIL E IDOR (usa cache de 60s de fetchAuthoritativeSystemUser em vez de query direta a cada chamada)
     const perfil = (user.user_metadata?.perfil || '').trim();
     const cargo = (user.user_metadata?.cargo || '').trim();
 
-    // Buscar no system_users se necessário para obter perfil, cargo e dados adicionais
-    let dbUser: any = null;
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, perfil, cargo, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle();
-    dbUser = foundUser;
+    const dbUser = await fetchAuthoritativeSystemUser(user);
 
     const effectivePerfil = dbUser?.perfil || perfil;
     const effectiveCargo = dbUser?.cargo || cargo;
@@ -61,7 +54,7 @@ export async function GET(request: Request) {
       (Boolean(alunoId) && hasDualRole)
     );
 
-    // BLINDAGEM IDOR: Se for perfil de família ou aluno, validar obrigatoriamente a relação
+    // BLINDAGEM IDOR: Se for perfil de família ou aluno, validar obrigatoriamente a relação (com cache em checkResponsavelRelationship)
     if (isFamilyOrStudentProfile) {
       if (!alunoId) {
         return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
@@ -74,15 +67,6 @@ export async function GET(request: Request) {
       if (dbUser?.id) candidateRespIds.add(String(dbUser.id));
       if (dbUser?.dados?.responsavel_id) candidateRespIds.add(String(dbUser.dados.responsavel_id));
       if (dbUser?.dados?.aluno_id) candidateRespIds.add(String(dbUser.dados.aluno_id));
-
-      if (user.email) {
-        const { data: respByEmail } = await supabase
-          .from('responsaveis')
-          .select('id')
-          .eq('email', user.email)
-          .maybeSingle();
-        if (respByEmail?.id) candidateRespIds.add(String(respByEmail.id));
-      }
 
       let isAuthorized = false;
       const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
@@ -105,7 +89,7 @@ export async function GET(request: Request) {
       }
     }
 
-    let accessStartDate = await getLoggedUserAccessStartDate();
+    let accessStartDate = await getLoggedUserAccessStartDate(false, user);
     let query = supabase.from('momentos').select('*');
 
     // Filtragem segura no Backend

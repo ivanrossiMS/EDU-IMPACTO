@@ -173,16 +173,9 @@ export async function GET(request: Request) {
     }
   }
 
-  // BLINDAGEM IDOR: Se for família, DEVE informar um aluno_id que lhe pertença
-  if (isFamilyOrStudent) {
-    if (!alunoId) {
-      return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
-    }
-    const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
-    const isOwner = await checkResponsavelRelationship(checkId, alunoId, user.email);
-    if (!isOwner) {
-      return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
-    }
+  // BLINDAGEM IDOR: Se for família, DEVE informar um aluno_id (a validação de vínculo roda em paralelo abaixo com a busca do aluno)
+  if (isFamilyOrStudent && !alunoId) {
+    return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
   }
 
   const typeParam = searchParams.get('type');
@@ -294,21 +287,28 @@ export async function GET(request: Request) {
     });
   }
 
-  // ── Resolução paralela de turma, grupos e data de acesso ──────────────────
+  // ── Resolução paralela de turma, grupos, vínculo IDOR e data de acesso ────
   let resolvedTurmas: string[] = [];
   if (turmaId) resolvedTurmas.push(turmaId);
   let studentGroups: string[] = [];
   const isAdminScopeRequest = (scopeParam === 'admin' || scopeParam === 'true') && isAdmin;
-  let accessStartDate = isAdminScopeRequest ? null : await getLoggedUserAccessStartDate(false, user);
+  // Só consulta getLoggedUserAccessStartDate quando NÃO há alunoId (pois quando há alunoId, a data vem do próprio aluno)
+  let accessStartDate = (isAdminScopeRequest || alunoId) ? null : await getLoggedUserAccessStartDate(false, user);
   let alunoDataForFilter: any = null;
   let allTurmasForFilter: any[] = [];
 
   if (alunoId) {
-    // Busca dados do aluno e turmas/grupos com cache de memória (0ms nas próximas chamadas)
-    const [alunoRes, { allTurmas, allGrupos }] = await Promise.all([
+    const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
+    // Busca validação IDOR, dados do aluno e turmas/grupos em PARALELO (economiza 1 roundtrip inteiro ao banco)
+    const [isOwner, alunoRes, { allTurmas, allGrupos }] = await Promise.all([
+      isFamilyOrStudent ? checkResponsavelRelationship(checkId, alunoId, user.email) : Promise.resolve(true),
       supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
       getCachedTurmasAndGrupos()
     ]);
+
+    if (isFamilyOrStudent && !isOwner) {
+      return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
+    }
 
     const alunoData = alunoRes.data;
     alunoDataForFilter = alunoData;
@@ -385,7 +385,11 @@ export async function GET(request: Request) {
     }
   }
 
-  let query = supabase.from('comunicados').select('*', { count: 'exact' });
+  // Evita COUNT(*) exato em toda a tabela no feed infinito de alunos/colaboradores (só calcula count exato no painel Admin)
+  const needsExactCount = isAdminScopeRequest || searchParams.get('include_count') === 'true';
+  let query = needsExactCount
+    ? supabase.from('comunicados').select('*', { count: 'exact' })
+    : supabase.from('comunicados').select('*');
 
   if (accessStartDate) {
     const adjustedStartDate = new Date(accessStartDate.getTime() - 60000); // 1 min buffer para clock skew
@@ -718,6 +722,7 @@ export async function GET(request: Request) {
   let allReads: any[] = [];
   let allCiencias: any[] = [];
   let allRespostas: any[] = [];
+  let cachedSysUsers: any[] = [];
   const colabToStuIds = new Map<string, string[]>();
 
   if (itemIds.length > 0) {
@@ -848,7 +853,7 @@ export async function GET(request: Request) {
      colabToStuIds.forEach(ids => ids.forEach(id => allStuIdsSet.add(id)));
      const allStuIds = Array.from(allStuIdsSet);
 
-     // 2. BUSCA UNIFICADA EM LOTES (evita UND_ERR_HEADERS_OVERFLOW em páginas grandes de 30, 50 ou 100 itens)
+     // 2. BUSCA UNIFICADA EM LOTES + system_users em PARALELO (evita UND_ERR_HEADERS_OVERFLOW e economiza roundtrip)
      const combinedReadsAndRespostasIds = Array.from(new Set([...itemIds, ...allStuIds]));
      const CHUNK_SIZE = 120;
      const idChunks: string[][] = [];
@@ -856,7 +861,7 @@ export async function GET(request: Request) {
        idChunks.push(combinedReadsAndRespostasIds.slice(i, i + CHUNK_SIZE));
      }
 
-     const [readsChunks, cienciasRes, respostasChunks] = await Promise.all([
+     const [readsChunks, cienciasRes, respostasChunks, sysUsersRes] = await Promise.all([
        Promise.all(
          idChunks.map(chunk =>
            supabaseServer
@@ -874,13 +879,15 @@ export async function GET(request: Request) {
              .in('comunicado_id', chunk)
              .order('created_at', { ascending: true })
          )
-       )
+       ),
+       getCachedSystemUsers().catch(() => [] as any[])
      ]);
      allReads = readsChunks.flatMap(r => r.data || []);
      allCiencias = cienciasRes.data || [];
      allRespostas = respostasChunks
        .flatMap(r => r.data || [])
        .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+     cachedSysUsers = sysUsersRes;
 
      // 3. Replicar leituras e respostas dos relatórios individuais (STU) para os seus respectivos consolidados (COLAB)
      if (colabToStuIds.size > 0) {
@@ -926,8 +933,6 @@ export async function GET(request: Request) {
   const alunoMetaId = user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : '';
   const colabMetaId = colaboradorId ? String(colaboradorId) : (user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : '');
   const userSlugMeta = user.user_metadata?.slug ? String(user.user_metadata.slug) : '';
-
-  const cachedSysUsers = await getCachedSystemUsers().catch(() => [] as any[]);
   const sysPhotoByKey = new Map<string, string>();
   for (const su of cachedSysUsers) {
     const f = su?.dados?.foto || su?.dados?.fotoUrl || su?.dados?.avatarUrl || su?.dados?.avatar;
@@ -1213,6 +1218,39 @@ export async function GET(request: Request) {
           merged.enquete = sanitizeEnqueteForViewer(merged.enquete, studentKeys);
           if (merged.dados?.enquete) {
             merged.dados = { ...merged.dados, enquete: merged.enquete };
+          }
+        }
+        // Enxugar payload de leituras/ciencias para contas familiares (não trafegar centenas de recibos de outros alunos da escola)
+        if (!isAdmin) {
+          const isViewerKey = (k: string) => {
+            if (studentKeys.has(k)) return true;
+            for (const sk of studentKeys) {
+              if (k === `aluno_${sk}` || k.startsWith(`${sk}_`) || k.endsWith(`_${sk}`)) return true;
+            }
+            return false;
+          };
+          if (merged.leituras && typeof merged.leituras === 'object') {
+            const scopedLeituras: Record<string, any> = {};
+            for (const [k, v] of Object.entries(merged.leituras)) {
+              if (isViewerKey(k)) scopedLeituras[k] = v;
+            }
+            merged.leituras = scopedLeituras;
+            if (merged.dados?.leituras) {
+              merged.dados = { ...merged.dados, leituras: scopedLeituras };
+            }
+          }
+          if (merged.ciencias && typeof merged.ciencias === 'object') {
+            const scopedCiencias: Record<string, any> = {};
+            for (const [k, v] of Object.entries(merged.ciencias)) {
+              if (isViewerKey(k)) scopedCiencias[k] = v;
+            }
+            merged.ciencias = scopedCiencias;
+            if (merged.dados?.ciencias) {
+              merged.dados = { ...merged.dados, ciencias: scopedCiencias };
+            }
+          }
+          if (Array.isArray(merged.leituras_alunos_ids)) {
+            merged.leituras_alunos_ids = merged.leituras_alunos_ids.filter((id: string) => studentKeys.has(String(id)));
           }
         }
       } else {

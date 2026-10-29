@@ -82,7 +82,12 @@ export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading: isGlobalDataLoading, chatGroups } = useAgendaDigital()
   const { turmas = [] } = useData();
-  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
+  const [hasSettled, setHasSettled] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setHasSettled(true), 350)
+    return () => clearTimeout(timer)
+  }, [])
+  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000', [], { enabled: hasSettled });
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   

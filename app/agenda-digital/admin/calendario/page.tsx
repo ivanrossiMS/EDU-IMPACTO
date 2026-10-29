@@ -6,8 +6,9 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin, Eye, EyeOff } from 'lucide-react'
 import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
+import { AddToCalendarButton } from '@/components/agenda/AddToCalendarButton'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -237,6 +238,7 @@ export default function CalendarioPage() {
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [filtroUsuario, setFiltroUsuario] = useState('todos')
+  const [mostrarTodos, setMostrarTodos] = useState(false)
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -461,15 +463,24 @@ export default function CalendarioPage() {
       .sort((a, b) => (a.data + (a.horaInicio || '')).localeCompare(b.data + (b.horaInicio || '')))
   }, [eventosAgenda, year, month, filtroTipo, searchQuery])
 
+  const eventosPassadosCount = useMemo(() => {
+    return meventosNoMes.filter(e => e.data < today).length
+  }, [meventosNoMes, today])
+
+  const eventosVisiveisNoMes = useMemo(() => {
+    if (mostrarTodos) return meventosNoMes
+    return meventosNoMes.filter(e => e.data >= today)
+  }, [meventosNoMes, mostrarTodos, today])
+
   // Grouped by date for list presentation
   const meventosAgrupados = useMemo(() => {
     const groups: Record<string, typeof meventosNoMes> = {}
-    meventosNoMes.forEach(ev => {
+    eventosVisiveisNoMes.forEach(ev => {
       if (!groups[ev.data]) groups[ev.data] = []
       groups[ev.data].push(ev)
     })
     return groups
-  }, [meventosNoMes])
+  }, [eventosVisiveisNoMes])
 
   const tiposList: Array<{ id: TipoEvento | 'todos'; label: string; color: string }> = [
     { id: 'todos', label: 'Todos os eventos', color: '#6366f1' },
@@ -1045,7 +1056,11 @@ export default function CalendarioPage() {
             </h1>
             <p className="page-subtitle" style={{ color: '#64748b', fontSize: 13, fontWeight: 500, margin: '4px 0 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />
-              <span>{meventosNoMes.length} evento(s) no mês • {year}</span>
+              <span>
+                {!mostrarTodos && eventosPassadosCount > 0
+                  ? `${eventosVisiveisNoMes.length} próximo(s) • ${meventosNoMes.length} evento(s) no mês • ${year}`
+                  : `${meventosNoMes.length} evento(s) no mês • ${year}`}
+              </span>
             </p>
           </div>
 
@@ -1112,6 +1127,8 @@ export default function CalendarioPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        flexWrap: 'wrap',
+        gap: 10,
         position: 'relative'
       }}>
         {/* Month Switcher Controls */}
@@ -1200,6 +1217,52 @@ export default function CalendarioPage() {
             </button>
           )}
         </div>
+
+        {/* Botão Mostrar Todos / Ocultar Passados */}
+        <button
+          type="button"
+          onClick={() => setMostrarTodos(prev => !prev)}
+          style={{
+            height: 46,
+            padding: '0 16px',
+            borderRadius: 16,
+            background: mostrarTodos
+              ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
+              : '#f8fafc',
+            color: mostrarTodos ? '#ffffff' : '#4f46e5',
+            border: mostrarTodos ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: 'Outfit, sans-serif',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            boxShadow: mostrarTodos
+              ? '0 4px 12px rgba(99, 102, 241, 0.25)'
+              : '0 1px 3px rgba(0, 0, 0, 0.03)',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap',
+            boxSizing: 'border-box'
+          }}
+          title={mostrarTodos ? 'Ocultar eventos que já passaram' : 'Mostrar todos os eventos do mês (incluindo realizados)'}
+        >
+          {mostrarTodos ? <EyeOff size={15} /> : <Eye size={15} />}
+          <span>{mostrarTodos ? 'Ocultar passados' : 'Mostrar todos'}</span>
+          {eventosPassadosCount > 0 && (
+            <span style={{
+              padding: '2px 7px',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 800,
+              background: mostrarTodos ? 'rgba(255, 255, 255, 0.22)' : 'rgba(99, 102, 241, 0.12)',
+              color: mostrarTodos ? '#ffffff' : '#4f46e5',
+              lineHeight: 1.2
+            }}>
+              {meventosNoMes.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* 🚀 LAYOUT PRINCIPAL EM LISTA (2 COLUNAS: LISTA DE EVENTOS + CARD DE ANIVERSARIANTES) */}
@@ -1230,14 +1293,40 @@ export default function CalendarioPage() {
                 <CalendarIcon size={36} />
               </div>
               <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b', margin: '0 0 6px 0' }}>
-                Nenhum evento encontrado
+                {!mostrarTodos && eventosPassadosCount > 0
+                  ? 'Não há próximos eventos neste mês'
+                  : 'Nenhum evento encontrado'}
               </h3>
-              <p style={{ fontSize: 13, color: '#64748b', maxWidth: 360, margin: '0 auto 20px auto' }}>
-                {selectedDay
-                  ? 'Não há compromissos agendados para a data selecionada.'
-                  : 'Nenhum evento agendado para este mês.'}
+              <p style={{ fontSize: 13, color: '#64748b', maxWidth: 380, margin: '0 auto 20px auto' }}>
+                {!mostrarTodos && eventosPassadosCount > 0
+                  ? `Os ${eventosPassadosCount} evento(s) agendado(s) para ${MESES[month]} já foram realizados.`
+                  : selectedDay
+                    ? 'Não há compromissos agendados para a data selecionada.'
+                    : 'Nenhum evento agendado para este mês.'}
               </p>
-              {selectedDay && (
+              {!mostrarTodos && eventosPassadosCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setMostrarTodos(true)}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: 14,
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    color: '#fff',
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    boxShadow: '0 8px 16px rgba(99,102,241,0.25)'
+                  }}
+                >
+                  <Eye size={15} />
+                  <span>Mostrar todos ({meventosNoMes.length})</span>
+                </button>
+              ) : selectedDay ? (
                 <button
                   onClick={() => setSelectedDay(null)}
                   style={{
@@ -1254,7 +1343,7 @@ export default function CalendarioPage() {
                 >
                   Ver Todos os Eventos do Mês
                 </button>
-              )}
+              ) : null}
             </motion.div>
           ) : (
             /* Timeline List Groups (Matching Reference Image) */
@@ -1301,15 +1390,21 @@ export default function CalendarioPage() {
                       maxWidth: 82,
                       background: isPast
                         ? '#f1f5f9'
-                        : `linear-gradient(155deg, #ffffff 0%, ${dateAccentColor}14 100%)`,
+                        : isToday
+                          ? 'linear-gradient(145deg, #6366f1 0%, #4f46e5 100%)'
+                          : '#ffffff',
                       borderRadius: 20,
                       padding: '16px 8px',
                       border: isPast
-                        ? '1.5px solid #cbd5e1'
-                        : `2px solid ${dateAccentColor}`,
+                        ? '1px solid #e2e8f0'
+                        : isToday
+                          ? '1px solid #4f46e5'
+                          : '1px solid #e2e8f0',
                       boxShadow: isPast
                         ? 'none'
-                        : `0 0 16px ${dateAccentColor}50, 0 0 4px ${dateAccentColor}75, inset 0 0 10px ${dateAccentColor}10`,
+                        : isToday
+                          ? '0 8px 20px -4px rgba(79, 70, 229, 0.38)'
+                          : '0 4px 14px rgba(15, 23, 42, 0.04)',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
@@ -1323,14 +1418,15 @@ export default function CalendarioPage() {
                       <span style={{
                         position: 'absolute',
                         top: -9,
-                        padding: '2px 8px',
-                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                        color: '#fff',
+                        padding: '2px 9px',
+                        background: '#ffffff',
+                        color: '#4f46e5',
+                        border: '1.5px solid #6366f1',
                         borderRadius: 10,
                         fontSize: 9,
-                        fontWeight: 800,
-                        letterSpacing: '0.04em',
-                        boxShadow: '0 0 10px rgba(99,102,241,0.6)'
+                        fontWeight: 900,
+                        letterSpacing: '0.05em',
+                        boxShadow: '0 2px 8px rgba(79, 70, 229, 0.22)'
                       }}>
                         HOJE
                       </span>
@@ -1340,8 +1436,7 @@ export default function CalendarioPage() {
                       style={{
                         fontSize: 28,
                         fontWeight: 800,
-                        color: isPast ? '#64748b' : dateAccentColor,
-                        textShadow: isPast ? 'none' : `0 0 10px ${dateAccentColor}35`,
+                        color: isPast ? '#64748b' : isToday ? '#ffffff' : '#0f172a',
                         lineHeight: 1,
                         letterSpacing: '-0.02em',
                         fontFamily: 'Outfit, sans-serif'
@@ -1352,7 +1447,7 @@ export default function CalendarioPage() {
                     <span style={{
                       fontSize: 11.5,
                       fontWeight: 700,
-                      color: isPast ? '#94a3b8' : dateAccentColor,
+                      color: isPast ? '#94a3b8' : isToday ? 'rgba(255, 255, 255, 0.92)' : primaryColor,
                       marginTop: 4,
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase'
@@ -1362,7 +1457,7 @@ export default function CalendarioPage() {
                     <span style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: isPast ? '#94a3b8' : '#64748b',
+                      color: isPast ? '#94a3b8' : isToday ? 'rgba(255, 255, 255, 0.75)' : '#64748b',
                       marginTop: 2,
                       textTransform: 'uppercase'
                     }}>
@@ -1379,18 +1474,21 @@ export default function CalendarioPage() {
                       maxWidth: '100%',
                       background: isPast
                         ? '#f8fafc'
-                        : `linear-gradient(135deg, #ffffff 0%, ${primaryColor}0F 100%)`,
+                        : isToday
+                          ? 'linear-gradient(135deg, #ffffff 0%, #f5f7ff 100%)'
+                          : '#ffffff',
                       borderRadius: 20,
                       padding: '16px 20px',
                       border: isPast
-                        ? '1.5px solid #cbd5e1'
-                        : `2px solid ${primaryColor}`,
-                      borderLeft: isPast
-                        ? '5px solid #94a3b8'
-                        : `6px solid ${primaryColor}`,
+                        ? '1px solid #e2e8f0'
+                        : isToday
+                          ? '1.5px solid rgba(99, 102, 241, 0.38)'
+                          : '1px solid #e2e8f0',
                       boxShadow: isPast
                         ? 'none'
-                        : `0 0 18px ${primaryColor}55, 0 0 5px ${primaryColor}85, inset 0 0 14px ${primaryColor}12`,
+                        : isToday
+                          ? '0 0 0 4px rgba(99, 102, 241, 0.08), 0 10px 26px -6px rgba(79, 70, 229, 0.14)'
+                          : '0 4px 16px rgba(15, 23, 42, 0.04)',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -1410,11 +1508,7 @@ export default function CalendarioPage() {
                               flexDirection: 'column',
                               gap: 6,
                               paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
-                              borderBottom: idx < eventsList.length - 1 ? (isPast ? '1px solid #e2e8f0' : `1px dashed ${color}40`) : 'none',
-                              ...(eventsList.length > 1 && !isPast ? {
-                                borderLeft: `3.5px solid ${color}`,
-                                paddingLeft: 10
-                              } : {}),
+                              borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
                               position: 'relative',
                               zIndex: 2
                             }}
@@ -1428,7 +1522,6 @@ export default function CalendarioPage() {
                                     height: 7,
                                     borderRadius: '50%',
                                     background: color,
-                                    boxShadow: isPast ? 'none' : `0 0 8px ${color}`,
                                     flexShrink: 0
                                   }} />
                                 )}
@@ -1439,10 +1532,9 @@ export default function CalendarioPage() {
                                   gap: 5,
                                   padding: '4px 10px',
                                   borderRadius: 10,
-                                  background: isPast ? '#e2e8f0' : `${color}1F`,
+                                  background: isPast ? '#e2e8f0' : `${color}14`,
                                   color: isPast ? '#64748b' : color,
-                                  border: isPast ? '1px solid #cbd5e1' : `1px solid ${color}66`,
-                                  boxShadow: isPast ? 'none' : `0 0 10px ${color}30`,
+                                  border: isPast ? '1px solid #cbd5e1' : `1px solid ${color}35`,
                                   fontSize: 11.5,
                                   fontWeight: 700,
                                   letterSpacing: '0.01em'
@@ -1461,17 +1553,34 @@ export default function CalendarioPage() {
                                   borderRadius: 999,
                                   textTransform: 'uppercase',
                                   letterSpacing: '0.04em',
-                                  background: isPast ? '#f1f5f9' : `${color}18`,
-                                  color: isPast ? '#64748b' : color,
-                                  border: isPast ? '1px solid #cbd5e1' : `1px solid ${color}55`,
-                                  boxShadow: isPast ? 'none' : `0 0 8px ${color}25`
+                                  background: isPast ? '#f1f5f9' : (isToday ? '#eef2ff' : `${color}12`),
+                                  color: isPast ? '#64748b' : (isToday ? '#4f46e5' : color),
+                                  border: isPast ? '1px solid #cbd5e1' : (isToday ? '1px solid #c7d2fe' : `1px solid ${color}35`)
                                 }}>
                                   {isPast ? 'Realizado' : (isToday ? 'Hoje' : TIPO_LABELS[ev.tipo] || 'Próximo')}
                                 </span>
                               </div>
 
                               {/* Action Buttons for Admin */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                                <AddToCalendarButton
+                                  event={{
+                                    id: ev.id,
+                                    titulo: ev.titulo,
+                                    descricao: ev.descricao,
+                                    tipo: ev.tipo,
+                                    tipoLabel: TIPO_LABELS[ev.tipo] || 'Evento',
+                                    data: ev.data,
+                                    horaInicio: ev.horaInicio,
+                                    horaFim: ev.horaFim,
+                                    diaTodo: Boolean((ev as any).diaTodo),
+                                    local: ev.local,
+                                    cor: resolveRealColor(ev),
+                                  }}
+                                  accentColor={resolveRealColor(ev)}
+                                  isPast={isPast}
+                                  compact
+                                />
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleEdit(ev as any); }}
                                   style={{

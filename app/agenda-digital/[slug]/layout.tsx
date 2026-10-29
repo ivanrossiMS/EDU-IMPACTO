@@ -28,6 +28,54 @@ import { AgendaNavigationTabBar } from './components/AgendaNavigationTabBar'
 // Estilos extraídos do monólito para CSS modularizado e otimizado
 import './agenda-layout.css'
 
+const clientProfileCache = new Map<string, { data: any; ts: number }>()
+const CLIENT_PROFILE_CACHE_TTL_MS = 60_000
+
+function getInitialSeededProfile(slug?: string, userId?: string): any | null {
+  if (!slug || typeof window === 'undefined') return null
+  const slugStr = String(slug).trim()
+  for (const [k, v] of clientProfileCache.entries()) {
+    if (k.startsWith(`${slugStr}_`) && Date.now() - v.ts < CLIENT_PROFILE_CACHE_TTL_MS) {
+      return v.data
+    }
+  }
+  try {
+    const keysToTry = userId ? [`edu-meus-alunos-${userId}`] : []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('edu-meus-alunos-') && !keysToTry.includes(k)) {
+        keysToTry.push(k)
+      }
+    }
+    for (const key of keysToTry) {
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      const parsed = JSON.parse(raw)
+      const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.alunos) ? parsed.alunos : [])
+      const match = list.find((a: any) =>
+        a && (
+          String(a.id) === slugStr ||
+          String(a.matricula || '') === slugStr ||
+          String(a.codigo || a.dados?.codigo || '') === slugStr
+        )
+      )
+      if (match) {
+        return {
+          aluno: match,
+          vinculo: match.vinculo || {
+            parentesco: match.parentesco || 'Responsável',
+            resp_pedagogico: match.resp_pedagogico !== false,
+            resp_financeiro: Boolean(match.resp_financeiro),
+          },
+          meusAlunos: list,
+          _seeded: true,
+        }
+      }
+    }
+  } catch (e) {}
+  return null
+}
+
 function PortalWrapper({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -43,10 +91,6 @@ export default function ADInnerLayout({
   params: any
 }) {
   const queryClient = useQueryClient()
-  const [profileData, setProfileData] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
-
   const { turmas = [] } = useData()
   const { adConfig, setAdLoading, chatGroups: grupos = [] } = useAgendaDigital()
   const { currentUser, hydrated, setLoadingPath } = useApp()
@@ -57,6 +101,12 @@ export default function ADInnerLayout({
   const searchParams = useSearchParams()
   const paramsHook = useParams<{ slug: string }>()
   const resolvedParams = paramsHook || (params as any)
+
+  const [profileData, setProfileData] = useState<any>(() =>
+    getInitialSeededProfile(resolvedParams?.slug, currentUser?.id)
+  )
+  const [isLoading, setIsLoading] = useState<boolean>(() => !profileData)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   const isMirrorMode =
     currentUser?.perfil === 'Administrador' ||
@@ -131,12 +181,27 @@ export default function ADInnerLayout({
     }
 
     const profileKey = `${resolvedParams.slug}_${respId}_${isAlunoLogado}_${isMirrorModeActive}`
-    if (loadedProfileKeyRef.current === profileKey && profileData) {
+    if (loadedProfileKeyRef.current === profileKey && profileData && !profileData._seeded) {
       setIsLoading(false)
       return
     }
 
-    setIsLoading(true)
+    const cachedEntry = clientProfileCache.get(profileKey)
+    if (cachedEntry && Date.now() - cachedEntry.ts < CLIENT_PROFILE_CACHE_TTL_MS) {
+      loadedProfileKeyRef.current = profileKey
+      setProfileData(cachedEntry.data)
+      setIsLoading(false)
+      return
+    }
+
+    const seeded = getInitialSeededProfile(resolvedParams.slug, currentUser?.id)
+    if (seeded && (!profileData || String(profileData?.aluno?.id) !== String(seeded.aluno?.id))) {
+      setProfileData(seeded)
+      setIsLoading(false)
+    } else if (!profileData) {
+      setIsLoading(true)
+    }
+
     const loadProfile = async () => {
       try {
         const res = await apiFetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
@@ -187,6 +252,7 @@ export default function ADInnerLayout({
           }
         }
         loadedProfileKeyRef.current = profileKey
+        clientProfileCache.set(profileKey, { data, ts: Date.now() })
         setProfileData(data)
       } catch(e) {
         console.error('Failed to load profile data:', e)
@@ -197,6 +263,7 @@ export default function ADInnerLayout({
     loadProfile()
 
     const handlePullRefresh = () => {
+      clientProfileCache.delete(profileKey)
       loadProfile()
     }
     window.addEventListener('ad:pull-to-refresh', handlePullRefresh)
@@ -206,9 +273,8 @@ export default function ADInnerLayout({
   }, [hydrated, currentUser?.id, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, router])
 
   useEffect(() => {
-    if (setAdLoading) setAdLoading(isLoading)
-    return () => { if (setAdLoading) setAdLoading(false) }
-  }, [isLoading, setAdLoading])
+    if (setAdLoading) setAdLoading(false)
+  }, [setAdLoading])
 
   // Trava scroll do body quando modal estiver aberto
   useEffect(() => {
@@ -419,9 +485,9 @@ export default function ADInnerLayout({
         </div>
 
         {/* 3. Barra de Navegação Rápida (Memoizada) */}
-        {aluno?.id && (
+        {(aluno?.id || resolvedParams?.slug) && (
           <AgendaNavigationTabBar
-            alunoId={aluno.id}
+            alunoId={aluno?.id || resolvedParams?.slug}
             adConfig={adConfig}
             userAccessRole={userAccessRole}
           />

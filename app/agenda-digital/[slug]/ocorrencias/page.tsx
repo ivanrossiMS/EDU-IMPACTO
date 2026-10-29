@@ -2,6 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApiQuery } from '@/hooks/useApi'
 import React, { useMemo, useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import { AlertTriangle, AlertCircle, CheckCircle, Eye, Check, Loader2, Filter, FileText, ShieldCheck, Sparkles, GraduationCap, User, Clock, Layers, Calendar } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
@@ -49,9 +50,11 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
 
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
+  const paramsHook = useParams<{ slug: string }>()
+  const targetAlunoId = aluno?.id || paramsHook?.slug || (params as any)?.slug || ''
   
-  const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : ''
-  const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint, undefined, { enabled: !!endpoint, noCache: true })
+  const endpoint = targetAlunoId ? `/api/ocorrencias?aluno_id=${targetAlunoId}` : ''
+  const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', targetAlunoId], endpoint, undefined, { enabled: !!endpoint })
   const ocorrencias = rawOcorrencias || []
   
   const queryClient = useQueryClient()
@@ -66,7 +69,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     },
     onInsert: (payload) => {
       if (payload && payload.new) {
-        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+        queryClient.setQueryData(['ocorrencias', targetAlunoId], (old: any) => {
           if (!old) return [payload.new];
           return [payload.new, ...old];
         });
@@ -74,7 +77,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     },
     onUpdate: (payload) => {
       if (payload && payload.new) {
-        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+        queryClient.setQueryData(['ocorrencias', targetAlunoId], (old: any) => {
           if (!old) return old;
           return old.map((item: any) => item.id === payload.new.id ? payload.new : item);
         });
@@ -82,7 +85,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     },
     onDelete: (payload) => {
       if (payload && payload.old) {
-        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+        queryClient.setQueryData(['ocorrencias', targetAlunoId], (old: any) => {
           if (!old) return old;
           return old.filter((item: any) => item.id !== payload.old.id);
         });
@@ -94,7 +97,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
 
   const ocorrenciasDoAluno = useMemo(() => {
     return ocorrencias
-      .filter(o => String(o.aluno_id) === String(aluno?.id) || String(o.alunoId) === String(aluno?.id))
+      .filter(o => String(o.aluno_id) === String(targetAlunoId) || String(o.alunoId) === String(targetAlunoId))
       .sort((a, b) => {
         const dateCompare = (b.data || '').localeCompare(a.data || '')
         if (dateCompare !== 0) return dateCompare
@@ -280,7 +283,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
         </button>
       </div>
 
-      {isLoading || !aluno ? (
+      {isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {[1, 2, 3].map(idx => (
              <div key={idx} style={{ padding: 24, display: 'flex', gap: 18, background: '#fff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>

@@ -12,7 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireAuth, fetchAuthoritativeSystemUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import {
@@ -25,7 +25,7 @@ import { getFilteredInstallments } from '@/lib/isaacCache'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient()
@@ -55,16 +55,7 @@ export async function GET(request: Request) {
 
     let isAuthorizedStaff = false
     if (user?.id || user?.email) {
-      const conds: string[] = []
-      if (user?.id) conds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
-      if (user?.email) conds.push(`email.ilike.${user.email.trim()}`)
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('perfil, cargo, status')
-        .or(conds.join(','))
-        .limit(1)
-        .maybeSingle()
-
+      const dbUser = await fetchAuthoritativeSystemUser(user)
       if (
         dbUser &&
         String(dbUser.status || 'ativo').toLowerCase() !== 'inativo' &&
@@ -74,27 +65,42 @@ export async function GET(request: Request) {
       }
     }
 
+    // Pré-carrega dados de aluno e vínculos de uma única vez em paralelo quando alunoIdParam é fornecido
+    let preloadedAluno: any = null
+    let preloadedLinks: any[] | null = null
+
+    if (alunoIdParam) {
+      const cleanAlunoId = String(alunoIdParam).trim()
+      const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
+      const [isAuthorized, alunoRes, linksRes] = await Promise.all([
+        !isAuthorizedStaff ? checkResponsavelRelationship(checkId, cleanAlunoId, user?.email) : Promise.resolve(true),
+        supabase
+          .from('alunos')
+          .select('id, matricula, responsavel_financeiro, responsavel')
+          .eq('id', cleanAlunoId)
+          .maybeSingle(),
+        supabase
+          .from('aluno_responsavel')
+          .select('responsavel_id, resp_financeiro')
+          .eq('aluno_id', cleanAlunoId),
+      ])
+
+      if (!isAuthorizedStaff && !isAuthorized) {
+        return NextResponse.json(
+          { error: 'Acesso negado: Você não possui autorização para visualizar os dados financeiros deste aluno.' },
+          { status: 403 }
+        )
+      }
+
+      preloadedAluno = alunoRes.data
+      preloadedLinks = linksRes.data || []
+    }
+
     if (!isAuthorizedStaff) {
       if (alunoIdParam) {
-        const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
-        const isAuthorized = await checkResponsavelRelationship(checkId, String(alunoIdParam).trim())
-        if (!isAuthorized) {
-          return NextResponse.json(
-            { error: 'Acesso negado: Você não possui autorização para visualizar os dados financeiros deste aluno.' },
-            { status: 403 }
-          )
-        }
-
         // Blindagem de Segurança Financeira: Usuário deve ter resp_financeiro ativo ou ser titular
         let hasFinancialPermission = false
-        const cleanAlunoId = String(alunoIdParam).trim()
-
-        const { data: alunoData } = await supabase
-          .from('alunos')
-          .select('responsavel_financeiro, responsavel')
-          .eq('id', cleanAlunoId)
-          .maybeSingle()
-
+        const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
         const userEmail = user?.email?.toLowerCase().trim()
         let respIdToMatch = checkId
 
@@ -103,21 +109,15 @@ export async function GET(request: Request) {
           if (r?.id) respIdToMatch = r.id
         }
 
-        if (respIdToMatch) {
-          const { data: linkFin } = await supabase
-            .from('aluno_responsavel')
-            .select('resp_financeiro')
-            .eq('aluno_id', cleanAlunoId)
-            .eq('responsavel_id', respIdToMatch)
-            .maybeSingle()
-
-          if (linkFin?.resp_financeiro === true) {
+        if (respIdToMatch && preloadedLinks) {
+          const matchedLink = preloadedLinks.find((l: any) => String(l.responsavel_id) === String(respIdToMatch))
+          if (matchedLink?.resp_financeiro === true) {
             hasFinancialPermission = true
           }
         }
 
-        if (!hasFinancialPermission && alunoData) {
-          const titular = (alunoData.responsavel_financeiro || alunoData.responsavel || '').toLowerCase().trim()
+        if (!hasFinancialPermission && preloadedAluno) {
+          const titular = (preloadedAluno.responsavel_financeiro || preloadedAluno.responsavel || '').toLowerCase().trim()
           const myName = (user?.user_metadata?.nome || user?.user_metadata?.name || '').toLowerCase().trim()
           if (titular && myName && titular === myName) {
             hasFinancialPermission = true
@@ -156,30 +156,17 @@ export async function GET(request: Request) {
         }
       }
     }
-    // ── 1. Resolução por Aluno (se alunoIdParam fornecido) ────────────────────
+    // ── 1. Resolução por Aluno (reutilizando dados pré-carregados em paralelo) ──
     if (alunoIdParam) {
       const cleanAlunoId = String(alunoIdParam).trim()
       studentIds.add(cleanAlunoId)
 
-      // Busca dados do aluno (matrícula) e responsáveis vinculados
-      const [alunoRes, linksRes] = await Promise.all([
-        supabase
-          .from('alunos')
-          .select('id, matricula')
-          .eq('id', cleanAlunoId)
-          .maybeSingle(),
-        supabase
-          .from('aluno_responsavel')
-          .select('responsavel_id')
-          .eq('aluno_id', cleanAlunoId),
-      ])
-
-      if (alunoRes.data?.matricula) {
-        studentIds.add(String(alunoRes.data.matricula).trim())
+      if (preloadedAluno?.matricula) {
+        studentIds.add(String(preloadedAluno.matricula).trim())
       }
 
-      if (linksRes.data && linksRes.data.length > 0) {
-        for (const link of linksRes.data) {
+      if (preloadedLinks && preloadedLinks.length > 0) {
+        for (const link of preloadedLinks) {
           if (link.responsavel_id) {
             guardianIds.add(String(link.responsavel_id).trim())
           }

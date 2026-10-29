@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireStaff, resolveUserRole } from '@/lib/server/authGuard'
+import { requireAuth, requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -41,21 +41,31 @@ export async function GET(request: Request) {
 
     query = query.order('data', { ascending: false })
 
-    const { data, error } = await query
+    const isRestrictedFamilyOrStudent = !isStaff && resolvedIsFamily
+
+    // Executa query de eventos, cache de turmas/grupos e resolução de alunos autorizados em PARALELO
+    const [eventosRes, turmasGruposRes, authorizedAlunoIds] = await Promise.all([
+      query,
+      isRestrictedFamilyOrStudent && !idParam
+        ? getCachedTurmasAndGrupos()
+        : Promise.resolve({ allTurmas: [] as any[], allGrupos: [] as any[] }),
+      isRestrictedFamilyOrStudent && !idParam
+        ? getAuthorizedAlunoIdsForUser(user)
+        : Promise.resolve(new Set<string>())
+    ])
+
+    const { data, error } = eventosRes
     if (error) throw new Error(error.message)
 
     let rows = data || []
 
     // Filtragem Segura no Backend para contas exclusivas de Família/Aluno (!isStaff)
-    const isRestrictedFamilyOrStudent = !isStaff && resolvedIsFamily
     if (isRestrictedFamilyOrStudent && !idParam) {
       const norm = (s: any) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
 
-      const [{ allTurmas, allGrupos }] = await Promise.all([
-        getCachedTurmasAndGrupos()
-      ])
+      const { allTurmas, allGrupos } = turmasGruposRes
 
-      const candidateStudentIds = new Set<string>()
+      const candidateStudentIds = new Set<string>(authorizedAlunoIds)
       const candidateRespIds = new Set<string>()
       const familyNamesNorm = new Set<string>()
 
@@ -63,62 +73,65 @@ export async function GET(request: Request) {
       if (user.user_metadata?.aluno_id) candidateStudentIds.add(String(user.user_metadata.aluno_id).trim())
       if (user.user_metadata?.nome) familyNamesNorm.add(norm(user.user_metadata.nome))
 
-      if (user.id) candidateRespIds.add(String(user.id).trim())
-      if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id).trim())
-      if (user.user_metadata?.uid_legacy) candidateRespIds.add(String(user.user_metadata.uid_legacy).trim())
+      // Fallback apenas se getAuthorizedAlunoIdsForUser ainda não encontrou alunos vinculados
+      if (candidateStudentIds.size === 0) {
+        if (user.id) candidateRespIds.add(String(user.id).trim())
+        if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id).trim())
+        if (user.user_metadata?.uid_legacy) candidateRespIds.add(String(user.user_metadata.uid_legacy).trim())
 
-      const respOrConds: string[] = []
-      if (user.id) {
-        respOrConds.push(`dados->>auth_id.eq.${user.id}`)
-        respOrConds.push(`dados->>user_id.eq.${user.id}`)
-      }
-      const userEmail = String(user.email || '').trim().toLowerCase()
-      if (userEmail) {
-        respOrConds.push(`email.ilike.${userEmail}`)
-      }
-      const nomeUser = user.user_metadata?.nome
-      if (nomeUser) {
-        const safeNome = String(nomeUser).replace(/["%,]/g, '').trim()
-        if (safeNome.length >= 3) {
-          respOrConds.push(`nome.ilike."%${safeNome}%"`)
+        const respOrConds: string[] = []
+        if (user.id) {
+          respOrConds.push(`dados->>auth_id.eq.${user.id}`)
+          respOrConds.push(`dados->>user_id.eq.${user.id}`)
         }
-      }
-
-      const sysConds: string[] = []
-      if (user.id) sysConds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
-      if (userEmail) sysConds.push(`email.ilike.${userEmail}`)
-
-      const [respRowsRes, sysDataRes] = await Promise.all([
-        respOrConds.length > 0
-          ? supabase.from('responsaveis').select('id, nome').or(respOrConds.join(',')).limit(10)
-          : Promise.resolve({ data: [] }),
-        sysConds.length > 0
-          ? supabase.from('system_users').select('id, nome, dados').or(sysConds.join(',')).limit(5)
-          : Promise.resolve({ data: [] })
-      ])
-
-      if (respRowsRes.data) {
-        for (const r of respRowsRes.data as any[]) {
-          if (r.id) candidateRespIds.add(String(r.id).trim())
-          if (r.nome) familyNamesNorm.add(norm(r.nome))
+        const userEmail = String(user.email || '').trim().toLowerCase()
+        if (userEmail) {
+          respOrConds.push(`email.ilike.${userEmail}`)
         }
-      }
-      if (sysDataRes.data) {
-        for (const s of sysDataRes.data as any[]) {
-          const rId = s.dados?.responsavel_id || s.dados?.responsavelId
-          if (rId) candidateRespIds.add(String(rId).trim())
-          if (s.nome) familyNamesNorm.add(norm(s.nome))
+        const nomeUser = user.user_metadata?.nome
+        if (nomeUser) {
+          const safeNome = String(nomeUser).replace(/["%,]/g, '').trim()
+          if (safeNome.length >= 3) {
+            respOrConds.push(`nome.ilike."%${safeNome}%"`)
+          }
         }
-      }
 
-      if (candidateRespIds.size > 0) {
-        const { data: vincsByResp } = await supabase
-          .from('aluno_responsavel')
-          .select('aluno_id')
-          .in('responsavel_id', Array.from(candidateRespIds))
-        if (vincsByResp) {
-          for (const v of vincsByResp as any[]) {
-            if (v.aluno_id) candidateStudentIds.add(String(v.aluno_id).trim())
+        const sysConds: string[] = []
+        if (user.id) sysConds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+        if (userEmail) sysConds.push(`email.ilike.${userEmail}`)
+
+        const [respRowsRes, sysDataRes] = await Promise.all([
+          respOrConds.length > 0
+            ? supabase.from('responsaveis').select('id, nome').or(respOrConds.join(',')).limit(10)
+            : Promise.resolve({ data: [] }),
+          sysConds.length > 0
+            ? supabase.from('system_users').select('id, nome, dados').or(sysConds.join(',')).limit(5)
+            : Promise.resolve({ data: [] })
+        ])
+
+        if (respRowsRes.data) {
+          for (const r of respRowsRes.data as any[]) {
+            if (r.id) candidateRespIds.add(String(r.id).trim())
+            if (r.nome) familyNamesNorm.add(norm(r.nome))
+          }
+        }
+        if (sysDataRes.data) {
+          for (const s of sysDataRes.data as any[]) {
+            const rId = s.dados?.responsavel_id || s.dados?.responsavelId
+            if (rId) candidateRespIds.add(String(rId).trim())
+            if (s.nome) familyNamesNorm.add(norm(s.nome))
+          }
+        }
+
+        if (candidateRespIds.size > 0) {
+          const { data: vincsByResp } = await supabase
+            .from('aluno_responsavel')
+            .select('aluno_id')
+            .in('responsavel_id', Array.from(candidateRespIds))
+          if (vincsByResp) {
+            for (const v of vincsByResp as any[]) {
+              if (v.aluno_id) candidateStudentIds.add(String(v.aluno_id).trim())
+            }
           }
         }
       }

@@ -170,8 +170,21 @@ function ColaboradorComunicadosContent() {
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
 
-  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
+  const [isClient, setIsClient] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(10)
+  const [isFetchingMore, setIsFetchingMore] = useState(false)
+  const [hasSettled, setHasSettled] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+    const timer = setTimeout(() => {
+      setHasSettled(true)
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000', [], { enabled: hasSettled })
+  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000', [], { enabled: isMirroring || hasSettled })
 
   const mirroredColab = useMemo(() => {
     if (!isMirroring || !espelharColabId) return null
@@ -203,19 +216,6 @@ function ColaboradorComunicadosContent() {
   const userSlug = effectiveUser?.id || 'colaborador';
   const { adAlert, chatGroups } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
-  
-  const [isClient, setIsClient] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(10)
-  const [isFetchingMore, setIsFetchingMore] = useState(false)
-  const [hasSettled, setHasSettled] = useState(false)
-  
-  useEffect(() => {
-    setIsClient(true)
-    const timer = setTimeout(() => {
-      setHasSettled(true)
-    }, 600)
-    return () => clearTimeout(timer)
-  }, [])
 
   const candidateColabIds = useMemo(() => {
     const ids = new Set<string>();

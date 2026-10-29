@@ -38,16 +38,18 @@ export default function ADNotasPage({ params }: { params: any }) {
   const { aluno } = useSelectedStudent()
   const { currentUser } = useApp()
   const { turmas = [] } = useData()
+  const paramsHook = useParams<{ slug: string }>()
+  const targetAlunoId = aluno?.id || paramsHook?.slug || (params as any)?.slug || ''
   const searchParams = useSearchParams()
   const queryItemId = searchParams?.get('id') || searchParams?.get('boletim_id') || searchParams?.get('item_id')
   const hasAutoSelectedRef = useRef(false)
 
-  // Fetch real data
+  // Fetch real data in parallel with profile loading
   const { data: responseData, isLoading } = useApiQuery<any>(
-    ['boletins', aluno?.id || ''],
-    `/api/boletins?aluno_id=${aluno?.id}`,
+    ['boletins', targetAlunoId],
+    `/api/boletins?aluno_id=${targetAlunoId}`,
     undefined,
-    { enabled: !!aluno?.id }
+    { enabled: !!targetAlunoId }
   )
 
   const queryClient = useQueryClient()
@@ -61,13 +63,13 @@ export default function ADNotasPage({ params }: { params: any }) {
       icon: <FileText size={18} color="#3b82f6" />
     },
     onInsert: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+      queryClient.invalidateQueries({ queryKey: ['boletins', targetAlunoId] })
     },
     onUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+      queryClient.invalidateQueries({ queryKey: ['boletins', targetAlunoId] })
     },
     onDelete: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+      queryClient.invalidateQueries({ queryKey: ['boletins', targetAlunoId] })
     }
   });
 

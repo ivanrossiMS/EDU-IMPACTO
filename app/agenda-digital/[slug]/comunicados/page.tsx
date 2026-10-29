@@ -369,12 +369,15 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     return () => window.removeEventListener('ad:pull-to-refresh', handleRefresh)
   }, [handleRefresh])
 
-  // Ao entrar na tela ou alternar páginas, sincroniza de imediato
   useEffect(() => {
-    refetch()
-  }, [refetch])
+    let syncTimer: ReturnType<typeof setTimeout> | null = null
+    const triggerDebouncedRefetch = () => {
+      if (syncTimer) clearTimeout(syncTimer)
+      syncTimer = setTimeout(() => {
+        refetch()
+      }, 800)
+    }
 
-  useEffect(() => {
     const handleInsert = (e: any) => {
       const payload = e.detail
       const rawItem = payload?.item || payload?.new || payload
@@ -406,7 +409,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           }
         })
       }
-      refetch()
+      triggerDebouncedRefetch()
     }
 
     const handleUpdateEvent = (e: any) => {
@@ -422,7 +425,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           }
         })
       }
-      refetch()
+      triggerDebouncedRefetch()
     }
 
     const handleDeleteEvent = (e: any) => {
@@ -439,7 +442,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           }
         })
       }
-      refetch()
+      triggerDebouncedRefetch()
     }
 
     window.addEventListener('ad:comunicados-insert', handleInsert)
@@ -462,6 +465,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     }, 60000)
 
     return () => {
+      if (syncTimer) clearTimeout(syncTimer)
       window.removeEventListener('ad:comunicados-insert', handleInsert)
       window.removeEventListener('ad:comunicados-update', handleUpdateEvent)
       window.removeEventListener('ad:comunicados-delete', handleDeleteEvent)
@@ -1114,7 +1118,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          if (loading || !aluno) {
+          if (loading) {
             return <ComunicadoSkeleton count={10} />
           }
 
@@ -1273,8 +1277,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                 key={c.id} 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                style={{ display: 'flex', position: 'relative', paddingBottom: index !== paginatedComunicados.length - 1 ? 8 : 0 }}
+                transition={{ delay: Math.min(index * 0.03, 0.25) }}
+                style={{ display: 'flex', position: 'relative', paddingBottom: index !== paginatedComunicados.length - 1 ? 8 : 0, contentVisibility: 'auto', containIntrinsicSize: 'auto 260px' }}
               >
                 {/* Timeline Laser Connector */}
                 {index !== paginatedComunicados.length - 1 && (

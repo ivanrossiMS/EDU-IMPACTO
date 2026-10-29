@@ -188,8 +188,9 @@ interface SystemUserCacheEntry {
   expiresAt: number
 }
 
-const SYSTEM_USER_CACHE_TTL_MS = 45_000
+const SYSTEM_USER_CACHE_TTL_MS = 60_000
 const systemUserCache = new Map<string, SystemUserCacheEntry>()
+const inflightSystemUser = new Map<string, Promise<SystemUserCacheEntry['dbUser']>>()
 
 interface FamilyScopeCacheEntry {
   alunoIds: Set<string>
@@ -197,13 +198,16 @@ interface FamilyScopeCacheEntry {
   expiresAt: number
 }
 
-const FAMILY_SCOPE_CACHE_TTL_MS = 45_000
+const FAMILY_SCOPE_CACHE_TTL_MS = 60_000
 const familyScopeCache = new Map<string, FamilyScopeCacheEntry>()
+const inflightFamilyScope = new Map<string, Promise<{ alunoIds: Set<string>; responsavelIds: Set<string> }>>()
 
 export function clearAuthGuardCache(userId?: string) {
   if (userId) {
     systemUserCache.delete(userId)
     familyScopeCache.delete(userId)
+    inflightSystemUser.delete(userId)
+    inflightFamilyScope.delete(userId)
     for (const [token, entry] of verifiedTokenCache.entries()) {
       if (entry.user?.id === userId) {
         verifiedTokenCache.delete(token)
@@ -212,11 +216,13 @@ export function clearAuthGuardCache(userId?: string) {
   } else {
     systemUserCache.clear()
     familyScopeCache.clear()
+    inflightSystemUser.clear()
+    inflightFamilyScope.clear()
     verifiedTokenCache.clear()
   }
 }
 
-async function fetchAuthoritativeSystemUser(user: any) {
+export async function fetchAuthoritativeSystemUser(user: any) {
   const cacheKey = String(user?.id || '')
   const now = Date.now()
   if (cacheKey) {
@@ -224,45 +230,59 @@ async function fetchAuthoritativeSystemUser(user: any) {
     if (cached && cached.expiresAt > now) {
       return cached.dbUser
     }
+    const inflight = inflightSystemUser.get(cacheKey)
+    if (inflight) {
+      return inflight
+    }
   }
 
-  const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
-  const queryId = user.user_metadata?.uid_legacy || user.id
-  const safeEmail = (user.email || '').trim().replace(/"/g, '')
+  const promise = (async () => {
+    const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
+    const queryId = user.user_metadata?.uid_legacy || user.id
+    const safeEmail = (user.email || '').trim().replace(/"/g, '')
 
-  const orParts = [`id.eq."${queryId}"`, `auth_id.eq."${user.id}"`]
-  if (safeEmail) {
-    orParts.push(`email.ilike."${safeEmail}"`)
-  }
+    const orParts = [`id.eq."${queryId}"`, `auth_id.eq."${user.id}"`]
+    if (safeEmail) {
+      orParts.push(`email.ilike."${safeEmail}"`)
+    }
 
-  const { data: dbUser } = await supabaseAdmin
-    .from('system_users')
-    .select('id, nome, email, auth_id, dados, perfil, cargo, status')
-    .or(orParts.join(','))
-    .limit(1)
-    .maybeSingle()
+    const { data: dbUser } = await supabaseAdmin
+      .from('system_users')
+      .select('id, nome, email, auth_id, dados, perfil, cargo, status')
+      .or(orParts.join(','))
+      .limit(1)
+      .maybeSingle()
 
-  const normalized = dbUser
-    ? {
-        id: String(dbUser.id),
-        nome: dbUser.nome ? String(dbUser.nome) : undefined,
-        email: dbUser.email ? String(dbUser.email) : undefined,
-        auth_id: dbUser.auth_id ? String(dbUser.auth_id) : undefined,
-        dados: dbUser.dados || {},
-        perfil: String(dbUser.perfil || ''),
-        cargo: String(dbUser.cargo || ''),
-        status: String(dbUser.status || 'ativo'),
+    const normalized = dbUser
+      ? {
+          id: String(dbUser.id),
+          nome: dbUser.nome ? String(dbUser.nome) : undefined,
+          email: dbUser.email ? String(dbUser.email) : undefined,
+          auth_id: dbUser.auth_id ? String(dbUser.auth_id) : undefined,
+          dados: dbUser.dados || {},
+          perfil: String(dbUser.perfil || ''),
+          cargo: String(dbUser.cargo || ''),
+          status: String(dbUser.status || 'ativo'),
+        }
+      : null
+
+    if (cacheKey) {
+      if (systemUserCache.size > 500) {
+        systemUserCache.clear()
       }
-    : null
+      systemUserCache.set(cacheKey, { dbUser: normalized, expiresAt: Date.now() + SYSTEM_USER_CACHE_TTL_MS })
+    }
+
+    return normalized
+  })().finally(() => {
+    if (cacheKey) inflightSystemUser.delete(cacheKey)
+  })
 
   if (cacheKey) {
-    if (systemUserCache.size > 500) {
-      systemUserCache.clear()
-    }
-    systemUserCache.set(cacheKey, { dbUser: normalized, expiresAt: now + SYSTEM_USER_CACHE_TTL_MS })
+    inflightSystemUser.set(cacheKey, promise)
   }
 
-  return normalized
+  return promise
 }
 
 /**
@@ -509,110 +529,150 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
     }
   }
 
-  const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
-  const alunoIds = new Set<string>()
-  const responsavelIds = new Set<string>()
-
-  const metaAlunoId = String(user.user_metadata?.aluno_id || user.app_metadata?.aluno_id || '').trim()
-  const metaRespId = String(user.user_metadata?.responsavel_id || user.app_metadata?.responsavel_id || '').trim()
-  const metaMatricula = String(user.user_metadata?.matricula || user.app_metadata?.matricula || '').trim()
-  const rawEmail = String(user.email || '').trim().toLowerCase()
-  const isVirtualStudentEmail = rawEmail.endsWith('@impactoedu.local')
-
-  // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local
-  let virtualMatricula = metaMatricula
-  if (!virtualMatricula && rawEmail.startsWith('aluno.') && isVirtualStudentEmail) {
-    virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
+  const inflight = inflightFamilyScope.get(cacheKey)
+  if (inflight) {
+    const res = await inflight
+    return {
+      alunoIds: new Set(res.alunoIds),
+      responsavelIds: new Set(res.responsavelIds),
+    }
   }
 
-  try {
-    // 1. Resolver responsaveis pelo id, auth_id ou email (exigindo correspondência do e-mail atual)
-    const respOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`, `auth_id.eq."${String(user.id).replace(/"/g, '')}"`]
-    if (metaRespId) {
-      respOrParts.push(`id.eq."${metaRespId.replace(/"/g, '')}"`)
-    }
-    if (rawEmail && !isVirtualStudentEmail) {
-      respOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
+  const promise = (async () => {
+    const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
+    const alunoIds = new Set<string>()
+    const responsavelIds = new Set<string>()
+
+    const metaAlunoId = String(user.user_metadata?.aluno_id || user.app_metadata?.aluno_id || '').trim()
+    const metaRespId = String(user.user_metadata?.responsavel_id || user.app_metadata?.responsavel_id || '').trim()
+    const metaMatricula = String(user.user_metadata?.matricula || user.app_metadata?.matricula || '').trim()
+    const rawEmail = String(user.email || '').trim().toLowerCase()
+    const isVirtualStudentEmail = rawEmail.endsWith('@impactoedu.local')
+
+    if (metaAlunoId) alunoIds.add(metaAlunoId.replace(/^(a_|_ALU)/, ''))
+    if (metaRespId) responsavelIds.add(metaRespId)
+
+    // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local
+    let virtualMatricula = metaMatricula
+    if (!virtualMatricula && rawEmail.startsWith('aluno.') && isVirtualStudentEmail) {
+      virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
     }
 
-    const { data: respRows } = await supabaseAdmin
-      .from('responsaveis')
-      .select('id, email, dados')
-      .or(respOrParts.join(','))
-      .limit(20)
+    try {
+      // 1. Preparar busca de responsaveis e alunos diretos + aluno_responsavel inicial (para metaRespId) em PARALELO
+      const respOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`, `auth_id.eq."${String(user.id).replace(/"/g, '')}"`]
+      if (metaRespId) {
+        respOrParts.push(`id.eq."${metaRespId.replace(/"/g, '')}"`)
+      }
+      if (rawEmail && !isVirtualStudentEmail) {
+        respOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
+      }
 
-    if (Array.isArray(respRows)) {
-      for (const r of respRows) {
-        const rEmail = String(r?.email || r?.dados?.email || '').trim().toLowerCase()
-        if (!isVirtualStudentEmail && rEmail && rawEmail && rEmail !== rawEmail) {
-          continue
-        }
-        if (r?.id) responsavelIds.add(String(r.id))
-        const vincs = r?.dados?.alunosVinculados || r?.dados?.alunos_vinculados
-        if (Array.isArray(vincs)) {
-          vincs.forEach((aid: any) => {
-            const cleanAid = String(typeof aid === 'object' ? aid?.id || aid?.aluno_id : aid || '').trim()
-            if (cleanAid) alunoIds.add(cleanAid)
-          })
+      const alunoOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`]
+      if (metaAlunoId) {
+        alunoOrParts.push(`id.eq."${metaAlunoId.replace(/"/g, '')}"`)
+      }
+      if (virtualMatricula) {
+        const safeMat = virtualMatricula.replace(/"/g, '')
+        alunoOrParts.push(`matricula.eq."${safeMat}"`, `dados->>codigo.eq."${safeMat}"`)
+      }
+      if (rawEmail && !isVirtualStudentEmail) {
+        alunoOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
+      }
+
+      const initialRespIds = Array.from( new Set([String(user.id), metaRespId].filter(Boolean)) )
+
+      const [respRes, directAlunosRes, initialLinksRes] = await Promise.all([
+        supabaseAdmin
+          .from('responsaveis')
+          .select('id, email, dados')
+          .or(respOrParts.join(','))
+          .limit(20),
+        supabaseAdmin
+          .from('alunos')
+          .select('id, email, matricula, dados')
+          .or(alunoOrParts.join(','))
+          .limit(20),
+        initialRespIds.length > 0
+          ? supabaseAdmin
+              .from('aluno_responsavel')
+              .select('aluno_id, responsavel_id')
+              .in('responsavel_id', initialRespIds)
+          : Promise.resolve({ data: [] })
+      ])
+
+      const respRows = respRes.data
+      if (Array.isArray(respRows)) {
+        for (const r of respRows) {
+          const rEmail = String(r?.email || r?.dados?.email || '').trim().toLowerCase()
+          if (!isVirtualStudentEmail && rEmail && rawEmail && rEmail !== rawEmail) {
+            continue
+          }
+          if (r?.id) responsavelIds.add(String(r.id))
+          const vincs = r?.dados?.alunosVinculados || r?.dados?.alunos_vinculados
+          if (Array.isArray(vincs)) {
+            vincs.forEach((aid: any) => {
+              const cleanAid = String(typeof aid === 'object' ? aid?.id || aid?.aluno_id : aid || '').trim()
+              if (cleanAid) alunoIds.add(cleanAid)
+            })
+          }
         }
       }
-    }
 
-    // 2. Resolver vínculos em aluno_responsavel para todos os responsavelIds encontrados
-    if (responsavelIds.size > 0) {
-      const { data: links } = await supabaseAdmin
-        .from('aluno_responsavel')
-        .select('aluno_id, responsavel_id')
-        .in('responsavel_id', Array.from(responsavelIds))
-      if (Array.isArray(links)) {
-        for (const l of links) {
+      if (Array.isArray(initialLinksRes.data)) {
+        for (const l of initialLinksRes.data) {
           if (l?.aluno_id) alunoIds.add(String(l.aluno_id).trim())
         }
       }
-    }
 
-    // 3. Resolver aluno direto por id, email ou matrícula
-    const alunoOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`]
-    if (metaAlunoId) {
-      alunoOrParts.push(`id.eq."${metaAlunoId.replace(/"/g, '')}"`)
-    }
-    if (virtualMatricula) {
-      const safeMat = virtualMatricula.replace(/"/g, '')
-      alunoOrParts.push(`matricula.eq."${safeMat}"`, `dados->>codigo.eq."${safeMat}"`)
-    }
-    if (rawEmail && !isVirtualStudentEmail) {
-      alunoOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
-    }
-
-    const { data: directAlunos } = await supabaseAdmin
-      .from('alunos')
-      .select('id, email, matricula, dados')
-      .or(alunoOrParts.join(','))
-      .limit(20)
-
-    if (Array.isArray(directAlunos)) {
-      for (const a of directAlunos) {
-        const aEmail = String(a?.email || a?.dados?.email || '').trim().toLowerCase()
-        if (!isVirtualStudentEmail && aEmail && rawEmail && aEmail !== rawEmail) {
-          continue
+      // 2. Se descobrimos novos responsavelIds que não estavam em initialRespIds, buscar seus vínculos
+      const extraRespIds = Array.from(responsavelIds).filter(id => !initialRespIds.includes(id))
+      if (extraRespIds.length > 0) {
+        const { data: extraLinks } = await supabaseAdmin
+          .from('aluno_responsavel')
+          .select('aluno_id, responsavel_id')
+          .in('responsavel_id', extraRespIds)
+        if (Array.isArray(extraLinks)) {
+          for (const l of extraLinks) {
+            if (l?.aluno_id) alunoIds.add(String(l.aluno_id).trim())
+          }
         }
-        if (a?.id) alunoIds.add(String(a.id).trim())
       }
-    }
-  } catch (err) {
-    console.warn('[authGuard] Aviso ao resolver familyScope:', err)
-  }
 
-  if (familyScopeCache.size > 500) {
-    familyScopeCache.clear()
-  }
-  familyScopeCache.set(cacheKey, {
-    alunoIds: new Set(alunoIds),
-    responsavelIds: new Set(responsavelIds),
-    expiresAt: now + FAMILY_SCOPE_CACHE_TTL_MS,
+      const directAlunos = directAlunosRes.data
+      if (Array.isArray(directAlunos)) {
+        for (const a of directAlunos) {
+          const aEmail = String(a?.email || a?.dados?.email || '').trim().toLowerCase()
+          if (!isVirtualStudentEmail && aEmail && rawEmail && aEmail !== rawEmail) {
+            continue
+          }
+          if (a?.id) alunoIds.add(String(a.id).trim())
+        }
+      }
+    } catch (err) {
+      console.warn('[authGuard] Aviso ao resolver familyScope:', err)
+    }
+
+    if (familyScopeCache.size > 500) {
+      familyScopeCache.clear()
+    }
+    familyScopeCache.set(cacheKey, {
+      alunoIds: new Set(alunoIds),
+      responsavelIds: new Set(responsavelIds),
+      expiresAt: Date.now() + FAMILY_SCOPE_CACHE_TTL_MS,
+    })
+
+    return { alunoIds, responsavelIds }
+  })().finally(() => {
+    inflightFamilyScope.delete(cacheKey)
   })
 
-  return { alunoIds, responsavelIds }
+  inflightFamilyScope.set(cacheKey, promise)
+  const result = await promise
+  return {
+    alunoIds: new Set(result.alunoIds),
+    responsavelIds: new Set(result.responsavelIds),
+  }
 }
 
 export async function getAuthorizedAlunoIdsForUser(user: any): Promise<Set<string>> {
