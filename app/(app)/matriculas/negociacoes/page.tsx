@@ -48,10 +48,8 @@ export default function NegociacoesMatriculasPage() {
 
   // Filtros e Busca
   const [searchTerm, setSearchTerm] = useState<string>('')
-  const [filtroIsaac, setFiltroIsaac] = useState<'todos' | 'no_isaac' | 'fora_isaac' | 'hibrido'>('todos')
-  const [filtroEscopo, setFiltroEscopo] = useState<'todos' | 'matricula' | 'mensalidade' | 'parcelamento' | 'material'>('todos')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'autorizado' | 'lancado' | 'concluido' | 'cancelado'>('todos')
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('table')
 
   // Modais e Feedback
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false)
@@ -283,51 +281,6 @@ export default function NegociacoesMatriculasPage() {
     [negociacoes, anoLetivo]
   )
 
-  // Métricas de KPI sobre o Ano Selecionado
-  const kpis = useMemo(() => {
-    const ativas = negociacoesDoAno.filter(n => n.status !== 'cancelado')
-    const pendentesLancamento = negociacoesDoAno.filter(n => n.status === 'autorizado').length
-    const lancadasOuConcluidas = negociacoesDoAno.filter(n => n.status === 'lancado' || n.status === 'concluido').length
-
-    const noIsaacCount = ativas.filter(
-      n =>
-        n.modalidadeIsaac === 'no_isaac' ||
-        n.modalidadeIsaac === 'hibrido' ||
-        (n.temMensalidade && n.canalMensalidade === 'no_isaac') ||
-        (n.temMatricula && n.canalMatricula === 'no_isaac')
-    ).length
-
-    const foraIsaacCount = ativas.filter(
-      n =>
-        n.modalidadeIsaac === 'fora_isaac' ||
-        n.modalidadeIsaac === 'hibrido' ||
-        (n.temMatricula && n.canalMatricula === 'fora_isaac') ||
-        (n.temMensalidade && n.canalMensalidade === 'fora_isaac')
-    ).length
-
-    const comMensalidade = ativas.filter(n => n.temMensalidade && n.descontoMensalidadePct > 0)
-    const descontoMedioMensalidade =
-      comMensalidade.length > 0
-        ? comMensalidade.reduce((acc, n) => acc + (Number(n.descontoMensalidadePct) || 0), 0) / comMensalidade.length
-        : 0
-
-    const economiaMensalTotal = ativas.reduce((acc, n) => {
-      if (!n.temMensalidade) return acc
-      return acc + Math.max(0, (Number(n.valorTabelaMensalidade) || 0) - (Number(n.valorAutorizadoMensalidade) || 0))
-    }, 0)
-
-    return {
-      total: negociacoesDoAno.length,
-      ativasCount: ativas.length,
-      pendentesLancamento,
-      lancadasOuConcluidas,
-      noIsaacCount,
-      foraIsaacCount,
-      descontoMedioMensalidade,
-      economiaMensalTotal,
-    }
-  }, [negociacoesDoAno])
-
   // Lista Filtrada
   const filteredList = useMemo(() => {
     const q = searchTerm
@@ -339,30 +292,6 @@ export default function NegociacoesMatriculasPage() {
     return negociacoesDoAno.filter(neg => {
       // Filtro Status
       if (filtroStatus !== 'todos' && neg.status !== filtroStatus) return false
-
-      // Filtro Isaac
-      if (filtroIsaac === 'no_isaac') {
-        const hasNoIsaac =
-          neg.modalidadeIsaac === 'no_isaac' ||
-          (neg.temMensalidade && neg.canalMensalidade === 'no_isaac') ||
-          (neg.temMatricula && neg.canalMatricula === 'no_isaac')
-        if (!hasNoIsaac) return false
-      } else if (filtroIsaac === 'fora_isaac') {
-        const hasForaIsaac =
-          neg.modalidadeIsaac === 'fora_isaac' ||
-          (neg.temMatricula && neg.canalMatricula === 'fora_isaac') ||
-          (neg.temMensalidade && neg.canalMensalidade === 'fora_isaac') ||
-          (neg.temParcelamentoEspecial && neg.canalParcelamento === 'fora_isaac')
-        if (!hasForaIsaac) return false
-      } else if (filtroIsaac === 'hibrido') {
-        if (neg.modalidadeIsaac !== 'hibrido') return false
-      }
-
-      // Filtro Escopo
-      if (filtroEscopo === 'matricula' && !neg.temMatricula) return false
-      if (filtroEscopo === 'mensalidade' && !neg.temMensalidade) return false
-      if (filtroEscopo === 'parcelamento' && !neg.temParcelamentoEspecial) return false
-      if (filtroEscopo === 'material' && !neg.temMaterial) return false
 
       // Busca Textual
       if (q.length > 0) {
@@ -390,7 +319,7 @@ export default function NegociacoesMatriculasPage() {
 
       return true
     })
-  }, [negociacoesDoAno, searchTerm, filtroIsaac, filtroEscopo, filtroStatus])
+  }, [negociacoesDoAno, searchTerm, filtroStatus])
 
   // Exportar CSV
   const handleExportCsv = () => {
@@ -462,16 +391,12 @@ export default function NegociacoesMatriculasPage() {
   }
 
   const activeFiltersCount = [
-    filtroIsaac !== 'todos',
-    filtroEscopo !== 'todos',
     filtroStatus !== 'todos',
     searchTerm.trim().length > 0,
   ].filter(Boolean).length
 
   const clearAllFilters = () => {
     setSearchTerm('')
-    setFiltroIsaac('todos')
-    setFiltroEscopo('todos')
     setFiltroStatus('todos')
   }
 
@@ -865,148 +790,6 @@ export default function NegociacoesMatriculasPage() {
               </button>
             </div>
           </div>
-
-          {/* ─── 6 CARDS DE KPI INTERATIVOS ─── */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: 12,
-              padding: '16px 28px 20px',
-              background: '#ffffff',
-              borderTop: '1px solid #f1f5f9',
-            }}
-          >
-            {/* KPI 1: Total */}
-            <div
-              onClick={clearAllFilters}
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 14,
-                padding: '12px 16px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                Negociações {anoLetivo}
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
-                {kpis.total}
-              </div>
-              <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700 }}>
-                {kpis.ativasCount} ativas autorizadas
-              </div>
-            </div>
-
-            {/* KPI 2: Aguardando Lançamento */}
-            <div
-              onClick={() => setFiltroStatus(filtroStatus === 'autorizado' ? 'todos' : 'autorizado')}
-              style={{
-                background: filtroStatus === 'autorizado' ? '#fffbeb' : '#f8fafc',
-                border: filtroStatus === 'autorizado' ? '2px solid #f59e0b' : '1px solid #fde68a',
-                borderRadius: 14,
-                padding: '12px 16px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>
-                ⏳ Pendente Lançamento
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#b45309', marginTop: 2 }}>
-                {kpis.pendentesLancamento}
-              </div>
-              <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700 }}>
-                Clique p/ filtrar pendências
-              </div>
-            </div>
-
-            {/* KPI 3: No isaac */}
-            <div
-              onClick={() => setFiltroIsaac(filtroIsaac === 'no_isaac' ? 'todos' : 'no_isaac')}
-              style={{
-                background: filtroIsaac === 'no_isaac' ? '#f5f3ff' : '#f8fafc',
-                border: filtroIsaac === 'no_isaac' ? '2px solid #7c3aed' : '1px solid #ddd6fe',
-                borderRadius: 14,
-                padding: '12px 16px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase' }}>
-                🟣 Cobrança No isaac
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#6d28d9', marginTop: 2 }}>
-                {kpis.noIsaacCount}
-              </div>
-              <div style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700 }}>
-                Faturadas via plataforma isaac
-              </div>
-            </div>
-
-            {/* KPI 4: Fora do isaac */}
-            <div
-              onClick={() => setFiltroIsaac(filtroIsaac === 'fora_isaac' ? 'todos' : 'fora_isaac')}
-              style={{
-                background: filtroIsaac === 'fora_isaac' ? '#ecfdf5' : '#f8fafc',
-                border: filtroIsaac === 'fora_isaac' ? '2px solid #10b981' : '1px solid #a7f3d0',
-                borderRadius: 14,
-                padding: '12px 16px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
-                🟢 Fora do isaac (Escola)
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#047857', marginTop: 2 }}>
-                {kpis.foraIsaacCount}
-              </div>
-              <div style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>
-                Direto na secretaria / maquininha
-              </div>
-            </div>
-
-            {/* KPI 5: Lançadas / Concluídas */}
-            <div
-              onClick={() => setFiltroStatus(filtroStatus === 'concluido' ? 'todos' : 'concluido')}
-              style={{
-                background: filtroStatus === 'concluido' ? '#ecfdf5' : '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 14,
-                padding: '12px 16px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                ✅ Lançadas / Efetivadas
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
-                {kpis.lancadasOuConcluidas}
-              </div>
-              <div style={{ fontSize: 11, color: '#10b981', fontWeight: 700 }}>
-                Já processadas pela equipe
-              </div>
-            </div>
-
-            {/* KPI 6: Desconto Médio */}
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 14,
-                padding: '12px 16px',
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-                Desconto Médio Mensal
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#2563eb', marginTop: 2 }}>
-                {kpis.descontoMedioMensalidade.toFixed(1)}%
-              </div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>
-                Concessão: {fmtCurrency(kpis.economiaMensalTotal)}/mês
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* ─── BARRA DE BUSCA INSTANTÂNEA E FILTROS RÁPIDOS ─── */}
@@ -1093,7 +876,7 @@ export default function NegociacoesMatriculasPage() {
               </button>
             )}
 
-            {/* Alternador Cards vs Tabela */}
+            {/* Alternador Tabela vs Cards */}
             <div
               style={{
                 display: 'flex',
@@ -1104,26 +887,6 @@ export default function NegociacoesMatriculasPage() {
                 gap: 4,
               }}
             >
-              <button
-                onClick={() => setViewMode('cards')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 13px',
-                  borderRadius: 8,
-                  border: 'none',
-                  fontSize: 12,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background: viewMode === 'cards' ? '#ffffff' : 'transparent',
-                  color: viewMode === 'cards' ? '#0f172a' : '#64748b',
-                  boxShadow: viewMode === 'cards' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                }}
-              >
-                <LayoutGrid size={14} />
-                Cards
-              </button>
               <button
                 onClick={() => setViewMode('table')}
                 style={{
@@ -1144,75 +907,31 @@ export default function NegociacoesMatriculasPage() {
                 <TableIcon size={14} />
                 Tabela
               </button>
+              <button
+                onClick={() => setViewMode('cards')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 13px',
+                  borderRadius: 8,
+                  border: 'none',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  background: viewMode === 'cards' ? '#ffffff' : 'transparent',
+                  color: viewMode === 'cards' ? '#0f172a' : '#64748b',
+                  boxShadow: viewMode === 'cards' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                <LayoutGrid size={14} />
+                Cards
+              </button>
             </div>
           </div>
 
-          {/* Linha 2: Pills de Filtro Rápido */}
+          {/* Linha 2: Filtro de Status Operacional */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            {/* Filtro Ambiente Isaac */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', marginRight: 2 }}>Canal:</span>
-              {[
-                { id: 'todos', label: 'Todos' },
-                { id: 'no_isaac', label: '🟣 No isaac' },
-                { id: 'fora_isaac', label: '🟢 Fora do isaac (Escola)' },
-                { id: 'hibrido', label: '⚡ Híbrido (Escola + isaac)' },
-              ].map(item => {
-                const active = filtroIsaac === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setFiltroIsaac(item.id as any)}
-                    style={{
-                      padding: '5px 11px',
-                      borderRadius: 999,
-                      fontSize: 11.5,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      border: active ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                      background: active ? '#0f172a' : '#ffffff',
-                      color: active ? '#ffffff' : '#475569',
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Filtro Escopo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', marginRight: 2 }}>Tipo:</span>
-              {[
-                { id: 'todos', label: 'Todos' },
-                { id: 'matricula', label: '🎒 Matrícula' },
-                { id: 'mensalidade', label: '📅 Mensalidades' },
-                { id: 'parcelamento', label: '💳 Parcelamentos' },
-                { id: 'material', label: '📚 Material' },
-              ].map(item => {
-                const active = filtroEscopo === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setFiltroEscopo(item.id as any)}
-                    style={{
-                      padding: '5px 11px',
-                      borderRadius: 999,
-                      fontSize: 11.5,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      border: active ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                      background: active ? '#2563eb' : '#ffffff',
-                      color: active ? '#ffffff' : '#475569',
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Filtro Status Operacional */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', marginRight: 2 }}>Status:</span>
               {[

@@ -444,8 +444,8 @@ export async function anexarCertificadoEvidencias(
         const targetPage = pdfDoc.getPage(pageIndex)
         const { width: pWidth, height: pHeight } = targetPage.getSize()
 
-        const boxWidth = Math.max(90, Math.min(320, pos.larguraPt || 190))
-        const boxHeight = Math.max(26, Math.min(80, pos.alturaPt || 45))
+        const boxWidth = Math.max(85, Math.min(320, pos.larguraPt || 118))
+        const boxHeight = Math.max(26, Math.min(80, pos.alturaPt || 42))
 
         const x = Math.max(8, Math.min(pWidth - boxWidth - 8, (pos.xPercent / 100) * pWidth))
         const topY = pHeight - ((pos.yPercent / 100) * pHeight)

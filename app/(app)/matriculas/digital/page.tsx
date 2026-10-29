@@ -23,6 +23,7 @@ import {
   SignatarioPosicionavel,
   gerarPosicionamentoPadrao,
   gerarPosicionamentoDocumentos,
+  gerarPosicionamentoTodasPaginasDocumentos,
   validarPosicionamentoCompleto,
 } from '@/components/matriculas/PosicionadorAssinaturasModal'
 import { getWhatsAppShareUrl, DEFAULT_WHATSAPP_DIGITAL_TEMPLATE, formatarMensagemWhatsApp } from '@/lib/whatsapp'
@@ -603,6 +604,7 @@ export default function MatriculaDigitalPage() {
   const [posicoesAssinaturas, setPosicoesAssinaturas] = useState<Record<string, PosicaoAssinatura>>({})
   const [modalPosicionadorAberto, setModalPosicionadorAberto] = useState<boolean>(false)
   const [signatarioModalAtivo, setSignatarioModalAtivo] = useState<string | null>(null)
+  const [paginaModalInicial, setPaginaModalInicial] = useState<number | null>(null)
 
   // Total de páginas do documento ativo na emissão (seja 1 arquivo ou pacote unificado)
   const totalPaginasDocumentoAtual = useMemo(() => {
@@ -750,10 +752,28 @@ export default function MatriculaDigitalPage() {
     const novasPosicoes = gerarPosicionamentoDocumentos(signatariosPosicionaveis, docs)
     setPosicoesAssinaturas(novasPosicoes)
     if (docs.length > 1) {
-      toast.success(`Assinaturas posicionadas no rodapé de cada um dos ${docs.length} documentos!`)
+      toast.success(`Assinaturas posicionadas no rodapé da última página de cada um dos ${docs.length} documentos!`)
     } else {
       toast.success(`Assinaturas posicionadas no rodapé da página ${totalPaginasDocumentoAtual}!`)
     }
+  }
+
+  // Ação rápida: auto-posicionar signatários no rodapé de TODAS as páginas de cada documento
+  const handleAutoPosicionarTodasPaginas = () => {
+    if (signatariosPosicionaveis.length === 0) {
+      toast.error('Informe primeiro o nome do signatário (ou selecione representantes) para posicionar as assinaturas.')
+      return
+    }
+    const docs = documentosUpload.map((d) => ({
+      id: d.id,
+      nome: d.nome,
+      totalPaginas: d.totalPaginas || 1,
+      pdfBase64: d.pdfBase64,
+    }))
+    const novasPosicoes = gerarPosicionamentoTodasPaginasDocumentos(signatariosPosicionaveis, docs)
+    setPosicoesAssinaturas(novasPosicoes)
+    const totalPags = docs.reduce((acc, d) => acc + Math.max(1, d.totalPaginas || 1), 0)
+    toast.success(`Assinaturas posicionadas no rodapé de todas as ${totalPags} página(s)!`)
   }
 
   // Estados do Verificador de Arquivo Local
@@ -6987,7 +7007,7 @@ export default function MatriculaDigitalPage() {
                             )}
                           </div>
                           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
-                            Defina o local exato onde cada pessoa irá assinar na folha. O posicionamento é flexível: não é obrigatório assinar em todos os documentos.
+                            Defina onde cada pessoa irá assinar: você pode posicionar assinaturas em <strong>qualquer página</strong> ou em <strong>todas as páginas</strong> do documento (opcional).
                           </div>
                         </div>
                       </div>
@@ -7019,6 +7039,33 @@ export default function MatriculaDigitalPage() {
                           <span>Auto-Posicionar no Rodapé</span>
                         </button>
 
+                        {totalPaginasGeral > 1 && (
+                          <button
+                            type="button"
+                            onClick={handleAutoPosicionarTodasPaginas}
+                            disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
+                            style={{
+                              background: 'rgba(16, 185, 129, 0.1)',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                              color: '#059669',
+                              borderRadius: 8,
+                              padding: '7px 12px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 'not-allowed' : 'pointer',
+                              opacity: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 0.5 : 1,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              transition: 'all 0.15s ease',
+                            }}
+                            title="Distribuir automaticamente as assinaturas no rodapé de todas as páginas do documento"
+                          >
+                            <Layers size={14} />
+                            <span>Assinar em Todas as Páginas ({totalPaginasGeral})</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
@@ -7030,6 +7077,7 @@ export default function MatriculaDigitalPage() {
                               toast.error('Informe primeiro o nome do signatário (ou selecione representantes opcionais) para posicionar as assinaturas.')
                               return
                             }
+                            setPaginaModalInicial(null)
                             setModalPosicionadorAberto(true)
                           }}
                           disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
@@ -7093,7 +7141,9 @@ export default function MatriculaDigitalPage() {
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
                         {signatariosPosicionaveis.map((sig) => {
-                          const posicoesDoSig = Object.values(posicoesAssinaturas).filter(p => p.signatarioId === sig.id)
+                          const posicoesDoSig = Object.values(posicoesAssinaturas)
+                            .filter(p => p.signatarioId === sig.id)
+                            .sort((a, b) => (a.pagina || 1) - (b.pagina || 1))
                           const temPosicoes = posicoesDoSig.length > 0
                           return (
                             <div
@@ -7157,10 +7207,18 @@ export default function MatriculaDigitalPage() {
                                           }}
                                           title={`Posição no documento: (${Math.round(p.xPercent)}%, ${Math.round(p.yPercent)}%)`}
                                         >
-                                          <span>
-                                            {p.documentoNome
+                                          <span
+                                            onClick={() => {
+                                              setSignatarioModalAtivo(sig.id)
+                                              setPaginaModalInicial(p.pagina)
+                                              setModalPosicionadorAberto(true)
+                                            }}
+                                            style={{ cursor: 'pointer' }}
+                                            title="Clique para abrir esta página no posicionador"
+                                          >
+                                            {p.documentoNome && documentosUpload.length > 1
                                               ? `${p.documentoNome.length > 14 ? p.documentoNome.substring(0, 14) + '…' : p.documentoNome}: Pág ${p.paginaRelativa || p.pagina}`
-                                              : `Pág ${p.pagina}`}
+                                              : `Pág ${p.paginaRelativa || p.pagina}`}
                                           </span>
                                           <button
                                             type="button"
@@ -10131,6 +10189,7 @@ export default function MatriculaDigitalPage() {
         onClose={() => {
           setModalPosicionadorAberto(false)
           setSignatarioModalAtivo(null)
+          setPaginaModalInicial(null)
         }}
         pdfUrl={previewPdfBlobUrl}
         pdfBase64={pdfUploadBase64}
@@ -10139,6 +10198,7 @@ export default function MatriculaDigitalPage() {
         signatarios={signatariosPosicionaveis}
         posicoesAtuais={posicoesAssinaturas}
         signatarioInicialId={signatarioModalAtivo}
+        paginaInicial={paginaModalInicial}
         documentos={documentosUpload.map((doc) => ({
           id: doc.id,
           nome: doc.nome,
@@ -10151,6 +10211,7 @@ export default function MatriculaDigitalPage() {
           setPosicoesAssinaturas(novas)
           setModalPosicionadorAberto(false)
           setSignatarioModalAtivo(null)
+          setPaginaModalInicial(null)
           toast.success('Posições das assinaturas salvas com sucesso!')
         }}
       />
