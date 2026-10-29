@@ -8,7 +8,6 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin, Eye, EyeOff } from 'lucide-react'
 import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
-import { AddToCalendarButton } from '@/components/agenda/AddToCalendarButton'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -1562,25 +1561,7 @@ export default function CalendarioPage() {
                               </div>
 
                               {/* Action Buttons for Admin */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                                <AddToCalendarButton
-                                  event={{
-                                    id: ev.id,
-                                    titulo: ev.titulo,
-                                    descricao: ev.descricao,
-                                    tipo: ev.tipo,
-                                    tipoLabel: TIPO_LABELS[ev.tipo] || 'Evento',
-                                    data: ev.data,
-                                    horaInicio: ev.horaInicio,
-                                    horaFim: ev.horaFim,
-                                    diaTodo: Boolean((ev as any).diaTodo),
-                                    local: ev.local,
-                                    cor: resolveRealColor(ev),
-                                  }}
-                                  accentColor={resolveRealColor(ev)}
-                                  isPast={isPast}
-                                  compact
-                                />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleEdit(ev as any); }}
                                   style={{

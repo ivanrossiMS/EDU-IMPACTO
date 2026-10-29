@@ -14,7 +14,6 @@ import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
-import { AddToCalendarButton } from '@/components/agenda/AddToCalendarButton'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -1793,26 +1792,7 @@ export default function ADCalendarioPage() {
                               </div>
 
                               {/* Action Buttons for Collaborator */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
-                                <AddToCalendarButton
-                                  event={{
-                                    id: ev.id,
-                                    titulo: ev.titulo,
-                                    descricao: ev.descricao,
-                                    tipo: ev.tipo,
-                                    tipoLabel: TIPO_LABELS[ev.tipo] || 'Evento',
-                                    data: ev.data,
-                                    horaInicio: ev.horaInicio,
-                                    horaFim: ev.horaFim,
-                                    diaTodo: Boolean((ev as any).diaTodo),
-                                    local: ev.local,
-                                    turmaNome: selectedTurmaName,
-                                    cor: resolveRealColor(ev),
-                                  }}
-                                  accentColor={resolveRealColor(ev)}
-                                  isPast={isPast}
-                                  compact
-                                />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleEdit(ev as any); }}
                                   style={{

@@ -9,7 +9,8 @@ import {
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
   CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2,
-  Layers, PackageCheck, Clock, ArrowUpRight, CheckCircle2, BookOpen
+  Layers, PackageCheck, Clock, ArrowUpRight, CheckCircle2, BookOpen,
+  Activity, Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -23,40 +24,74 @@ const getInitials = (nome: string) => {
   return `${p[0]?.[0] ?? ''}${p[1]?.[0] ?? ''}`.toUpperCase()
 }
 
-// ── Sparkline Component
-function Sparkline({ color, path }: { color: string, path: string }) {
-  const fillPath = `${path} L 100 40 L 0 40 Z`
-  
-  // Extrai as coordenadas finais do path (ex: "M ... S 80 25, 100 10")
-  const pathParts = path.split(/[\s,]+/)
+// ── Sparkline Component (Ultra-Modern Animated Telemetry Curve)
+function Sparkline({ color, path, index = 0 }: { color: string, path: string, index?: number }) {
+  const cleanId = color.replace('#', '')
+  const fillPath = `${path} L 96 42 L 0 42 Z`
+
+  // Extrai as coordenadas finais do path (ex: "M ... S 80 25, 96 10")
+  const pathParts = path.trim().split(/[\s,]+/)
   const endX = pathParts[pathParts.length - 2]
   const endY = pathParts[pathParts.length - 1]
 
   return (
-    <div className="dashboard-sparkline-container">
-      <svg width="100%" height="100%" viewBox="0 0 100 40" preserveAspectRatio="none" style={{ overflow: 'visible', display: 'block' }}>
+    <div className="dashboard-sparkline-container" aria-hidden="true">
+      <svg width="100%" height="100%" viewBox="0 0 100 42" preserveAspectRatio="none" style={{ overflow: 'visible', display: 'block' }}>
         <defs>
-          <linearGradient id={`grad-${color.replace('#','')}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+          <linearGradient id={`grad-${cleanId}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <stop offset="65%" stopColor={color} stopOpacity="0.06" />
             <stop offset="100%" stopColor={color} stopOpacity="0.0" />
           </linearGradient>
-          <filter id={`shadow-${color.replace('#','')}`}>
-            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor={color} floodOpacity="0.3"/>
+          <filter id={`shadow-${cleanId}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2.2" floodColor={color} floodOpacity="0.38" />
           </filter>
         </defs>
-        <path d={fillPath} fill={`url(#grad-${color.replace('#','')})`} />
-        <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={endX} cy={endY} r="3" fill={color} stroke="hsl(var(--bg-surface))" strokeWidth="1.5" filter={`url(#shadow-${color.replace('#','')})`} />
+        <motion.path
+          d={fillPath}
+          fill={`url(#grad-${cleanId})`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.9, delay: 0.2 + index * 0.08 }}
+        />
+        <motion.path
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          filter={`url(#shadow-${cleanId})`}
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 1.25, delay: 0.12 + index * 0.08, ease: [0.16, 1, 0.3, 1] }}
+        />
+        <circle
+          cx={endX}
+          cy={endY}
+          r="6"
+          fill={color}
+          className="dashboard-kpi-spark-pulse"
+        />
+        <circle
+          cx={endX}
+          cy={endY}
+          r="3.2"
+          fill={color}
+          stroke="hsl(var(--bg-surface))"
+          strokeWidth="1.6"
+          filter={`url(#shadow-${cleanId})`}
+        />
       </svg>
     </div>
   )
 }
 
 const PATHS = {
-  blue:   "M 0 25 C 10 20, 20 30, 30 20 S 50 25, 60 15 S 80 25, 100 10",
-  purple: "M 0 30 C 15 25, 20 15, 35 25 S 55 10, 70 20 S 85 10, 100 15",
-  green:  "M 0 20 C 10 25, 20 15, 30 25 S 50 10, 60 20 S 80 15, 100 5",
-  orange: "M 0 15 C 15 20, 25 10, 40 20 S 60 25, 75 15 S 90 20, 100 10"
+  blue:   "M 0 28 C 12 22, 22 31, 34 20 S 54 25, 66 14 S 82 22, 96 9",
+  purple: "M 0 31 C 15 26, 22 16, 36 25 S 56 11, 70 19 S 84 10, 96 13",
+  green:  "M 0 24 C 12 28, 22 17, 34 25 S 52 12, 64 19 S 80 14, 96 6",
+  orange: "M 0 19 C 15 24, 26 12, 42 21 S 60 26, 74 14 S 86 19, 96 10"
 }
 
 export default function DashboardPage() {
@@ -80,6 +115,7 @@ export default function DashboardPage() {
   const [filtroPedidos, setFiltroPedidos] = useState<'todos' | 'pendentes' | 'feitos' | 'entregues'>('todos')
   const [diaSelecionadoOffset, setDiaSelecionadoOffset] = useState<number>(0)
   const [apenasMinhasTarefas, setApenasMinhasTarefas] = useState(true)
+  const [engRoleFocus, setEngRoleFocus] = useState<'colab' | 'alunos' | 'resps' | null>(null)
 
   // ── Data for Stats
   const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes', {}, { staleTime: 120_000 })
@@ -165,44 +201,76 @@ export default function DashboardPage() {
   const selectedDateStr = selectedDate.toISOString().slice(0, 10);
   const eventosExibidos = eventosAgenda.filter((e: any) => e.data === selectedDateStr);
 
+  const totalTurmasAtivas = turmas.length || kpis.nTurmas || 0
+  const ocorrenciasConfirmadasCount = ocorrencias.filter((o: any) => !!o.ciencia_responsavel).length
+  const pctOcorrenciasCiencia = ocorrencias.length > 0 ? Math.round((ocorrenciasConfirmadasCount / ocorrencias.length) * 100) : 100
+
   const kpiCards = [
     { 
       label: 'Total de Alunos', 
+      category: 'CORPO DISCENTE',
       value: formatNumber(totalAlunos), 
-      icon: <Users size={20} strokeWidth={2.2} />, 
+      badge: totalTurmasAtivas > 0 ? `${totalTurmasAtivas} turmas` : 'Ativos',
+      icon: <Users size={20} strokeWidth={2.3} />, 
       color: '#2563eb', 
-      bgIcon: 'rgba(37, 99, 235, 0.12)', 
+      accent: '#3b82f6',
+      lightBg: 'rgba(37, 99, 235, 0.1)',
+      borderTint: 'rgba(59, 130, 246, 0.24)',
+      glow: 'rgba(37, 99, 235, 0.22)',
+      iconGradient: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 55%, #0ea5e9 100%)',
       sub: 'Matriculados ativos', 
+      href: '/academico/alunos',
       path: PATHS.blue,
       gradient: 'linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #06b6d4 100%)'
     },
     { 
       label: 'Taxa de Ocupação', 
+      category: 'INFRAESTRUTURA',
       value: fmtPct(taxaOcupacao), 
-      icon: <GraduationCap size={20} strokeWidth={2.2} />, 
+      badge: taxaOcupacao >= 75 ? 'Alta demanda' : 'Capacidade ativa',
+      icon: <GraduationCap size={20} strokeWidth={2.3} />, 
       color: '#7c3aed', 
-      bgIcon: 'rgba(124, 58, 237, 0.12)', 
+      accent: '#8b5cf6',
+      lightBg: 'rgba(124, 58, 237, 0.1)',
+      borderTint: 'rgba(139, 92, 246, 0.24)',
+      glow: 'rgba(124, 58, 237, 0.22)',
+      iconGradient: 'linear-gradient(135deg, #6d28d9 0%, #8b5cf6 55%, #c084fc 100%)',
       sub: 'Capacidade física', 
+      href: '/academico/turmas',
       path: PATHS.purple,
       gradient: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #c084fc 100%)'
     },
     { 
       label: 'Novas Matrículas', 
+      category: 'EXPANSÃO MENSAL',
       value: formatNumber(novasMatriculas), 
-      icon: <UserPlus size={20} strokeWidth={2.2} />, 
+      badge: novasMatriculas > 0 ? `+${novasMatriculas} ingresso${novasMatriculas === 1 ? '' : 's'}` : 'Ciclo atual',
+      icon: <UserPlus size={20} strokeWidth={2.3} />, 
       color: '#059669', 
-      bgIcon: 'rgba(5, 150, 105, 0.12)', 
+      accent: '#10b981',
+      lightBg: 'rgba(5, 150, 105, 0.1)',
+      borderTint: 'rgba(16, 185, 129, 0.24)',
+      glow: 'rgba(5, 150, 105, 0.22)',
+      iconGradient: 'linear-gradient(135deg, #047857 0%, #10b981 55%, #34d399 100%)',
       sub: 'Este mês', 
+      href: '/academico/alunos',
       path: PATHS.green,
       gradient: 'linear-gradient(90deg, #047857 0%, #10b981 50%, #34d399 100%)'
     },
     { 
       label: 'Ocorrências', 
+      category: 'ACOMPANHAMENTO',
       value: formatNumber(ocorrencias.length), 
-      icon: <AlertTriangle size={20} strokeWidth={2.2} />, 
+      badge: `${pctOcorrenciasCiencia}% c/ ciência`,
+      icon: <AlertTriangle size={20} strokeWidth={2.3} />, 
       color: '#ea580c', 
-      bgIcon: 'rgba(234, 88, 12, 0.12)', 
+      accent: '#f97316',
+      lightBg: 'rgba(234, 88, 12, 0.1)',
+      borderTint: 'rgba(249, 115, 22, 0.24)',
+      glow: 'rgba(234, 88, 12, 0.22)',
+      iconGradient: 'linear-gradient(135deg, #c2410c 0%, #ea580c 55%, #f59e0b 100%)',
       sub: 'Registradas', 
+      href: '/academico/ocorrencias',
       path: PATHS.orange,
       gradient: 'linear-gradient(90deg, #c2410c 0%, #f97316 50%, #fbbf24 100%)'
     },
@@ -269,47 +337,108 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ═══ Top Row (4 KPIs) ══════════════════════════════════════════════ */}
+      {/* ═══ Top Row (4 KPIs — Ultra-Modern Telemetry Bento Cards) ════════ */}
       <div className="dashboard-kpi-grid">
-        {kpiCards.map((kpi) => (
-          <div 
-            key={kpi.label} 
+        {kpiCards.map((kpi, idx) => (
+          <motion.article
+            key={kpi.label}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.45, delay: idx * 0.06, ease: [0.16, 1, 0.3, 1] }}
             className="dashboard-kpi-card"
+            style={{
+              '--kpi-color': kpi.color,
+              '--kpi-accent': kpi.accent,
+              '--kpi-glow': kpi.glow,
+              '--kpi-border': kpi.borderTint
+            } as React.CSSProperties}
           >
-            {/* Top Accent Gradient Bar */}
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 4,
-              background: kpi.gradient,
-            }} />
+            {/* Top Animated Gradient Beam */}
+            <div className="dashboard-kpi-top-beam" style={{ background: kpi.gradient }} />
+
+            {/* Ambient Corner Glow & Subtle Dot Grid */}
+            <div
+              className="dashboard-kpi-ambient-orb"
+              style={{ background: `radial-gradient(circle, ${kpi.glow} 0%, transparent 70%)` }}
+            />
+            <div className="dashboard-kpi-dot-mesh" />
 
             <div className="dashboard-kpi-content">
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span className="dashboard-kpi-label" style={{ color: kpi.color }}>
-                  {kpi.label}
-                </span>
-                <div className="dashboard-kpi-value">
-                  {loadKpis ? <Loader2 className="animate-spin" size={24} color={kpi.color} style={{ margin: '3px 0' }} /> : kpi.value}
+                {/* Category Micro-Tag */}
+                <div className="dashboard-kpi-category-row">
+                  <span
+                    className="dashboard-kpi-category-pill"
+                    style={{
+                      color: kpi.color,
+                      background: kpi.lightBg,
+                      borderColor: kpi.borderTint
+                    }}
+                  >
+                    <span className="dashboard-kpi-category-dot" style={{ background: kpi.accent }} />
+                    <span>{kpi.category}</span>
+                  </span>
                 </div>
-                <div className="dashboard-kpi-sub">
-                  {kpi.sub}
+
+                {/* Title with Stretched Link */}
+                <h2 className="dashboard-kpi-title-heading">
+                  <Link href={kpi.href} className="dashboard-kpi-label dashboard-kpi-card-link" style={{ color: 'hsl(var(--text-secondary))' }}>
+                    {kpi.label}
+                  </Link>
+                </h2>
+
+                {/* Big Hero Value + Live Metric Pill */}
+                <div className="dashboard-kpi-value-row">
+                  <div className="dashboard-kpi-value">
+                    {loadKpis ? (
+                      <Loader2 className="animate-spin" size={24} color={kpi.color} style={{ margin: '3px 0' }} />
+                    ) : (
+                      kpi.value
+                    )}
+                  </div>
+                  {!loadKpis && (
+                    <span
+                      className="dashboard-kpi-metric-badge"
+                      style={{
+                        color: kpi.color,
+                        background: kpi.lightBg,
+                        borderColor: kpi.borderTint
+                      }}
+                    >
+                      {kpi.badge}
+                    </span>
+                  )}
+                </div>
+
+                {/* Subtitle + Hover Action Arrow */}
+                <div className="dashboard-kpi-footer-row">
+                  <span className="dashboard-kpi-sub">{kpi.sub}</span>
+                  <span className="dashboard-kpi-action-hint" style={{ color: kpi.color }}>
+                    <ArrowUpRight size={13} strokeWidth={2.5} />
+                  </span>
                 </div>
               </div>
-              <div className="dashboard-kpi-icon" style={{ 
-                background: kpi.bgIcon,
-                border: `1px solid ${kpi.color}25`,
-                color: kpi.color,
-                boxShadow: `0 8px 16px ${kpi.color}15`
-              }}>
-                {kpi.icon}
+
+              {/* 3D Glowing Squircle Icon Box */}
+              <div className="dashboard-kpi-icon-wrap">
+                <div
+                  className="dashboard-kpi-icon-ring"
+                  style={{ borderColor: kpi.borderTint }}
+                />
+                <div
+                  className="dashboard-kpi-icon"
+                  style={{
+                    background: kpi.iconGradient,
+                    boxShadow: `0 10px 20px -4px ${kpi.glow}, inset 0 1px 1px rgba(255, 255, 255, 0.42)`
+                  }}
+                >
+                  {kpi.icon}
+                </div>
               </div>
             </div>
 
-            <Sparkline color={kpi.color} path={kpi.path} />
-          </div>
+            <Sparkline color={kpi.color} path={kpi.path} index={idx} />
+          </motion.article>
         ))}
       </div>
 
@@ -933,652 +1062,1248 @@ export default function DashboardPage() {
 
         {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
-          {/* Tarefas */}
-          <div className="dashboard-card">
-            {/* Header Ultra Moderno com Gradiente */}
+          {/* ═══ CARD: TAREFAS (Ultra-Modern) ═══ */}
+          <motion.article
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+            className="dashboard-card dashboard-modern-widget"
+          >
+            {/* Header Ultra Moderno com Gradiente & Shimmer */}
             <div className="dashboard-card-header" style={{ 
-              background: 'linear-gradient(135deg, #065f46 0%, #059669 45%, #14b8a6 100%)', 
+              background: 'linear-gradient(135deg, #064e3b 0%, #059669 48%, #14b8a6 100%)', 
             }}>
-              {/* Efeito sutil de luz glass reflexiva */}
-              <div style={{ 
-                position: 'absolute', 
-                top: '-40px', 
-                right: '-20px', 
-                width: 120, 
-                height: 120, 
-                borderRadius: '50%', 
-                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
-                pointerEvents: 'none' 
-              }} />
+              <div className="dashboard-header-orb dashboard-header-orb-top" />
+              <div className="dashboard-header-orb dashboard-header-orb-bottom" style={{ background: 'radial-gradient(circle, rgba(45, 212, 191, 0.28) 0%, transparent 70%)' }} />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
-                <div style={{ 
-                  width: 36, 
-                  height: 36, 
-                  background: 'rgba(255,255,255,0.2)', 
-                  backdropFilter: 'blur(8px)', 
-                  WebkitBackdropFilter: 'blur(8px)',
-                  borderRadius: '10px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  color: '#ffffff'
-                }}>
+                <div className="dashboard-header-icon-box">
                   <ClipboardCheck size={18} strokeWidth={2.4} />
                 </div>
                 <div>
-                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-                    Tarefas
-                  </span>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Atividades e lembretes</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span className="dashboard-header-title">Tarefas</span>
+                    {tarefasPendentesList.length > 0 && (
+                      <span className="dashboard-header-count-pill">
+                        {tarefasPendentesList.length} ativa{tarefasPendentesList.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="dashboard-header-subtitle">Atividades e lembretes</div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
                 {/* Glass Minhas Switch Pill */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px',
-                  background: 'rgba(255, 255, 255, 0.18)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255, 255, 255, 0.28)',
-                  padding: '5px 12px',
-                  borderRadius: '20px',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
-                }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Minhas</span>
-                  <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '30px', height: '16px', margin: 0 }}>
-                    <input type="checkbox" checked={apenasMinhasTarefas} onChange={e => setApenasMinhasTarefas(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                    <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: apenasMinhasTarefas ? '#10b981' : 'rgba(255,255,255,0.3)', transition: '.3s', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.4)' }}>
-                      <span style={{ position: 'absolute', content: '""', height: '12px', width: '12px', left: apenasMinhasTarefas ? '15px' : '2px', bottom: '1px', background: 'white', transition: '.3s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></span>
+                <label className="dashboard-glass-toggle" title="Filtrar apenas minhas tarefas">
+                  <span className="dashboard-glass-toggle-label">Minhas</span>
+                  <span className="dashboard-glass-switch">
+                    <input
+                      type="checkbox"
+                      checked={apenasMinhasTarefas}
+                      onChange={e => setApenasMinhasTarefas(e.target.checked)}
+                    />
+                    <span
+                      className="dashboard-glass-slider"
+                      style={{ background: apenasMinhasTarefas ? '#10b981' : 'rgba(255,255,255,0.26)' }}
+                    >
+                      <span
+                        className="dashboard-glass-thumb"
+                        style={{ translate: apenasMinhasTarefas ? '13px 0' : '0 0' }}
+                      />
                     </span>
-                  </label>
-                </div>
+                  </span>
+                </label>
 
                 {/* Glass Ver todas Link */}
-                <Link 
-                  href="/tarefas" 
-                  style={{ 
-                    fontSize: '12px', 
-                    color: '#ffffff', 
-                    textDecoration: 'none', 
-                    fontWeight: 800,
-                    background: 'rgba(255, 255, 255, 0.18)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255, 255, 255, 0.28)',
-                    padding: '6px 14px',
-                    borderRadius: '14px',
-                    transition: 'all 0.2s',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
-                  }}
-                >
-                  Ver todas
+                <Link href="/tarefas" className="dashboard-header-cta">
+                  <span>Ver todas</span>
+                  <ArrowUpRight size={13} strokeWidth={2.5} />
                 </Link>
               </div>
             </div>
 
-            <div className="dashboard-card-body">
+            <div className="dashboard-card-body" style={{ padding: '18px 20px', gap: 14 }}>
               {loadContext ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#10b981" />
                 </div>
-              ) : (
-                <>
-              <div className="dashboard-tab-bar" style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
-            <div 
-              onClick={() => setFiltroTarefas('todas')}
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'todas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'todas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'todas' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Todas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'todas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'todas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasFiltradas.length}</span>
-            </div>
-            <div 
-              onClick={() => setFiltroTarefas('pendentes')}
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'pendentes' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'pendentes' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'pendentes' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Pendentes</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'pendentes' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'pendentes' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasPendentesList.length}</span>
-            </div>
-            <div 
-              onClick={() => setFiltroTarefas('concluidas')}
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'concluidas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'concluidas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'concluidas' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Concluídas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'concluidas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'concluidas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasConcluidasList.length}</span>
-            </div>
-          </div>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
-            {tarefasExibidas.length === 0 ? (
-              <>
-                <div style={{ marginBottom: 20 }}>
-                  <svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="5" y="15" width="50" height="55" rx="10" fill="#e0e7ff" />
-                    <rect x="20" y="5" width="20" height="15" rx="5" fill="hsl(var(--bg-surface))" stroke="#a5b4fc" strokeWidth="4" />
-                    <path d="M 22 32 L 27 37 L 38 26" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M 22 46 L 27 51 L 38 40" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M 22 60 L 27 65 L 38 54" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', marginBottom: 4 }}>Nenhuma tarefa {filtroTarefas === 'pendentes' ? 'pendente' : filtroTarefas === 'concluidas' ? 'concluída' : 'encontrada'}</div>
-                <div style={{ fontSize: '13px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
-                {tarefasExibidas.slice(0, 5).map((t: any) => {
-                  const isConcluida = t.status === 'concluida';
-                  return (
-                    <div key={t.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${isConcluida ? '#10b981' : '#f59e0b'}`, width: '100%', textAlign: 'left' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))', textDecoration: isConcluida ? 'line-through' : 'none', opacity: isConcluida ? 0.7 : 1 }}>{t.titulo}</span>
-                      {t.prazo && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>Prazo: {t.prazo.split('-').reverse().join('/')}</span>}
+              ) : (() => {
+                const totalTar = tarefasFiltradas.length
+                const conclTar = tarefasConcluidasList.length
+                const pctTar = totalTar > 0 ? Math.round((conclTar / totalTar) * 100) : 100
+
+                const tabs = [
+                  { id: 'todas' as const, label: 'Todas', count: tarefasFiltradas.length, color: '#059669' },
+                  { id: 'pendentes' as const, label: 'Pendentes', count: tarefasPendentesList.length, color: '#d97706' },
+                  { id: 'concluidas' as const, label: 'Concluídas', count: tarefasConcluidasList.length, color: '#10b981' },
+                ]
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 14, minWidth: 0 }}>
+                    {/* Segmented Pill Bar + Completion Chip */}
+                    <div className="dashboard-segmented-bar-wrap">
+                      <div className="dashboard-segmented-track">
+                        {tabs.map(tab => {
+                          const isActive = filtroTarefas === tab.id
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setFiltroTarefas(tab.id)}
+                              className={`dashboard-segmented-btn ${isActive ? 'is-active' : ''}`}
+                            >
+                              {isActive && (
+                                <motion.div
+                                  layoutId="tarefas-segmented-pill"
+                                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                                  className="dashboard-segmented-pill-bg"
+                                />
+                              )}
+                              <span className="dashboard-segmented-text" style={{ color: isActive ? '#065f46' : 'hsl(var(--text-secondary))' }}>
+                                {tab.label}
+                              </span>
+                              <span
+                                className="dashboard-segmented-badge"
+                                style={{
+                                  background: isActive ? '#059669' : 'rgba(148, 163, 184, 0.18)',
+                                  color: isActive ? '#ffffff' : 'hsl(var(--text-secondary))'
+                                }}
+                              >
+                                {tab.count}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <div className="dashboard-mini-completion-pill" title="Taxa de conclusão das tarefas">
+                        <span className="dashboard-mini-completion-dot" />
+                        <span>{pctTar}% em dia</span>
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-            </>
-          )}
-            </div>
-          </div>
 
-        {/* ── Coluna 3: Agenda ──────────────────────────── */}
-        <div className="dashboard-card" style={{ height: '100%', position: 'relative' }}>
-          {/* Header Ultra Moderno com Gradiente */}
-          <div className="dashboard-card-header" style={{ 
-            background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 45%, #a855f7 100%)', 
-          }}>
-            {/* Efeito sutil de luz glass reflexiva */}
-            <div style={{ 
-              position: 'absolute', 
-              top: '-40px', 
-              right: '-20px', 
-              width: 120, 
-              height: 120, 
-              borderRadius: '50%', 
-              background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
-              pointerEvents: 'none' 
-            }} />
+                    {/* Content Area with Animated Empty State or Task Cards */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 175 }}>
+                      <AnimatePresence mode="wait">
+                        {tarefasExibidas.length === 0 ? (
+                          <motion.div
+                            key={`empty-${filtroTarefas}`}
+                            initial={{ opacity: 0, scale: 0.96, y: 6 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.96, y: -6 }}
+                            transition={{ duration: 0.25 }}
+                            className="dashboard-modern-empty-state"
+                            style={{
+                              background: 'linear-gradient(145deg, rgba(16, 185, 129, 0.04) 0%, rgba(20, 184, 166, 0.08) 100%)',
+                              borderColor: 'rgba(16, 185, 129, 0.2)'
+                            }}
+                          >
+                            <div className="dashboard-empty-orb-wrap">
+                              <div className="dashboard-empty-pulse-ring" style={{ borderColor: 'rgba(16, 185, 129, 0.28)' }} />
+                              <div
+                                className="dashboard-empty-icon-squircle"
+                                style={{
+                                  background: 'linear-gradient(135deg, #059669 0%, #14b8a6 100%)',
+                                  boxShadow: '0 10px 24px -4px rgba(16, 185, 129, 0.4)'
+                                }}
+                              >
+                                <CheckCircle2 size={26} strokeWidth={2.3} color="#ffffff" />
+                              </div>
+                              <span className="dashboard-empty-sparkle-badge">
+                                <Sparkles size={11} />
+                              </span>
+                            </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
-              <div style={{ 
-                width: 36, 
-                height: 36, 
-                background: 'rgba(255,255,255,0.2)', 
-                backdropFilter: 'blur(8px)', 
-                WebkitBackdropFilter: 'blur(8px)',
-                borderRadius: '10px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                color: '#ffffff'
-              }}>
-                <CalendarIcon size={18} strokeWidth={2.4} />
-              </div>
-              <div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-                  Agenda
-                </span>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Eventos escolares</div>
-              </div>
-            </div>
+                            <div className="dashboard-empty-title">
+                              Nenhuma tarefa {filtroTarefas === 'pendentes' ? 'pendente' : filtroTarefas === 'concluidas' ? 'concluída' : 'encontrada'}
+                            </div>
+                            <div className="dashboard-empty-sub">
+                              Tudo em dia por aqui! Sua rotina está organizada. 🎉
+                            </div>
 
-            <Link 
-              href="/calendario" 
-              style={{ 
-                fontSize: '12px', 
-                color: '#ffffff', 
-                textDecoration: 'none', 
-                fontWeight: 800,
-                background: 'rgba(255, 255, 255, 0.18)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255, 255, 255, 0.28)',
-                padding: '6px 14px',
-                borderRadius: '14px',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                position: 'relative',
-                zIndex: 1,
-                display: 'inline-flex',
-                alignItems: 'center'
-              }}
-            >
-              Ver todos
-            </Link>
-          </div>
-
-          <div className="dashboard-card-body">
-            {loadContext ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-                <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
-              </div>
-            ) : (
-              <>
-          {/* Week View */}
-          <div className="dashboard-agenda-strip no-scrollbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }}>
-            {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
-              const d = new Date(hoje);
-              d.setDate(hoje.getDate() + offset);
-              const isSelected = diaSelecionadoOffset === offset;
-              const isToday = offset === 0;
-              const dayName = isToday ? 'Hoje' : new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
-              
-              const dStr = d.toISOString().slice(0, 10);
-              const qtdEventos = eventosAgenda.filter((e: any) => e.data === dStr).length;
-              
-              return (
-                <div 
-                  key={offset} 
-                  onClick={() => setDiaSelecionadoOffset(offset)}
-                  style={{ 
-                    flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', 
-                    background: isSelected ? '#8b5cf6' : 'transparent', 
-                    padding: isSelected ? '10px 14px' : '10px 0', 
-                    borderRadius: '20px', 
-                    color: isSelected ? 'hsl(var(--bg-surface))' : 'inherit', 
-                    gap: 4, 
-                    boxShadow: isSelected ? '0 4px 14px rgba(139, 92, 246, 0.3)' : 'none',
-                    cursor: 'pointer',
-                    minWidth: isSelected ? 'auto' : '40px',
-                    transition: 'all 0.2s',
-                    position: 'relative'
-                  }}
-                >
-                  {qtdEventos > 0 && (
-                    <div style={{ position: 'absolute', top: -2, right: isSelected ? 2 : -4, background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 900, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', boxShadow: '0 0 0 2px hsl(var(--bg-surface))', zIndex: 2 }}>
-                      {qtdEventos}
+                            <Link href="/tarefas" className="dashboard-empty-action-pill" style={{ color: '#047857', background: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+                              <span>Gerenciar tarefas</span>
+                              <ArrowUpRight size={12} strokeWidth={2.5} />
+                            </Link>
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key={`list-${filtroTarefas}`}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={{ duration: 0.22 }}
+                            style={{ display: 'flex', flexDirection: 'column', gap: 9, width: '100%', overflowY: 'auto', maxHeight: '230px', paddingRight: '2px' }}
+                          >
+                            {tarefasExibidas.slice(0, 4).map((t: any, idx: number) => {
+                              const isConcluida = t.status === 'concluida'
+                              const accentColor = isConcluida ? '#10b981' : '#f59e0b'
+                              const fmtPrazo = t.prazo ? t.prazo.split('-').reverse().join('/') : ''
+                              return (
+                                <motion.div
+                                  key={t.id}
+                                  initial={{ opacity: 0, x: -8 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ duration: 0.28, delay: idx * 0.05 }}
+                                >
+                                  <Link
+                                    href="/tarefas"
+                                    className="dashboard-modern-item-row"
+                                    style={{ borderLeft: `3.5px solid ${accentColor}` }}
+                                  >
+                                    <div
+                                      className="dashboard-modern-item-icon"
+                                      style={{
+                                        background: isConcluida ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                        color: accentColor,
+                                        borderColor: isConcluida ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.28)'
+                                      }}
+                                    >
+                                      {isConcluida ? <CheckCircle2 size={15} strokeWidth={2.4} /> : <Clock size={15} strokeWidth={2.4} />}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div
+                                        style={{
+                                          fontSize: '13px',
+                                          fontWeight: 800,
+                                          color: 'hsl(var(--text-primary))',
+                                          textDecoration: isConcluida ? 'line-through' : 'none',
+                                          opacity: isConcluida ? 0.68 : 1,
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                      >
+                                        {t.titulo}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                                        {fmtPrazo ? (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            <CalendarDays size={11} />
+                                            Prazo: {fmtPrazo}
+                                          </span>
+                                        ) : (
+                                          <span>Sem prazo definido</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span
+                                      className="dashboard-modern-status-tag"
+                                      style={{
+                                        color: isConcluida ? '#047857' : '#b45309',
+                                        background: isConcluida ? '#d1fae5' : '#fef3c7',
+                                        borderColor: isConcluida ? '#6ee7b7' : '#fcd34d'
+                                      }}
+                                    >
+                                      {isConcluida ? 'Concluída' : 'Pendente'}
+                                    </span>
+                                  </Link>
+                                </motion.div>
+                              )
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  )}
-                  <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: isSelected ? 'rgba(255,255,255,0.8)' : 'hsl(var(--text-muted))' }}>{dayName}</span>
-                  <div style={{ color: isSelected ? '#fff' : 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
-                </div>
-              )
-            })}
-          </div>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
-            {eventosExibidos.length === 0 ? (
-              <>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhum evento {diaSelecionadoOffset === 0 ? 'para hoje' : 'neste dia'}</div>
-                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Aproveite para planejar! 📅</div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
-                {eventosExibidos.slice(0, 5).map((e: any) => (
-                  <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{e.titulo}</span>
-                    {e.horaInicio && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>{e.horaInicio} {e.horaFim ? `às ${e.horaFim}` : ''}</span>}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-            </>
-          )}
-          </div>
-        </div>
-        {/* Fim da Coluna Central */}
-        </div>
+                )
+              })()}
+            </div>
+          </motion.article>
 
-        {/* ── Coluna 4: Aniversários & Ocorrências ──────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
-          
-          {/* Aniversariantes */}
-          <div className="dashboard-card">
+          {/* ═══ CARD: AGENDA (Ultra-Modern) ═══ */}
+          <motion.article
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+            className="dashboard-card dashboard-modern-widget"
+            style={{ height: '100%', position: 'relative' }}
+          >
             {/* Header Ultra Moderno com Gradiente */}
             <div className="dashboard-card-header" style={{ 
-              background: 'linear-gradient(135deg, #9d174d 0%, #ec4899 45%, #f43f5e 100%)', 
+              background: 'linear-gradient(135deg, #3b0764 0%, #6d28d9 48%, #a855f7 100%)', 
             }}>
-              {/* Efeito sutil de luz glass reflexiva */}
-              <div style={{ 
-                position: 'absolute', 
-                top: '-40px', 
-                right: '-20px', 
-                width: 120, 
-                height: 120, 
-                borderRadius: '50%', 
-                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
-                pointerEvents: 'none' 
-              }} />
+              <div className="dashboard-header-orb dashboard-header-orb-top" />
+              <div className="dashboard-header-orb dashboard-header-orb-bottom" style={{ background: 'radial-gradient(circle, rgba(192, 132, 252, 0.28) 0%, transparent 70%)' }} />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
-                <div style={{ 
-                  width: 36, 
-                  height: 36, 
-                  background: 'rgba(255,255,255,0.2)', 
-                  backdropFilter: 'blur(8px)', 
-                  WebkitBackdropFilter: 'blur(8px)',
-                  borderRadius: '10px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  color: '#ffffff'
-                }}>
+                <div className="dashboard-header-icon-box">
+                  <CalendarIcon size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span className="dashboard-header-title">Agenda</span>
+                    <span className="dashboard-header-count-pill">
+                      {eventosExibidos.length} {eventosExibidos.length === 1 ? 'evento' : 'eventos'}
+                    </span>
+                  </div>
+                  <div className="dashboard-header-subtitle">Eventos e calendário escolar</div>
+                </div>
+              </div>
+
+              <Link href="/calendario" className="dashboard-header-cta">
+                <span>Ver todos</span>
+                <ArrowUpRight size={13} strokeWidth={2.5} />
+              </Link>
+            </div>
+
+            <div className="dashboard-card-body" style={{ padding: '18px 20px', gap: 14 }}>
+              {loadContext ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                  <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 14, minWidth: 0 }}>
+                  {/* 7-Day Interactive Bento Strip */}
+                  <div className="dashboard-agenda-bento-strip">
+                    {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
+                      const d = new Date(hoje)
+                      d.setDate(hoje.getDate() + offset)
+                      const isSelected = diaSelecionadoOffset === offset
+                      const isToday = offset === 0
+                      const dayName = isToday ? 'HOJE' : new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase()
+                      const dStr = d.toISOString().slice(0, 10)
+                      const qtdEventos = eventosAgenda.filter((e: any) => e.data === dStr).length
+
+                      return (
+                        <button
+                          key={offset}
+                          type="button"
+                          onClick={() => setDiaSelecionadoOffset(offset)}
+                          className={`dashboard-agenda-day-pill ${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`}
+                        >
+                          {isSelected && (
+                            <motion.div
+                              layoutId="agenda-selected-day-bg"
+                              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                              className="dashboard-agenda-day-active-bg"
+                            />
+                          )}
+                          {qtdEventos > 0 && (
+                            <span className={`dashboard-agenda-day-badge ${isSelected ? 'is-selected' : ''}`}>
+                              {qtdEventos}
+                            </span>
+                          )}
+                          <span className="dashboard-agenda-day-name">{dayName}</span>
+                          <span className="dashboard-agenda-day-num">
+                            {d.getDate().toString().padStart(2, '0')}
+                          </span>
+                          <span
+                            className="dashboard-agenda-day-dot"
+                            style={{
+                              opacity: qtdEventos > 0 ? 1 : 0,
+                              background: isSelected ? '#ffffff' : '#8b5cf6'
+                            }}
+                          />
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Events Timeline List */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 140 }}>
+                    <AnimatePresence mode="wait">
+                      {eventosExibidos.length === 0 ? (
+                        <motion.div
+                          key={`empty-day-${diaSelecionadoOffset}`}
+                          initial={{ opacity: 0, scale: 0.96, y: 6 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.96, y: -6 }}
+                          transition={{ duration: 0.22 }}
+                          className="dashboard-modern-empty-state"
+                          style={{
+                            background: 'linear-gradient(145deg, rgba(124, 58, 237, 0.04) 0%, rgba(168, 85, 247, 0.08) 100%)',
+                            borderColor: 'rgba(139, 92, 246, 0.2)',
+                            padding: '18px 14px'
+                          }}
+                        >
+                          <div
+                            className="dashboard-empty-icon-squircle"
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 14,
+                              background: 'linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)',
+                              boxShadow: '0 8px 20px -4px rgba(124, 58, 237, 0.35)',
+                              marginBottom: 8
+                            }}
+                          >
+                            <CalendarDays size={20} strokeWidth={2.3} color="#ffffff" />
+                          </div>
+                          <div className="dashboard-empty-title" style={{ fontSize: '14px' }}>
+                            Nenhum evento {diaSelecionadoOffset === 0 ? 'para hoje' : 'neste dia'}
+                          </div>
+                          <div className="dashboard-empty-sub" style={{ fontSize: '11.5px' }}>
+                            Dia livre no calendário escolar — aproveite para planejar! 📅
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key={`events-day-${diaSelecionadoOffset}`}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.22 }}
+                          style={{ display: 'flex', flexDirection: 'column', gap: 9, width: '100%', overflowY: 'auto', maxHeight: '220px', paddingRight: '2px' }}
+                        >
+                          {eventosExibidos.slice(0, 4).map((e: any, idx: number) => {
+                            const evColor = e.cor || '#7c3aed'
+                            return (
+                              <motion.div
+                                key={e.id}
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.26, delay: idx * 0.05 }}
+                              >
+                                <Link
+                                  href="/calendario"
+                                  className="dashboard-agenda-event-card"
+                                  style={{ borderLeft: `4px solid ${evColor}` }}
+                                >
+                                  <div
+                                    className="dashboard-agenda-event-icon"
+                                    style={{
+                                      background: `${evColor}15`,
+                                      color: evColor,
+                                      border: `1px solid ${evColor}30`
+                                    }}
+                                  >
+                                    <CalendarDays size={15} strokeWidth={2.3} />
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div className="dashboard-agenda-event-title">
+                                      {e.titulo}
+                                    </div>
+                                    <div className="dashboard-agenda-event-meta">
+                                      <Clock size={11} style={{ color: evColor, flexShrink: 0 }} />
+                                      <span>
+                                        {e.horaInicio
+                                          ? `${e.horaInicio}${e.horaFim ? ` às ${e.horaFim}` : ''}`
+                                          : (diaSelecionadoOffset === 0 ? 'Hoje • Dia inteiro' : 'Evento escolar • Dia inteiro')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span
+                                    className="dashboard-agenda-event-chip"
+                                    style={{
+                                      color: evColor,
+                                      background: `${evColor}12`,
+                                      border: `1px solid ${evColor}28`
+                                    }}
+                                  >
+                                    {diaSelecionadoOffset === 0 ? 'Hoje' : 'Agendado'}
+                                  </span>
+                                </Link>
+                              </motion.div>
+                            )
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.article>
+        </div>
+
+        {/* ── Coluna 3: Aniversários & Ocorrências ──────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+          
+          {/* ═══ CARD: ANIVERSARIANTES (Ultra-Modern) ═══ */}
+          <motion.article
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+            className="dashboard-card dashboard-modern-widget"
+          >
+            {/* Header Ultra Moderno com Gradiente */}
+            <div className="dashboard-card-header" style={{ 
+              background: 'linear-gradient(135deg, #831843 0%, #db2777 48%, #f43f5e 100%)', 
+            }}>
+              <div className="dashboard-header-orb dashboard-header-orb-top" />
+              <div className="dashboard-header-orb dashboard-header-orb-bottom" style={{ background: 'radial-gradient(circle, rgba(251, 113, 133, 0.3) 0%, transparent 70%)' }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+                <div className="dashboard-header-icon-box">
                   <Cake size={18} strokeWidth={2.4} />
                 </div>
                 <div>
-                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-                    Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
-                  </span>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Comemorações do mês</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span className="dashboard-header-title">
+                      Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
+                    </span>
+                    {aniversariantes.length > 0 && (
+                      <span className="dashboard-header-count-pill">
+                        {aniversariantes.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="dashboard-header-subtitle">Comemorações do mês</div>
                 </div>
               </div>
 
-              <button 
-                onClick={() => setModalAnivOpen(true)} 
-                style={{ 
-                  fontSize: '12px', 
-                  color: '#ffffff', 
-                  textDecoration: 'none', 
-                  fontWeight: 800,
-                  background: 'rgba(255, 255, 255, 0.18)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255, 255, 255, 0.28)',
-                  padding: '6px 14px',
-                  borderRadius: '14px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                  position: 'relative',
-                  zIndex: 1
-                }}
+              <button
+                type="button"
+                onClick={() => setModalAnivOpen(true)}
+                className="dashboard-header-cta"
+                style={{ cursor: 'pointer' }}
               >
-                Ver todos
+                <span>Ver todos</span>
+                <ArrowUpRight size={13} strokeWidth={2.5} />
               </button>
             </div>
 
-            <div className="dashboard-card-body">
+            <div className="dashboard-card-body" style={{ padding: '18px 20px', gap: 12 }}>
               {loadAniv ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#ec4899" />
                 </div>
               ) : (
-                <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {aniversariantes.length === 0 ? (
-                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
-              ) : (
-                aniversariantes.slice(0, 3).map((aniv: any) => {
-                  const isHoje = Number(aniv.dia) === hoje.getDate();
-                  return (
-                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #fdf2f8' }}>
-                      <div style={{ width: 44, height: 44, borderRadius: '50%', background: isHoje ? 'rgba(236, 72, 153, 0.1)' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isHoje ? '#ec4899' : '#64748b', fontWeight: 800, fontSize: '14px', flexShrink: 0, border: isHoje ? '2px solid #fbcfe8' : '1px solid #e2e8f0' }}>
-                        {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 12, minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                    {aniversariantes.length === 0 ? (
+                      <div
+                        className="dashboard-modern-empty-state"
+                        style={{
+                          background: 'linear-gradient(145deg, rgba(236, 72, 153, 0.04) 0%, rgba(244, 63, 94, 0.08) 100%)',
+                          borderColor: 'rgba(236, 72, 153, 0.2)'
+                        }}
+                      >
+                        <Cake size={26} color="#ec4899" style={{ marginBottom: 6 }} />
+                        <div className="dashboard-empty-title" style={{ fontSize: '14px' }}>Nenhum aniversariante neste mês</div>
+                        <div className="dashboard-empty-sub" style={{ fontSize: '11.5px' }}>Novas comemorações aparecerão aqui automaticamente.</div>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
-                        <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
-                      </div>
-                      <div style={{ fontSize: '11px', fontWeight: 900, color: isHoje ? '#ec4899' : '#64748b', flexShrink: 0, textTransform: 'uppercase' }}>Dia {aniv.dia}</div>
-                    </div>
-                  );
-                })
+                    ) : (
+                      aniversariantes.slice(0, 3).map((aniv: any, idx: number) => {
+                        const isHoje = Number(aniv.dia) === hoje.getDate()
+                        return (
+                          <motion.div
+                            key={aniv.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.32, delay: 0.06 + idx * 0.06, ease: [0.16, 1, 0.3, 1] }}
+                            onClick={() => setModalAnivOpen(true)}
+                            className={`dashboard-birthday-row ${isHoje ? 'is-today' : ''}`}
+                          >
+                            {/* Avatar with Gradient Ring */}
+                            <div className={`dashboard-birthday-avatar-ring ${isHoje ? 'is-today' : ''}`}>
+                              <div className="dashboard-birthday-avatar-inner">
+                                {aniv.foto ? (
+                                  <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                ) : (
+                                  getInitials(aniv.nome)
+                                )}
+                              </div>
+                              {isHoje && (
+                                <span className="dashboard-birthday-today-sparkle" title="Aniversário hoje!">
+                                  🎂
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Student Info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div className="dashboard-birthday-name">{aniv.nome}</div>
+                                {isHoje && (
+                                  <span className="dashboard-birthday-today-pill">Parabéns hoje!</span>
+                                )}
+                              </div>
+                              <div className="dashboard-birthday-meta">
+                                <span className="dashboard-birthday-role-badge">ALUNO</span>
+                                <span style={{ opacity: 0.4 }}>•</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.turma}</span>
+                              </div>
+                            </div>
+
+                            {/* Calendar Day Tile */}
+                            <div className={`dashboard-birthday-date-tile ${isHoje ? 'is-today' : ''}`}>
+                              <span className="dashboard-birthday-date-label">DIA</span>
+                              <span className="dashboard-birthday-date-num">
+                                {String(aniv.dia).padStart(2, '0')}
+                              </span>
+                            </div>
+                          </motion.div>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  {/* Ultra Modern Footer CTA Button */}
+                  <button
+                    type="button"
+                    onClick={() => setModalAnivOpen(true)}
+                    className="dashboard-modern-footer-btn"
+                    style={{
+                      color: '#be185d',
+                      background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(244, 63, 94, 0.12) 100%)',
+                      borderColor: 'rgba(236, 72, 153, 0.22)'
+                    }}
+                  >
+                    <Cake size={14} strokeWidth={2.3} />
+                    <span>Ver todos os aniversariantes ({aniversariantes.length})</span>
+                    <ArrowUpRight size={14} strokeWidth={2.5} />
+                  </button>
+                </div>
               )}
             </div>
-            
-            <div style={{ textAlign: 'center', marginTop: 20 }}>
-              <button 
-                onClick={() => setModalAnivOpen(true)} 
-                style={{ width: '100%', fontSize: '13px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: 'rgba(236, 72, 153, 0.1)', padding: '12px 24px', borderRadius: '16px', border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
-                onMouseOver={(e) => e.currentTarget.style.background = '#fce7f3'}
-                onMouseOut={(e) => e.currentTarget.style.background = '#fdf2f8'}
-              >
-                Ver todos os aniversariantes
-              </button>
-            </div>
-              </>
-            )}
-            </div>
-          </div>
+          </motion.article>
 
-          {/* Ocorrências Recentes */}
-          <div className="dashboard-card" style={{ minWidth: 0, maxWidth: '100%' }}>
+          {/* ═══ CARD: OCORRÊNCIAS RECENTES (Ultra-Modern) ═══ */}
+          <motion.article
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+            className="dashboard-card dashboard-modern-widget"
+            style={{ minWidth: 0, maxWidth: '100%', height: '100%' }}
+          >
             {/* Header Ultra Moderno com Gradiente */}
             <div className="dashboard-card-header" style={{ 
-              background: 'linear-gradient(135deg, #9a3412 0%, #ea580c 45%, #f59e0b 100%)', 
+              background: 'linear-gradient(135deg, #7c2d12 0%, #ea580c 48%, #f59e0b 100%)', 
             }}>
-              {/* Efeito sutil de luz glass reflexiva */}
-              <div style={{ 
-                position: 'absolute', 
-                top: '-40px', 
-                right: '-20px', 
-                width: 120, 
-                height: 120, 
-                borderRadius: '50%', 
-                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
-                pointerEvents: 'none' 
-              }} />
+              <div className="dashboard-header-orb dashboard-header-orb-top" />
+              <div className="dashboard-header-orb dashboard-header-orb-bottom" style={{ background: 'radial-gradient(circle, rgba(251, 191, 36, 0.28) 0%, transparent 70%)' }} />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
-                <div style={{ 
-                  width: 36, 
-                  height: 36, 
-                  background: 'rgba(255,255,255,0.2)', 
-                  backdropFilter: 'blur(8px)', 
-                  WebkitBackdropFilter: 'blur(8px)',
-                  borderRadius: '10px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  color: '#ffffff'
-                }}>
+                <div className="dashboard-header-icon-box">
                   <AlertTriangle size={18} strokeWidth={2.4} />
                 </div>
                 <div>
-                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
-                    Ocorrências Recentes
-                  </span>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Registros disciplinares</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span className="dashboard-header-title">Ocorrências Recentes</span>
+                    {ocorrencias.length > 0 && (
+                      <span className="dashboard-header-count-pill">
+                        {ocorrencias.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="dashboard-header-subtitle">Registros e ciência disciplinar</div>
                 </div>
               </div>
 
-              <Link 
-                href="/academico/ocorrencias" 
-                style={{ 
-                  fontSize: '12px', 
-                  color: '#ffffff', 
-                  textDecoration: 'none', 
-                  fontWeight: 800,
-                  background: 'rgba(255, 255, 255, 0.18)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255, 255, 255, 0.28)',
-                  padding: '6px 14px',
-                  borderRadius: '14px',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                  position: 'relative',
-                  zIndex: 1
-                }}
-              >
-                Ver todas
+              <Link href="/academico/ocorrencias" className="dashboard-header-cta">
+                <span>Ver todas</span>
+                <ArrowUpRight size={13} strokeWidth={2.5} />
               </Link>
             </div>
 
-            <div className="dashboard-card-body">
+            <div className="dashboard-card-body" style={{ padding: '18px 20px', gap: 12 }}>
               {loadOcorr ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#f59e0b" />
                 </div>
-              ) : (
-                <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, width: '100%' }}>
-              {ocorrencias.length === 0 ? (
-                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
-              ) : (
-                ocorrencias.slice(0, 3).map((oc: any) => {
-                  const isConfirmada = !!oc.ciencia_responsavel;
-                  const color = isConfirmada ? '#10b981' : '#f59e0b';
-                  const bg = isConfirmada ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)';
-                  
-                  // Extract date
-                  let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || '';
-                  let fmtDate = '';
-                  if (dataStr) {
-                    const d = new Date(dataStr);
-                    if (!isNaN(d.getTime())) {
-                      fmtDate = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')} - ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                    }
-                  }
+              ) : (() => {
+                const totalOc = ocorrencias.length
+                const confirmadasOc = ocorrencias.filter((o: any) => !!o.ciencia_responsavel).length
+                const aguardandoOc = Math.max(0, totalOc - confirmadasOc)
+                const pctConfirmada = totalOc > 0 ? Math.round((confirmadasOc / totalOc) * 100) : 100
 
-                  const rawDesc = oc.descricao || '';
-                  const lancadoMatch = rawDesc.match(/\[Lançado por:\s*([^\]]+)\]/i);
-                  const lancadoAutor = lancadoMatch
-                    ? lancadoMatch[1].replace(/\s+em\s+\d{2}\/\d{2}\/\d{4}.*$/i, '').trim()
-                    : (oc.responsavel || '').trim();
-                  const primeiroNomeAutor = lancadoAutor.split(/\s+/)[0] || '';
-
-                  const cleanDescricao = rawDesc
-                    .replace(/\[(?:Lançado|Editado|Confirmado) por:[^\]]*\]/gi, '')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-
-                  const tituloOcorrencia = primeiroNomeAutor
-                    ? `[por ${primeiroNomeAutor}] ${cleanDescricao}`.trim()
-                    : (cleanDescricao || 'Ocorrência Disciplinar');
-
-                  return (
-                    <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}`, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
-                      <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                        <div title={tituloOcorrencia} style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{tituloOcorrencia}</div>
-                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-                          <Users size={12} style={{ flexShrink: 0 }} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.alunoNome || 'Aluno'}</span>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                        <div style={{ fontSize: '10px', fontWeight: 900, color: color, textTransform: 'uppercase' }}>
-                          {isConfirmada ? 'Ciência Confirmada' : 'Aguardando Ciência'}
-                        </div>
-                        {fmtDate && (
-                          <div style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>
-                            {fmtDate}
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 12, minWidth: 0, width: '100%' }}>
+                    {/* Mini Telemetry Strip for Ocorrências */}
+                    {totalOc > 0 && (
+                      <div className="dashboard-ocorr-telemetry-strip">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span className="dashboard-ocorr-stat-chip is-emerald">
+                              <CheckCircle2 size={11} strokeWidth={2.5} />
+                              <span>{confirmadasOc} confirmada{confirmadasOc === 1 ? '' : 's'}</span>
+                            </span>
+                            <span className="dashboard-ocorr-stat-chip is-amber">
+                              <Clock size={11} strokeWidth={2.5} />
+                              <span>{aguardandoOc} aguardando ciência</span>
+                            </span>
                           </div>
-                        )}
+                          <span style={{ fontSize: '10.5px', fontWeight: 900, color: '#059669', fontFamily: 'Outfit, sans-serif' }}>
+                            {pctConfirmada}% ciência
+                          </span>
+                        </div>
+                        <div className="dashboard-ocorr-mini-bar">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pctConfirmada}%` }}
+                            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                            style={{ height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', borderRadius: 999 }}
+                          />
+                        </div>
                       </div>
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 9, flex: 1, minWidth: 0, width: '100%' }}>
+                      {ocorrencias.length === 0 ? (
+                        <div
+                          className="dashboard-modern-empty-state"
+                          style={{
+                            background: 'linear-gradient(145deg, rgba(245, 158, 11, 0.04) 0%, rgba(16, 185, 129, 0.06) 100%)',
+                            borderColor: 'rgba(245, 158, 11, 0.2)'
+                          }}
+                        >
+                          <CheckCircle2 size={26} color="#10b981" style={{ marginBottom: 6 }} />
+                          <div className="dashboard-empty-title" style={{ fontSize: '14px' }}>Nenhuma ocorrência registrada</div>
+                          <div className="dashboard-empty-sub" style={{ fontSize: '11.5px' }}>Ambiente escolar tranquilo e sem registros pendentes.</div>
+                        </div>
+                      ) : (
+                        ocorrencias.slice(0, 3).map((oc: any, idx: number) => {
+                          const isConfirmada = !!oc.ciencia_responsavel
+                          const color = isConfirmada ? '#059669' : '#d97706'
+                          const accentBorder = isConfirmada ? '#10b981' : '#f59e0b'
+
+                          let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || ''
+                          let fmtDate = ''
+                          if (dataStr) {
+                            const d = new Date(dataStr)
+                            if (!isNaN(d.getTime())) {
+                              fmtDate = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')} • ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+                            }
+                          }
+
+                          const rawDesc = oc.descricao || ''
+                          const lancadoMatch = rawDesc.match(/\[Lançado por:\s*([^\]]+)\]/i)
+                          const lancadoAutor = lancadoMatch
+                            ? lancadoMatch[1].replace(/\s+em\s+\d{2}\/\d{2}\/\d{4}.*$/i, '').trim()
+                            : (oc.responsavel || '').trim()
+                          const primeiroNomeAutor = lancadoAutor.split(/\s+/)[0] || ''
+
+                          const cleanDescricao = rawDesc
+                            .replace(/\[(?:Lançado|Editado|Confirmado) por:[^\]]*\]/gi, '')
+                            .replace(/\s+/g, ' ')
+                            .trim()
+
+                          const tituloLimpo = cleanDescricao || 'Ocorrência Disciplinar'
+
+                          return (
+                            <motion.div
+                              key={oc.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.32, delay: 0.08 + idx * 0.06, ease: [0.16, 1, 0.3, 1] }}
+                            >
+                              <Link
+                                href="/academico/ocorrencias"
+                                className={`dashboard-ocorr-card ${isConfirmada ? 'is-confirmed' : 'is-pending'}`}
+                                style={{ borderLeft: `4px solid ${accentBorder}` }}
+                              >
+                                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                                  <div
+                                    title={tituloLimpo}
+                                    className="dashboard-ocorr-title"
+                                  >
+                                    {tituloLimpo}
+                                  </div>
+                                  <div className="dashboard-ocorr-meta-row">
+                                    <span className="dashboard-ocorr-student">
+                                      <Users size={11} style={{ flexShrink: 0, color }} />
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {oc.alunoNome || 'Aluno'}
+                                      </span>
+                                    </span>
+                                    {primeiroNomeAutor && (
+                                      <span className="dashboard-ocorr-author-chip">
+                                        por {primeiroNomeAutor}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="dashboard-ocorr-right-col">
+                                  <span className={`dashboard-ocorr-status-pill ${isConfirmada ? 'is-confirmed' : 'is-pending'}`}>
+                                    {isConfirmada ? (
+                                      <>
+                                        <CheckCircle2 size={10} strokeWidth={2.5} />
+                                        <span>Confirmada</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="dashboard-ocorr-pulse-dot" />
+                                        <span>Aguardando</span>
+                                      </>
+                                    )}
+                                  </span>
+                                  {fmtDate && (
+                                    <span className="dashboard-ocorr-date">{fmtDate}</span>
+                                  )}
+                                </div>
+                              </Link>
+                            </motion.div>
+                          )
+                        })
+                      )}
                     </div>
-                  )
-                })
-              )}
+                  </div>
+                )
+              })()}
             </div>
-              </>
-            )}
-            </div>
-          </div>
+          </motion.article>
 
         </div>
 
       </div>
 
-      {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div className="dashboard-engagement-banner">
-        {/* Top Accent Bar */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 4,
-          background: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #3b82f6 100%)'
-        }} />
+      {/* ═══ Active Users Banner (Ultra-Modern Telemetry Bento Card) ═══════ */}
+      <motion.article
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        className="dashboard-engagement-banner"
+      >
+        {/* Top Luminous Animated Accent Beam */}
+        <div className="dashboard-engagement-top-beam" />
+
+        {/* Ambient Mesh Glow Orbs */}
+        <div className="dashboard-engagement-orb dashboard-engagement-orb-1" />
+        <div className="dashboard-engagement-orb dashboard-engagement-orb-2" />
+        <div className="dashboard-engagement-orb dashboard-engagement-orb-3" />
+        <div className="dashboard-engagement-grid-bg" />
+
         {loadUsuarios ? (
-          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0' }}>
-            <Loader2 className="animate-spin" size={32} color="#6d28d9" />
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '36px 0', position: 'relative', zIndex: 2 }}>
+            <Loader2 className="animate-spin" size={32} color="#7c3aed" />
           </div>
-        ) : (
-          <>
-        <div className="dashboard-engagement-left">
-          
-          {/* Circular Progress */}
-          <div className="dashboard-engagement-circle">
-            <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" strokeWidth="8" />
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeDasharray="282.74" strokeDashoffset={282.74 - (282.74 * (statsUsuarios.totalGeral > 0 ? statsUsuarios.total / statsUsuarios.totalGeral : 0))} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
-            </svg>
-            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="dashboard-engagement-pct" style={{ fontSize: '20px', fontWeight: 900, color: '#4c1d95', fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.totalGeral > 0 ? Math.round((statsUsuarios.total / statsUsuarios.totalGeral) * 100) : 0}<span style={{ fontSize: '12px' }}>%</span></span>
-            </div>
-          </div>
+        ) : (() => {
+          const totalAtivos = statsUsuarios.total || 0
+          const totalGeral = statsUsuarios.totalGeral || 0
+          const totalPendentes = Math.max(0, totalGeral - totalAtivos)
+          const pctGeralRaw = totalGeral > 0 ? (totalAtivos / totalGeral) * 100 : 0
+          const pctGeral = Math.round(pctGeralRaw)
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="dashboard-engagement-title" style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 8 }}>Engajamento do Sistema</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <div className="dashboard-engagement-count" style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: '#6d28d9' }}>{statsUsuarios.total}</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
-            </div>
-            <div className="dashboard-engagement-sub" style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
-          </div>
+          const pctColabRaw = statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0
+          const pctAlunosRaw = statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0
+          const pctRespsRaw = statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0
 
-          {/* Wavy Line decoration */}
-          <div className="dashboard-engagement-wave">
-            <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-              <defs>
-                <linearGradient id="wave-grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 30 C 40 10, 60 50, 100 30 C 140 10, 160 50, 200 30 L 200 60 L 0 60 Z" fill="url(#wave-grad)" />
-              <path d="M 0 30 C 40 10, 60 50, 100 30 C 140 10, 160 50, 200 30" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
+          const pctColab = Math.round(pctColabRaw)
+          const pctAlunos = Math.round(pctAlunosRaw)
+          const pctResps = Math.round(pctRespsRaw)
 
-        </div>
-        
-        <div className="dashboard-engagement-cards">
-          {/* Card Colaboradores */}
-          <div className="dashboard-role-card">
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }} />
-            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
-              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+          // Share of active users for stacked distribution bar
+          const shareColab = totalAtivos > 0 ? (statsUsuarios.colab / totalAtivos) * 100 : 0
+          const shareAlunos = totalAtivos > 0 ? (statsUsuarios.alunos / totalAtivos) * 100 : 0
+          const shareResps = totalAtivos > 0 ? Math.max(0, 100 - shareColab - shareAlunos) : 0
+
+          const rolesConfig = [
+            {
+              key: 'colab' as const,
+              label: 'Colaboradores',
+              shortTag: 'EQUIPE',
+              subtitle: 'Equipe & Docentes',
+              active: statsUsuarios.colab,
+              total: statsUsuarios.colabTotal,
+              pending: Math.max(0, statsUsuarios.colabTotal - statsUsuarios.colab),
+              pct: pctColab,
+              pctExact: pctColabRaw,
+              color: '#7c3aed',
+              accent: '#8b5cf6',
+              lightColor: '#f3e8ff',
+              borderColor: 'rgba(139, 92, 246, 0.28)',
+              gradient: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #c084fc 100%)',
+              cardBg: 'linear-gradient(145deg, rgba(139, 92, 246, 0.06) 0%, rgba(255, 255, 255, 0.85) 100%)',
+              iconBg: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)',
+              glow: 'rgba(139, 92, 246, 0.22)',
+              strokeId: 'url(#eng-ring-colab)',
+              icon: <ShieldCheck size={17} strokeWidth={2.3} />,
+              wavePath: 'M 0 18 C 18 6, 36 26, 54 14 S 82 4, 100 10'
+            },
+            {
+              key: 'alunos' as const,
+              label: 'Alunos',
+              shortTag: 'ALUNOS',
+              subtitle: 'Corpo Discente',
+              active: statsUsuarios.alunos,
+              total: statsUsuarios.alunosTotal,
+              pending: Math.max(0, statsUsuarios.alunosTotal - statsUsuarios.alunos),
+              pct: pctAlunos,
+              pctExact: pctAlunosRaw,
+              color: '#2563eb',
+              accent: '#3b82f6',
+              lightColor: '#dbeafe',
+              borderColor: 'rgba(59, 130, 246, 0.28)',
+              gradient: 'linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #38bdf8 100%)',
+              cardBg: 'linear-gradient(145deg, rgba(59, 130, 246, 0.06) 0%, rgba(255, 255, 255, 0.85) 100%)',
+              iconBg: 'linear-gradient(135deg, #2563eb 0%, #0284c7 100%)',
+              glow: 'rgba(59, 130, 246, 0.22)',
+              strokeId: 'url(#eng-ring-alunos)',
+              icon: <GraduationCap size={17} strokeWidth={2.3} />,
+              wavePath: 'M 0 22 C 20 18, 40 26, 60 16 S 84 12, 100 8'
+            },
+            {
+              key: 'resps' as const,
+              label: 'Responsáveis',
+              shortTag: 'FAMÍLIAS',
+              subtitle: 'Famílias Conectadas',
+              active: statsUsuarios.resps,
+              total: statsUsuarios.respsTotal,
+              pending: Math.max(0, statsUsuarios.respsTotal - statsUsuarios.resps),
+              pct: pctResps,
+              pctExact: pctRespsRaw,
+              color: '#059669',
+              accent: '#10b981',
+              lightColor: '#d1fae5',
+              borderColor: 'rgba(16, 185, 129, 0.28)',
+              gradient: 'linear-gradient(90deg, #047857 0%, #10b981 50%, #34d399 100%)',
+              cardBg: 'linear-gradient(145deg, rgba(16, 185, 129, 0.06) 0%, rgba(255, 255, 255, 0.85) 100%)',
+              iconBg: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)',
+              glow: 'rgba(16, 185, 129, 0.22)',
+              strokeId: 'url(#eng-ring-resps)',
+              icon: <Users size={17} strokeWidth={2.3} />,
+              wavePath: 'M 0 20 C 16 10, 34 24, 52 12 S 78 16, 100 6'
+            }
+          ]
+
+          const focusedRole = rolesConfig.find(r => r.key === engRoleFocus) || null
+          const displayPct = focusedRole ? focusedRole.pct : pctGeral
+          const displayPctExact = focusedRole ? focusedRole.pctExact : pctGeralRaw
+          const displayStroke = focusedRole ? focusedRole.strokeId : 'url(#eng-ring-main)'
+          const displayColor = focusedRole ? focusedRole.color : '#6d28d9'
+          const displayTag = focusedRole ? focusedRole.shortTag : 'ADESÃO'
+
+          const outerCircumference = 2 * Math.PI * 44 // r=44 -> ~276.46
+          const outerOffset = outerCircumference - (outerCircumference * Math.min(100, Math.max(0, displayPctExact))) / 100
+
+          const innerCircumference = 2 * Math.PI * 34 // r=34 -> ~213.63
+          const innerOffset = innerCircumference - (innerCircumference * Math.min(100, Math.max(0, pctColabRaw))) / 100
+
+          return (
+            <div className="dashboard-engagement-inner">
+              {/* ── LEFT HERO: Orbital Telemetry Gauge + Main Metrics ── */}
+              <div className="dashboard-engagement-left">
+                {/* Multi-Layer Orbital Radial Gauge */}
+                <div className="dashboard-engagement-circle">
+                  <div
+                    className="dashboard-engagement-circle-glow"
+                    style={{ background: `radial-gradient(circle, ${focusedRole ? focusedRole.glow : 'rgba(139, 92, 246, 0.24)'} 0%, transparent 70%)` }}
+                  />
+                  <svg viewBox="0 0 108 108" className="dashboard-engagement-svg">
+                    <defs>
+                      <linearGradient id="eng-ring-main" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#6d28d9" />
+                        <stop offset="50%" stopColor="#3b82f6" />
+                        <stop offset="100%" stopColor="#10b981" />
+                      </linearGradient>
+                      <linearGradient id="eng-ring-colab" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#6d28d9" />
+                        <stop offset="100%" stopColor="#c084fc" />
+                      </linearGradient>
+                      <linearGradient id="eng-ring-alunos" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#1d4ed8" />
+                        <stop offset="100%" stopColor="#38bdf8" />
+                      </linearGradient>
+                      <linearGradient id="eng-ring-resps" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#047857" />
+                        <stop offset="100%" stopColor="#34d399" />
+                      </linearGradient>
+                      <filter id="eng-ring-glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor={displayColor} floodOpacity="0.35" />
+                      </filter>
+                    </defs>
+
+                    {/* Rotating Outer Orbital Dashed Track */}
+                    <circle
+                      cx="54"
+                      cy="54"
+                      r="50"
+                      fill="none"
+                      stroke="rgba(139, 92, 246, 0.18)"
+                      strokeWidth="1.2"
+                      strokeDasharray="3 5"
+                      className="dashboard-engagement-orbit-ring"
+                    />
+
+                    {/* Main Track */}
+                    <circle
+                      cx="54"
+                      cy="54"
+                      r="44"
+                      fill="none"
+                      stroke="rgba(148, 163, 184, 0.16)"
+                      strokeWidth="8.5"
+                    />
+
+                    {/* Subtle Inner Telemetry Track & Arc */}
+                    <circle
+                      cx="54"
+                      cy="54"
+                      r="34"
+                      fill="none"
+                      stroke="rgba(139, 92, 246, 0.08)"
+                      strokeWidth="3.5"
+                    />
+                    <motion.circle
+                      cx="54"
+                      cy="54"
+                      r="34"
+                      fill="none"
+                      stroke="url(#eng-ring-colab)"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      strokeDasharray={innerCircumference}
+                      initial={{ strokeDashoffset: innerCircumference }}
+                      animate={{ strokeDashoffset: innerOffset }}
+                      transition={{ duration: 1.3, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+                      style={{ opacity: 0.45 }}
+                    />
+
+                    {/* Primary Animated Progress Ring */}
+                    <motion.circle
+                      cx="54"
+                      cy="54"
+                      r="44"
+                      fill="none"
+                      stroke={displayStroke}
+                      strokeWidth="8.5"
+                      strokeLinecap="round"
+                      strokeDasharray={outerCircumference}
+                      initial={{ strokeDashoffset: outerCircumference }}
+                      animate={{ strokeDashoffset: outerOffset }}
+                      transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+                      filter="url(#eng-ring-glow)"
+                    />
+                  </svg>
+
+                  {/* Center Readout */}
+                  <div className="dashboard-engagement-circle-center">
+                    <motion.span
+                      key={displayPct}
+                      initial={{ opacity: 0, scale: 0.85, y: 3 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="dashboard-engagement-pct"
+                      style={{ color: displayColor }}
+                    >
+                      {displayPct}<span className="dashboard-engagement-pct-sign">%</span>
+                    </motion.span>
+                    <span
+                      className="dashboard-engagement-circle-tag"
+                      style={{
+                        color: displayColor,
+                        background: `${displayColor}14`
+                      }}
+                    >
+                      {displayTag}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Main Telemetry Copy & Distribution Bar */}
+                <div className="dashboard-engagement-hero-copy">
+                  <div className="dashboard-engagement-badge-row">
+                    <span className="dashboard-engagement-live-pill">
+                      <span className="dashboard-engagement-live-dot" />
+                      <span>TELEMETRIA DE ACESSOS</span>
+                    </span>
+                    <span className="dashboard-engagement-pending-pill">
+                      <Sparkles size={11} />
+                      <span>{formatNumber(totalPendentes)} aguardando 1º acesso</span>
+                    </span>
+                  </div>
+
+                  <div className="dashboard-engagement-title-row">
+                    <h3 className="dashboard-engagement-title">Engajamento do Sistema</h3>
+                  </div>
+
+                  <div className="dashboard-engagement-counter-row">
+                    <motion.div
+                      key={focusedRole ? focusedRole.key : 'all'}
+                      initial={{ opacity: 0.6, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.22 }}
+                      style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}
+                    >
+                      <span
+                        className="dashboard-engagement-count"
+                        style={{
+                          background: focusedRole
+                            ? focusedRole.gradient
+                            : 'linear-gradient(135deg, #4c1d95 0%, #6d28d9 45%, #2563eb 100%)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent'
+                        }}
+                      >
+                        {formatNumber(focusedRole ? focusedRole.active : totalAtivos)}
+                      </span>
+                      <span className="dashboard-engagement-total-label">
+                        / {formatNumber(focusedRole ? focusedRole.total : totalGeral)} ativos
+                      </span>
+                      <span className="dashboard-engagement-context-chip">
+                        {focusedRole ? focusedRole.label : 'Primeiro acesso realizado'}
+                      </span>
+                    </motion.div>
+                  </div>
+
+                  {/* Multi-Segment Active Distribution Bar */}
+                  <div className="dashboard-engagement-distribution">
+                    <div className="dashboard-engagement-dist-bar">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${shareColab}%` }}
+                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+                        className="dashboard-engagement-dist-seg"
+                        style={{
+                          background: 'linear-gradient(90deg, #6d28d9, #8b5cf6)',
+                          opacity: engRoleFocus && engRoleFocus !== 'colab' ? 0.35 : 1
+                        }}
+                        title={`Colaboradores: ${statsUsuarios.colab} (${Math.round(shareColab)}% dos ativos)`}
+                      />
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${shareAlunos}%` }}
+                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                        className="dashboard-engagement-dist-seg"
+                        style={{
+                          background: 'linear-gradient(90deg, #2563eb, #38bdf8)',
+                          opacity: engRoleFocus && engRoleFocus !== 'alunos' ? 0.35 : 1
+                        }}
+                        title={`Alunos: ${statsUsuarios.alunos} (${Math.round(shareAlunos)}% dos ativos)`}
+                      />
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${shareResps}%` }}
+                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
+                        className="dashboard-engagement-dist-seg"
+                        style={{
+                          background: 'linear-gradient(90deg, #059669, #34d399)',
+                          opacity: engRoleFocus && engRoleFocus !== 'resps' ? 0.35 : 1
+                        }}
+                        title={`Responsáveis: ${statsUsuarios.resps} (${Math.round(shareResps)}% dos ativos)`}
+                      />
+                    </div>
+
+                    <div className="dashboard-engagement-dist-legend">
+                      {rolesConfig.map(r => {
+                        const share = totalAtivos > 0 ? Math.round((r.active / totalAtivos) * 100) : 0
+                        return (
+                          <button
+                            key={r.key}
+                            type="button"
+                            onMouseEnter={() => setEngRoleFocus(r.key)}
+                            onMouseLeave={() => setEngRoleFocus(null)}
+                            onClick={() => setEngRoleFocus(prev => prev === r.key ? null : r.key)}
+                            className={`dashboard-engagement-legend-item ${engRoleFocus === r.key ? 'is-active' : ''}`}
+                          >
+                            <span className="dashboard-engagement-legend-dot" style={{ background: r.accent }} />
+                            <span className="dashboard-engagement-legend-name">{r.label}</span>
+                            <span className="dashboard-engagement-legend-val" style={{ color: r.color }}>{share}%</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── RIGHT ZONE: 3 Interactive Role Bento Cards ── */}
+              <div className="dashboard-engagement-cards">
+                {rolesConfig.map((role, idx) => {
+                  const isFocused = engRoleFocus === role.key
+                  return (
+                    <motion.div
+                      key={role.key}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.45, delay: 0.1 + idx * 0.08, ease: [0.16, 1, 0.3, 1] }}
+                      onMouseEnter={() => setEngRoleFocus(role.key)}
+                      onMouseLeave={() => setEngRoleFocus(null)}
+                      onClick={() => setEngRoleFocus(prev => prev === role.key ? null : role.key)}
+                      className={`dashboard-role-card ${isFocused ? 'is-focused' : ''}`}
+                      style={{
+                        background: role.cardBg,
+                        borderColor: isFocused ? role.accent : role.borderColor,
+                        boxShadow: isFocused
+                          ? `0 14px 28px -8px ${role.glow}, 0 0 0 2px ${role.accent}35`
+                          : '0 4px 16px rgba(15, 23, 42, 0.03)'
+                      }}
+                    >
+                      {/* Top Accent Gradient Strip */}
+                      <div className="dashboard-role-card-bar" style={{ background: role.gradient }} />
+
+                      {/* Corner Ambient Glow */}
+                      <div
+                        className="dashboard-role-card-glow"
+                        style={{ background: `radial-gradient(circle, ${role.glow} 0%, transparent 70%)` }}
+                      />
+
+                      {/* Header Row: Squircle Icon + Role Title + Pct Pill */}
+                      <div className="dashboard-role-card-head">
+                        <div className="dashboard-role-icon-box" style={{ background: role.iconBg, boxShadow: `0 6px 14px ${role.glow}` }}>
+                          {role.icon}
+                        </div>
+                        <div className="dashboard-role-head-text">
+                          <div className="dashboard-role-label">{role.label}</div>
+                          <div className="dashboard-role-subtitle">{role.subtitle}</div>
+                        </div>
+                        <div
+                          className="dashboard-role-pct-badge"
+                          style={{
+                            color: role.color,
+                            background: role.lightColor,
+                            border: `1px solid ${role.borderColor}`
+                          }}
+                        >
+                          {role.pct}%
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Numbers + Mini Sparkline */}
+                      <div className="dashboard-role-metrics-row">
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                          <span className="dashboard-role-value" style={{ color: role.color }}>
+                            {formatNumber(role.active)}
+                          </span>
+                          <span className="dashboard-role-total">
+                            / {formatNumber(role.total)}
+                          </span>
+                        </div>
+
+                        <svg viewBox="0 0 100 28" className="dashboard-role-mini-wave" preserveAspectRatio="none">
+                          <path
+                            d={role.wavePath}
+                            fill="none"
+                            stroke={role.accent}
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            style={{ opacity: 0.75 }}
+                          />
+                        </svg>
+                      </div>
+
+                      {/* Animated Progress Bar with Shimmer */}
+                      <div className="dashboard-role-progress">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.max(role.active > 0 ? 4 : 0, Math.min(100, role.pctExact))}%` }}
+                          transition={{ duration: 1.15, delay: 0.2 + idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                          className="dashboard-role-progress-fill"
+                          style={{
+                            background: role.gradient,
+                            boxShadow: `0 0 10px ${role.glow}`
+                          }}
+                        >
+                          <div className="dashboard-role-progress-shimmer" />
+                        </motion.div>
+                      </div>
+
+                      {/* Footer Micro-Status */}
+                      <div className="dashboard-role-footer">
+                        <span className="dashboard-role-footer-status">
+                          <Activity size={11} style={{ color: role.accent, flexShrink: 0 }} />
+                          <span>
+                            {role.pending === 0
+                              ? '100% ativado'
+                              : `${formatNumber(role.pending)} pendente${role.pending === 1 ? '' : 's'}`}
+                          </span>
+                        </span>
+                        <span className="dashboard-role-footer-pct" style={{ color: role.color }}>
+                          {role.pct >= 80 ? 'Ótimo' : role.pct >= 35 ? 'Em avanço' : 'Atenção'}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
             </div>
-            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#8b5cf6' }} />
-            </div>
-          </div>
-          {/* Card Alunos */}
-          <div className="dashboard-role-card">
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #2563eb, #60a5fa)' }} />
-            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
-              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
-            </div>
-            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#3b82f6' }} />
-            </div>
-          </div>
-          {/* Card Responsáveis */}
-          <div className="dashboard-role-card">
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #059669, #34d399)' }} />
-            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
-              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
-            </div>
-            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
-            </div>
-          </div>
-        </div>
-          </>
-        )}
-      </div>
+          )
+        })()}
+      </motion.article>
 
       
       {/* ── Modal de Aniversariantes ──────────────────────────── */}

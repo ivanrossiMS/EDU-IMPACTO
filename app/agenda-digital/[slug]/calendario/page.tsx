@@ -7,7 +7,6 @@ import { useData, EventoAgenda } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, useRef, use } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Eye, EyeOff } from 'lucide-react'
-import { AddToCalendarButton } from '@/components/agenda/AddToCalendarButton'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { 
   getAlunoTodasTurmasEGrupos, 
@@ -1135,25 +1134,6 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                                   {isPast ? 'Realizado' : (isToday ? 'Hoje' : TIPO_LABELS[ev.tipo] || 'Próximo')}
                                 </span>
                               </div>
-
-                              <AddToCalendarButton
-                                event={{
-                                  id: ev.id,
-                                  titulo: ev.titulo,
-                                  descricao: ev.descricao,
-                                  tipo: ev.tipo,
-                                  tipoLabel: TIPO_LABELS[ev.tipo] || 'Evento',
-                                  data: ev.data,
-                                  horaInicio: ev.horaInicio,
-                                  horaFim: ev.horaFim,
-                                  diaTodo: Boolean((ev as any).diaTodo),
-                                  local: ev.local,
-                                  turmaNome: turmaBadgeDisplay,
-                                  cor: resolveRealColor(ev),
-                                }}
-                                accentColor={resolveRealColor(ev)}
-                                isPast={isPast}
-                              />
                             </div>
 
                             {/* Title & Description: Full width for fluid readability */}

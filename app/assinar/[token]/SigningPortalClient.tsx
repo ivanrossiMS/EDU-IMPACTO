@@ -1831,7 +1831,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
 
                     <div style={{ marginTop: 4, paddingTop: 10, borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
                       <a
-                        href={getWhatsAppShareUrl('5567992806464', `Olá! Estou na etapa de validação do código OTP para assinatura do contrato (${contrato.protocolo}) do(a) estudante ${contrato.aluno_nome || 'meu filho(a)'}. Poderiam me auxiliar?`)}
+                        href={getWhatsAppShareUrl('556730286316', `Olá! Estou na etapa de validação do código OTP para assinatura do contrato (${contrato.protocolo}) do(a) estudante ${contrato.aluno_nome || 'meu filho(a)'}. Poderiam me auxiliar?`)}
                         target="_blank"
                         rel="noreferrer"
                         style={{

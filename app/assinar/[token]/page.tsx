@@ -90,7 +90,7 @@ export default async function AssinarPage({ params }: Props) {
           </p>
 
           <a
-            href={getWhatsAppShareUrl('5567992806464', 'Olá! Preciso de ajuda para assinar o documento pelo sistema digital.')}
+            href={getWhatsAppShareUrl('556730286316', 'Olá! Preciso de ajuda para assinar o documento pelo sistema digital.')}
             target="_blank"
             rel="noreferrer"
             style={{

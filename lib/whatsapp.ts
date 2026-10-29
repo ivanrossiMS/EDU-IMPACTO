@@ -126,12 +126,26 @@ export function formatarMensagemWhatsApp(
     .trim()
 }
 
+export const SECRETARIA_WHATSAPP_PHONE = '556730286316'
+
 /**
  * Localiza especificamente o canal de WhatsApp da Secretaria (ex: Auxiliadora) para suporte à família
  */
 export function getSecretariaWhatsApp(contacts?: any[]) {
   const activeList = (contacts || []).filter((c: any) => c && c.ativo)
-  if (activeList.length === 0) return null
+  if (activeList.length === 0) {
+    return {
+      contact: null,
+      telefone: '(67) 3028-6316',
+      nome: 'Secretaria Escolar',
+      setor: 'Secretaria Escolar',
+      label: 'Falar com a Secretaria no WhatsApp',
+      url: getWhatsAppShareUrl(
+        SECRETARIA_WHATSAPP_PHONE,
+        'Olá! Gostaria de informações com a Secretaria sobre o atendimento escolar.'
+      )
+    }
+  }
 
   // 1. Procura primeiro por Auxiliadora ou Secretaria (prioridade absoluta do atendimento escolar)
   const foundSecretaria = activeList.find((c: any) => 
