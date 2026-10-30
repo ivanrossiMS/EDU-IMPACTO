@@ -365,6 +365,17 @@ export default function MatriculaDigitalPage() {
   const [modalAuditoriaContrato, setModalAuditoriaContrato] = useState<ContratoItem | null>(null)
   const [modalConfigAberto, setModalConfigAberto] = useState(false)
   const [modalVerificadorAberto, setModalVerificadorAberto] = useState(false)
+  const [modalOtpInfo, setModalOtpInfo] = useState<{
+    contrato: ContratoItem
+    loading: boolean
+    codigoOtp: string | null
+    emailDestinatario: string
+    emailMascarado?: string
+    expiraEm?: string | null
+    emailEnviado: boolean
+    erro?: string | null
+  } | null>(null)
+  const [copiadoCodigoOtpModal, setCopiadoCodigoOtpModal] = useState(false)
 
   // Estados de Upload de Documentos (suporte a seleção e envio de múltiplos arquivos)
   const [documentosUpload, setDocumentosUpload] = useState<DocumentoUploadItem[]>([])
@@ -1762,23 +1773,81 @@ export default function MatriculaDigitalPage() {
     }
   }
 
-  // Reenviar OTP
+  // Reenviar OTP por E-mail e abrir modal com o código gerado
   const handleReenviarOtp = async (contrato: ContratoItem) => {
+    setCopiadoCodigoOtpModal(false)
+    setModalOtpInfo({
+      contrato,
+      loading: true,
+      codigoOtp: null,
+      emailDestinatario: contrato.responsavel_email || '',
+      emailMascarado: contrato.responsavel_email || '',
+      expiraEm: null,
+      emailEnviado: false,
+      erro: null,
+    })
+
     try {
       const res = await fetch('/api/matriculas/digital/enviar-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contratoId: contrato.id }),
+        body: JSON.stringify({
+          contratoId: contrato.id,
+          origem: 'painel_admin',
+        }),
       })
       const data = await res.json()
-      if (res.ok) {
-        toast.success(`Código de verificação reenviado para ${data.emailMascarado}!`)
+      const codigoGerado = data.codigoOtp || data.codigoSimulado || null
+      const emailDestino = data.emailDestinatario || contrato.responsavel_email || data.emailMascarado || 'e-mail cadastrado'
+
+      if (res.ok && data.success) {
+        setModalOtpInfo({
+          contrato,
+          loading: false,
+          codigoOtp: codigoGerado,
+          emailDestinatario: emailDestino,
+          emailMascarado: data.emailMascarado || emailDestino,
+          expiraEm: data.expiraEm || null,
+          emailEnviado: data.emailEnviado !== false,
+          erro: null,
+        })
+        toast.success(`Código de verificação enviado para ${emailDestino}!`)
+        carregarContratos()
       } else {
+        setModalOtpInfo({
+          contrato,
+          loading: false,
+          codigoOtp: codigoGerado,
+          emailDestinatario: emailDestino,
+          emailMascarado: data.emailMascarado || emailDestino,
+          expiraEm: data.expiraEm || null,
+          emailEnviado: false,
+          erro: data.error || 'Erro ao reenviar código por e-mail.',
+        })
         toast.error(data.error || 'Erro ao reenviar código.')
       }
     } catch {
+      setModalOtpInfo(prev =>
+        prev
+          ? {
+              ...prev,
+              loading: false,
+              emailEnviado: false,
+              erro: 'Erro de rede ao reenviar o código OTP.',
+            }
+          : null
+      )
       toast.error('Erro de rede ao reenviar código.')
     }
+  }
+
+  const handleCopiarCodigoOtpModal = (codigo: string) => {
+    if (!codigo) return
+    copiarTextoComFeedback(codigo, () => {
+      setCopiadoCodigoOtpModal(true)
+      toast.success('Código OTP copiado com sucesso! 📋')
+      setTimeout(() => setCopiadoCodigoOtpModal(false), 3000)
+    })
   }
 
   // Reenviar Cópia do Contrato Assinado por E-mail
@@ -7016,58 +7085,6 @@ export default function MatriculaDigitalPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <button
                           type="button"
-                          onClick={handleAutoPosicionarRodape}
-                          disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
-                          style={{
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            border: '1px solid rgba(59, 130, 246, 0.3)',
-                            color: '#2563eb',
-                            borderRadius: 8,
-                            padding: '7px 12px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 'not-allowed' : 'pointer',
-                            opacity: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 0.5 : 1,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            transition: 'all 0.15s ease',
-                          }}
-                          title="Distribuir automaticamente todas as assinaturas no rodapé da última página"
-                        >
-                          <Sparkles size={14} />
-                          <span>Auto-Posicionar no Rodapé</span>
-                        </button>
-
-                        {totalPaginasGeral > 1 && (
-                          <button
-                            type="button"
-                            onClick={handleAutoPosicionarTodasPaginas}
-                            disabled={documentosUpload.length === 0 || signatariosPosicionaveis.length === 0}
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.1)',
-                              border: '1px solid rgba(16, 185, 129, 0.35)',
-                              color: '#059669',
-                              borderRadius: 8,
-                              padding: '7px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 'not-allowed' : 'pointer',
-                              opacity: documentosUpload.length === 0 || signatariosPosicionaveis.length === 0 ? 0.5 : 1,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Distribuir automaticamente as assinaturas no rodapé de todas as páginas do documento"
-                          >
-                            <Layers size={14} />
-                            <span>Assinar em Todas as Páginas ({totalPaginasGeral})</span>
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
                           onClick={() => {
                             if (documentosUpload.length === 0) {
                               toast.error('Faça upload de ao menos um arquivo PDF para abrir o posicionador visual.')
@@ -7859,6 +7876,30 @@ export default function MatriculaDigitalPage() {
                   </button>
 
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    {modalAuditoriaContrato.status === 'pendente' && (
+                      <button
+                        onClick={() => handleReenviarOtp(modalAuditoriaContrato)}
+                        title={`Reenviar Código OTP para ${modalAuditoriaContrato.responsavel_email}`}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.35)',
+                          color: '#38bdf8',
+                          borderRadius: 8,
+                          padding: '8px 14px',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <Mail size={14} />
+                        Reenviar Código OTP por E-mail
+                      </button>
+                    )}
+
                     {modalAuditoriaContrato.status === 'assinado' && (
                       <button
                         onClick={() => handleReenviarDocumentoEmail(modalAuditoriaContrato)}
@@ -7928,6 +7969,507 @@ export default function MatriculaDigitalPage() {
                       Fechar
                     </button>
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL DO CÓDIGO OTP GERADO E ENVIADO POR E-MAIL ── */}
+      <AnimatePresence>
+        {modalOtpInfo && (
+          <div
+            className="digital-modal-backdrop"
+            onClick={() => {
+              if (!modalOtpInfo.loading) {
+                setModalOtpInfo(null)
+                setCopiadoCodigoOtpModal(false)
+              }
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 120,
+              background: 'rgba(7, 11, 22, 0.82)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              overflow: 'hidden',
+              overscrollBehavior: 'contain',
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              onClick={e => e.stopPropagation()}
+              className="digital-modal-content"
+              style={{
+                background: 'hsl(var(--bg-surface))',
+                border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 20,
+                maxWidth: 480,
+                width: '100%',
+                overflow: 'hidden',
+                boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.55)',
+                overscrollBehavior: 'contain',
+              }}
+            >
+              {/* Barra superior de acento */}
+              <div
+                style={{
+                  height: 4,
+                  width: '100%',
+                  background: 'linear-gradient(90deg, #2563eb 0%, #38bdf8 50%, #10b981 100%)',
+                }}
+              />
+
+              {/* Cabeçalho do Modal */}
+              <div
+                style={{
+                  padding: '18px 22px',
+                  borderBottom: '1px solid hsl(var(--border-subtle))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 11,
+                      background: modalOtpInfo.loading
+                        ? 'rgba(56, 189, 248, 0.12)'
+                        : modalOtpInfo.emailEnviado
+                        ? 'rgba(16, 185, 129, 0.14)'
+                        : 'rgba(245, 158, 11, 0.14)',
+                      border: modalOtpInfo.loading
+                        ? '1px solid rgba(56, 189, 248, 0.3)'
+                        : modalOtpInfo.emailEnviado
+                        ? '1px solid rgba(16, 185, 129, 0.35)'
+                        : '1px solid rgba(245, 158, 11, 0.35)',
+                      color: modalOtpInfo.loading
+                        ? '#38bdf8'
+                        : modalOtpInfo.emailEnviado
+                        ? '#10b981'
+                        : '#f59e0b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {modalOtpInfo.loading ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <Mail size={20} />
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <h3
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 800,
+                        margin: 0,
+                        color: 'hsl(var(--text-primary))',
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      {modalOtpInfo.loading ? 'Enviando Código OTP por E-mail...' : 'Código OTP Gerado e Enviado'}
+                    </h3>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: 'hsl(var(--text-secondary))',
+                        marginTop: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          color: '#38bdf8',
+                          background: 'rgba(56, 189, 248, 0.1)',
+                          padding: '1px 6px',
+                          borderRadius: 5,
+                          fontSize: 11,
+                        }}
+                      >
+                        {modalOtpInfo.contrato.protocolo}
+                      </span>
+                      <span>•</span>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
+                        {modalOtpInfo.contrato.responsavel_nome}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalOtpInfo(null)
+                    setCopiadoCodigoOtpModal(false)
+                  }}
+                  style={{
+                    background: 'hsl(var(--bg-elevated))',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    padding: 7,
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                  title="Fechar modal"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              {/* Corpo do Modal */}
+              <div style={{ padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {modalOtpInfo.loading ? (
+                  <div
+                    style={{
+                      padding: '28px 16px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#38bdf8',
+                      }}
+                    >
+                      <Loader2 size={28} className="animate-spin" />
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                      Gerando novo código e enviando por e-mail...
+                    </div>
+                    <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', maxWidth: 340, lineHeight: 1.5 }}>
+                      Disparando o código de confirmação de 6 dígitos para{' '}
+                      <strong style={{ color: 'hsl(var(--text-primary))' }}>
+                        {modalOtpInfo.emailDestinatario || 'o e-mail do signatário'}
+                      </strong>
+                      .
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Mensagem de Confirmação de Envio para o E-mail */}
+                    {modalOtpInfo.emailEnviado ? (
+                      <div
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.1)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          borderRadius: 14,
+                          padding: '14px 16px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 12,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            background: 'rgba(16, 185, 129, 0.18)',
+                            color: '#10b981',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            marginTop: 1,
+                          }}
+                        >
+                          <CheckCircle2 size={18} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#10b981', marginBottom: 3 }}>
+                            O código foi enviado para o e-mail com sucesso!
+                          </div>
+                          <div style={{ fontSize: 12.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.45 }}>
+                            Enviado para <strong style={{ color: 'hsl(var(--text-primary))' }}>{modalOtpInfo.contrato.responsavel_nome}</strong> no endereço:
+                          </div>
+                          <div
+                            style={{
+                              marginTop: 6,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: 'hsl(var(--bg-surface))',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              borderRadius: 7,
+                              padding: '4px 10px',
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                              fontWeight: 700,
+                              color: 'hsl(var(--text-primary))',
+                              wordBreak: 'break-all',
+                            }}
+                          >
+                            <Mail size={12} color="#10b981" style={{ flexShrink: 0 }} />
+                            <span>{modalOtpInfo.emailDestinatario}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.1)',
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          borderRadius: 14,
+                          padding: '14px 16px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 12,
+                        }}
+                      >
+                        <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 800, color: '#f59e0b', marginBottom: 3 }}>
+                            {modalOtpInfo.codigoOtp
+                              ? 'Código OTP gerado (Oscilação no servidor de e-mail)'
+                              : 'Não foi possível enviar o código'}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', lineHeight: 1.45 }}>
+                            {modalOtpInfo.erro || 'Verifique a conexão e tente novamente.'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Caixa do Código OTP Gerado e Botão de Copiar */}
+                    {modalOtpInfo.codigoOtp && (
+                      <div
+                        style={{
+                          background: 'hsl(var(--bg-elevated))',
+                          border: copiadoCodigoOtpModal
+                            ? '1.5px solid #10b981'
+                            : '1.5px dashed rgba(56, 189, 248, 0.45)',
+                          borderRadius: 16,
+                          padding: '20px 18px',
+                          textAlign: 'center',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            color: 'hsl(var(--text-secondary))',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.08em',
+                            marginBottom: 12,
+                          }}
+                        >
+                          Código OTP Gerado (6 Dígitos)
+                        </div>
+
+                        {/* Dígitos do Código OTP */}
+                        <div
+                          onClick={() => handleCopiarCodigoOtpModal(modalOtpInfo.codigoOtp!)}
+                          title="Clique para copiar o código"
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            gap: 8,
+                            marginBottom: 14,
+                            cursor: 'pointer',
+                            userSelect: 'all',
+                          }}
+                        >
+                          {modalOtpInfo.codigoOtp.split('').map((digito, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                width: 46,
+                                height: 54,
+                                borderRadius: 12,
+                                background: 'hsl(var(--bg-surface))',
+                                border: copiadoCodigoOtpModal
+                                  ? '1.5px solid #10b981'
+                                  : '1px solid hsl(var(--border-subtle))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 26,
+                                fontWeight: 800,
+                                fontFamily: 'monospace',
+                                color: copiadoCodigoOtpModal ? '#10b981' : '#38bdf8',
+                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              {digito}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: 'hsl(var(--text-secondary))',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 5,
+                            marginBottom: 16,
+                          }}
+                        >
+                          <Clock size={12} color="#38bdf8" />
+                          <span>Válido pelos próximos <strong>15 minutos</strong> para assinatura</span>
+                        </div>
+
+                        {/* Botão Principal de Copiar Código */}
+                        <button
+                          type="button"
+                          onClick={() => handleCopiarCodigoOtpModal(modalOtpInfo.codigoOtp!)}
+                          style={{
+                            width: '100%',
+                            height: 44,
+                            borderRadius: 11,
+                            border: copiadoCodigoOtpModal
+                              ? '1px solid #10b981'
+                              : '1px solid rgba(37, 99, 235, 0.5)',
+                            background: copiadoCodigoOtpModal
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: 14,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 8,
+                            boxShadow: copiadoCodigoOtpModal
+                              ? '0 4px 16px rgba(16, 185, 129, 0.35)'
+                              : '0 4px 16px rgba(37, 99, 235, 0.35)',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          {copiadoCodigoOtpModal ? (
+                            <>
+                              <Check size={18} style={{ strokeWidth: 2.5 }} />
+                              <span>Código Copiado! ({modalOtpInfo.codigoOtp})</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={17} />
+                              <span>Copiar Código OTP</span>
+                            </>
+                          )}
+                        </button>
+
+                        <AnimatePresence>
+                          {copiadoCodigoOtpModal && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4, height: 0 }}
+                              animate={{ opacity: 1, y: 0, height: 'auto' }}
+                              exit={{ opacity: 0, y: -4, height: 0 }}
+                              transition={{ duration: 0.18 }}
+                              style={{
+                                marginTop: 10,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: '#10b981',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                              }}
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Código copiado para a área de transferência!</span>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Rodapé do Modal */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    paddingTop: 12,
+                    borderTop: '1px solid hsl(var(--border-subtle))',
+                  }}
+                >
+                  <button
+                    type="button"
+                    disabled={modalOtpInfo.loading}
+                    onClick={() => handleReenviarOtp(modalOtpInfo.contrato)}
+                    style={{
+                      background: 'hsl(var(--bg-elevated))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      color: 'hsl(var(--text-primary))',
+                      borderRadius: 10,
+                      padding: '9px 14px',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: modalOtpInfo.loading ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      opacity: modalOtpInfo.loading ? 0.6 : 1,
+                    }}
+                  >
+                    <RefreshCw size={14} className={modalOtpInfo.loading ? 'animate-spin' : ''} />
+                    <span>Gerar e Reenviar Novo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalOtpInfo(null)
+                      setCopiadoCodigoOtpModal(false)
+                    }}
+                    style={{
+                      background: 'hsl(var(--bg-surface))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      color: 'hsl(var(--text-primary))',
+                      borderRadius: 10,
+                      padding: '9px 18px',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Fechar
+                  </button>
                 </div>
               </div>
             </motion.div>

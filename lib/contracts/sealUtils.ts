@@ -235,7 +235,7 @@ export function gerarAssinaturaCaligraficaCanvas(
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const estilo = ESTILOS_CHANCELA.find(e => e.id === estiloId || (estiloId === 'rubrica' && e.id === 'formal')) || ESTILOS_CHANCELA[0]
-    const nomeLimpo = (nome || 'Representante Legal').trim()
+    const nomeLimpo = formatSignatureDisplayName(sanitizeSignerName(nome || 'Representante Legal'), 28)
 
     // Ajusta o tamanho da fonte proporcionalmente ao comprimento do nome
     let fontSize = 42

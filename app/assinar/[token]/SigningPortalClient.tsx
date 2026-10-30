@@ -15,6 +15,7 @@ import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 import { PdfCanvasViewer, getCachedPdfBlobUrl } from './PdfCanvasViewer'
 import {
   formatAbbreviatedSignerName,
+  formatSignatureDisplayName,
   formatTimestampSelo,
   validarCPF,
   formatarCPF,
@@ -483,8 +484,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
 
-    // Desenha o nome puramente, sem linha embaixo e sem texto de rodapé
-    const nomeLimpo = sanitizeSignerName(signatarioNome) || 'Assinatura Eletrônica'
+    // Desenha o nome no mesmo formato que sai no comprovante (sem abreviação de iniciais)
+    const nomeLimpo = formatSignatureDisplayName(sanitizeSignerName(signatarioNome || contrato.signatario_nome), 28) || 'Assinatura Eletrônica'
     ctx.fillText(nomeLimpo, canvas.width / 2, canvas.height / 2)
 
     return canvas.toDataURL('image/png')
@@ -1977,7 +1978,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                                   padding: '0 2px',
                                 }}
                               >
-                                {formatAbbreviatedSignerName(signatarioNome) || signatarioNome || 'Assinatura'}
+                                {formatSignatureDisplayName(sanitizeSignerName(signatarioNome || contrato.signatario_nome), 28)}
                               </div>
                             </button>
                           ))}
@@ -2086,7 +2087,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                               lineHeight: 1.2,
                             }}
                           >
-                            {formatAbbreviatedSignerName(signatarioNome || contrato.signatario_nome)}
+                            {formatSignatureDisplayName(sanitizeSignerName(signatarioNome || contrato.signatario_nome), 28)}
                           </div>
                           <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: 3 }}>
                             <Check size={12} strokeWidth={3} /> assinado eletronicamente
@@ -2253,7 +2254,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                               marginTop: 1,
                             }}
                           >
-                            {formatAbbreviatedSignerName(signatarioNome || contrato.signatario_nome)}
+                            {formatSignatureDisplayName(sanitizeSignerName(signatarioNome || contrato.signatario_nome), 28)}
                           </div>
                         </div>
 

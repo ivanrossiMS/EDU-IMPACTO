@@ -49,12 +49,19 @@ export async function POST(request: Request) {
     }
 
     // 1. Resolução do destinatário: se o contrato já possui e-mail cadastrado, só staff autenticado pode alterá-lo
-    let canOverrideEmail = !contrato.responsavel_email
-    if (body.email_destinatario && contrato.responsavel_email && body.email_destinatario.trim().toLowerCase() !== contrato.responsavel_email.trim().toLowerCase()) {
+    const isAdminRequest = Boolean(contratoId || body.origem === 'painel_admin')
+    let isStaff = false
+    if (
+      isAdminRequest ||
+      (body.email_destinatario &&
+        contrato.responsavel_email &&
+        body.email_destinatario.trim().toLowerCase() !== contrato.responsavel_email.trim().toLowerCase())
+    ) {
       const { resolveUserRole } = await import('@/lib/server/authGuard')
       const roleCtx = await resolveUserRole(request)
-      canOverrideEmail = roleCtx.isStaff
+      isStaff = Boolean(roleCtx.isStaff)
     }
+    const canOverrideEmail = !contrato.responsavel_email || isStaff
     const emailEfetivo = ((canOverrideEmail ? body.email_destinatario : contrato.responsavel_email) || contrato.responsavel_email || body.email_destinatario || '').trim()
     const nomeEfetivo = (body.nome_destinatario || contrato.responsavel_nome || '').trim()
 
@@ -115,20 +122,31 @@ export async function POST(request: Request) {
       }),
     ])
 
+    const isProd = process.env.NODE_ENV === 'production'
+    const canReturnOtpCode = isStaff || (!isProd && isAdminRequest)
+
     if (!emailResult.success) {
       console.error('[API Enviar OTP] Falha após todas as tentativas de envio:', emailResult.error)
       return NextResponse.json({
         success: false,
+        emailEnviado: false,
         error: `O servidor de e-mail não pôde entregar o código no momento (${emailResult.error || 'Oscilação temporária'}). Você também pode receber o código diretamente via WhatsApp.`,
+        emailMascarado: maskEmail(emailEfetivo),
+        emailDestinatario: canReturnOtpCode ? emailEfetivo : undefined,
+        codigoOtp: canReturnOtpCode ? otpCode : undefined,
+        expiraEm,
         simulated: false,
       }, { status: 502 })
     }
 
-    const isProd = process.env.NODE_ENV === 'production'
     return NextResponse.json({
       success: true,
-      message: `Código enviado com sucesso para ${maskEmail(emailEfetivo)}.`,
+      emailEnviado: true,
+      message: `Código enviado com sucesso para ${canReturnOtpCode ? emailEfetivo : maskEmail(emailEfetivo)}.`,
       emailMascarado: maskEmail(emailEfetivo),
+      emailDestinatario: canReturnOtpCode ? emailEfetivo : undefined,
+      codigoOtp: canReturnOtpCode ? otpCode : undefined,
+      expiraEm,
       simulated: emailResult.simulated,
       codigoSimulado: (!isProd && emailResult.simulated) ? otpCode : undefined,
     })

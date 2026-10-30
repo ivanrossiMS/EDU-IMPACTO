@@ -184,15 +184,15 @@ export async function desenharSeloEletronicoNoPdf(
     color: colorSubtle,
   })
 
-  // Linha 2: Nome do Signatário com Fonte Caligráfica de Assinatura (ex: Ivan R.)
+  // Linha 2: Nome do Signatário com Fonte Caligráfica de Assinatura (igual ao comprovante)
   const fontAssinatura = params.fonteAssinatura || (await obterOuCarregarFonteAssinatura(pdfDoc))
-  const nomeAbreviado = sanitizeWinAnsi(formatAbbreviatedSignerName(signatarioNome))
+  const nomeAssinatura = sanitizeWinAnsi(formatSignatureDisplayName(sanitizeSignerName(signatarioNome), 28))
   let nomeFontSize = 14
-  while (fontAssinatura.widthOfTextAtSize(nomeAbreviado, nomeFontSize) > maxTextWidth && nomeFontSize > 9) {
+  while (fontAssinatura.widthOfTextAtSize(nomeAssinatura, nomeFontSize) > maxTextWidth && nomeFontSize > 9) {
     nomeFontSize -= 0.5
   }
 
-  targetPage.drawText(nomeAbreviado, {
+  targetPage.drawText(nomeAssinatura, {
     x: textStartX,
     y: sealY + 33,
     size: nomeFontSize,
