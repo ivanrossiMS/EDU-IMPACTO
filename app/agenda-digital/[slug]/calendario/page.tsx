@@ -185,7 +185,13 @@ export default function ADCalendarioPage({ params }: { params: any }) {
 
     if (queryItemId && eventosAgenda && eventosAgenda.length > 0) {
       const rawTarget = String(queryItemId).trim();
-      const target = eventosAgenda.find((e: any) => String(e.id) === rawTarget);
+      const normalizedTarget = rawTarget
+        .replace(/-reminder.*$/, '')
+        .replace(/-\d+$/, '')
+        .trim();
+      const target = eventosAgenda.find(
+        (e: any) => String(e.id) === rawTarget || String(e.id) === normalizedTarget
+      );
       if (target && target.data) {
         hasAutoSelectedRef.current = true;
         const [y, m] = target.data.split('-').map(Number);
@@ -211,7 +217,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         const timer = setTimeout(() => setHighlightedEventId(null), 6000);
         return () => clearTimeout(timer);
       }
-    } else if (queryData) {
+    }
+
+    if (queryData) {
       hasAutoSelectedRef.current = true;
       const [y, m] = queryData.split('-').map(Number);
       if (y && m) {

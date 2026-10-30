@@ -165,78 +165,107 @@ class NotificationService {
       }
     } else {
       // ── Web Push ──────────────────────────────────────────────────────────
-      try {
-        await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
-            console.warn('[NotificationService] Timeout aguardando OneSignal Web SDK.')
-            resolve()
-          }, 6000)
+      // No navegador Web, só inicializamos o OneSignal se a permissão já estiver 'granted'.
+      // Caso contrário, atualizamos o estado local via Notification.permission nativa do navegador
+      // e só inicializamos o SDK Web se o usuário clicar para ativar notificações (requestNotificationPermission).
+      // Isso evita criar sessões anônimas / "Web Desconectado (-99)" no OneSignal a cada visita.
+      const hasWebPermission =
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted'
 
-          window.OneSignalDeferred = window.OneSignalDeferred || []
-          window.OneSignalDeferred.push(async (OneSignal: any) => {
-            try {
-              if (!OneSignal) {
-                clearTimeout(timeout)
-                resolve()
-                return
-              }
+      if (!hasWebPermission) {
+        await this.refresh()
+        return
+      }
 
-              // Limpa operações de alias travadas (404 SetAlias failed) no IndexedDB antes do init
-              await this.clearStaleWebOperations()
+      await this.initWebOneSignalSdk(appId)
+    }
+  }
 
-              await OneSignal.init({
-                appId,
-                allowLocalhostAsSecureOrigin: true,
-                serviceWorkerParam: { scope: '/' },
-              })
-              ;(window as any).__OS_INIT__ = true
+  private async initWebOneSignalSdk(customAppId?: string): Promise<void> {
+    if (typeof window === 'undefined' || (window as any).__OS_INIT__) return
+    const appId = customAppId || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || '1d652b2a-7b06-4b07-984f-f47e0a4b37fc'
+    if (!appId) return
 
-              // Listeners para mudanças de permissão e subscrição na Web
-              if (OneSignal.Notifications?.addEventListener) {
-                OneSignal.Notifications.addEventListener('permissionChange', () => {
-                  this.refresh().catch(() => {})
-                  if (this.cachedUser) {
-                    this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
-                  }
-                })
-              }
-              const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
-              if (pushSub?.addEventListener) {
-                pushSub.addEventListener('change', () => {
-                  this.refresh().catch(() => {})
-                  if (this.cachedUser) {
-                    this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
-                  }
-                })
-              }
+    try {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn('[NotificationService] Timeout aguardando OneSignal Web SDK.')
+          resolve()
+        }, 6000)
 
-              await this.refresh()
-              console.log('🔔 [NotificationService] OneSignal Web inicializado!')
-            } catch (webErr: any) {
-              const msg = webErr?.message || ''
-              if (!msg.includes('already initialized')) {
-                const isLocalhostDomain =
-                  typeof window !== 'undefined' &&
-                  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
-                  msg.includes('Can only be used on')
-
-                if (isLocalhostDomain) {
-                  console.info('ℹ️ [NotificationService] OneSignal Web Push inativo em localhost (configurado no dashboard para impacto-edu.net).')
-                } else {
-                  console.warn('[NotificationService] Erro inicialização web:', webErr)
-                }
-                this.state.error = msg
-                this.notifyListeners()
-              }
-            } finally {
+        window.OneSignalDeferred = window.OneSignalDeferred || []
+        window.OneSignalDeferred.push(async (OneSignal: any) => {
+          try {
+            if (!OneSignal) {
               clearTimeout(timeout)
               resolve()
+              return
             }
-          })
+            if ((window as any).__OS_INIT__) {
+              clearTimeout(timeout)
+              resolve()
+              return
+            }
+
+            // Limpa operações de alias travadas (404 SetAlias failed) no IndexedDB antes do init
+            await this.clearStaleWebOperations()
+
+            await OneSignal.init({
+              appId,
+              allowLocalhostAsSecureOrigin: true,
+              serviceWorkerParam: { scope: '/' },
+            })
+            ;(window as any).__OS_INIT__ = true
+
+            // Listeners para mudanças de permissão e subscrição na Web
+            if (OneSignal.Notifications?.addEventListener) {
+              OneSignal.Notifications.addEventListener('permissionChange', () => {
+                this.refresh().catch(() => {})
+                if (this.cachedUser) {
+                  this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+                }
+              })
+            }
+            const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
+            if (pushSub?.addEventListener) {
+              pushSub.addEventListener('change', () => {
+                this.refresh().catch(() => {})
+                if (this.cachedUser) {
+                  this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+                }
+              })
+            }
+
+            await this.refresh()
+            console.log('🔔 [NotificationService] OneSignal Web inicializado!')
+          } catch (webErr: any) {
+            const msg = webErr?.message || ''
+            if (!msg.includes('already initialized')) {
+              const isLocalhostDomain =
+                typeof window !== 'undefined' &&
+                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+                msg.includes('Can only be used on')
+
+              if (isLocalhostDomain) {
+                console.info('ℹ️ [NotificationService] OneSignal Web Push inativo em localhost (configurado no dashboard para impacto-edu.net).')
+              } else {
+                console.warn('[NotificationService] Erro inicialização web:', webErr)
+              }
+              this.state.error = msg
+              this.notifyListeners()
+            } else {
+              ;(window as any).__OS_INIT__ = true
+            }
+          } finally {
+            clearTimeout(timeout)
+            resolve()
+          }
         })
-      } catch (e: any) {
-        console.error('[NotificationService] Erro ao enfileirar inicialização web:', e)
-      }
+      })
+    } catch (e: any) {
+      console.error('[NotificationService] Erro ao enfileirar inicialização web:', e)
     }
   }
 
@@ -509,25 +538,26 @@ class NotificationService {
         }
       }
 
-    // Web
-    if ('Notification' in window) {
-      try {
-        const OS = (window as any).OneSignal
-        if (OS?.Notifications?.requestPermission) {
-          await OS.Notifications.requestPermission()
-          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-          if (typeof optInFn === 'function') {
-            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
+      // Web
+      if ('Notification' in window) {
+        try {
+          if (Notification.permission !== 'granted') {
+            await Notification.requestPermission()
           }
-        } else {
-          await Notification.requestPermission()
-        }
-        if (Notification.permission === 'granted' && this.cachedUser) {
-          this.lastSyncedPayloadHash = ''
-          await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
-        }
-        await this.refresh()
-        return Notification.permission === 'granted'
+          if (Notification.permission === 'granted') {
+            await this.initWebOneSignalSdk()
+            const OS = (window as any).OneSignal
+            const optInFn = OS?.User?.PushSubscription?.optIn || OS?.User?.pushSubscription?.optIn
+            if (typeof optInFn === 'function') {
+              await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
+            }
+            if (this.cachedUser) {
+              this.lastSyncedPayloadHash = ''
+              await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+            }
+          }
+          await this.refresh()
+          return Notification.permission === 'granted'
       } catch (err) {
         console.warn('[NotificationService] Falha ao solicitar permissão web:', err)
       }
@@ -581,24 +611,18 @@ class NotificationService {
       const resJson = await res.json().catch(() => ({}))
 
       if (resJson?.inactiveCleanup === true) {
-        console.log('🧹 [NotificationService] Todos os alunos vinculados estão inativos. Desativando subscrição push neste aparelho.')
+        console.log('🧹 [NotificationService] Todos os alunos vinculados estão inativos. Registro já excluído pelo servidor.')
         try {
           if (typeof window !== 'undefined') {
             localStorage.setItem('edu_push_inactive_opted_out', 'true')
             localStorage.removeItem('edu_push_needs_reactivation')
           }
-          if (Capacitor.isNativePlatform()) {
-            const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-            if (typeof OneSignalNative.User?.pushSubscription?.optOut === 'function') {
-              await OneSignalNative.User.pushSubscription.optOut().catch(() => {})
-            }
-          } else if (typeof window !== 'undefined') {
-            const OS = (window as any).OneSignal
-            const optOutFn = OS?.User?.PushSubscription?.optOut || OS?.User?.pushSubscription?.optOut
-            if (typeof optOutFn === 'function') {
-              await optOutFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
-            }
-          }
+          // IMPORTANTE: NÃO chamar pushSubscription.optOut() aqui!
+          // O servidor já deletou o player e o usuário no OneSignal via REST API.
+          // Chamar optOut() no SDK do aparelho dispara uma requisição de rede que recria o player como inativo.
+          this.loggedInToOneSignal = false
+          this.currentUserId = null
+          this.lastSyncedPayloadHash = ''
         } catch {}
         await this.refresh().catch(() => {})
         return
@@ -619,43 +643,35 @@ class NotificationService {
               localStorage.removeItem('edu_push_inactive_opted_out')
               localStorage.removeItem('edu_push_dismissed_v2')
               sessionStorage.removeItem('edu_push_dismissed_session')
-              localStorage.setItem('edu_push_needs_reactivation', 'true')
+              if (!wasRecreatedOnServer) {
+                localStorage.setItem('edu_push_needs_reactivation', 'true')
+              } else {
+                localStorage.removeItem('edu_push_needs_reactivation')
+              }
             } catch {}
 
-            try {
-              if (Capacitor.isNativePlatform()) {
-                const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-                const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
-                if (hasPerm && typeof OneSignalNative.User?.pushSubscription?.optIn === 'function') {
-                  if (subWasDeleted && typeof OneSignalNative.User?.pushSubscription?.optOut === 'function') {
-                    await OneSignalNative.User.pushSubscription.optOut().catch(() => {})
-                    await new Promise(r => setTimeout(r, 250))
+            // Só tenta reativar optIn no cliente se não foi recriado no servidor e se a permissão do SO estiver ativa
+            // (sem chamar optOut() para não disparar loop no listener pushSubscription.change)
+            if (!wasRecreatedOnServer) {
+              try {
+                if (Capacitor.isNativePlatform()) {
+                  const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+                  const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
+                  if (hasPerm && typeof OneSignalNative.User?.pushSubscription?.optIn === 'function') {
+                    await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
                   }
-                  await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-                  await OneSignalNative.login(payload.userId).catch(() => {})
-                  if (wasRecreatedOnServer) {
-                    localStorage.removeItem('edu_push_needs_reactivation')
-                  }
-                }
-              } else {
-                const OS = (window as any).OneSignal
-                if ('Notification' in window && Notification.permission === 'granted') {
-                  const pushSub = OS?.User?.PushSubscription || OS?.User?.pushSubscription
-                  const optOutFn = pushSub?.optOut
-                  const optInFn = pushSub?.optIn
-                  if (subWasDeleted && typeof optOutFn === 'function') {
-                    await optOutFn.call(pushSub).catch(() => {})
-                    await new Promise(r => setTimeout(r, 200))
-                  }
-                  if (typeof optInFn === 'function') {
-                    await optInFn.call(pushSub).catch(() => {})
-                    if (wasRecreatedOnServer) {
-                      localStorage.removeItem('edu_push_needs_reactivation')
+                } else {
+                  const OS = (window as any).OneSignal
+                  if ('Notification' in window && Notification.permission === 'granted') {
+                    const pushSub = OS?.User?.PushSubscription || OS?.User?.pushSubscription
+                    const optInFn = pushSub?.optIn
+                    if (typeof optInFn === 'function') {
+                      await optInFn.call(pushSub).catch(() => {})
                     }
                   }
                 }
-              }
-            } catch {}
+              } catch {}
+            }
 
             window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
             await this.refresh().catch(() => {})
@@ -870,11 +886,26 @@ class NotificationService {
         activeMeusAlunos !== null &&
         activeMeusAlunos.length === 0
 
-      if (allLoadedStudentsInactive && typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('edu_push_inactive_opted_out', 'true')
-          localStorage.removeItem('edu_push_needs_reactivation')
-        } catch {}
+      const alreadyMarkedInactive =
+        !colabId &&
+        !isMaster &&
+        typeof window !== 'undefined' &&
+        localStorage.getItem('edu_push_inactive_opted_out') === 'true' &&
+        (!activeMeusAlunos || activeMeusAlunos.length === 0)
+
+      if (allLoadedStudentsInactive || alreadyMarkedInactive) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('edu_push_inactive_opted_out', 'true')
+            localStorage.removeItem('edu_push_needs_reactivation')
+          } catch {}
+        }
+        // IMPORTANTE: Interrompe antes de OneSignalNative.login() / addAliases() / addTags()
+        // para não registrar ou recriar aparelhos de alunos inativos no OneSignal!
+        this.loggedInToOneSignal = false
+        this.currentUserId = null
+        await this.refresh().catch(() => {})
+        return
       } else if (
         activeMeusAlunos &&
         activeMeusAlunos.length > 0 &&
@@ -906,30 +937,22 @@ class NotificationService {
       if (this.lastSyncedPayloadHash === payloadHash && this.loggedInToOneSignal) {
         return
       }
+      this.lastSyncedPayloadHash = payloadHash
 
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        // Login resiliente no OneSignal nativo com verificação e retry
-        const performLogin = async (retryCount = 0): Promise<boolean> => {
+        // Login no OneSignal nativo (sem loop de múltiplos login() seguidos para não saturar a fila de operações)
+        const performLogin = async (): Promise<boolean> => {
           try {
-            await OneSignalNative.login(userId)
+            const currentExtId = await OneSignalNative.User.getExternalId().catch(() => null)
+            if (currentExtId !== userId) {
+              await OneSignalNative.login(userId)
+              await new Promise(r => setTimeout(r, 600))
+            }
             this.currentUserId = userId
             this.loggedInToOneSignal = true
             console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
-
-            // Verificação pós-login: confirma que o external_id foi realmente vinculado
-            await new Promise(r => setTimeout(r, 200))
-            const verifiedExtId = await OneSignalNative.User.getExternalId().catch(() => null)
-            if (verifiedExtId !== userId) {
-              if (retryCount < 2) {
-                console.warn(`⚠️ [NotificationService] External ID não vinculado após login (tentativa ${retryCount + 1}). Retry...`)
-                await new Promise(r => setTimeout(r, 300 * (retryCount + 1)))
-                return performLogin(retryCount + 1)
-              }
-              console.warn(`⚠️ [NotificationService] External ID não vinculado após ${retryCount + 1} tentativas. Forçando via backend.`)
-              return false
-            }
             return true
           } catch (loginErr) {
             console.warn('[NotificationService] Aviso no OneSignalNative.login:', loginErr)
@@ -1188,40 +1211,13 @@ class NotificationService {
 
   /**
    * Limpa silenciosamente operações de alias travadas (SetAlias 404) na fila do OneSignal Web
-   * ou purga o banco local caso o navegador não tenha permissão de notificação concedida.
+   * sem deletar o banco ONE_SIGNAL_SDK_DB (o que forçaria a geração de novos IDs órfãos).
    */
   private async clearStaleWebOperations(): Promise<void> {
     if (typeof window === 'undefined' || !('indexedDB' in window)) return
     try {
       const hasPermission = 'Notification' in window && Notification.permission === 'granted'
-
-      if (!hasPermission) {
-        // Sem permissão ativa, qualquer registro local do OneSignal é apenas rascunho anônimo/órfão
-        try {
-          const delReq = window.indexedDB.deleteDatabase('ONE_SIGNAL_SDK_DB')
-          await new Promise<void>((resolve) => {
-            delReq.onsuccess = () => resolve()
-            delReq.onerror = () => resolve()
-            delReq.onblocked = () => resolve()
-            setTimeout(resolve, 250)
-          })
-        } catch {}
-        try {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i)
-            if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal') || key.startsWith('os_'))) {
-              localStorage.removeItem(key)
-            }
-          }
-          for (let i = sessionStorage.length - 1; i >= 0; i--) {
-            const key = sessionStorage.key(i)
-            if (key && (key.startsWith('onesignal') || key.startsWith('OneSignal'))) {
-              sessionStorage.removeItem(key)
-            }
-          }
-        } catch {}
-        return
-      }
+      if (!hasPermission) return
 
       // Com permissão concedida, limpa apenas a store 'operations' se o banco já existir,
       // removendo operações SetAlias travadas de sessões anteriores sem apagar a subscrição ativa.

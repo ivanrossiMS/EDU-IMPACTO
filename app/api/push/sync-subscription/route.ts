@@ -264,7 +264,10 @@ export async function POST(request: NextRequest) {
       ...(colabIdent ? { colaborador_id: String(colabIdent) } : {}),
     }
 
-    // 1. Atualizar o player no OneSignal diretamente com external_user_id, tags e notification_types: 1 (reativa em caso de rematrícula)
+    const hasValidPushToken = Boolean(pushToken && String(pushToken).trim().length > 0)
+
+    // 1. Atualizar o player no OneSignal diretamente com external_user_id e tags
+    // (apenas envia notification_types: 1 quando há pushToken válido para reativar em caso de rematrícula)
     const playerUpdateRes = await fetch(`https://onesignal.com/api/v1/players/${cleanSubId}`, {
       method: 'PUT',
       headers: {
@@ -275,13 +278,17 @@ export async function POST(request: NextRequest) {
         app_id: appId,
         external_user_id: cleanUserId,
         tags: tagPayload,
-        notification_types: 1,
-        ...(pushToken ? { identifier: pushToken } : {}),
+        ...(hasValidPushToken
+          ? {
+              notification_types: 1,
+              identifier: String(pushToken).trim(),
+            }
+          : {}),
       }),
     })
 
     const playerData = await playerUpdateRes.json().catch(() => ({}))
-    const subscriptionDeletedNeedsReset =
+    const wasPlayerMissing =
       playerNotFound ||
       playerUpdateRes.status === 404 ||
       (Array.isArray(playerData?.errors) &&
@@ -291,7 +298,7 @@ export async function POST(request: NextRequest) {
     // recriamos imediatamente o registro do aparelho no OneSignal via POST /api/v1/players para restaurar o push na hora!
     let effectiveSubId = cleanSubId
     let recreatedSubscriptionId: string | null = null
-    if (subscriptionDeletedNeedsReset && pushToken && String(pushToken).trim().length > 0) {
+    if (wasPlayerMissing && hasValidPushToken) {
       try {
         const platLower = String(platform || '').toLowerCase()
         const deviceType = platLower === 'ios' ? 0 : platLower === 'android' ? 1 : 5
@@ -322,6 +329,9 @@ export async function POST(request: NextRequest) {
         console.warn('[Push Sync] Aviso ao recriar player excluído:', recreateErr?.message)
       }
     }
+
+    // Só sinaliza reset no cliente se o aparelho tinha token válido mas não pôde ser recriado no servidor
+    const subscriptionDeletedNeedsReset = Boolean(wasPlayerMissing && hasValidPushToken && !recreatedSubscriptionId)
 
     // 2. Se o player estava sem external_user_id, força re-vínculo adicional via Identity API
     // Isso corrige o estado após OneSignal.logout() que deixa o player como "anonymous"
@@ -417,39 +427,29 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
 
-    // 2b. Sempre vincular a subscrição ao usuário via Subscription Owner API e Users Subscriptions API (OneSignal v5)
+    // 2b. Vincular a subscrição existente ao usuário via Subscription Owner API (OneSignal v5)
+    // IMPORTANTE: Nunca chamar POST /users/by/external_id/{id}/subscriptions aqui, pois esse endpoint
+    // é para criar uma NOVA subscrição (e sem type/token gera registros fantasmas device_type=0 sdk=null).
     let subscriptionPatchData: any = {}
-    try {
-      // 1. PATCH /subscriptions/{sub_id}/owner transfere ou vincula a subscrição diretamente ao external_id
-      const subPatchRes = await fetch(
-        `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${effectiveSubId}/owner`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: authHeader,
-          },
-          body: JSON.stringify({ identity: { external_id: cleanUserId } }),
-        }
-      )
-      subscriptionPatchData = await subPatchRes.json().catch(() => ({}))
+    if (!wasPlayerMissing || recreatedSubscriptionId) {
+      try {
+        const subPatchRes = await fetch(
+          `https://onesignal.com/api/v1/apps/${appId}/subscriptions/${effectiveSubId}/owner`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authHeader,
+            },
+            body: JSON.stringify({ identity: { external_id: cleanUserId } }),
+          }
+        )
+        subscriptionPatchData = await subPatchRes.json().catch(() => ({}))
 
-      // 2. Adicionalmente associa a subscrição ao usuário via POST /users/by/external_id/{id}/subscriptions
-      await fetch(
-        `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}/subscriptions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: authHeader,
-          },
-          body: JSON.stringify({ subscription: { id: effectiveSubId } }),
-        }
-      ).catch(() => {})
-
-      console.log(`✅ [Push Sync] Vínculo via Subscription Owner API concluído:`, subPatchRes.status)
-    } catch (subPatchErr: any) {
-      console.warn('[Push Sync] Falha no PATCH por subscrição (não crítico):', subPatchErr?.message)
+        console.log(`✅ [Push Sync] Vínculo via Subscription Owner API concluído:`, subPatchRes.status)
+      } catch (subPatchErr: any) {
+        console.warn('[Push Sync] Falha no PATCH por subscrição (não crítico):', subPatchErr?.message)
+      }
     }
 
     console.log(`✅ [Push Sync Subscription] Aparelho ${effectiveSubId} associado ao usuário ${cleanUserId}`, {

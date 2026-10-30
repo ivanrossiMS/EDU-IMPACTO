@@ -120,14 +120,21 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
 def garantir_instancia_unica():
     """
-    Garante que processos anteriores (python.exe ou pythonw.exe) sejam encerrados automaticamente
-    ao abrir a nova versão, sem nunca encerrar o próprio processo atual (my_pid).
+    Garante que processos em segundo plano não fiquem duplicados.
+    Se estiver rodando como console interativo (python.exe), encerra processos ocultos (pythonw.exe).
+    Se estiver rodando em segundo plano (pythonw.exe), NÃO encerra a si próprio!
     """
     if sys.platform == "win32":
         try:
+            exe_name = os.path.basename(sys.executable).lower()
             my_pid = os.getpid()
-            cmd = f'powershell -NoProfile -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force"'
-            subprocess.run(cmd, shell=True, capture_output=True)
+            if "pythonw" not in exe_name:
+                # Se estamos abrindo uma janela interativa (python.exe), encerra processos ocultos (pythonw.exe)
+                subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
+            else:
+                # Se estamos rodando como pythonw.exe, mata apenas OUTROS processos pythonw, nunca a si mesmo
+                cmd = f'powershell -NoProfile -Command "Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force"'
+                subprocess.run(cmd, shell=True, capture_output=True)
         except Exception:
             pass
 

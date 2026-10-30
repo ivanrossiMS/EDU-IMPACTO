@@ -167,7 +167,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 }
 
 export default function CalendarioPage() {
-  const { eventosAgenda = [], setEventosAgenda, cfgCalendarioLetivo = [] } = useData()
+  const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
   const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
@@ -322,14 +322,26 @@ export default function CalendarioPage() {
       : []
     
     if (editingId) {
-      setEventosAgenda(prev => prev.map(e => e.id === editingId ? {
-        ...e,
+      const existingEv = eventosAgenda.find(e => e.id === editingId)
+      const updatedEvento: EventoAgenda = {
+        ...(existingEv || ({} as any)),
         ...form,
+        id: editingId,
         dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : { visibilidadeUsuario: undefined }),
-      } : e))
+      } as any
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda(prev => prev.map(e => e.id === editingId ? updatedEvento : e))
+      } else {
+        setEventosAgenda(prev => prev.map(e => e.id === editingId ? updatedEvento : e))
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvento),
+      }).catch(err => console.error('[Calendario] Erro ao atualizar evento:', err))
     } else {
       const getDates = (start: string, end?: string) => {
         if (!end || end < start) return [start]
@@ -354,7 +366,16 @@ export default function CalendarioPage() {
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
       }))
-      setEventosAgenda(prev => [...prev, ...novosEventos])
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda(prev => [...prev, ...novosEventos])
+      } else {
+        setEventosAgenda(prev => [...prev, ...novosEventos])
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novosEventos),
+      }).catch(err => console.error('[Calendario] Erro ao salvar novos eventos:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
     setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
@@ -363,7 +384,9 @@ export default function CalendarioPage() {
   }
 
   const handleDelete = async (id: string) => {
-    setEventosAgenda(prev => prev.filter(e => e.id !== id))
+    if (setLocalEventosAgenda) {
+      setLocalEventosAgenda(prev => prev.filter(e => e.id !== id))
+    }
     try {
       const res = await fetch(`/api/agenda/eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!res.ok) {

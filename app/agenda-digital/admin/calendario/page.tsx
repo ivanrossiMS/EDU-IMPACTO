@@ -257,20 +257,32 @@ export default function CalendarioPage() {
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.titulo.trim() || !form.data) return
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
       : visibilidade.tipo === 'todos' ? ['TODOS']
       : []
     
     if (editingId) {
-      setEventosAgenda(prev => prev.map(e => e.id === editingId ? {
-        ...e,
+      const existingEv = eventosAgenda.find(e => e.id === editingId)
+      const updatedEvento: EventoAgenda = {
+        ...(existingEv || ({} as any)),
         ...form,
+        id: editingId,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : { visibilidadeUsuario: undefined }),
-      } : e))
+      }
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda(prev => prev.map(e => e.id === editingId ? updatedEvento : e))
+      } else {
+        setEventosAgenda(prev => prev.map(e => e.id === editingId ? updatedEvento : e))
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvento),
+      }).catch(err => console.error('[Calendario Admin] Erro ao atualizar evento:', err))
     } else {
       const novoEvento: EventoAgenda = {
         ...form,
@@ -280,7 +292,16 @@ export default function CalendarioPage() {
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
       }
-      setEventosAgenda(prev => [...prev, novoEvento])
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda(prev => [...prev, novoEvento])
+      } else {
+        setEventosAgenda(prev => [...prev, novoEvento])
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([novoEvento]),
+      }).catch(err => console.error('[Calendario Admin] Erro ao salvar novo evento:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
     setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
@@ -289,7 +310,9 @@ export default function CalendarioPage() {
   }
 
   const handleDelete = async (id: string) => {
-    setEventosAgenda(prev => prev.filter(e => e.id !== id))
+    if (setLocalEventosAgenda) {
+      setLocalEventosAgenda(prev => prev.filter(e => e.id !== id))
+    }
     try {
       const res = await fetch(`/api/agenda/eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!res.ok) {

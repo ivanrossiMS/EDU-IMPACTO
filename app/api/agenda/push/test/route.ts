@@ -319,6 +319,8 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
   const comunicadoIds = new Set<string>()
   const callIds = new Set<string>()
   const eventoIds = new Set<string>()
+  const freqIds = new Set<string>()
+  const ocorrenciaIds = new Set<string>()
   const directUserIds = new Set<string>()
 
   for (const l of logs) {
@@ -332,27 +334,48 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
     } catch {}
 
     if (meta?.sender_id) directUserIds.add(String(meta.sender_id))
+    if (meta?.sender_auth_id) directUserIds.add(String(meta.sender_auth_id))
     if (meta?.author_id) directUserIds.add(String(meta.author_id))
     if (meta?.authorId) directUserIds.add(String(meta.authorId))
 
+    const itemIdStr = l.item_id ? String(l.item_id).trim() : ''
+
     if (l.type === 'momentos') {
-      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
-      if (baseId) momentoIds.add(baseId)
+      if (meta?.item_id) momentoIds.add(String(meta.item_id))
+      if (itemIdStr && !itemIdStr.startsWith('momento_like_') && !itemIdStr.startsWith('momento_comment_')) {
+        const baseId = itemIdStr.split('_aluno_')[0].split('_perfil_')[0]
+        if (baseId) momentoIds.add(baseId)
+      }
     } else if (l.type === 'comunicados') {
-      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
-      if (baseId) comunicadoIds.add(baseId)
+      if (meta?.item_id) comunicadoIds.add(String(meta.item_id))
+      if (itemIdStr && !itemIdStr.startsWith('resp_')) {
+        const baseId = itemIdStr.split('_aluno_')[0].split('_perfil_')[0]
+        if (baseId) comunicadoIds.add(baseId)
+      }
     } else if (l.type === 'saida') {
-      const m = l.item_id ? String(l.item_id).match(/^(?:chamada|saida)_([0-9a-f-]{36})/i) : null
+      const m = itemIdStr.match(/^(?:chamada|saida|special_auth)_([0-9a-f-]{36})/i)
       if (m) callIds.add(m[1])
       if (meta?.saida_id) callIds.add(String(meta.saida_id))
+      if (meta?.call_id) callIds.add(String(meta.call_id))
     } else if (l.type === 'calendario') {
-      const baseId = l.item_id ? String(l.item_id).replace(/-reminder.*$/, '').split('_aluno_')[0] : null
-      if (baseId) eventoIds.add(baseId)
+      if (meta?.item_id) eventoIds.add(String(meta.item_id))
+      const baseId = itemIdStr ? itemIdStr.replace(/-reminder.*$/, '').split('_aluno_')[0].split('_perfil_')[0].replace(/-\d+$/, '') : null
+      if (baseId && !baseId.startsWith('cal_dia_') && !baseId.startsWith('cal_lembrete_')) eventoIds.add(baseId)
+    } else if (l.type === 'frequencia') {
+      const baseFreqId = itemIdStr.replace(/_(presente|falta|justificada|atraso|saida)$/i, '').trim()
+      if (baseFreqId.startsWith('FREQ-')) freqIds.add(baseFreqId)
+      if (meta?.aluno_id && meta?.data) {
+        freqIds.add(`FREQ-${meta.aluno_id}-${meta.data}`)
+      }
+    } else if (l.type === 'ocorrencias') {
+      if (meta?.item_id) ocorrenciaIds.add(String(meta.item_id))
+      const baseOcId = itemIdStr.replace(/^ciencia_/, '').split('_aluno_')[0].trim()
+      if (baseOcId) ocorrenciaIds.add(baseOcId)
     }
   }
 
-  // Buscar dados em lote de forma paralela
-  const [momsRes, comsRes, callsRes, evsRes, sysUsersRes] = await Promise.all([
+  // Buscar dados em lote de forma paralela (incluindo frequencias, ocorrencias e auth.users em cache)
+  const [momsRes, comsRes, callsRes, evsRes, freqsRes, ocsRes, sysUsersRes, authUsersList] = await Promise.all([
     momentoIds.size > 0
       ? supabase.from('momentos').select('id, dados').in('id', Array.from(momentoIds))
       : Promise.resolve({ data: [] }),
@@ -365,35 +388,183 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
     eventoIds.size > 0
       ? supabase.from('eventos_agenda').select('id, titulo, criado_por, dados').in('id', Array.from(eventoIds))
       : Promise.resolve({ data: [] }),
-    supabase.from('system_users').select('id, auth_id, nome, email, perfil, cargo, dados')
+    freqIds.size > 0
+      ? supabase.from('frequencias').select('id, aluno_id, data, presente, dados').in('id', Array.from(freqIds))
+      : Promise.resolve({ data: [] }),
+    ocorrenciaIds.size > 0
+      ? supabase.from('ocorrencias').select('id, descricao, dados, created_at').in('id', Array.from(ocorrenciaIds))
+      : Promise.resolve({ data: [] }),
+    supabase.from('system_users').select('id, auth_id, nome, email, perfil, cargo, dados'),
+    getAllAuthUsersCached().catch(() => [] as any[]),
   ])
 
   const momMap = new Map<string, any>((momsRes.data || []).map((m: any) => [String(m.id), m]))
   const comMap = new Map<string, any>((comsRes.data || []).map((c: any) => [String(c.id), c]))
   const callMap = new Map<string, any>((callsRes.data || []).map((c: any) => [String(c.id), c]))
   const evMap = new Map<string, any>((evsRes.data || []).map((e: any) => [String(e.id), e]))
+  const freqMap = new Map<string, any>((freqsRes.data || []).map((f: any) => [String(f.id), f]))
+  const ocMap = new Map<string, any>((ocsRes.data || []).map((o: any) => [String(o.id), o]))
+
+  // Se houver ocorrências vinculadas a relatórios de colaboradores (comunicadoColabId) ainda não carregados em comMap, buscá-los
+  const extraColabComIds = new Set<string>()
+  for (const oc of ocsRes.data || []) {
+    const colabComId = oc?.dados?.comunicadoColabId
+    if (colabComId && !comMap.has(String(colabComId))) {
+      extraColabComIds.add(String(colabComId))
+    }
+  }
+  if (extraColabComIds.size > 0) {
+    const { data: extraComs } = await supabase
+      .from('comunicados')
+      .select('id, autor, dados, titulo')
+      .in('id', Array.from(extraColabComIds))
+    for (const ec of extraComs || []) {
+      comMap.set(String(ec.id), ec)
+    }
+  }
   const sysUserList: any[] = sysUsersRes.data || []
+  const authUsersById = new Map<string, any>((authUsersList || []).map((au: any) => [String(au.id), au]))
+
+  const normText = (s?: string | null) =>
+    String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+
+  const GENERIC_SENDER_NAMES = new Set([
+    'sistema', 'automatico', 'automático', 'portaria', 'portaria escolar', 'portaria & saida',
+    'secretaria', 'secretaria academica', 'catraca', 'catraca idface', 'catraca digital idface',
+    'totem', 'admin', 'admin logado', 'colaborador', 'colaboradora', 'colaborador(a)',
+    'professor', 'professora', 'coordenacao', 'coordenação', 'coordenacao escolar',
+    'coordenacao disciplinar', 'equipe pedagogica', 'equipe escolar', 'colegio impacto',
+    'departamento financeiro', 'financeiro', 'manual', 'manual (auto)'
+  ])
+
+  const isGenericSenderName = (name?: string | null): boolean => {
+    if (!name) return true
+    const n = normText(name)
+    if (!n || n.length < 2) return true
+    return GENERIC_SENDER_NAMES.has(n)
+  }
 
   function findUser(idOrAuthId?: string | null, name?: string | null, email?: string | null) {
     if (idOrAuthId) {
-      const u = sysUserList.find(x => x.id === idOrAuthId || x.auth_id === idOrAuthId)
+      const cleanId = String(idOrAuthId).trim()
+      const strippedId = cleanId.replace(/^(f_|func_|colab_|prof_|usr_)/i, '')
+      const u = sysUserList.find(x =>
+        String(x.id) === cleanId ||
+        String(x.id) === strippedId ||
+        (x.auth_id && String(x.auth_id) === cleanId) ||
+        (x.dados?.colaborador_id && String(x.dados.colaborador_id) === strippedId) ||
+        (x.dados?.uid_legacy && String(x.dados.uid_legacy) === cleanId)
+      )
       if (u) return u
+
+      // Se o ID é um Auth UUID que ainda não está vinculado em system_users.auth_id,
+      // cruzar via auth.users (por email, uid_legacy, colaborador_id ou nome)
+      const au = authUsersById.get(cleanId)
+      if (au) {
+        const auEmail = String(au.email || au.user_metadata?.email || '').toLowerCase().trim()
+        const auLegacyId = String(au.user_metadata?.uid_legacy || au.user_metadata?.colaborador_id || au.user_metadata?.system_user_id || '').trim()
+        const auName = String(au.user_metadata?.nome || au.user_metadata?.full_name || au.user_metadata?.name || '').trim()
+
+        if (auLegacyId) {
+          const strippedLegacy = auLegacyId.replace(/^(f_|func_|colab_|prof_|usr_)/i, '')
+          const uByLegacy = sysUserList.find(x => String(x.id) === auLegacyId || String(x.id) === strippedLegacy)
+          if (uByLegacy) return uByLegacy
+        }
+        if (auEmail) {
+          const uByEmail = sysUserList.find(x => x.email && String(x.email).toLowerCase().trim() === auEmail)
+          if (uByEmail) return uByEmail
+        }
+        if (auName && !isGenericSenderName(auName)) {
+          const auNameNorm = normText(auName)
+          const uByName = sysUserList.find(x => x.nome && normText(x.nome) === auNameNorm)
+          if (uByName) return uByName
+        }
+        if (auName && !isGenericSenderName(auName) && !auEmail.endsWith('@impactoedu.local')) {
+          return {
+            id: cleanId,
+            auth_id: cleanId,
+            nome: auName,
+            email: auEmail || null,
+            cargo: au.user_metadata?.cargo || au.user_metadata?.perfil || 'Colaborador(a)',
+            perfil: au.user_metadata?.perfil || 'Colaborador(a)',
+            dados: { foto: au.user_metadata?.foto || au.user_metadata?.avatar_url || null }
+          }
+        }
+      }
     }
+
     if (email) {
       const cleanEmail = email.toLowerCase().trim()
       const u = sysUserList.find(x => x.email && x.email.toLowerCase().trim() === cleanEmail)
       if (u) return u
     }
+
     if (name) {
-      const cleanName = name.toLowerCase().trim()
-      if (cleanName.length >= 3) {
-        const u = sysUserList.find(x => x.nome && x.nome.toLowerCase().trim() === cleanName)
-        if (u) return u
-        const u2 = sysUserList.find(x => x.nome && (x.nome.toLowerCase().includes(cleanName) || cleanName.includes(x.nome.toLowerCase())))
-        if (u2) return u2
+      const rawExtracted = String(name).match(/^Manual\s*\((.+)\)$/i)?.[1]?.trim() || String(name).trim()
+      if (!isGenericSenderName(rawExtracted)) {
+        const cleanNameNorm = normText(rawExtracted)
+        if (cleanNameNorm.length >= 3) {
+          const uExact = sysUserList.find(x => x.nome && normText(x.nome) === cleanNameNorm)
+          if (uExact) return uExact
+          const uPrefix = sysUserList.find(x => x.nome && normText(x.nome).startsWith(cleanNameNorm + ' '))
+          if (uPrefix) return uPrefix
+          const uSub = sysUserList.find(x => x.nome && (normText(x.nome).includes(cleanNameNorm) || cleanNameNorm.includes(normText(x.nome))))
+          if (uSub) return uSub
+
+          const stopWords = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
+          const nameTokens = cleanNameNorm.split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t))
+          if (nameTokens.length >= 2) {
+            const firstTok = nameTokens[0]
+            const lastTok = nameTokens[nameTokens.length - 1]
+            const uFirstLast = sysUserList.find(x => {
+              if (!x.nome) return false
+              const xTokens = normText(x.nome).split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t))
+              return xTokens.length >= 2 && xTokens[0] === firstTok && xTokens[xTokens.length - 1] === lastTok
+            })
+            if (uFirstLast) return uFirstLast
+          }
+        }
       }
     }
     return null
+  }
+
+  function buildAutoSender(subtitulo = 'Sincronizar Catraca'): PushSenderInfo {
+    return {
+      id: 'automatico',
+      nome: 'Automático',
+      friendlyName: 'Automático',
+      subtitulo,
+      tipo: 'sistema',
+      foto: null,
+      initials: 'AU',
+    }
+  }
+
+  function buildColabSender(
+    u: any | null,
+    fallbackName?: string | null,
+    fallbackCargo?: string | null,
+    fallbackFoto?: string | null
+  ): PushSenderInfo {
+    const rawFallback = fallbackName
+      ? (String(fallbackName).match(/^Manual\s*\((.+)\)$/i)?.[1]?.trim() || String(fallbackName).trim())
+      : null
+    const finalName = u?.nome || rawFallback || 'Colaborador'
+    return {
+      id: u?.id ? String(u.id) : null,
+      nome: finalName,
+      friendlyName: getFriendlySenderName(finalName),
+      subtitulo: u?.cargo || u?.perfil || fallbackCargo || 'Colaborador(a)',
+      tipo: 'colaborador',
+      foto: u?.foto || u?.dados?.foto || u?.dados?.avatar || fallbackFoto || null,
+      email: u?.email || null,
+      initials: getSenderInitials(finalName),
+    }
   }
 
   for (const l of logs) {
@@ -405,20 +576,100 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
         : l.onesignal_response?._metadata
     } catch {}
 
-    // 1. Checagem direta por user_id ou meta.sender_id
-    const directId = l.user_id || meta?.sender_id || meta?.author_id || meta?.authorId
-    if (directId) {
-      const u = findUser(directId, meta?.sender_name || meta?.author, meta?.sender_email)
-      if (u) {
+    const itemIdStr = String(l.item_id || '').trim()
+    const msgStr = String(l.message || '').trim()
+    const titleStr = String(l.title || '').trim()
+
+    // 0. Detecção prioritária de disparos AUTOMÁTICOS (Sincronizar_Catraca, Totem, Crons)
+    const isCatracaAuto =
+      meta?.origem === 'sincronizar_catraca' ||
+      meta?.origem === 'catraca' ||
+      meta?.origem === 'catraca_idface' ||
+      meta?.tipo === 'saida_sozinho' ||
+      itemIdStr.startsWith('reentrada_catraca_') ||
+      itemIdStr.startsWith('saida_catraca_') ||
+      (l.type === 'frequencia' && (
+        /\(Entrada\s+às\s+\d{1,2}:\d{2}\)/i.test(msgStr) ||
+        /confirmada na portaria às .* via /i.test(msgStr)
+      )) ||
+      (l.type === 'saida' && (
+        /Saída Registrada na Catraca/i.test(titleStr) ||
+        /\(Saiu sozinho\)/i.test(msgStr)
+      ))
+
+    if (isCatracaAuto) {
+      sender = buildAutoSender(
+        meta?.dispositivo
+          ? `Sincronizar Catraca • ${meta.dispositivo}`
+          : 'Sincronizar Catraca'
+      )
+    }
+
+    const isTotemAuto =
+      !sender && (
+        meta?.origem === 'totem_automatico' ||
+        meta?.origem === 'totem' ||
+        (l.type === 'frequencia' && !l.user_id && /Foi registrada uma falta para .+ no dia \d{4}-\d{2}-\d{2}/i.test(msgStr))
+      )
+
+    if (isTotemAuto) {
+      sender = buildAutoSender('Totem de Frequência')
+    }
+
+    const isCalendarAutoReminder =
+      !sender &&
+      l.type === 'calendario' && (
+        itemIdStr.includes('-reminder') ||
+        Boolean(meta?.is_reminder) ||
+        titleStr.includes('Lembrete') ||
+        msgStr.startsWith('Lembrete')
+      )
+
+    if (isCalendarAutoReminder) {
+      sender = buildAutoSender('Lembrete de Calendário')
+    }
+
+    const isFinanceiroAuto =
+      !sender &&
+      l.type === 'cobrancas' &&
+      !l.user_id && (
+        itemIdStr.startsWith('fin_overdue_') ||
+        meta?.origem === 'cron_automatico' ||
+        meta?.tipo === 'parcela_vencida_3d'
+      )
+
+    if (isFinanceiroAuto) {
+      sender = buildAutoSender('Alerta Financeiro')
+    }
+
+    if (!sender && meta?.sender_type === 'automatico') {
+      sender = buildAutoSender(
+        meta?.origem === 'sincronizar_catraca' ? 'Sincronizar Catraca' : 'Sistema Automático'
+      )
+    }
+
+    // 1. Checagem direta por user_id ou metadados do remetente (colaborador ou responsável manual)
+    if (!sender) {
+      const directId = l.user_id || meta?.sender_id || meta?.sender_auth_id || meta?.author_id || meta?.authorId
+      const directName = meta?.sender_name || meta?.author || meta?.autor || meta?.operator_name
+      const directEmail = meta?.sender_email
+
+      if (meta?.sender_type === 'responsavel' && directName && !isGenericSenderName(directName)) {
         sender = {
-          id: u.id,
-          nome: u.nome,
-          friendlyName: getFriendlySenderName(u.nome),
-          subtitulo: u.cargo || u.perfil || 'Administrador',
-          tipo: 'colaborador',
-          foto: u.foto || u.dados?.foto || null,
-          email: u.email,
-          initials: getSenderInitials(u.nome)
+          id: directId ? String(directId) : null,
+          nome: directName,
+          friendlyName: getFriendlySenderName(directName),
+          subtitulo: 'Responsável (Família)',
+          tipo: 'responsavel',
+          foto: meta?.sender_foto || null,
+          initials: getSenderInitials(directName),
+        }
+      } else if (directId || (directName && !isGenericSenderName(directName)) || directEmail) {
+        const u = findUser(directId, directName, directEmail)
+        if (u) {
+          sender = buildColabSender(u, directName, meta?.sender_cargo || meta?.sender_perfil, meta?.sender_foto)
+        } else if (directName && !isGenericSenderName(directName)) {
+          sender = buildColabSender(null, directName, meta?.sender_cargo || meta?.sender_perfil || 'Colaborador(a)', meta?.sender_foto)
         }
       }
     }
@@ -426,181 +677,224 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
     // 2. Chat: se tem meta.sender_name
     if (!sender && l.type === 'chat' && meta?.sender_name) {
       const u = findUser(meta?.sender_id, meta.sender_name)
-      sender = {
-        id: u?.id || meta?.sender_id || null,
-        nome: u?.nome || meta.sender_name,
-        friendlyName: getFriendlySenderName(u?.nome || meta.sender_name),
-        subtitulo: u?.cargo || u?.perfil || meta?.sender_perfil || 'Mensagem do Chat',
-        tipo: 'colaborador',
-        foto: u?.foto || u?.dados?.foto || null,
-        email: u?.email || null,
-        initials: getSenderInitials(u?.nome || meta.sender_name)
-      }
-    }
-
-    // 3. Momentos
-    if (!sender && l.type === 'momentos') {
-      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
-      const m = baseId ? momMap.get(baseId) : null
-      const authorName = m?.dados?.author || m?.dados?.autor || meta?.author || meta?.autor
-      const authorId = m?.dados?.authorId || m?.dados?.author_id || meta?.authorId || meta?.author_id
-
-      const u = findUser(authorId, authorName)
-      if (u) {
+      const isFamSender = ['aluno', 'responsável', 'responsavel', 'família', 'familia'].includes(normText(meta?.sender_perfil))
+      if (isFamSender && !u) {
         sender = {
-          id: u.id,
-          nome: u.nome,
-          friendlyName: getFriendlySenderName(u.nome),
-          subtitulo: u.cargo || u.perfil || 'Professora',
-          tipo: 'colaborador',
-          foto: u.foto || u.dados?.foto || null,
-          email: u.email,
-          initials: getSenderInitials(u.nome)
-        }
-      } else if (authorName) {
-        sender = {
-          nome: authorName,
-          friendlyName: getFriendlySenderName(authorName),
-          subtitulo: 'Professora / Coordenação',
-          tipo: 'colaborador',
-          foto: null,
-          initials: getSenderInitials(authorName)
-        }
-      } else {
-        sender = {
-          nome: 'Equipe Pedagógica',
-          friendlyName: 'Equipe Pedagógica',
-          subtitulo: 'Momentos & Mídia',
-          tipo: 'colaborador',
-          foto: null,
-          initials: 'EP'
-        }
-      }
-    }
-
-    // 4. Comunicados
-    if (!sender && l.type === 'comunicados') {
-      const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0].split('_perfil_')[0] : null
-      const c = baseId ? comMap.get(baseId) : null
-      let authorName = c?.autor || c?.dados?.autor || c?.dados?.autor_nome || meta?.author || meta?.autor
-      let authorId = c?.dados?.autorId || meta?.authorId || meta?.author_id
-      let authorCargo = c?.dados?.autorCargo || meta?.author_cargo
-      let authorFoto = c?.dados?.autorFoto || meta?.author_foto
-
-      if (!authorName && l.message) {
-        const m1 = l.message.match(/enviada por\s+([^.]+)/i)
-        const m2 = l.message.match(/^(.+?)\s+enviou uma mensagem/i)
-        const m3 = l.message.match(/^(.+?)\s+disponibilizou o relatório/i)
-        const m4 = l.message.match(/^(.+?)\s+enviou um novo comunicado/i)
-        authorName = (m1 ? m1[1] : (m2 ? m2[1] : (m3 ? m3[1] : (m4 ? m4[1] : null))))?.trim()
-      }
-
-      const u = findUser(authorId, authorName)
-      if (u) {
-        sender = {
-          id: u.id,
-          nome: u.nome,
-          friendlyName: getFriendlySenderName(u.nome),
-          subtitulo: u.cargo || u.perfil || authorCargo || 'Colaborador',
-          tipo: 'colaborador',
-          foto: u.foto || u.dados?.foto || authorFoto || null,
-          email: u.email,
-          initials: getSenderInitials(u.nome)
-        }
-      } else if (authorName) {
-        sender = {
-          nome: authorName,
-          friendlyName: getFriendlySenderName(authorName),
-          subtitulo: authorCargo || 'Colaborador',
-          tipo: 'colaborador',
-          foto: authorFoto || null,
-          initials: getSenderInitials(authorName)
-        }
-      } else {
-        sender = {
-          nome: 'Coordenação Escolar',
-          friendlyName: 'Coordenação',
-          subtitulo: 'Comunicado Escolar',
-          tipo: 'colaborador',
-          foto: null,
-          initials: 'CE'
-        }
-      }
-    }
-
-    // 5. Portaria & Saída
-    if (!sender && l.type === 'saida') {
-      const match = l.item_id ? String(l.item_id).match(/^(?:chamada|saida)_([0-9a-f-]{36})/i) : null
-      const call = match ? callMap.get(match[1]) : (meta?.saida_id ? callMap.get(meta.saida_id) : null)
-      const guardian = call?.dados?.guardianName || meta?.guardian_name
-      if (guardian) {
-        sender = {
-          nome: guardian,
-          friendlyName: getFriendlySenderName(guardian),
-          subtitulo: call?.dados?.source === 'app' ? 'Responsável (App)' : 'Responsável',
+          id: meta?.sender_id || null,
+          nome: meta.sender_name,
+          friendlyName: getFriendlySenderName(meta.sender_name),
+          subtitulo: meta?.sender_perfil || 'Responsável (Família)',
           tipo: 'responsavel',
           foto: null,
-          initials: getSenderInitials(guardian)
-        }
-      } else if (l.title && l.title.includes('Chamada')) {
-        sender = {
-          nome: 'Portaria & Saída',
-          friendlyName: 'Portaria',
-          subtitulo: 'Chamada de Portão',
-          tipo: 'portaria',
-          foto: null,
-          initials: 'PS'
+          initials: getSenderInitials(meta.sender_name),
         }
       } else {
-        sender = {
-          nome: 'Portaria Escolar',
-          friendlyName: 'Portaria',
-          subtitulo: 'Saída Confirmada',
-          tipo: 'portaria',
-          foto: null,
-          initials: 'PE'
+        sender = buildColabSender(u, meta.sender_name, meta?.sender_perfil || 'Mensagem do Chat')
+      }
+    }
+
+    // 3. Frequência (diferenciação estrita entre Colaborador Manual vs Automático)
+    if (!sender && l.type === 'frequencia') {
+      const baseFreqId = itemIdStr.replace(/_(presente|falta|justificada|atraso|saida)$/i, '').trim()
+      const freqRow = freqMap.get(baseFreqId) || (meta?.aluno_id && meta?.data ? freqMap.get(`FREQ-${meta.aluno_id}-${meta.data}`) : null)
+      const fDados = freqRow?.dados || {}
+      const regPor = String(fDados.registradoPor || '').trim()
+      const manualMatch = regPor.match(/^Manual\s*\((.+)\)$/i)
+      const extractedManualName =
+        fDados.usuarioNome ||
+        (manualMatch ? manualMatch[1].trim() : (!isGenericSenderName(regPor) && !/catraca|idface|totem/i.test(regPor) ? regPor : null))
+      const manualUserId = fDados.usuarioId || fDados.usuarioAuthId
+
+      if (manualUserId || (extractedManualName && !isGenericSenderName(extractedManualName))) {
+        const u = findUser(manualUserId, extractedManualName)
+        if (u || (extractedManualName && !isGenericSenderName(extractedManualName))) {
+          sender = buildColabSender(u, extractedManualName, fDados.usuarioCargo || 'Registro de Frequência')
+        }
+      }
+
+      if (!sender) {
+        if (fDados.origem === 'totem' || /totem/i.test(regPor)) {
+          sender = buildAutoSender('Totem de Frequência')
+        } else {
+          sender = buildAutoSender('Sincronizar Catraca')
         }
       }
     }
 
-    // 6. Frequência
-    if (!sender && l.type === 'frequencia') {
-      sender = {
-        nome: 'Secretaria Acadêmica',
-        friendlyName: 'Secretaria',
-        subtitulo: 'Registro de Frequência',
-        tipo: 'sistema',
-        foto: null,
-        initials: 'SA'
+    // 4. Momentos (publicações e interações de curtida/comentário)
+    if (!sender && l.type === 'momentos') {
+      if (itemIdStr.startsWith('momento_like_') || itemIdStr.startsWith('momento_comment_')) {
+        const actorName = meta?.author || msgStr.match(/^(.+?)\s+(?:curtiu|comentou)/i)?.[1]?.trim()
+        const u = findUser(l.user_id || meta?.sender_id, actorName)
+        if (u) {
+          sender = buildColabSender(u, actorName)
+        } else if (actorName) {
+          sender = {
+            nome: actorName,
+            friendlyName: getFriendlySenderName(actorName),
+            subtitulo: 'Interação no Mural',
+            tipo: 'responsavel',
+            foto: null,
+            initials: getSenderInitials(actorName),
+          }
+        }
+      }
+
+      if (!sender) {
+        const baseId = meta?.item_id || (itemIdStr ? itemIdStr.split('_aluno_')[0].split('_perfil_')[0] : null)
+        const m = baseId ? momMap.get(String(baseId)) : null
+        const authorName = m?.dados?.author || m?.dados?.autor || meta?.author || meta?.autor
+        const authorId = m?.dados?.authorId || m?.dados?.author_id || meta?.authorId || meta?.author_id
+
+        const u = findUser(authorId, authorName)
+        if (u || (authorName && !isGenericSenderName(authorName))) {
+          sender = buildColabSender(u, authorName, 'Professora / Coordenação')
+        } else {
+          sender = {
+            nome: 'Equipe Pedagógica',
+            friendlyName: 'Equipe Pedagógica',
+            subtitulo: 'Momentos & Mídia',
+            tipo: 'colaborador',
+            foto: null,
+            initials: 'EP',
+          }
+        }
+      }
+    }
+
+    // 5. Comunicados (e respostas de comunicados)
+    if (!sender && l.type === 'comunicados') {
+      if (titleStr.startsWith('💬 Resposta de ')) {
+        const repName = titleStr.replace(/^💬\s*Resposta de\s+/i, '').trim()
+        if (repName) {
+          sender = {
+            nome: repName,
+            friendlyName: getFriendlySenderName(repName),
+            subtitulo: 'Responsável (Família)',
+            tipo: 'responsavel',
+            foto: null,
+            initials: getSenderInitials(repName),
+          }
+        }
+      } else if (titleStr.startsWith('🏫 Nova mensagem de ')) {
+        const repName = titleStr.replace(/^🏫\s*Nova mensagem de\s+/i, '').trim()
+        if (repName) {
+          const u = findUser(null, repName)
+          sender = buildColabSender(u, repName, 'Resposta em Comunicado')
+        }
+      }
+
+      if (!sender) {
+        const baseId = meta?.item_id || (itemIdStr ? itemIdStr.split('_aluno_')[0].split('_perfil_')[0] : null)
+        const c = baseId ? comMap.get(String(baseId)) : null
+        let authorName = c?.autor || c?.dados?.autor || c?.dados?.autor_nome || meta?.author || meta?.autor
+        let authorId = c?.dados?.autorId || meta?.authorId || meta?.author_id
+        let authorCargo = c?.dados?.autorCargo || meta?.author_cargo
+        let authorFoto = c?.dados?.autorFoto || meta?.author_foto
+
+        if (!authorName && msgStr) {
+          const m1 = msgStr.match(/enviada por\s+([^.]+)/i)
+          const m2 = msgStr.match(/^(.+?)\s+enviou uma mensagem/i)
+          const m3 = msgStr.match(/^(.+?)\s+disponibilizou o relatório/i)
+          const m4 = msgStr.match(/^(.+?)\s+enviou um novo comunicado/i)
+          const m5 = msgStr.match(/^(.+?)\s+enviou o seu relatório/i)
+          authorName = (m1?.[1] || m2?.[1] || m3?.[1] || m4?.[1] || m5?.[1] || null)?.trim()
+        }
+
+        const u = findUser(authorId, authorName)
+        if (u || (authorName && !isGenericSenderName(authorName))) {
+          sender = buildColabSender(u, authorName, authorCargo || 'Colaborador(a)', authorFoto)
+        } else {
+          sender = {
+            nome: 'Coordenação Escolar',
+            friendlyName: 'Coordenação',
+            subtitulo: 'Comunicado Escolar',
+            tipo: 'colaborador',
+            foto: null,
+            initials: 'CE',
+          }
+        }
+      }
+    }
+
+    // 6. Portaria & Saída
+    if (!sender && l.type === 'saida') {
+      const match = itemIdStr.match(/^(?:chamada|saida|special_auth)_([0-9a-f-]{36})/i)
+      const callIdKey = match ? match[1] : (meta?.saida_id || meta?.call_id || null)
+      const call = callIdKey ? callMap.get(String(callIdKey)) : null
+      const cDados = call?.dados || {}
+
+      const isCallCatraca =
+        cDados.origem === 'catraca_idface' ||
+        cDados.guardianId === 'catraca-saida' ||
+        cDados.source === 'catraca' ||
+        cDados.source === 'idface' ||
+        /catraca/i.test(String(cDados.operatorId || ''))
+
+      if (isCallCatraca) {
+        sender = buildAutoSender('Sincronizar Catraca • Portaria')
+      } else {
+        const isAppCall =
+          titleStr.includes('Chamada') &&
+          (cDados.source === 'app' || cDados.source === 'app_familia' || meta?.source === 'app' || meta?.source === 'app_familia')
+
+        const guardian = cDados.guardianName || meta?.guardian_name
+        const candidateOps = [
+          meta?.operator_name,
+          cDados.confirmedBy,
+          cDados.operatorId,
+          cDados.authorizedBy,
+        ]
+          .map(v => (typeof v === 'string' ? v.trim() : ''))
+          .filter(v =>
+            Boolean(v) &&
+            !isGenericSenderName(v) &&
+            !v.toLowerCase().includes('(app agenda digital)') &&
+            (!guardian || normText(v) !== normText(guardian))
+          )
+
+        if (!isAppCall && candidateOps.length > 0) {
+          const opName = candidateOps[0]
+          const u = findUser(null, opName)
+          sender = buildColabSender(u, opName, 'Portaria & Saída')
+        } else if (guardian && !isGenericSenderName(guardian)) {
+          sender = {
+            nome: guardian,
+            friendlyName: getFriendlySenderName(guardian),
+            subtitulo: isAppCall ? 'Responsável (App)' : 'Responsável (Família)',
+            tipo: 'responsavel',
+            foto: null,
+            initials: getSenderInitials(guardian),
+          }
+        } else {
+          sender = buildAutoSender('Portaria & Saída')
+        }
       }
     }
 
     // 7. Calendário & Eventos
     if (!sender && l.type === 'calendario') {
-      const isRem = (l.item_id && l.item_id.includes('-reminder')) ||
-                    (l.title && l.title.includes('Lembrete')) ||
-                    (l.message && l.message.startsWith('Lembrete'))
-      if (isRem) {
-        sender = {
-          nome: 'Sistema (Automático)',
-          friendlyName: 'Lembrete Auto',
-          subtitulo: 'Lembrete da Véspera',
-          tipo: 'sistema',
-          foto: null,
-          initials: 'LA'
-        }
+      const baseId = meta?.item_id || (itemIdStr ? itemIdStr.split('_aluno_')[0].replace(/-\d+$/, '') : null)
+      const ev = baseId ? evMap.get(String(baseId)) : null
+      const evCreator =
+        ev?.criado_por ||
+        ev?.dados?.criadoPor ||
+        ev?.dados?.criado_por ||
+        ev?.dados?.responsavel ||
+        ev?.dados?.autor ||
+        ev?.dados?.usuarioNome ||
+        meta?.sender_name
+      const u = findUser(l.user_id || meta?.sender_id || ev?.dados?.usuarioId, evCreator)
+      if (u || (evCreator && !isGenericSenderName(evCreator))) {
+        sender = buildColabSender(u, evCreator, 'Calendário de Eventos')
       } else {
-        const baseId = l.item_id ? String(l.item_id).split('_aluno_')[0] : null
-        const ev = baseId ? evMap.get(baseId) : null
-        const u = findUser(null, ev?.criado_por)
         sender = {
-          id: u?.id || null,
-          nome: u?.nome || ev?.criado_por || 'Coordenação Escolar',
-          friendlyName: getFriendlySenderName(u?.nome || ev?.criado_por || 'Coordenação Escolar'),
-          subtitulo: u?.cargo || u?.perfil || 'Calendário de Eventos',
+          nome: 'Coordenação Escolar',
+          friendlyName: 'Coordenação',
+          subtitulo: 'Calendário de Eventos',
           tipo: 'colaborador',
-          foto: u?.foto || u?.dados?.foto || null,
-          initials: getSenderInitials(u?.nome || ev?.criado_por || 'Coordenação Escolar')
+          foto: null,
+          initials: 'CE',
         }
       }
     }
@@ -613,7 +907,7 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
         subtitulo: 'Simulação Manual de Push',
         tipo: 'colaborador',
         foto: null,
-        initials: 'AM'
+        initials: 'AM',
       }
     }
 
@@ -623,46 +917,103 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
         nome: 'Secretaria Acadêmica',
         friendlyName: 'Secretaria',
         subtitulo: 'Boletim & Notas',
-        tipo: 'sistema',
+        tipo: 'colaborador',
         foto: null,
-        initials: 'SA'
+        initials: 'SA',
       }
     }
 
     // 10. Ocorrências
     if (!sender && l.type === 'ocorrencias') {
-      sender = {
-        nome: 'Coordenação Disciplinar',
-        friendlyName: 'Coordenação',
-        subtitulo: 'Registro de Ocorrência',
-        tipo: 'colaborador',
-        foto: null,
-        initials: 'CD'
+      if (itemIdStr.startsWith('ciencia_') || meta?.action === 'ciencia_confirmada') {
+        const baseOcId = meta?.item_id || itemIdStr.replace(/^ciencia_/, '').split('_aluno_')[0].trim()
+        const oc = baseOcId ? ocMap.get(String(baseOcId)) : null
+        const famMatch = msgStr.match(/A família de\s+(.+?)\s+confirmou ciência/i)?.[1]?.trim()
+        const respCienciaName =
+          meta?.sender_name ||
+          oc?.dados?.responsavel_ciencia ||
+          (famMatch ? `Família de ${getFriendlySenderName(famMatch)}` : 'Responsável')
+        sender = {
+          nome: respCienciaName,
+          friendlyName: respCienciaName.startsWith('Família de ') ? respCienciaName : getFriendlySenderName(respCienciaName),
+          subtitulo: 'Ciência de Ocorrência • Família',
+          tipo: 'responsavel',
+          foto: null,
+          initials: getSenderInitials(famMatch || respCienciaName),
+        }
+      } else {
+        const baseOcId = meta?.item_id || itemIdStr.split('_aluno_')[0].trim()
+        let oc = baseOcId ? ocMap.get(String(baseOcId)) : null
+        // Se uma ocorrência individual de lote (OC-REL-<timestamp>-...) foi removida depois,
+        // buscar irmã do mesmo lote pelo prefixo de timestamp
+        if (!oc && baseOcId && baseOcId.startsWith('OC-REL-')) {
+          const tsPrefix = baseOcId.slice(0, 19) // ex: "OC-REL-179250332016"
+          for (const [k, v] of ocMap.entries()) {
+            if (k.startsWith(tsPrefix)) {
+              oc = v
+              break
+            }
+          }
+        }
+        const ocDados = oc?.dados || {}
+        const descStr = String(oc?.descricao || ocDados?.descricao || '')
+        const lancadoMatch = descStr.match(/\[Lançado por:\s*([^\]]+?)(?:\s+via\s+Relatório)?(?:\s+em\s+\d{2}\/\d{2}|\])/i)
+        const editadoMatch = descStr.match(/\[Editado por:\s*([^\]]+?)(?:\s+em\s+\d{2}\/\d{2}|\])/i)
+        const extractedFromDesc = lancadoMatch?.[1]?.trim() || editadoMatch?.[1]?.trim() || null
+        const parentCom = ocDados.comunicadoColabId ? comMap.get(String(ocDados.comunicadoColabId)) : null
+
+        const candidateNames = [
+          ocDados.responsavel,
+          ocDados.registradoPor,
+          extractedFromDesc,
+          ocDados.autor,
+          ocDados.professor,
+          ocDados.usuarioNome,
+          parentCom?.autor,
+          parentCom?.dados?.autor,
+          meta?.sender_name,
+        ]
+          .map(v => (typeof v === 'string' ? v.trim() : ''))
+          .filter(v => Boolean(v) && !isGenericSenderName(v))
+
+        const ocAuthorName = candidateNames[0] || null
+        const ocAuthorId =
+          ocDados.usuarioId ||
+          ocDados.autorId ||
+          parentCom?.dados?.autorId ||
+          meta?.sender_id ||
+          meta?.sender_auth_id ||
+          null
+
+        const u = findUser(ocAuthorId, ocAuthorName)
+        if (u || (ocAuthorName && !isGenericSenderName(ocAuthorName))) {
+          sender = buildColabSender(
+            u,
+            ocAuthorName,
+            ocDados.autorCargo || ocDados.cargo || parentCom?.dados?.autorCargo || 'Registro de Ocorrência',
+            ocDados.autorFoto || parentCom?.dados?.autorFoto || null
+          )
+        } else {
+          sender = {
+            nome: 'Coordenação Disciplinar',
+            friendlyName: 'Coordenação',
+            subtitulo: 'Registro de Ocorrência',
+            tipo: 'colaborador',
+            foto: null,
+            initials: 'CD',
+          }
+        }
       }
     }
 
     // 11. Cobranças
     if (!sender && l.type === 'cobrancas') {
-      sender = {
-        nome: 'Departamento Financeiro',
-        friendlyName: 'Financeiro',
-        subtitulo: 'Cobrança & Mensalidade',
-        tipo: 'sistema',
-        foto: null,
-        initials: 'DF'
-      }
+      sender = buildAutoSender('Departamento Financeiro')
     }
 
     // Fallback geral
     if (!sender) {
-      sender = {
-        nome: 'Colégio Impacto',
-        friendlyName: 'Colégio Impacto',
-        subtitulo: 'Sistema Escolar',
-        tipo: 'sistema',
-        foto: null,
-        initials: 'CI'
-      }
+      sender = buildAutoSender('Sistema Escolar')
     }
 
     result.set(l.id, sender)
@@ -1457,7 +1808,7 @@ export async function GET(request: Request) {
         query = query.eq('status', filterStatus)
       }
 
-      // 4. Filtro por Busca Textual (com suporte a Remetente/Autor)
+      // 4. Filtro por Busca Textual (com suporte a Remetente/Autor e Automático/Catraca)
       if (filterSearch) {
         const safeOrSearch = filterSearch.replace(/[,()"'\\]/g, '').trim()
         const searchOrs: string[] = safeOrSearch
@@ -1468,18 +1819,53 @@ export async function GET(request: Request) {
             ]
           : []
 
+        const searchNorm = safeOrSearch
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+
+        if (
+          searchNorm.includes('automatic') ||
+          searchNorm.includes('catraca') ||
+          searchNorm.includes('sincronizar')
+        ) {
+          searchOrs.push(
+            'message.ilike.%Entrada às%',
+            'message.ilike.%Saiu sozinho%',
+            'item_id.ilike.%catraca%',
+            'item_id.ilike.%-reminder%'
+          )
+        }
+
         if (safeOrSearch.length >= 2) {
           try {
-            const [{ data: matchedUsers }, { data: matchedMoms }, { data: matchedComs }] = await Promise.all([
-              supabase.from('system_users').select('id, auth_id').ilike('nome', `%${safeOrSearch}%`).limit(10),
+            const [{ data: matchedUsers }, { data: matchedMoms }, { data: matchedComs }, { data: matchedOcs }, authUsersForSearch] = await Promise.all([
+              supabase.from('system_users').select('id, auth_id, email, nome').ilike('nome', `%${safeOrSearch}%`).limit(15),
               supabase.from('momentos').select('id').ilike('dados->>author', `%${safeOrSearch}%`).limit(25),
-              supabase.from('comunicados').select('id').ilike('autor', `%${safeOrSearch}%`).not('id', 'like', 'AD-COM-REL-STU-%').limit(25)
+              supabase.from('comunicados').select('id').ilike('autor', `%${safeOrSearch}%`).not('id', 'like', 'AD-COM-REL-STU-%').limit(25),
+              supabase.from('ocorrencias').select('id').or(`dados->>responsavel.ilike.%${safeOrSearch}%,descricao.ilike.%${safeOrSearch}%`).limit(25),
+              getAllAuthUsersCached().catch(() => [] as any[])
             ])
 
+            const matchedEmails = new Set<string>()
             if (matchedUsers && matchedUsers.length > 0) {
               matchedUsers.forEach((u: any) => {
                 if (u.id) searchOrs.push(`user_id.eq.${u.id}`)
                 if (u.auth_id) searchOrs.push(`user_id.eq.${u.auth_id}`)
+                if (u.email) matchedEmails.add(String(u.email).toLowerCase().trim())
+              })
+            }
+
+            if (Array.isArray(authUsersForSearch) && authUsersForSearch.length > 0) {
+              authUsersForSearch.forEach((au: any) => {
+                const auEmail = String(au.email || au.user_metadata?.email || '').toLowerCase().trim()
+                const auNameNorm = String(au.user_metadata?.nome || au.user_metadata?.full_name || au.user_metadata?.name || '')
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .toLowerCase()
+                if ((auEmail && matchedEmails.has(auEmail)) || (searchNorm.length >= 3 && auNameNorm.includes(searchNorm))) {
+                  if (au.id) searchOrs.push(`user_id.eq.${au.id}`)
+                }
               })
             }
 
@@ -1494,13 +1880,19 @@ export async function GET(request: Request) {
                 if (c.id) searchOrs.push(`item_id.ilike.%${c.id}%`)
               })
             }
+
+            if (matchedOcs && matchedOcs.length > 0) {
+              matchedOcs.forEach((o: any) => {
+                if (o.id) searchOrs.push(`item_id.ilike.${o.id}%`)
+              })
+            }
           } catch (searchEnhanceErr) {
             console.warn('Aviso ao expandir busca por autor:', searchEnhanceErr)
           }
         }
 
         if (searchOrs.length > 0) {
-          query = query.or(searchOrs.join(','))
+          query = query.or(Array.from(new Set(searchOrs)).join(','))
         }
       }
 
@@ -1573,9 +1965,19 @@ export async function GET(request: Request) {
           const colabFilter = isColabUuid ? `id.eq.${filterUserId},auth_id.eq.${filterUserId}` : `id.eq.${filterUserId}`
           const { data: colab } = await supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados').or(colabFilter).maybeSingle()
           if (colab) {
+            let resolvedColabAuthId = colab.auth_id || null
+            if (!resolvedColabAuthId && colab.email) {
+              try {
+                const authList = await getAllAuthUsersCached()
+                const cleanColabEmail = String(colab.email).toLowerCase().trim()
+                const matchedAu = authList.find((u: any) => String(u.email || '').toLowerCase().trim() === cleanColabEmail)
+                if (matchedAu?.id) resolvedColabAuthId = String(matchedAu.id)
+              } catch {}
+            }
+
             userContext = {
               id: String(colab.id),
-              authId: colab.auth_id,
+              authId: resolvedColabAuthId,
               nome: colab.nome,
               tipo: 'colaborador',
               cargo: colab.cargo,
@@ -1584,7 +1986,7 @@ export async function GET(request: Request) {
               foto: colab.dados?.foto || null
             }
             const colabId = String(colab.id).trim()
-            const colabAuth = colab.auth_id || colabId
+            const colabAuth = resolvedColabAuthId || colabId
             const colabFullName = colab.nome.trim()
             const colabParts = colabFullName.split(/\s+/).filter(Boolean)
             const colabFriendly = colabParts.length > 1 ? `${colabParts[0]} ${colabParts[1]}` : colabParts[0]
@@ -1598,10 +2000,22 @@ export async function GET(request: Request) {
             if (colabFriendly.length >= 4) {
               colabConditions.push(`message.ilike.%${colabFriendly}%`)
             }
-            query = query.or(colabConditions.join(','))
+
+            try {
+              const { data: colabOcs } = await supabase
+                .from('ocorrencias')
+                .select('id')
+                .or(`dados->>responsavel.ilike.%${colabFullName}%,dados->>responsavel.ilike.%${colabFriendly}%`)
+                .limit(30)
+              for (const oc of colabOcs || []) {
+                if (oc.id) colabConditions.push(`item_id.ilike.${oc.id}%`)
+              }
+            } catch {}
+
+            query = query.or(Array.from(new Set(colabConditions)).join(','))
 
             userDevices = await fetchDevicesForGuardian({
-              authId: colab.auth_id,
+              authId: resolvedColabAuthId,
               system_user_id: String(colab.id),
               colaborador_id: String(colab.id),
               email: colab.email

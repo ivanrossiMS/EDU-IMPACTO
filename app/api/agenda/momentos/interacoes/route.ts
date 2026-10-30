@@ -200,6 +200,12 @@ export async function POST(request: Request) {
             targetUrl,
             author: authorName,
             action,
+            sender_id: dbUser?.id || user.id,
+            sender_auth_id: user.id,
+            sender_name: authorName,
+            sender_email: dbUser?.email || user.email || null,
+            sender_cargo: dbUser?.cargo || dbUser?.perfil || (isStaff ? 'Colaborador(a)' : 'Responsável (Família)'),
+            sender_type: isStaff ? 'colaborador' : 'responsavel',
           }
         }).catch(err => console.error('[Push Dispatch Error] Interacoes Momento:', err))
       }

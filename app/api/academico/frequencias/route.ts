@@ -188,26 +188,19 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { requireStaff } = await import('@/lib/server/authGuard')
-  const { user, errorResponse } = await requireStaff(request)
+  const { user, dbUser, cargo, perfil, errorResponse } = await requireStaff(request)
   if (errorResponse || !user) return errorResponse!
 
   const supabase = await createProtectedClient();
 
-  let userName = user.user_metadata?.nome || user.user_metadata?.name || ''
-  if (!userName && user.email) {
-    try {
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('nome')
-        .or(`id.eq.${user.id},email.eq.${user.email}`)
-        .maybeSingle()
-      if (dbUser?.nome) {
-        userName = dbUser.nome
-      } else {
-        userName = user.email.split('@')[0]
-      }
-    } catch {}
-  }
+  const userName =
+    dbUser?.nome ||
+    user.user_metadata?.nome ||
+    user.user_metadata?.name ||
+    (user.email ? user.email.split('@')[0] : 'Colaborador')
+  const userCargo = cargo || perfil || dbUser?.cargo || dbUser?.perfil || 'Colaborador(a)'
+  const userFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || null
+  const effectiveSenderId = dbUser?.id || user.id
 
   try {
     const mergeExistingAttendanceLogs = async (itemsToProcess: Array<{ row: any; notifyPush: boolean }>) => {
@@ -333,7 +326,7 @@ export async function POST(request: Request) {
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       
-      const rawItems = body.map(f => buildRow(f, userName, user.id))
+      const rawItems = body.map(f => buildRow(f, userName, effectiveSenderId, user.id, userCargo))
       const processedItems = await mergeExistingAttendanceLogs(rawItems)
       const changedItems = processedItems.filter(i => i.hasDbChanges)
       const rows = changedItems.map(i => i.row)
@@ -414,7 +407,15 @@ export async function POST(request: Request) {
                       aluno_id: String(row.aluno_id),
                       turma_id: String(row.turma_id),
                       data: String(row.data),
-                      status: statusKey
+                      status: statusKey,
+                      origem: row.dados?.origem || 'manual',
+                      sender_type: row.dados?.origem === 'catraca' ? 'automatico' : 'colaborador',
+                      sender_id: effectiveSenderId,
+                      sender_auth_id: user.id,
+                      sender_name: row.dados?.origem === 'catraca' ? 'Automático' : userName,
+                      sender_email: dbUser?.email || user.email || null,
+                      sender_cargo: userCargo,
+                      sender_foto: userFoto
                     }
                   })
                 } catch (err) {
@@ -439,7 +440,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
-    const item = buildRow(body, userName, user.id)
+    const item = buildRow(body, userName, effectiveSenderId, user.id, userCargo)
     const [processedSingle] = await mergeExistingAttendanceLogs([item])
     const mergedRow = processedSingle.row
 
@@ -495,7 +496,15 @@ export async function POST(request: Request) {
             aluno_id: String(data.aluno_id),
             turma_id: String(data.turma_id),
             data: String(data.data),
-            status: statusKey
+            status: statusKey,
+            origem: data.dados?.origem || 'manual',
+            sender_type: data.dados?.origem === 'catraca' ? 'automatico' : 'colaborador',
+            sender_id: effectiveSenderId,
+            sender_auth_id: user.id,
+            sender_name: data.dados?.origem === 'catraca' ? 'Automático' : userName,
+            sender_email: dbUser?.email || user.email || null,
+            sender_cargo: userCargo,
+            sender_foto: userFoto
           }
         }).catch(err => console.error('Frequencia Push Error:', err))
       }
@@ -565,7 +574,7 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-function buildRow(f: any, userName?: string, userId?: string) {
+function buildRow(f: any, userName?: string, userId?: string, userAuthId?: string, userCargo?: string) {
   const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, notifyPush, dados, ...rest } = f
   const currentYear = new Date().getFullYear().toString()
   const year = anoLetivo || currentYear
@@ -616,6 +625,8 @@ function buildRow(f: any, userName?: string, userId?: string) {
       registradoPor: finalRegistradoPor,
       usuarioNome: userName || mergedExtra.usuarioNome || null,
       usuarioId: userId || mergedExtra.usuarioId || null,
+      usuarioAuthId: userAuthId || mergedExtra.usuarioAuthId || null,
+      usuarioCargo: userCargo || mergedExtra.usuarioCargo || null,
       origem: origem || mergedExtra.origem || 'manual',
       horaRegistro: finalHoraRegistro,
       horaEntrada: finalHoraRegistro,

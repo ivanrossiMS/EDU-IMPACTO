@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isValidStudentPhoto } from '@/lib/utils'
+import { triggerCalendarRemindersIfDue } from '@/lib/server/calendarReminders'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,6 +21,7 @@ const supabase = createClient(
  */
 
 async function handlePushRequest(req: Request) {
+  triggerCalendarRemindersIfDue('portaria_push_heartbeat')
   try {
     const { searchParams } = new URL(req.url)
 

@@ -286,11 +286,12 @@ export default function ADCalendarioPage() {
   })
 
   const queryId = searchParams?.get('id')
+  const queryData = searchParams?.get('data')
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null)
   const hasAutoOpenedEvent = useRef(false)
 
   useEffect(() => {
-    if (!queryId || hasAutoOpenedEvent.current) return
+    if ((!queryId && !queryData) || hasAutoOpenedEvent.current) return
 
     const navigateToEvent = (ev: any) => {
       hasAutoOpenedEvent.current = true
@@ -317,11 +318,17 @@ export default function ADCalendarioPage() {
       }, 450)
     }
 
-    const target = (eventosAgenda || []).find((e: any) => String(e.id) === String(queryId))
-    if (target) {
-      navigateToEvent(target)
-    } else {
-      fetch(`/api/agenda/eventos?id=${encodeURIComponent(queryId)}`)
+    const cleanQueryId = queryId
+      ? String(queryId).replace(/-reminder.*$/, '').replace(/-\d+$/, '').trim()
+      : ''
+
+    if (cleanQueryId && !cleanQueryId.startsWith('cal_')) {
+      const target = (eventosAgenda || []).find((e: any) => String(e.id) === cleanQueryId)
+      if (target) {
+        navigateToEvent(target)
+        return
+      }
+      fetch(`/api/agenda/eventos?id=${encodeURIComponent(cleanQueryId)}`)
         .then(res => res.ok ? res.json() : null)
         .then(data => {
           if (data && Array.isArray(data) && data.length > 0) {
@@ -335,8 +342,22 @@ export default function ADCalendarioPage() {
           }
         })
         .catch(err => console.error('Erro ao buscar evento por id:', err))
+    } else if (queryData) {
+      hasAutoOpenedEvent.current = true
+      const parts = String(queryData).split('-')
+      if (parts.length >= 2) {
+        const evYear = parseInt(parts[0], 10)
+        const evMonth = parseInt(parts[1], 10) - 1
+        if (!isNaN(evYear) && !isNaN(evMonth)) {
+          setViewDate(new Date(evYear, evMonth, 1))
+        }
+      }
+      if (queryData < todayStr()) {
+        setMostrarTodos(true)
+      }
+      setSelectedDay(queryData)
     }
-  }, [queryId, eventosAgenda, setLocalEventos])
+  }, [queryId, queryData, eventosAgenda, setLocalEventos])
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -445,14 +466,26 @@ export default function ADCalendarioPage() {
       : []
     
     if (editingId) {
-      setEventosAgenda((prev: any) => prev.map((e: any) => e.id === editingId ? {
-        ...e,
+      const existingEv = (eventosAgenda || []).find((e: any) => e.id === editingId)
+      const updatedEvento: EventoAgenda = {
+        ...(existingEv || ({} as any)),
         ...form,
+        id: editingId,
         dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : { visibilidadeUsuario: undefined }),
-      } : e))
+      } as any
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => prev.map((e: any) => e.id === editingId ? updatedEvento : e))
+      } else {
+        setEventosAgenda((prev: any) => prev.map((e: any) => e.id === editingId ? updatedEvento : e))
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvento),
+      }).catch(err => console.error('[Calendario Colaborador] Erro ao atualizar evento:', err))
     } else {
       const getDates = (start: string, end?: string) => {
         if (!end || end < start) return [start]
@@ -477,7 +510,16 @@ export default function ADCalendarioPage() {
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
       }))
-      setEventosAgenda((prev: any) => [...prev, ...novosEventos])
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => [...(prev || []), ...novosEventos])
+      } else {
+        setEventosAgenda((prev: any) => [...(prev || []), ...novosEventos])
+      }
+      fetch('/api/agenda/eventos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novosEventos),
+      }).catch(err => console.error('[Calendario Colaborador] Erro ao salvar novos eventos:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
     setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
@@ -486,7 +528,9 @@ export default function ADCalendarioPage() {
   }
 
   const handleDelete = async (id: string) => {
-    setEventosAgenda((prev: any) => prev.filter((e: any) => e.id !== id))
+    if (setLocalEventos) {
+      setLocalEventos((prev: any) => (prev || []).filter((e: any) => e.id !== id))
+    }
     try {
       const res = await fetch(`/api/agenda/eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!res.ok) {

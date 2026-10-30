@@ -212,6 +212,9 @@ export async function POST(request: Request) {
             metadata: {
               aluno_id: String(aluno.id),
               data: String(data),
+              origem: 'totem_automatico',
+              sender_type: 'automatico',
+              sender_name: 'Automático',
             },
           })
         })

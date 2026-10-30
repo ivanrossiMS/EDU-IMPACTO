@@ -585,13 +585,16 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
   const nowSec = Math.floor(Date.now() / 1000)
 
   // 7. Processar cada Player do OneSignal
-  const enrichedDevices: Array<OneSignalFleetDevice & { _lastActiveSort: number }> = rawPlayers.map((p: any) => {
+  const enrichedDevices: Array<OneSignalFleetDevice & { _lastActiveSort: number; _isPhantom: boolean }> = rawPlayers.map((p: any) => {
     const subId = String(p.id || '').trim()
     const extId = p.external_user_id ? String(p.external_user_id).trim() : null
     const tags: Record<string, string> = p.tags && typeof p.tags === 'object' ? p.tags : {}
 
+    const isPhantomRecord = !p.sdk && !p.device_model && !p.identifier
     const platform = detectPlatform(p.device_type, p.device_model || '')
-    const model = formatDeviceModelFriendly(p.device_model || '', platform)
+    const model = isPhantomRecord
+      ? 'Registro Fantasma API (Sem Aparelho)'
+      : formatDeviceModelFriendly(p.device_model || '', platform)
     const os = p.device_os
       ? platform === 'iOS'
         ? `iOS ${p.device_os}`
@@ -609,7 +612,9 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
     let statusTone: 'success' | 'warning' | 'danger' = 'success'
     if (!isSubscribed) {
       statusTone = 'danger'
-      if (notifTypes === -99) {
+      if (isPhantomRecord) {
+        statusLabel = 'Registro Fantasma API (Sem Hardware)'
+      } else if (notifTypes === -99) {
         statusLabel = 'Web Desconectado'
         statusTone = 'warning'
       } else if (notifTypes === -2) {
@@ -831,13 +836,14 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
       inactiveStudentsCount,
       deviceRankInUser: 1,
       userTotalDevices: 1,
-      isDuplicateStale: false,
+      isDuplicateStale: isPhantomRecord,
       isProtected: false,
       protectionReason: null,
       cleanupReasons: [],
       isRecommendedForCleanup: false,
       primaryCleanupBadge: null,
       _lastActiveSort: lastActiveTs || 0,
+      _isPhantom: isPhantomRecord,
     }
   })
 
@@ -853,6 +859,10 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
     if (group.length <= 1) continue
     group.sort((a, b) => {
       if (a.isSubscribed !== b.isSubscribed) return a.isSubscribed ? -1 : 1
+      if (a._isPhantom !== b._isPhantom) return a._isPhantom ? 1 : -1
+      const aHasModel = Boolean(a.modelRaw && a.modelRaw.trim().length > 0)
+      const bHasModel = Boolean(b.modelRaw && b.modelRaw.trim().length > 0)
+      if (aHasModel !== bHasModel) return aHasModel ? -1 : 1
       if (b._lastActiveSort !== a._lastActiveSort) return b._lastActiveSort - a._lastActiveSort
       return b.sessionCount - a.sessionCount
     })
@@ -863,16 +873,22 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
     group.forEach((dev, idx) => {
       dev.deviceRankInUser = idx + 1
       dev.userTotalDevices = group.length
+      if (dev._isPhantom) {
+        dev.isDuplicateStale = true
+        return
+      }
       if (idx === 0) return
 
       const platModelKey = `${dev.platform}:${dev.model}`
       const isSameModelDuplicate = seenPlatformModels.has(platModelKey)
       seenPlatformModels.add(platModelKey)
 
+      // Só marca 2º aparelho como duplicado se for do mesmo modelo (reinstalação),
+      // estiver com push desativado, ou estiver sem uso há +60 dias (preserva 2º celular ativo de pai/mãe/portaria de modelo diferente)
       if (
         isSameModelDuplicate ||
         !dev.isSubscribed ||
-        (primaryDevice.isSubscribed && dev.daysInactive >= 14)
+        (primaryDevice.isSubscribed && dev.daysInactive >= 60 && !dev.isStaffMember)
       ) {
         dev.isDuplicateStale = true
       }
@@ -883,11 +899,23 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
   for (const dev of enrichedDevices) {
     const reasons: FleetDeviceCleanupReason[] = []
 
-    if (!dev.isSubscribed && dev.deviceRankInUser === 1 && dev.daysInactive <= 14 && dev.statusLabel.includes('Token Substituído')) {
+    if (!dev.isSubscribed && !dev._isPhantom && dev.deviceRankInUser === 1 && dev.daysInactive <= 14 && dev.statusLabel.includes('Token Substituído')) {
       dev.statusLabel = 'Bloqueado nos Ajustes do Celular'
-    } else if (!dev.isSubscribed && dev.deviceRankInUser > 1 && dev.statusLabel.includes('Token Substituído')) {
+    } else if (!dev.isSubscribed && !dev._isPhantom && dev.deviceRankInUser > 1 && dev.statusLabel.includes('Token Substituído')) {
       dev.statusLabel = 'Sessão Antiga (App Reinstalado/Atualizado)'
     }
+
+    // Aparelho físico principal (1º) de responsável/colaborador ativo com uso recente que apenas está
+    // com notificações desativadas nos ajustes do celular: não ocupa vaga ativa no OneSignal e, se for
+    // deletado, será recriado automaticamente no dia seguinte ao abrir o app.
+    const isActiveUserPrimaryBlockedDevice =
+      !dev.isSubscribed &&
+      !dev._isPhantom &&
+      dev.platform !== 'Web' &&
+      dev.deviceRankInUser === 1 &&
+      dev.ownerStatus === 'ativo' &&
+      dev.ownerType !== 'orfao' &&
+      dev.daysInactive <= 14
 
     if (dev.isStaffMember) {
       dev.isProtected = true
@@ -929,8 +957,8 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
       reasons.includes('aluno_inativo') ||
       reasons.includes('colaborador_inativo') ||
       reasons.includes('orfao') ||
-      reasons.includes('desativado') ||
       reasons.includes('duplicado') ||
+      (reasons.includes('desativado') && !isActiveUserPrimaryBlockedDevice) ||
       (!dev.isStaffMember && reasons.includes('sem_uso_60d'))
 
     // Badge principal de diagnóstico
@@ -952,6 +980,12 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
         label: dev.externalUserId ? 'Conta Órfã / Sem Vínculo' : 'Aparelho Anônimo (Órfão)',
         tone: 'warning',
       }
+    } else if (dev._isPhantom) {
+      dev.primaryCleanupBadge = {
+        code: 'duplicado',
+        label: 'Registro Fantasma API',
+        tone: 'danger',
+      }
     } else if (reasons.includes('duplicado')) {
       dev.primaryCleanupBadge = {
         code: 'duplicado',
@@ -961,8 +995,8 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
     } else if (!dev.isSubscribed) {
       dev.primaryCleanupBadge = {
         code: 'desativado',
-        label: 'Push Desativado / Sem Token',
-        tone: 'danger',
+        label: isActiveUserPrimaryBlockedDevice ? 'Push Bloqueado no Aparelho' : 'Push Desativado / Sem Token',
+        tone: isActiveUserPrimaryBlockedDevice ? 'warning' : 'danger',
       }
     } else if (reasons.includes('sem_uso_60d')) {
       dev.primaryCleanupBadge = {
@@ -979,6 +1013,7 @@ export async function getOneSignalFleetOverview(): Promise<OneSignalFleetOvervie
     }
 
     delete (dev as any)._lastActiveSort
+    delete (dev as any)._isPhantom
   }
 
   // 10. Calcular KPIs consolidados
@@ -1156,9 +1191,9 @@ export async function executeOneSignalSmartCleanup(
   } else if (options.mode === 'orphans') {
     targets = allDevices.filter(d => d.cleanupReasons.includes('orfao'))
   } else if (options.mode === 'disabled') {
-    targets = allDevices.filter(d => !d.isSubscribed)
+    targets = allDevices.filter(d => !d.isSubscribed && d.isRecommendedForCleanup)
   } else if (options.mode === 'duplicates') {
-    targets = allDevices.filter(d => d.isDuplicateStale && d.deviceRankInUser > 1)
+    targets = allDevices.filter(d => d.isDuplicateStale)
   } else if (options.mode === 'unused') {
     targets = allDevices.filter(d => {
       if (protectStaff && d.isStaffMember) return false
@@ -1168,8 +1203,8 @@ export async function executeOneSignalSmartCleanup(
     targets = allDevices.filter(d => {
       if (d.cleanupReasons.includes('aluno_inativo') || d.cleanupReasons.includes('colaborador_inativo')) return true
       if (d.cleanupReasons.includes('orfao')) return true
-      if (!d.isSubscribed) return true
-      if (d.isDuplicateStale && d.deviceRankInUser > 1) return true
+      if (d.isDuplicateStale) return true
+      if (!d.isSubscribed && d.isRecommendedForCleanup) return true
       if (!d.isStaffMember && d.daysInactive >= minDays) return true
       return false
     })

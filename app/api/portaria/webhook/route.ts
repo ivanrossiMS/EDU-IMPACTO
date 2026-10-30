@@ -788,6 +788,9 @@ export async function POST(req: Request) {
                   data: String(localDate),
                   hora: localTimeStr,
                   tipo: 'saida_sozinho',
+                  origem: 'sincronizar_catraca',
+                  sender_type: 'automatico',
+                  sender_name: 'Automático',
                   dispositivo: dispositivoNome || 'Catraca Rua das Garças'
                 }
               })
@@ -899,6 +902,9 @@ export async function POST(req: Request) {
                             data: String(localDate),
                             hora: localTimeStr,
                             tipo: 'reentrada',
+                            origem: 'sincronizar_catraca',
+                            sender_type: 'automatico',
+                            sender_name: 'Automático',
                             dispositivo: dispositivoNome || 'Catraca'
                           }
                         })
@@ -984,7 +990,11 @@ export async function POST(req: Request) {
                       metadata: {
                         aluno_id: String(alunoId),
                         data: String(localDate),
-                        status: 'presente'
+                        status: 'presente',
+                        origem: 'sincronizar_catraca',
+                        sender_type: 'automatico',
+                        sender_name: 'Automático',
+                        dispositivo: dispositivoNome || 'Catraca iDFace'
                       }
                     })
                     console.log(`✅ [Portaria Webhook] Push de Presença Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)

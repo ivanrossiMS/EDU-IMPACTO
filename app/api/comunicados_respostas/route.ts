@@ -593,11 +593,22 @@ export async function POST(request: Request) {
               await sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(data.id), // ID único do comentário evita deduplicação indevida
+                senderUserId: user.id,
                 title: `💬 Resposta de ${remetenteNome}`,
                 message: `No comunicado "${comData.titulo}": ${msgTexto}`,
                 targetUserIds,
                 targetUrl: colabTargetUrl,
-                metadata: { perfil_destino: 'colaborador', item_id: String(finalComunicadoId), rota: 'comunicados', targetUrl: colabTargetUrl }
+                metadata: {
+                  perfil_destino: 'colaborador',
+                  item_id: String(finalComunicadoId),
+                  rota: 'comunicados',
+                  targetUrl: colabTargetUrl,
+                  sender_id: authorId || user.id,
+                  sender_auth_id: user.id,
+                  sender_name: remetenteNome,
+                  sender_type: 'responsavel',
+                  sender_foto: authorFoto || null,
+                }
               });
             } catch (err) {
               console.error("Push erro:", err);
@@ -700,6 +711,7 @@ export async function POST(request: Request) {
             await sendAgendaPushNotification({
               type: 'comunicados',
               itemId: String(data.id),
+              senderUserId: user.id,
               title: `🏫 Nova mensagem de ${remetenteNome}`,
               message: `Sobre "${tituloCom}": ${msgTexto}`,
               targetUserIds: Array.from(expandedFamilyTargets),
@@ -709,6 +721,11 @@ export async function POST(request: Request) {
                 item_id: String(finalComunicadoId), 
                 rota: 'comunicados', 
                 targetUrl: studentUrl,
+                sender_id: authorId || user.id,
+                sender_auth_id: user.id,
+                sender_name: remetenteNome,
+                sender_type: 'colaborador',
+                sender_foto: authorFoto || null,
                 ...(targetAlunoId ? { aluno_id: String(targetAlunoId) } : {})
               }
             });

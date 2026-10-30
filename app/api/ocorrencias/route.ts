@@ -128,8 +128,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, isStaff, errorResponse } = await resolveUserRole(request)
+  const { user, dbUser, cargo, perfil, isStaff, errorResponse } = await resolveUserRole(request)
   if (errorResponse || !user) return errorResponse!
+
+  const senderName =
+    dbUser?.nome ||
+    user.user_metadata?.nome ||
+    user.user_metadata?.name ||
+    (user.email ? user.email.split('@')[0] : 'Colaborador')
+  const senderCargo = cargo || perfil || dbUser?.cargo || dbUser?.perfil || (isStaff ? 'Colaborador(a)' : 'Responsável')
+  const senderFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || null
+  const effectiveSenderId = dbUser?.id || user.id
 
   const supabase = await createProtectedClient();
   try {
@@ -139,7 +148,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Acesso negado para lançamento em lote de ocorrências.' }, { status: 403 })
       }
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      const rows = body.map(o => buildRow(o))
+      const rows = body.map(o => buildRow(o, senderName, effectiveSenderId))
       const { error } = await supabase.from('ocorrencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
@@ -158,15 +167,32 @@ export async function POST(request: Request) {
               nomeAluno = aluno?.nome || ''
             }
             if (!nomeAluno) nomeAluno = 'o aluno'
+            const rowDados = (row.dados || {}) as any
+            const rowSenderName =
+              (rowDados.responsavel && rowDados.responsavel !== 'Colaborador')
+                ? rowDados.responsavel
+                : (rowDados.registradoPor || senderName)
+            const rowSenderId = rowDados.usuarioId || effectiveSenderId
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'ocorrencias',
                 itemId: String(row.id),
+                senderUserId: user.id,
                 title: '⚠️ Aviso de Ocorrência',
                 message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
                 targetUserIds: targetIds,
                 targetUrl: `/agenda-digital/${row.aluno_id}/ocorrencias?id=${row.id}`,
-                metadata: { aluno_id: String(row.aluno_id), item_id: String(row.id), rota: 'ocorrencias' }
+                metadata: {
+                  aluno_id: String(row.aluno_id),
+                  item_id: String(row.id),
+                  rota: 'ocorrencias',
+                  sender_id: rowSenderId,
+                  sender_auth_id: user.id,
+                  sender_name: rowSenderName,
+                  sender_email: dbUser?.email || user.email || null,
+                  sender_cargo: rowDados.autorCargo || senderCargo,
+                  sender_foto: rowDados.autorFoto || senderFoto,
+                }
               }).catch(err => console.error('Ocorrencia Push Error:', err))
             )
           }
@@ -181,7 +207,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Acesso negado. Apenas colaboradores podem criar ou editar ocorrências.' }, { status: 403 })
     }
 
-    let row = buildRow(body)
+    let row = buildRow(body, isStaff ? senderName : undefined, isStaff ? effectiveSenderId : undefined)
     if (!isStaff && isCienciaAction) {
       // Família/Responsável só pode registrar ciência em ocorrência já existente, sem adulterar texto/tipo/status
       const { data: existingOc } = await supabase.from('ocorrencias').select('*').eq('id', body.id).maybeSingle()
@@ -226,11 +252,20 @@ export async function POST(request: Request) {
           await sendAgendaPushNotification({
             type: 'ocorrencias',
             itemId: `ciencia_${data.id}`,
+            senderUserId: user.id,
             title: '✍️ Ciência de Ocorrência Confirmada',
             message: `A família de ${nomeAluno} confirmou ciência da ocorrência.`,
             targetUserIds: masterAdminIds,
             targetUrl: `/agenda-digital/admin/ocorrencias?id=${data.id}`,
-            metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias', action: 'ciencia_confirmada' }
+            metadata: {
+              aluno_id: String(data.aluno_id),
+              item_id: String(data.id),
+              rota: 'ocorrencias',
+              action: 'ciencia_confirmada',
+              sender_id: user.id,
+              sender_name: (data.dados as any)?.responsavel_ciencia || senderName,
+              sender_type: 'responsavel',
+            }
           }).catch(err => console.error('Ciencia Push Error:', err))
         }
         return
@@ -246,14 +281,31 @@ export async function POST(request: Request) {
           nomeAluno = aluno?.nome || ''
         }
         if (!nomeAluno) nomeAluno = 'o aluno'
+        const singleDados = (data.dados || {}) as any
+        const singleSenderName =
+          (singleDados.responsavel && singleDados.responsavel !== 'Colaborador')
+            ? singleDados.responsavel
+            : (singleDados.registradoPor || senderName)
+        const singleSenderId = singleDados.usuarioId || effectiveSenderId
         await sendAgendaPushNotification({
           type: 'ocorrencias',
           itemId: String(data.id),
+          senderUserId: user.id,
           title: '⚠️ Aviso de Ocorrência',
           message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
           targetUserIds: targetIds,
           targetUrl: `/agenda-digital/${data.aluno_id}/ocorrencias?id=${data.id}`,
-          metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias' }
+          metadata: {
+            aluno_id: String(data.aluno_id),
+            item_id: String(data.id),
+            rota: 'ocorrencias',
+            sender_id: singleSenderId,
+            sender_auth_id: user.id,
+            sender_name: singleSenderName,
+            sender_email: dbUser?.email || user.email || null,
+            sender_cargo: singleDados.autorCargo || senderCargo,
+            sender_foto: singleDados.autorFoto || senderFoto,
+          }
         }).catch(err => console.error('Ocorrencia Push Error:', err))
       }
     })
@@ -279,9 +331,13 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-function buildRow(o: any) {
+function buildRow(o: any, senderName?: string, senderId?: string) {
   const { id, alunoId, aluno_id, tipoId, tipo_id, descricao, data, status, ...rest } = o
   const resolvedAlunoId = String(alunoId || aluno_id || '').replace(/^a_?/, '').trim()
+  const effectiveResponsavel =
+    rest.responsavel && rest.responsavel !== 'Colaborador'
+      ? rest.responsavel
+      : (senderName || rest.responsavel || 'Colaborador')
   return {
     id: id || `OC-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
     aluno_id: resolvedAlunoId,
@@ -291,6 +347,9 @@ function buildRow(o: any) {
     status: status || 'aberta',
     dados: {
       ...rest,
+      responsavel: effectiveResponsavel,
+      registradoPor: rest.registradoPor || effectiveResponsavel,
+      ...(senderId && !rest.usuarioId ? { usuarioId: senderId } : {}),
       alunoId: resolvedAlunoId,
       aluno_id: resolvedAlunoId,
     },

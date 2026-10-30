@@ -234,6 +234,7 @@ export async function POST(request: Request) {
 
       await sendAgendaPushNotification({
         targetUserIds: Array.from(pushTargets),
+        senderUserId: user.id,
         title: `📊 Relatório de Frequência - ${mesNome}/${anoNum}`,
         message: `${masterAdminNome} enviou o seu relatório oficial de envios e frequência. Confira!`,
         targetUrl: `/agenda-digital/colaborador/comunicados?id=${newComId}`,
@@ -242,7 +243,13 @@ export async function POST(request: Request) {
         metadata: {
           rota: 'comunicados',
           perfil_destino: 'colaborador',
-          item_id: newComId
+          item_id: newComId,
+          sender_id: masterAdminId,
+          sender_auth_id: user.id,
+          sender_name: masterAdminNome,
+          sender_email: dbUser?.email || user.email || null,
+          sender_cargo: masterAdminCargo,
+          sender_foto: masterAdminFoto,
         }
       })
     } catch (pushErr) {

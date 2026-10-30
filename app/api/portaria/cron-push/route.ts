@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { triggerCalendarRemindersIfDue } from '@/lib/server/calendarReminders'
 
 /**
  * GET /api/portaria/cron-push
@@ -35,6 +36,7 @@ export async function GET(req: Request) {
   }
 
   try {
+    triggerCalendarRemindersIfDue('portaria_cron_push')
     const now = new Date()
 
     // ─── 1. Monitorar dispositivos: marcar offline se não comunicaram há >10 min ────

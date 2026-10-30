@@ -278,8 +278,13 @@ test('Push Architecture Regression Guards - OneSignal Limits, Deduplication Keys
   const frequenciasCode = await fs.readFile(path.join(root, 'app/api/academico/frequencias/route.ts'), 'utf8')
   assert.match(frequenciasCode, /const pushItemId = `\$\{row\.id\}_\$\{statusKey\}`/, 'Frequência em lote deve usar chave determinística por status')
 
-  // 7. eventos/route.ts: Agendamento send_after na criação limitado a 24h (demais via Cron Diário)
+  // 7. eventos/route.ts: Agendamento send_after na criação limitado a 24h (demais via Cron Diário) + 1 push por aluno por dia
   const eventosCode = await fs.readFile(path.join(root, 'app/api/agenda/eventos/route.ts'), 'utf8')
   assert.match(eventosCode, /shouldSendReminder = diffHours > 0 && diffHours <= 24/, 'Agendamento imediato send_after de eventos deve ocorrer apenas dentro da janela de 24h')
+  assert.match(eventosCode, /const dailyStudentItemId = `cal_dia_\$\{todayStr\}-\$\{student\.aluno_id\}`/, 'Eventos adicionados no mesmo dia devem enviar no máximo 1 push por aluno no dia')
+
+  // 8. calendarReminders.ts: Lembretes de eventos consolidados por aluno e por data do evento
+  const remindersCode = await fs.readFile(path.join(root, 'lib/server/calendarReminders.ts'), 'utf8')
+  assert.match(remindersCode, /const reminderItemId = `cal_lembrete_\$\{targetDate\}-\$\{student\.aluno_id\}-reminder`/, 'Lembretes de calendário devem ser consolidados por data e por aluno')
 })
 

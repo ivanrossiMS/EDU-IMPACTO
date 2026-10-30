@@ -1042,6 +1042,11 @@ export async function POST(request: Request) {
             source: row.dados?.source,
             guardianId: row.dados?.guardianId,
             operatorName: row.dados?.confirmedBy || row.dados?.operatorId || resolvedOperatorName,
+            senderUserId: user?.id,
+            senderId: dbUser?.id || user?.id,
+            senderEmail: dbUser?.email || user?.email,
+            senderCargo: dbUser?.cargo || dbUser?.perfil,
+            senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
           })
         } else if ((row.dados?.status === 'waiting' || row.dados?.status === 'called') && !row.dados?.isRevert && studentId) {
           const isNewCall = !existing
@@ -1055,6 +1060,15 @@ export async function POST(request: Request) {
               studentName: row.dados?.studentName,
               studentClass: row.dados?.studentClass,
               calledAt: row.dados?.calledAt,
+              guardianName: row.dados?.guardianName,
+              source: row.dados?.source,
+              operatorName: row.dados?.operatorId || resolvedOperatorName,
+              senderUserId: user?.id,
+              senderId: dbUser?.id || user?.id,
+              senderEmail: dbUser?.email || user?.email,
+              senderCargo: dbUser?.cargo || dbUser?.perfil,
+              senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
+              isStaff: Boolean(dbUser),
             })
           }
         } else if (row.dados?.status === 'special_auth') {
@@ -1067,11 +1081,16 @@ export async function POST(request: Request) {
               studentClass: row.dados?.studentClass,
               authorizedPerson: row.dados?.guardianName,
               targetTime: row.dados?.targetTime,
-              operatorName: row.dados?.operatorId,
+              operatorName: row.dados?.operatorId || resolvedOperatorName,
               studentPhoto: resolvedPhotosById.get(row.id) || row.dados?.studentPhoto,
               validDays: row.dados?.validDays,
               validFrom: row.dados?.validFrom,
               validUntil: row.dados?.validUntil,
+              senderUserId: user?.id,
+              senderId: dbUser?.id || user?.id,
+              senderEmail: dbUser?.email || user?.email,
+              senderCargo: dbUser?.cargo || dbUser?.perfil,
+              senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
             })
           }
         }
@@ -1259,6 +1278,11 @@ export async function POST(request: Request) {
         source: data.dados?.source,
         guardianId: data.dados?.guardianId,
         operatorName: data.dados?.confirmedBy || data.dados?.operatorId || resolvedOperatorName,
+        senderUserId: user?.id,
+        senderId: dbUser?.id || user?.id,
+        senderEmail: dbUser?.email || user?.email,
+        senderCargo: dbUser?.cargo || dbUser?.perfil,
+        senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
       })
     } else if ((data.dados?.status === 'waiting' || data.dados?.status === 'called') && !isRevert && studentId) {
       const isNewCall = !existingRow
@@ -1272,6 +1296,15 @@ export async function POST(request: Request) {
           studentName: data.dados?.studentName,
           studentClass: data.dados?.studentClass,
           calledAt: data.dados?.calledAt,
+          guardianName: data.dados?.guardianName,
+          source: data.dados?.source,
+          operatorName: data.dados?.operatorId || resolvedOperatorName,
+          senderUserId: user?.id,
+          senderId: dbUser?.id || user?.id,
+          senderEmail: dbUser?.email || user?.email,
+          senderCargo: dbUser?.cargo || dbUser?.perfil,
+          senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
+          isStaff: Boolean(dbUser),
         })
       }
     } else if (data.dados?.status === 'special_auth') {
@@ -1284,11 +1317,16 @@ export async function POST(request: Request) {
           studentClass: data.dados?.studentClass,
           authorizedPerson: data.dados?.guardianName,
           targetTime: data.dados?.targetTime,
-          operatorName: data.dados?.operatorId,
+          operatorName: data.dados?.operatorId || resolvedOperatorName,
           studentPhoto: resolvedStudentPhoto || data.dados?.studentPhoto,
           validDays: data.dados?.validDays,
           validFrom: data.dados?.validFrom,
           validUntil: data.dados?.validUntil,
+          senderUserId: user?.id,
+          senderId: dbUser?.id || user?.id,
+          senderEmail: dbUser?.email || user?.email,
+          senderCargo: dbUser?.cargo || dbUser?.perfil,
+          senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || null,
         })
       }
     }
@@ -1471,12 +1509,30 @@ async function dispatchChamadaPortariaPush({
   studentName,
   studentClass,
   calledAt,
+  guardianName,
+  source,
+  operatorName,
+  senderUserId,
+  senderId,
+  senderEmail,
+  senderCargo,
+  senderFoto,
+  isStaff,
 }: {
   callId: string
   studentId: string
   studentName?: string
   studentClass?: string
   calledAt?: string
+  guardianName?: string
+  source?: string
+  operatorName?: string
+  senderUserId?: string
+  senderId?: string
+  senderEmail?: string
+  senderCargo?: string
+  senderFoto?: string | null
+  isStaff?: boolean
 }) {
   try {
     const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
@@ -1502,10 +1558,12 @@ async function dispatchChamadaPortariaPush({
     if (targetIds.length > 0) {
       const callTime = calledAt ? new Date(calledAt).getTime() : Date.now()
       const pushItemId = `chamada_${callId}_${callTime}`
+      const isAppGuardian = !isStaff && (source === 'app' || source === 'app_familia' || Boolean(guardianName && !operatorName))
 
       await sendAgendaPushNotification({
         type: 'saida',
         itemId: pushItemId,
+        senderUserId,
         title: '🚗 Chamada de Portaria',
         message: `${nomeAmigavel} foi chamado na portaria para saída e está se dirigindo ao portão principal.`,
         targetUserIds: targetIds,
@@ -1514,6 +1572,16 @@ async function dispatchChamadaPortariaPush({
           aluno_id: rawStudentId,
           saida_id: String(callId),
           tipo: 'chamada_portaria',
+          source: source || null,
+          guardian_name: guardianName || null,
+          operator_name: operatorName || null,
+          sender_id: senderId || senderUserId || null,
+          sender_auth_id: senderUserId || null,
+          sender_name: isAppGuardian ? (guardianName || null) : (operatorName || null),
+          sender_email: senderEmail || null,
+          sender_cargo: senderCargo || null,
+          sender_foto: senderFoto || null,
+          sender_type: isAppGuardian ? 'responsavel' : (operatorName ? 'colaborador' : null),
         },
       })
       console.log(`[API Saida] Push de Chamada de Portaria disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
@@ -1535,6 +1603,11 @@ async function dispatchSaidaConfirmadaPush({
   source,
   guardianId,
   operatorName,
+  senderUserId,
+  senderId,
+  senderEmail,
+  senderCargo,
+  senderFoto,
 }: {
   callId: string
   studentId: string
@@ -1545,6 +1618,11 @@ async function dispatchSaidaConfirmadaPush({
   source?: string
   guardianId?: string
   operatorName?: string
+  senderUserId?: string
+  senderId?: string
+  senderEmail?: string
+  senderCargo?: string
+  senderFoto?: string | null
 }) {
   try {
     const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
@@ -1612,17 +1690,29 @@ async function dispatchSaidaConfirmadaPush({
     const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
     if (targetIds.length > 0) {
       const pushItemId = `saida_${callId}_${Date.now()}`
+      const isCatracaSaida = resolvedSaidaOrigem === 'catraca'
 
       await sendAgendaPushNotification({
         type: 'saida',
         itemId: pushItemId,
+        senderUserId: isCatracaSaida ? undefined : senderUserId,
         title: '🎓 Saída Confirmada',
         message: `A saída de ${nomeAmigavel} foi confirmada na portaria às ${horaSaida}.`,
         targetUserIds: targetIds,
         targetUrl: `/agenda-digital/${rawStudentId}/frequencia`,
         metadata: {
           aluno_id: rawStudentId,
-          saida_id: String(callId)
+          saida_id: String(callId),
+          origem: isCatracaSaida ? 'sincronizar_catraca' : resolvedSaidaOrigem,
+          guardian_name: guardianName || null,
+          operator_name: operatorName || null,
+          sender_id: isCatracaSaida ? null : (senderId || senderUserId || null),
+          sender_auth_id: isCatracaSaida ? null : (senderUserId || null),
+          sender_name: isCatracaSaida ? 'Automático' : (operatorName || null),
+          sender_email: isCatracaSaida ? null : (senderEmail || null),
+          sender_cargo: isCatracaSaida ? null : (senderCargo || null),
+          sender_foto: isCatracaSaida ? null : (senderFoto || null),
+          sender_type: isCatracaSaida ? 'automatico' : (operatorName ? 'colaborador' : null),
         }
       })
       console.log(`[API Saida] Push de Saída Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
@@ -1644,6 +1734,11 @@ async function dispatchSpecialAuthNotification({
   validDays,
   validFrom,
   validUntil,
+  senderUserId,
+  senderId,
+  senderEmail,
+  senderCargo,
+  senderFoto,
 }: {
   callId: string
   studentId?: string
@@ -1656,6 +1751,11 @@ async function dispatchSpecialAuthNotification({
   validDays?: number
   validFrom?: string
   validUntil?: string
+  senderUserId?: string
+  senderId?: string
+  senderEmail?: string
+  senderCargo?: string
+  senderFoto?: string | null
 }) {
   try {
     const supabaseService = getAdminClient()
@@ -1769,6 +1869,7 @@ async function dispatchSpecialAuthNotification({
       await sendAgendaPushNotification({
         type: 'saida',
         itemId: pushItemId,
+        senderUserId,
         title: '📝 Autorização Especial: Saída Liberada',
         message: `${nomeAmigavel}${studentClass ? ` (${studentClass})` : ''} liberado(a) para retirada por ${authorizedPerson || 'Pessoa Autorizada'}${horaStr}.`,
         targetUserIds: Array.from(pushTargets),
@@ -1780,7 +1881,15 @@ async function dispatchSpecialAuthNotification({
           aluno_id: studentId || '',
           call_id: String(callId),
           perfil_destino: 'colaborador',
-          targetUrl: '/saida-alunos/chamadas'
+          targetUrl: '/saida-alunos/chamadas',
+          operator_name: operatorName || null,
+          sender_id: senderId || senderUserId || null,
+          sender_auth_id: senderUserId || null,
+          sender_name: operatorName || null,
+          sender_email: senderEmail || null,
+          sender_cargo: senderCargo || null,
+          sender_foto: senderFoto || null,
+          sender_type: operatorName ? 'colaborador' : null,
         }
       })
       console.log(`[API Saida] Push de Autorização Especial enviado para ${effectiveUsers.length} colaboradores (${directSubIds.length} aparelhos diretos):`, effectiveUsers.map(u => u.nome))

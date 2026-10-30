@@ -394,6 +394,9 @@ async function runOverdueFinancialAlertsRoutine(options: { forceSimulate?: boole
           tipo: 'parcela_vencida_3d',
           valor: item.valor,
           vencimento: item.vencimento,
+          origem: 'cron_automatico',
+          sender_type: 'automatico',
+          sender_name: 'Automático',
         },
       })
 

@@ -126,8 +126,17 @@ function normalizeBimestre(raw: any): string {
 
 export async function POST(request: Request) {
   const { requireStaff } = await import('@/lib/server/authGuard')
-  const { errorResponse } = await requireStaff(request)
-  if (errorResponse) return errorResponse
+  const { user, dbUser, cargo, perfil, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
+
+  const senderName =
+    dbUser?.nome ||
+    user.user_metadata?.nome ||
+    user.user_metadata?.name ||
+    (user.email ? user.email.split('@')[0] : 'Colaborador')
+  const senderCargo = cargo || perfil || dbUser?.cargo || dbUser?.perfil || 'Colaborador(a)'
+  const senderFoto = dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || null
+  const effectiveSenderId = dbUser?.id || user.id
 
   try {
     const body = await request.json()
@@ -213,11 +222,22 @@ export async function POST(request: Request) {
             type: 'notas',
             itemId: `${data[0].id}_${updateBucket}`,
             collapseId: `boletim_${data[0].id}`,
+            senderUserId: user.id,
             title: '🏆 Novas Notas Lançadas!',
             message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
             targetUserIds: targetIds,
             targetUrl: `/agenda-digital/${data[0].aluno_id}/notas?id=${data[0].id}`,
-            metadata: { aluno_id: String(data[0].aluno_id), item_id: String(data[0].id), rota: 'notas' }
+            metadata: {
+              aluno_id: String(data[0].aluno_id),
+              item_id: String(data[0].id),
+              rota: 'notas',
+              sender_id: effectiveSenderId,
+              sender_auth_id: user.id,
+              sender_name: senderName,
+              sender_email: dbUser?.email || user.email || null,
+              sender_cargo: senderCargo,
+              sender_foto: senderFoto,
+            }
           }).catch(err => console.error('Boletins Push Error:', err))
         }
       })

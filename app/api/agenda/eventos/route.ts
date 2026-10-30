@@ -3,14 +3,26 @@ import { requireAuth, requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUse
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 import { isTurmaOrGroupMatch } from '@/lib/studentTurmaUtils'
+import {
+  getCampoGrandeDateStr,
+  getEve20hSchedule,
+  invalidateCalendarReminderCacheForDate,
+  resolveEventTargets,
+  runCalendarRemindersForDate,
+  triggerCalendarRemindersIfDue,
+  type ResolvedEventTargetStudent,
+  type ResolvedEventTargets,
+} from '@/lib/server/calendarReminders'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  // Gatilho oportunístico não-bloqueante para garantir lembretes de véspera às 20:00 MS
+  triggerCalendarRemindersIfDue('agenda_eventos_get')
+
   const { user, isStaff, isFamilyOrStudent: resolvedIsFamily, errorResponse } = await resolveUserRole(request)
   if (errorResponse || !user) return errorResponse || NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
@@ -213,155 +225,393 @@ export async function GET(request: Request) {
   }
 }
 
-async function dispatchPushNotifications(supabase: any, row: any) {
-  const rowDados = row.dados || {}
-  const turmasList = Array.isArray(row.turmas) ? row.turmas : (Array.isArray(rowDados.turmas) ? rowDados.turmas : [])
-  const isTodos = turmasList.length === 0 || turmasList.some((t: any) => typeof t === 'string' && (t.toLowerCase().includes('todos') || t.toLowerCase().includes('toda a escola')))
+interface SenderContext {
+  userId?: string
+  senderId?: string
+  senderName?: string
+  senderEmail?: string
+  senderCargo?: string
+  senderFoto?: string | null
+}
 
-  const targetParams = {
-    turmas: turmasList,
-    targetClasses: turmasList,
-    grupos: rowDados.grupos || rowDados.targetGrupos || [],
-    colaboradoresIds: rowDados.colaboradoresIds || rowDados.funcionariosIds || [],
-    funcionariosIds: rowDados.funcionariosIds || rowDados.colaboradoresIds || [],
-    alunosIds: rowDados.alunosIds || rowDados.targetStudents || [],
-    destino: isTodos ? 'todos' : (rowDados.destino || 'selecionados')
+/**
+ * Dispara notificações push de calendário de forma consolidada por aluno e por dia (America/Campo_Grande).
+ *
+ * REGRA DE OURO:
+ * Quando múltiplos eventos são adicionados (ou alterados) no mesmo dia para o mesmo aluno
+ * (seja em um único lote de período data..dataFim ou em salvamentos separados ao longo do mesmo dia),
+ * envia APENAS 1 notificação push de calendário por aluno naquele dia.
+ */
+async function dispatchCalendarPushNotificationsBatch(
+  supabase: any,
+  newRows: any[],
+  updatedRows: any[],
+  senderCtx?: SenderContext
+) {
+  const todayStr = getCampoGrandeDateStr()
+
+  // 1. Consultar configurações globais de notificações (ad_config)
+  let pushCalendarioEnabled = true
+  let pushAlteracaoEnabled = true
+  try {
+    const { data: cfgRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', 'ad_config')
+      .maybeSingle()
+    const notifs = cfgRow?.valor?.notificacoes
+    if (notifs) {
+      if (notifs.pushCalendario === false) pushCalendarioEnabled = false
+      if (notifs.pushAlteracaoCalendario === false) pushAlteracaoEnabled = false
+    }
+  } catch (err) {
+    console.warn('[Eventos Push] Falha ao ler ad_config, mantendo padrão habilitado:', err)
   }
 
-  const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams)
-  
-  // Handle visibilidadeUsuario
-  const visibilidadeUsuario = row.dados?.visibilidadeUsuario || row.visibilidadeUsuario;
-  if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
-    const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-    if (sysUser?.id) {
-      directColaboradores.push(String(sysUser.id));
-    } else {
-      const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-      if (respUser?.id) {
-        directColaboradores.push(String(respUser.id));
-      } else {
-        const { data: alunoUser } = await supabase.from('alunos').select('id, nome').ilike('nome', visibilidadeUsuario).maybeSingle();
-        if (alunoUser?.id) {
-           const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
-           const responsaveis_ids = [String(alunoUser.id)];
-           vincs?.forEach((v: any) => responsaveis_ids.push(String(v.responsavel_id)));
-           students.push({
-             aluno_id: String(alunoUser.id),
-             aluno_nome: alunoUser.nome || 'Aluno',
-             responsaveis_ids
-           });
-        }
+  if (!pushCalendarioEnabled) {
+    return
+  }
+
+  // Filtrar apenas eventos com data atual ou futura (eventos passados adicionados retroativamente não disparam push)
+  const eligibleNewRows = (newRows || []).filter((r) => !r.data || String(r.data) >= todayStr)
+  const eligibleUpdatedRows = pushAlteracaoEnabled
+    ? (updatedRows || []).filter((r) => !r.data || String(r.data) >= todayStr)
+    : []
+
+  const allEligibleRows = [...eligibleNewRows, ...eligibleUpdatedRows]
+  if (allEligibleRows.length === 0) {
+    return
+  }
+
+  // Invalidar cache em memória de lembretes para as datas afetadas
+  const affectedDates = new Set<string>()
+  for (const r of allEligibleRows) {
+    if (r.data) {
+      affectedDates.add(String(r.data))
+      invalidateCalendarReminderCacheForDate(String(r.data))
+    }
+  }
+
+  // 2. Consultar agenda_push_logs de HOJE (fuso America/Campo_Grande, GMT-0400)
+  // para identificar alunos que JÁ receberam notificação de calendário hoje (excluindo lembretes).
+  const startOfTodayIso = new Date(`${todayStr}T00:00:00-04:00`).toISOString()
+  const { data: logsToday } = await supabase
+    .from('agenda_push_logs')
+    .select('item_id, status')
+    .eq('type', 'calendario')
+    .gte('created_at', startOfTodayIso)
+
+  const alreadyNotifiedAlunosToday = new Set<string>()
+  let colabAlreadyNotifiedToday = false
+  const staleCalDiaKeysToClear = new Set<string>()
+
+  for (const log of logsToday || []) {
+    const itemIdStr = String(log.item_id || '')
+    const st = String(log.status || '')
+
+    // Ignorar logs de lembrete (véspera às 20h) — eles possuem controle próprio por data do evento
+    if (itemIdStr.includes('-reminder') || itemIdStr.startsWith('cal_lembrete_')) {
+      continue
+    }
+
+    const isCompletedStatus = st === 'sent' || st === 'pending' || st === 'skipped'
+    const alunoMatch = itemIdStr.match(/_aluno_(\d+)$/)
+
+    if (alunoMatch) {
+      const alunoId = alunoMatch[1]
+      if (isCompletedStatus) {
+        alreadyNotifiedAlunosToday.add(alunoId)
+      } else if (
+        (st === 'failed' || st === 'paused') &&
+        itemIdStr.startsWith(`cal_dia_${todayStr}-`)
+      ) {
+        staleCalDiaKeysToClear.add(itemIdStr)
+      }
+    } else if (itemIdStr.endsWith('_perfil_colaborador')) {
+      if (isCompletedStatus && itemIdStr === `cal_dia_${todayStr}_perfil_colaborador`) {
+        colabAlreadyNotifiedToday = true
+      } else if (
+        (st === 'failed' || st === 'paused') &&
+        itemIdStr === `cal_dia_${todayStr}_perfil_colaborador`
+      ) {
+        staleCalDiaKeysToClear.add(itemIdStr)
       }
     }
   }
 
-  // Cálculo da véspera do evento (horário local de MS: GMT-0400)
-  // Apenas agenda via send_after na criação se o horário do lembrete for nas próximas 24h.
-  // Eventos mais distantes são disparados na véspera pelo Cron Diário (/api/cron/lembretes-calendario),
-  // evitando o limite de 30 dias do OneSignal e garantindo que eventos excluídos/remarcados não enviem lembretes obsoletos.
-  let sendAfterStr: string | null = null;
-  let shouldSendReminder = false;
-  if (row.data) {
-    const eventDate = new Date(`${row.data}T12:00:00Z`);
-    eventDate.setUTCDate(eventDate.getUTCDate() - 1);
-    const eveDateStr = eventDate.toISOString().split('T')[0];
-    sendAfterStr = `${eveDateStr} 20:00:00 GMT-0400`;
-    const sendAfterDate = new Date(`${eveDateStr}T20:00:00-04:00`);
-    const diffHours = (sendAfterDate.getTime() - Date.now()) / (1000 * 60 * 60);
-    shouldSendReminder = diffHours > 0 && diffHours <= 24;
+  // 3. Resolver destinatários de todos os eventos do lote (com cache de turmas para evitar queries repetidas)
+  const targetResolutionCache = new Map<string, ResolvedEventTargets>()
+  const studentBucketMap = new Map<
+    string,
+    {
+      student: ResolvedEventTargetStudent
+      newEvents: any[]
+      updatedEvents: any[]
+    }
+  >()
+  const colabNewEvents: any[] = []
+  const colabUpdatedEvents: any[] = []
+  const allDirectColabIds = new Set<string>()
+
+  for (const row of eligibleNewRows) {
+    const resolved = await resolveEventTargets(supabase, row, targetResolutionCache)
+    for (const student of resolved.students || []) {
+      if (!student.responsaveis_ids || student.responsaveis_ids.length === 0) continue
+      const alunoKey = String(student.aluno_id)
+      const bucket = studentBucketMap.get(alunoKey)
+      if (!bucket) {
+        studentBucketMap.set(alunoKey, {
+          student: {
+            aluno_id: alunoKey,
+            aluno_nome: student.aluno_nome,
+            responsaveis_ids: Array.from(new Set(student.responsaveis_ids)),
+          },
+          newEvents: [row],
+          updatedEvents: [],
+        })
+      } else {
+        bucket.newEvents.push(row)
+        for (const rId of student.responsaveis_ids) {
+          if (!bucket.student.responsaveis_ids.includes(rId)) {
+            bucket.student.responsaveis_ids.push(rId)
+          }
+        }
+      }
+    }
+    if (resolved.directColaboradores && resolved.directColaboradores.length > 0) {
+      for (const cId of resolved.directColaboradores) allDirectColabIds.add(cId)
+      colabNewEvents.push(row)
+    }
   }
 
-  // 1. Dispatch for students (personalizado com o nome do aluno, em lotes controlados de 20)
-  if (students.length > 0) {
-    const validStudents = students.filter(s => s.responsaveis_ids && s.responsaveis_ids.length > 0);
-    const BATCH_SIZE = 20;
-    for (let i = 0; i < validStudents.length; i += BATCH_SIZE) {
-      const batch = validStudents.slice(i, i + BATCH_SIZE);
-      const batchPromises: Promise<any>[] = [];
-      for (const student of batch) {
-        const nomeAluno = formatFriendlyStudentName(student.aluno_nome);
+  for (const row of eligibleUpdatedRows) {
+    const resolved = await resolveEventTargets(supabase, row, targetResolutionCache)
+    for (const student of resolved.students || []) {
+      if (!student.responsaveis_ids || student.responsaveis_ids.length === 0) continue
+      const alunoKey = String(student.aluno_id)
+      const bucket = studentBucketMap.get(alunoKey)
+      if (!bucket) {
+        studentBucketMap.set(alunoKey, {
+          student: {
+            aluno_id: alunoKey,
+            aluno_nome: student.aluno_nome,
+            responsaveis_ids: Array.from(new Set(student.responsaveis_ids)),
+          },
+          newEvents: [],
+          updatedEvents: [row],
+        })
+      } else {
+        bucket.updatedEvents.push(row)
+        for (const rId of student.responsaveis_ids) {
+          if (!bucket.student.responsaveis_ids.includes(rId)) {
+            bucket.student.responsaveis_ids.push(rId)
+          }
+        }
+      }
+    }
+    if (resolved.directColaboradores && resolved.directColaboradores.length > 0) {
+      for (const cId of resolved.directColaboradores) allDirectColabIds.add(cId)
+      colabUpdatedEvents.push(row)
+    }
+  }
 
-        // Notificação Imediata
+  // Se havia algum registro 'failed' ou 'paused' para hoje que agora poderá ser reenviado, limpá-lo antes
+  if (staleCalDiaKeysToClear.size > 0) {
+    const keysArr = Array.from(staleCalDiaKeysToClear)
+    for (let i = 0; i < keysArr.length; i += 100) {
+      await supabase
+        .from('agenda_push_logs')
+        .delete()
+        .eq('type', 'calendario')
+        .in('item_id', keysArr.slice(i, i + 100))
+        .in('status', ['failed', 'paused'])
+    }
+  }
+
+  // 4. Disparar NO MÁXIMO 1 push imediato por aluno no dia (cal_dia_${todayStr}-${aluno_id})
+  const studentEntries = Array.from(studentBucketMap.entries()).filter(
+    ([alunoId]) => !alreadyNotifiedAlunosToday.has(alunoId)
+  )
+
+  if (studentEntries.length > 0) {
+    const BATCH_SIZE = 20
+    for (let i = 0; i < studentEntries.length; i += BATCH_SIZE) {
+      const batch = studentEntries.slice(i, i + BATCH_SIZE)
+      const batchPromises: Promise<any>[] = []
+
+      for (const [alunoId, { student, newEvents, updatedEvents }] of batch) {
+        alreadyNotifiedAlunosToday.add(alunoId)
+
+        const allStudentEvents = [...newEvents, ...updatedEvents]
+        const primaryEvent = newEvents[0] || updatedEvents[0]
+        const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+
+        // Deduplicar títulos de eventos (para que eventos de múltiplos dias com o mesmo título, ex: Recesso Criativo,
+        // exibam o título de forma limpa sem repetição)
+        const uniqueTitles: string[] = []
+        const seenNormTitles = new Set<string>()
+        for (const ev of allStudentEvents) {
+          const cleanTitle = String(ev.titulo || 'Evento Escolar').trim()
+          const normTitle = cleanTitle.toLowerCase()
+          if (cleanTitle && !seenNormTitles.has(normTitle)) {
+            seenNormTitles.add(normTitle)
+            uniqueTitles.push(cleanTitle)
+          }
+        }
+
+        const isNewAddition = newEvents.length > 0
+        let title = '📅 Novo Evento!'
+        let message = ''
+
+        if (isNewAddition) {
+          if (uniqueTitles.length <= 1) {
+            title = '📅 Novo Evento!'
+            message = `Novo evento no calendário para a turma de ${nomeAluno}: ${uniqueTitles[0] || primaryEvent.titulo}. Confira os detalhes!`
+          } else {
+            title = '📅 Novos Eventos no Calendário!'
+            const listed =
+              uniqueTitles.slice(0, 2).join(', ') +
+              (uniqueTitles.length > 2 ? ` e mais ${uniqueTitles.length - 2}` : '')
+            message = `Novos eventos no calendário para a turma de ${nomeAluno}: ${listed}. Confira os detalhes!`
+          }
+        } else {
+          title = '📅 Calendário Atualizado!'
+          if (uniqueTitles.length <= 1) {
+            message = `Evento atualizado no calendário para a turma de ${nomeAluno}: ${uniqueTitles[0] || primaryEvent.titulo}. Confira os detalhes!`
+          } else {
+            const listed =
+              uniqueTitles.slice(0, 2).join(', ') +
+              (uniqueTitles.length > 2 ? ` e mais ${uniqueTitles.length - 2}` : '')
+            message = `Eventos atualizados no calendário para a turma de ${nomeAluno}: ${listed}. Confira os detalhes!`
+          }
+        }
+
+        const senderMeta = senderCtx
+          ? {
+              sender_id: senderCtx.senderId || senderCtx.userId || null,
+              sender_auth_id: senderCtx.userId || null,
+              sender_name: senderCtx.senderName || primaryEvent.criado_por || null,
+              sender_email: senderCtx.senderEmail || null,
+              sender_cargo: senderCtx.senderCargo || null,
+              sender_foto: senderCtx.senderFoto || null,
+            }
+          : {}
+
+        const dailyStudentItemId = `cal_dia_${todayStr}-${student.aluno_id}`
+        const studentTargetUrl = `/agenda-digital/${student.aluno_id}/calendario?id=${encodeURIComponent(String(primaryEvent.id))}&data=${encodeURIComponent(String(primaryEvent.data || todayStr))}`
+
         batchPromises.push(
           sendAgendaPushNotification({
             type: 'calendario',
-            itemId: `${row.id}-${student.aluno_id}`,
-            title: '📅 Novo Evento!',
-            message: `Novo evento no calendário para a turma de ${nomeAluno}: ${row.titulo}. Confira os detalhes!`,
+            itemId: dailyStudentItemId,
+            senderUserId: senderCtx?.userId,
+            title,
+            message,
             targetUserIds: student.responsaveis_ids,
-            targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
-            metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}` }
-          }).catch(err => console.error('Evento Push Error:', err))
-        );
-
-        // Lembrete Agendado na Véspera (apenas quando a véspera é nas próximas 24h)
-        if (shouldSendReminder && sendAfterStr) {
-          batchPromises.push(
-            sendAgendaPushNotification({
-              type: 'calendario',
-              itemId: `${row.id}-${student.aluno_id}-reminder`,
-              title: '⏰ Lembrete: Amanhã!',
-              message: `Lembrete para ${nomeAluno}: amanhã temos o evento ${row.titulo}. Não se esqueça!`,
-              targetUserIds: student.responsaveis_ids,
-              targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
-              metadata: {
-                aluno_id: student.aluno_id,
-                perfil_destino: 'familia',
-                item_id: String(row.id),
-                rota: 'calendario',
-                data: row.data,
-                targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
-                is_reminder: true,
-                send_after: sendAfterStr,
-              },
-              sendAfter: sendAfterStr
-            }).catch(err => console.error('Evento Reminder Error:', err))
-          );
-        }
+            targetUrl: studentTargetUrl,
+            collapseId: `cal_dia_${todayStr}_${student.aluno_id}`,
+            metadata: {
+              aluno_id: student.aluno_id,
+              aluno_nome: nomeAluno,
+              perfil_destino: 'familia',
+              item_id: String(primaryEvent.id),
+              event_ids: allStudentEvents.map((e: any) => String(e.id)),
+              rota: 'calendario',
+              data: primaryEvent.data,
+              targetUrl: studentTargetUrl,
+              ...senderMeta,
+            },
+          }).catch((err) => console.error('Evento Push Error:', err))
+        )
       }
-      await Promise.allSettled(batchPromises);
+
+      await Promise.allSettled(batchPromises)
     }
   }
 
-  // 2. Dispatch for direct colaboradores / untargeted responsaveis
-  if (directColaboradores && directColaboradores.length > 0) {
+  // 5. Disparar NO MÁXIMO 1 push imediato para colaboradores diretos no dia
+  if (allDirectColabIds.size > 0 && !colabAlreadyNotifiedToday) {
+    const allColabEvents = [...colabNewEvents, ...colabUpdatedEvents]
+    const primaryEvent = allColabEvents[0] || allEligibleRows[0]
+    const uniqueTitles: string[] = []
+    const seenNormTitles = new Set<string>()
+    for (const ev of allColabEvents) {
+      const cleanTitle = String(ev.titulo || 'Evento Escolar').trim()
+      const normTitle = cleanTitle.toLowerCase()
+      if (cleanTitle && !seenNormTitles.has(normTitle)) {
+        seenNormTitles.add(normTitle)
+        uniqueTitles.push(cleanTitle)
+      }
+    }
+
+    const colabMessage =
+      uniqueTitles.length <= 1
+        ? `O evento "${uniqueTitles[0] || primaryEvent.titulo}" foi adicionado à sua agenda.`
+        : `Novos eventos foram adicionados à sua agenda: ${uniqueTitles.slice(0, 2).join(', ')}.`
+
+    const senderMeta = senderCtx
+      ? {
+          sender_id: senderCtx.senderId || senderCtx.userId || null,
+          sender_auth_id: senderCtx.userId || null,
+          sender_name: senderCtx.senderName || primaryEvent.criado_por || null,
+          sender_email: senderCtx.senderEmail || null,
+          sender_cargo: senderCtx.senderCargo || null,
+          sender_foto: senderCtx.senderFoto || null,
+        }
+      : {}
+
+    const colabTargetUrl = `/agenda-digital/colaborador/calendario?id=${encodeURIComponent(String(primaryEvent.id))}&data=${encodeURIComponent(String(primaryEvent.data || todayStr))}`
+
     await sendAgendaPushNotification({
       type: 'calendario',
-      itemId: String(row.id),
+      itemId: `cal_dia_${todayStr}`,
+      senderUserId: senderCtx?.userId,
       title: '📅 Novo Evento!',
-      message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
-      targetUserIds: directColaboradores,
-      targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
-      metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}` }
-    }).catch(err => console.error('Evento Push Error:', err))
+      message: colabMessage,
+      targetUserIds: Array.from(allDirectColabIds),
+      targetUrl: colabTargetUrl,
+      collapseId: `cal_dia_${todayStr}_colab`,
+      metadata: {
+        perfil_destino: 'colaborador',
+        item_id: String(primaryEvent.id),
+        event_ids: allColabEvents.map((e: any) => String(e.id)),
+        rota: 'calendario',
+        data: primaryEvent.data,
+        targetUrl: colabTargetUrl,
+        ...senderMeta,
+      },
+    }).catch((err) => console.error('Evento Push Colab Error:', err))
+  }
 
-    if (shouldSendReminder && sendAfterStr) {
-      await sendAgendaPushNotification({
-        type: 'calendario',
-        itemId: `${row.id}-reminder`,
-        title: '⏰ Lembrete: Amanhã!',
-        message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
-        targetUserIds: directColaboradores,
-        targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
-        metadata: {
-          perfil_destino: 'colaborador',
-          item_id: String(row.id),
-          rota: 'calendario',
-          data: row.data,
-          targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
-          is_reminder: true,
-          send_after: sendAfterStr,
-        },
-        sendAfter: sendAfterStr
-      }).catch(err => console.error('Evento Reminder Error:', err))
+  // 6. Se algum dos eventos criados/atualizados ocorre amanhã (véspera às 20:00 MS dentro das próximas 24h),
+  // acionar a rotina consolidada de lembretes para aquela data (garantindo apenas 1 lembrete por aluno na data).
+  for (const eventDateStr of affectedDates) {
+    const { diffHours } = getEve20hSchedule(eventDateStr)
+    const shouldSendReminder = diffHours > 0 && diffHours <= 24
+    if (shouldSendReminder) {
+      await runCalendarRemindersForDate({
+        supabase,
+        targetDate: eventDateStr,
+        senderUserId: senderCtx?.userId,
+        source: 'criacao_evento_calendario',
+        allowScheduleAhead: true,
+      }).catch((err) => console.error(`[Eventos Reminder Schedule Error][${eventDateStr}]:`, err))
     }
   }
 }
 
 export async function POST(request: Request) {
-  const { errorResponse } = await requireStaff(request)
-  if (errorResponse) return errorResponse
+  const { user, dbUser, cargo, perfil, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
+
+  const senderCtx: SenderContext = {
+    userId: user.id,
+    senderId: dbUser?.id || user.id,
+    senderName: dbUser?.nome || user.user_metadata?.nome || user.user_metadata?.name || (user.email ? user.email.split('@')[0] : 'Colaborador'),
+    senderEmail: dbUser?.email || user.email,
+    senderCargo: cargo || perfil || dbUser?.cargo || dbUser?.perfil || 'Colaborador(a)',
+    senderFoto: dbUser?.dados?.foto || dbUser?.dados?.avatar || user.user_metadata?.foto || null,
+  }
 
   try {
     const body = await request.json()
@@ -371,40 +621,95 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      const rows = body.map(buildRowAuth)
+      const rows = body.map(b => buildRowAuth(b, senderCtx.senderName))
 
-      // Identificar apenas eventos novos ou modificados para evitar timeout em salvamentos de lote
-      const { data: existingRows } = await supabase
-        .from('eventos_agenda')
-        .select('id, titulo, data, turmas')
-        .in('id', rows.map(r => r.id))
-
-      const existingMap = new Map((existingRows || []).map((e: any) => [e.id, e]))
-      const changedRows = rows.filter(r => {
-        const prev = existingMap.get(r.id)
-        if (!prev) return true // Novo evento
-        if (prev.titulo !== r.titulo || prev.data !== r.data) return true // Título ou data mudou
-        if (JSON.stringify(prev.turmas || []) !== JSON.stringify(r.turmas || [])) return true // Turmas mudaram
-        return false
-      })
-
-      const { error } = await supabase.from('eventos_agenda').upsert(rows)
-      if (error) throw new Error(error.message)
-      
-      // Disparar Push apenas para eventos que foram criados ou alterados
-      for (const row of changedRows) {
-        await dispatchPushNotifications(supabase, row);
+      // Buscar eventos existentes em lotes de 200 para evitar estouro de URL no PostgREST
+      const existingMap = new Map<string, any>()
+      const allIds = rows.map(r => r.id).filter(Boolean)
+      const CHUNK_SIZE = 200
+      for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
+        const chunkIds = allIds.slice(i, i + CHUNK_SIZE)
+        const { data: existingChunk, error: fetchErr } = await supabase
+          .from('eventos_agenda')
+          .select('id, titulo, data, turmas')
+          .in('id', chunkIds)
+        if (fetchErr) {
+          throw new Error(`Falha ao verificar eventos existentes: ${fetchErr.message}`)
+        }
+        for (const e of existingChunk || []) {
+          existingMap.set(e.id, e)
+        }
       }
 
-      return NextResponse.json({ ok: true, count: rows.length, updatedCount: changedRows.length })
+      const newRows: any[] = []
+      const updatedRows: any[] = []
+      const rowsToUpsert: any[] = []
+      const isFullArraySync = rows.length > 15
+      const nowMs = Date.now()
+
+      for (const r of rows) {
+        const prev = existingMap.get(r.id)
+        if (!prev) {
+          // Proteção contra ressurreição de eventos excluídos quando uma aba antiga envia o array completo via setEventosAgenda:
+          // Se for sincronização de array completo e o item possuir createdAt com mais de 10 minutos, ele já havia sido excluído no banco.
+          if (isFullArraySync) {
+            const rawCreatedAt = r.dados?.createdAt || r.dados?.created_at || (r as any).created_at
+            const createdMs = rawCreatedAt ? Date.parse(String(rawCreatedAt)) : NaN
+            if (!isNaN(createdMs) && nowMs - createdMs > 10 * 60 * 1000) {
+              continue
+            }
+          }
+          newRows.push(r)
+          rowsToUpsert.push(r)
+        } else {
+          rowsToUpsert.push(r)
+          const titleChanged = prev.titulo !== r.titulo
+          const dateChanged = prev.data !== r.data
+          const turmasChanged = JSON.stringify(prev.turmas || []) !== JSON.stringify(r.turmas || [])
+          if (titleChanged || dateChanged || turmasChanged) {
+            updatedRows.push(r)
+          }
+        }
+      }
+
+      if (rowsToUpsert.length > 0) {
+        const { error } = await supabase.from('eventos_agenda').upsert(rowsToUpsert)
+        if (error) throw new Error(error.message)
+      }
+
+      if (newRows.length > 0 || updatedRows.length > 0) {
+        await dispatchCalendarPushNotificationsBatch(supabase, newRows, updatedRows, senderCtx)
+      }
+
+      return NextResponse.json({
+        ok: true,
+        count: rowsToUpsert.length,
+        newCount: newRows.length,
+        updatedCount: updatedRows.length,
+      })
     }
 
-    const row = buildRowAuth(body)
+    const row = buildRowAuth(body, senderCtx.senderName)
+    const { data: prevRow } = await supabase
+      .from('eventos_agenda')
+      .select('id, titulo, data, turmas')
+      .eq('id', row.id)
+      .maybeSingle()
+
     const { data, error } = await supabase.from('eventos_agenda').upsert(row).select().single()
     if (error) throw new Error(error.message)
 
-    // Disparar Push (Background)
-    await dispatchPushNotifications(supabase, data);
+    if (!prevRow) {
+      await dispatchCalendarPushNotificationsBatch(supabase, [data], [], senderCtx)
+    } else {
+      const hasChanges =
+        prevRow.titulo !== row.titulo ||
+        prevRow.data !== row.data ||
+        JSON.stringify(prevRow.turmas || []) !== JSON.stringify(row.turmas || [])
+      if (hasChanges) {
+        await dispatchCalendarPushNotificationsBatch(supabase, [], [data], senderCtx)
+      }
+    }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {
@@ -416,7 +721,7 @@ export async function PUT(request: Request) {
   return POST(request)
 }
 
-function buildRowAuth(body: any) {
+function buildRowAuth(body: any, fallbackAuthor?: string) {
   const {
     id, titulo, descricao, tipo, data,
     horaInicio, hora_inicio,
@@ -441,7 +746,7 @@ function buildRowAuth(body: any) {
     local: local || '',
     cor: cor || '#f59e0b',
     recorrente: recorrente || false,
-    criado_por: criadoPor ?? criado_por ?? '',
+    criado_por: criadoPor ?? criado_por ?? fallbackAuthor ?? '',
     unidade: unidade || '',
     dados: { ...baseDados, ...rest },
   }
@@ -475,9 +780,21 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const { error } = await supabase.from('eventos_agenda').delete().eq('id', String(id).trim())
+    const cleanId = String(id).trim()
+    const { data: existingEv } = await supabase
+      .from('eventos_agenda')
+      .select('data')
+      .eq('id', cleanId)
+      .maybeSingle()
+
+    const { error } = await supabase.from('eventos_agenda').delete().eq('id', cleanId)
     if (error) throw new Error(error.message)
-    return NextResponse.json({ ok: true, id: String(id).trim() })
+
+    if (existingEv?.data) {
+      invalidateCalendarReminderCacheForDate(String(existingEv.data))
+    }
+
+    return NextResponse.json({ ok: true, id: cleanId })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
