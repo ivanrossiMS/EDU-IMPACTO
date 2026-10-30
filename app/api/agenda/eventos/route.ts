@@ -621,7 +621,7 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      const rows = body.map(b => buildRowAuth(b, senderCtx.senderName))
+      const rows = body.map(b => buildRowAuth(b, senderCtx))
 
       // Buscar eventos existentes em lotes de 200 para evitar estouro de URL no PostgREST
       const existingMap = new Map<string, any>()
@@ -631,7 +631,7 @@ export async function POST(request: Request) {
         const chunkIds = allIds.slice(i, i + CHUNK_SIZE)
         const { data: existingChunk, error: fetchErr } = await supabase
           .from('eventos_agenda')
-          .select('id, titulo, data, turmas')
+          .select('id, titulo, data, turmas, criado_por, dados')
           .in('id', chunkIds)
         if (fetchErr) {
           throw new Error(`Falha ao verificar eventos existentes: ${fetchErr.message}`)
@@ -662,6 +662,19 @@ export async function POST(request: Request) {
           newRows.push(r)
           rowsToUpsert.push(r)
         } else {
+          // Se o evento já existia e tinha um autor válido, preservá-lo durante sincronizações de array
+          if (prev.criado_por && !isGenericCreatorName(prev.criado_por)) {
+            r.criado_por = prev.criado_por
+          }
+          if (prev.dados?.usuarioId && !r.dados?.usuarioId) {
+            r.dados = {
+              ...r.dados,
+              usuarioId: prev.dados.usuarioId,
+              usuarioNome: prev.dados.usuarioNome || prev.criado_por,
+              usuarioCargo: prev.dados.usuarioCargo || null,
+              usuarioFoto: prev.dados.usuarioFoto || null,
+            }
+          }
           rowsToUpsert.push(r)
           const titleChanged = prev.titulo !== r.titulo
           const dateChanged = prev.data !== r.data
@@ -689,7 +702,7 @@ export async function POST(request: Request) {
       })
     }
 
-    const row = buildRowAuth(body, senderCtx.senderName)
+    const row = buildRowAuth(body, senderCtx)
     const { data: prevRow } = await supabase
       .from('eventos_agenda')
       .select('id, titulo, data, turmas')
@@ -721,7 +734,27 @@ export async function PUT(request: Request) {
   return POST(request)
 }
 
-function buildRowAuth(body: any, fallbackAuthor?: string) {
+function isGenericCreatorName(val?: any): boolean {
+  if (!val) return true
+  const norm = String(val)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+  if (!norm || norm.length < 2) return true
+  return [
+    'usuario',
+    'usuario(a)',
+    'user',
+    'colaborador',
+    'colaboradora',
+    'colaborador(a)',
+    'admin',
+    'sistema',
+  ].includes(norm)
+}
+
+function buildRowAuth(body: any, senderCtx?: SenderContext) {
   const {
     id, titulo, descricao, tipo, data,
     horaInicio, hora_inicio,
@@ -734,6 +767,21 @@ function buildRowAuth(body: any, fallbackAuthor?: string) {
   } = body
   const baseDados = (dados && typeof dados === 'object') ? { ...dados } : {}
   delete baseDados.dados
+
+  const rawExplicitCreator = criadoPor ?? criado_por ?? baseDados.criadoPor ?? baseDados.criado_por
+  const resolvedCreator = !isGenericCreatorName(rawExplicitCreator)
+    ? String(rawExplicitCreator).trim()
+    : (senderCtx?.senderName || '')
+
+  const mergedDados: Record<string, any> = {
+    ...baseDados,
+    ...rest,
+    usuarioId: baseDados.usuarioId || rest.usuarioId || senderCtx?.senderId || senderCtx?.userId || null,
+    usuarioNome: (!isGenericCreatorName(baseDados.usuarioNome) ? baseDados.usuarioNome : null) || resolvedCreator || null,
+    usuarioCargo: baseDados.usuarioCargo || rest.usuarioCargo || senderCtx?.senderCargo || null,
+    usuarioFoto: baseDados.usuarioFoto || rest.usuarioFoto || senderCtx?.senderFoto || null,
+  }
+
   return {
     id: id || crypto.randomUUID(),
     titulo: titulo || 'Evento sem título',
@@ -746,9 +794,9 @@ function buildRowAuth(body: any, fallbackAuthor?: string) {
     local: local || '',
     cor: cor || '#f59e0b',
     recorrente: recorrente || false,
-    criado_por: criadoPor ?? criado_por ?? fallbackAuthor ?? '',
+    criado_por: resolvedCreator,
     unidade: unidade || '',
-    dados: { ...baseDados, ...rest },
+    dados: mergedDados,
   }
 }
 

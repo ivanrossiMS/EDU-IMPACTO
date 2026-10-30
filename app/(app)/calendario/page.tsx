@@ -1,6 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect, useCallback } from 'react'
@@ -161,12 +162,13 @@ function VisibilidadeSelector({
 
 const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string } = {
   titulo: '', descricao: '', tipo: 'evento', data: '', horaInicio: '', horaFim: '',
-  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: 'Usuário',
+  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: '',
   confirmacaoNecessaria: false, confirmados: [], unidade: '',
   diaTodo: false, dataFim: ''
 }
 
 export default function CalendarioPage() {
+  const { currentUser } = useApp()
   const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
@@ -356,8 +358,16 @@ export default function CalendarioPage() {
       }
 
       const datesToCreate = getDates(form.data, form.dataFim)
+      const creatorName =
+        form.criadoPor && form.criadoPor !== 'Usuário'
+          ? form.criadoPor
+          : (currentUser?.nome || '')
       const novosEventos = datesToCreate.map(d => ({
         ...form,
+        criadoPor: creatorName,
+        usuarioId: currentUser?.id || undefined,
+        usuarioNome: creatorName || undefined,
+        usuarioCargo: currentUser?.cargo || currentUser?.perfil || undefined,
         data: d,
         dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',

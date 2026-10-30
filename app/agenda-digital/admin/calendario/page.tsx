@@ -1,6 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
@@ -168,7 +169,7 @@ function VisibilidadeSelector({
 
 const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
   titulo: '', descricao: '', tipo: 'evento', data: '', horaInicio: '', horaFim: '',
-  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: 'Usuário',
+  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: '',
   confirmacaoNecessaria: false, confirmados: [], unidade: '',
   diaTodo: false,
 }
@@ -176,6 +177,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
 // Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function CalendarioPage() {
+  const { currentUser } = useApp()
   const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda, turmas = [], cfgCalendarioLetivo = [] } = useData()
 
   useAgendaRealtime({
@@ -284,14 +286,22 @@ export default function CalendarioPage() {
         body: JSON.stringify(updatedEvento),
       }).catch(err => console.error('[Calendario Admin] Erro ao atualizar evento:', err))
     } else {
+      const creatorName =
+        form.criadoPor && form.criadoPor !== 'Usuário'
+          ? form.criadoPor
+          : (currentUser?.nome || '')
       const novoEvento: EventoAgenda = {
         ...form,
+        criadoPor: creatorName,
+        usuarioId: currentUser?.id || undefined,
+        usuarioNome: creatorName || undefined,
+        usuarioCargo: currentUser?.cargo || currentUser?.perfil || undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         id: newId('EV'),
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
-      }
+      } as any
       if (setLocalEventosAgenda) {
         setLocalEventosAgenda(prev => [...prev, novoEvento])
       } else {

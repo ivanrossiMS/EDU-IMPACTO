@@ -201,7 +201,7 @@ function VisibilidadeSelector({
 
 const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string } = {
   titulo: '', descricao: '', tipo: 'evento', data: '', horaInicio: '', horaFim: '',
-  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: 'Usuário',
+  turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: '',
   confirmacaoNecessaria: false, confirmados: [], unidade: '',
   diaTodo: false, dataFim: ''
 }
@@ -500,8 +500,16 @@ export default function ADCalendarioPage() {
       }
 
       const datesToCreate = getDates(form.data, form.dataFim)
+      const creatorName =
+        form.criadoPor && form.criadoPor !== 'Usuário'
+          ? form.criadoPor
+          : (effectiveUser?.nome || '')
       const novosEventos = datesToCreate.map(d => ({
         ...form,
+        criadoPor: creatorName,
+        usuarioId: effectiveUser?.id || undefined,
+        usuarioNome: creatorName || undefined,
+        usuarioCargo: effectiveUser?.cargo || effectiveUser?.perfil || undefined,
         data: d,
         dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',

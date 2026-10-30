@@ -546,6 +546,8 @@ export function PosicionadorAssinaturasModal({
   const pdfDocRef = useRef<any>(null)
   const abertoAnteriorRef = useRef<boolean>(false)
   const isProgrammaticScrollRef = useRef<boolean>(false)
+  const paginaScrollPendenteRef = useRef<{ pNum: number; smooth: boolean } | null>(null)
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Estado para arrastar (drag and drop) das caixinhas de assinatura
   const [arrastandoId, setArrastandoId] = useState<string | null>(null)
@@ -565,49 +567,128 @@ export function PosicionadorAssinaturasModal({
 
   // Rola suavemente até uma página específica no container vertical
   const rolarParaPagina = useCallback((pNum: number, smooth = true) => {
-    setPaginaAtualNoDoc(pNum)
-    const wrapper = pageWrapperRefs.current[pNum]
+    const alvo = Math.max(1, Math.min(totalPaginasDocAtivo, pNum))
+    setPaginaAtualNoDoc(alvo)
+    const wrapper = pageWrapperRefs.current[alvo]
+    const canvas = canvasRefs.current[alvo]
     const container = scrollContainerRef.current
-    if (wrapper && container) {
+
+    if (!carregandoPdf && wrapper && container && (!canvas || canvas.offsetHeight > 0)) {
+      paginaScrollPendenteRef.current = null
       isProgrammaticScrollRef.current = true
-      const topTarget = Math.max(0, wrapper.offsetTop - 16)
+      const topTarget = alvo === 1 ? 0 : Math.max(0, wrapper.offsetTop - 16)
       container.scrollTo({
         top: topTarget,
         behavior: smooth ? 'smooth' : 'auto',
       })
-      setTimeout(() => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+      scrollTimeoutRef.current = setTimeout(() => {
         isProgrammaticScrollRef.current = false
-      }, 420)
+      }, smooth ? 650 : 140)
+    } else {
+      paginaScrollPendenteRef.current = { pNum: alvo, smooth }
     }
-  }, [])
+  }, [carregandoPdf, totalPaginasDocAtivo])
+
+  // Vai diretamente para a última página de um arquivo específico (ou do arquivo ativo)
+  const handleIrParaUltimaPaginaDoArquivo = useCallback(
+    (targetDocIdx?: number, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation()
+      const idxAlvo = typeof targetDocIdx === 'number' ? targetDocIdx : docAtivoIndex
+      const docAlvo = docsProcessados[idxAlvo] || docAtivo
+      if (!docAlvo) return
+
+      const ultimaPag = Math.max(
+        1,
+        idxAlvo === docAtivoIndex ? totalPaginasDocAtivo : docAlvo.totalPaginas || 1
+      )
+
+      if (idxAlvo !== docAtivoIndex) {
+        paginaScrollPendenteRef.current = { pNum: ultimaPag, smooth: false }
+        setDocAtivoIndex(idxAlvo)
+        setPaginaAtualNoDoc(ultimaPag)
+        const diagDocAlvo = validarPosicionamentoCompleto(signatarios, docsProcessados, posicoes).porDocumento[idxAlvo]
+        if (
+          diagDocAlvo &&
+          diagDocAlvo.faltantes.length > 0 &&
+          !diagDocAlvo.faltantes.some((f) => f.id === signatarioAtivoId)
+        ) {
+          setSignatarioAtivoId(diagDocAlvo.faltantes[0].id)
+        }
+      } else {
+        rolarParaPagina(ultimaPag, true)
+      }
+    },
+    [docAtivoIndex, docsProcessados, docAtivo, totalPaginasDocAtivo, signatarios, posicoes, signatarioAtivoId, rolarParaPagina]
+  )
+
+  // Vai diretamente para a primeira página de um arquivo específico (ou do arquivo ativo)
+  const handleIrParaPrimeiraPaginaDoArquivo = useCallback(
+    (targetDocIdx?: number, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation()
+      const idxAlvo = typeof targetDocIdx === 'number' ? targetDocIdx : docAtivoIndex
+      if (idxAlvo !== docAtivoIndex) {
+        paginaScrollPendenteRef.current = { pNum: 1, smooth: false }
+        setDocAtivoIndex(idxAlvo)
+        setPaginaAtualNoDoc(1)
+      } else {
+        rolarParaPagina(1, true)
+      }
+    },
+    [docAtivoIndex, rolarParaPagina]
+  )
 
   // Sincroniza posições iniciais e zoom 80% ao abrir o modal
   useEffect(() => {
     if (aberto && !abertoAnteriorRef.current) {
       setPosicoes({ ...posicoesAtuais })
-      setDocAtivoIndex(0)
       setZoom(80)
       setPresetCustomizado(false)
       setTamanhoPadraoPt({ largura: 117, altura: 42 })
-      const pagIni = paginaInicial && paginaInicial >= 1 ? paginaInicial : 1
-      setPaginaAtualNoDoc(pagIni)
+
+      let docIniIdx = 0
+      let pagRelIni = 1
+      if (paginaInicial && paginaInicial >= 1) {
+        if (docsProcessados.length > 1) {
+          const foundIdx = docsProcessados.findIndex(
+            (d) =>
+              typeof d.paginaInicioGlobal === 'number' &&
+              typeof d.paginaFimGlobal === 'number' &&
+              paginaInicial >= d.paginaInicioGlobal &&
+              paginaInicial <= d.paginaFimGlobal
+          )
+          if (foundIdx >= 0) {
+            docIniIdx = foundIdx
+            pagRelIni = paginaInicial - (docsProcessados[foundIdx].paginaInicioGlobal || 1) + 1
+          } else {
+            pagRelIni = Math.min(paginaInicial, docsProcessados[0]?.totalPaginas || 1)
+          }
+        } else {
+          pagRelIni = paginaInicial
+        }
+      }
+
+      setDocAtivoIndex(docIniIdx)
+      setPaginaAtualNoDoc(pagRelIni)
       if (signatarioInicialId) {
         setSignatarioAtivoId(signatarioInicialId)
       } else if (signatarios.length > 0) {
         setSignatarioAtivoId(signatarios[0].id)
       }
-      if (pagIni > 1) {
-        setTimeout(() => rolarParaPagina(pagIni, false), 180)
+      if (pagRelIni > 1) {
+        paginaScrollPendenteRef.current = { pNum: pagRelIni, smooth: false }
       } else if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTop = 0
       }
     }
     abertoAnteriorRef.current = aberto
-  }, [aberto, posicoesAtuais, signatarios, signatarioInicialId, paginaInicial, rolarParaPagina])
+  }, [aberto, posicoesAtuais, signatarios, signatarioInicialId, paginaInicial, docsProcessados])
 
-  // Ao trocar de documento, volta o scroll para o topo (Página 1)
+  // Ao trocar de documento, volta o scroll para o topo (Página 1), exceto quando há salto agendado (ex: Última página)
   useEffect(() => {
-    if (scrollContainerRef.current) {
+    if (scrollContainerRef.current && !paginaScrollPendenteRef.current) {
       scrollContainerRef.current.scrollTop = 0
     }
   }, [docAtivoIndex])
@@ -684,6 +765,7 @@ export function PosicionadorAssinaturasModal({
   }, [aberto, activePdfBase64, activePdfUrl])
 
   // Renderiza TODAS as páginas do documento ativo empilhadas verticalmente para rolagem com o mouse
+  // Utiliza dimensionamento em 2 passos para salto imediato e sem layout shift até a última página
   const renderizarTodasPaginas = useCallback(async () => {
     if (!pdfDocRef.current) return
 
@@ -700,6 +782,14 @@ export function PosicionadorAssinaturasModal({
       const maxDisplayWidth = Math.max(320, Math.min(availableWidth, 740))
       const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
 
+      const paginasPreparadas: Array<{
+        pNum: number
+        page: any
+        ctx: CanvasRenderingContext2D
+        viewport: any
+      }> = []
+
+      // Passo 1: Dimensiona todos os canvas/overlays imediatamente para estabilizar a altura total do scroll
       for (let pNum = 1; pNum <= numPages; pNum++) {
         const page = await pdfDocRef.current.getPage(pNum)
         const canvas = canvasRefs.current[pNum]
@@ -728,12 +818,50 @@ export function PosicionadorAssinaturasModal({
         }
 
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        paginasPreparadas.push({ pNum, page, ctx, viewport })
+      }
 
-        const task = page.render({
-          canvasContext: ctx,
-          viewport,
+      // Se houver um salto de página pendente (ex: clicou em "Última página"), executa o scroll imediatamente
+      let paginaPrioritaria: number | null = null
+      if (paginaScrollPendenteRef.current) {
+        const pendente = paginaScrollPendenteRef.current
+        paginaScrollPendenteRef.current = null
+        const targetPNum = Math.min(numPages, Math.max(1, pendente.pNum))
+        paginaPrioritaria = targetPNum
+        setPaginaAtualNoDoc(targetPNum)
+        const wrapper = pageWrapperRefs.current[targetPNum]
+        const container = scrollContainerRef.current
+        if (wrapper && container) {
+          isProgrammaticScrollRef.current = true
+          const topTarget = targetPNum === 1 ? 0 : Math.max(0, wrapper.offsetTop - 16)
+          container.scrollTo({
+            top: topTarget,
+            behavior: pendente.smooth ? 'smooth' : 'auto',
+          })
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current)
+          }
+          scrollTimeoutRef.current = setTimeout(() => {
+            isProgrammaticScrollRef.current = false
+          }, pendente.smooth ? 650 : 180)
+        }
+      }
+
+      // Passo 2: Rasteriza primeiro a página alvo (se houver salto) e em seguida as demais páginas
+      if (paginaPrioritaria !== null) {
+        paginasPreparadas.sort((a, b) => {
+          if (a.pNum === paginaPrioritaria) return -1
+          if (b.pNum === paginaPrioritaria) return 1
+          return a.pNum - b.pNum
         })
-        renderTasksRef.current[pNum] = task
+      }
+
+      for (const item of paginasPreparadas) {
+        const task = item.page.render({
+          canvasContext: item.ctx,
+          viewport: item.viewport,
+        })
+        renderTasksRef.current[item.pNum] = task
         await task.promise
       }
     } catch (e: any) {
@@ -754,6 +882,18 @@ export function PosicionadorAssinaturasModal({
     if (isProgrammaticScrollRef.current) return
     const container = scrollContainerRef.current
     if (!container) return
+
+    if (container.scrollTop <= 12) {
+      setPaginaAtualNoDoc((prev) => (prev !== 1 ? 1 : prev))
+      return
+    }
+    if (
+      totalPaginasDocAtivo > 1 &&
+      container.scrollHeight - (container.scrollTop + container.clientHeight) <= 18
+    ) {
+      setPaginaAtualNoDoc((prev) => (prev !== totalPaginasDocAtivo ? totalPaginasDocAtivo : prev))
+      return
+    }
 
     const viewCenterY = container.scrollTop + container.clientHeight * 0.38
     let melhorPagina = 1
@@ -1361,22 +1501,19 @@ export function PosicionadorAssinaturasModal({
   // Navegação entre páginas com transição contínua entre múltiplos documentos
   const handlePaginaAnterior = () => {
     if (paginaAtualNoDoc > 1) {
-      setPaginaAtualNoDoc(p => p - 1)
+      rolarParaPagina(paginaAtualNoDoc - 1)
     } else if (docAtivoIndex > 0) {
       // Volta para a última página do documento anterior
-      const prevDoc = docsProcessados[docAtivoIndex - 1]
-      setDocAtivoIndex(i => i - 1)
-      setPaginaAtualNoDoc(Math.max(1, prevDoc.totalPaginas || 1))
+      handleIrParaUltimaPaginaDoArquivo(docAtivoIndex - 1)
     }
   }
 
   const handleProximaPagina = () => {
     if (paginaAtualNoDoc < totalPaginasDocAtivo) {
-      setPaginaAtualNoDoc(p => p + 1)
+      rolarParaPagina(paginaAtualNoDoc + 1)
     } else if (docAtivoIndex < docsProcessados.length - 1) {
       // Avança para a primeira página do próximo documento
-      setDocAtivoIndex(i => i + 1)
-      setPaginaAtualNoDoc(1)
+      handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex + 1)
     }
   }
 
@@ -1615,6 +1752,8 @@ export function PosicionadorAssinaturasModal({
                     const diagDoc = diagnostico.porDocumento[idx]
                     const totalAssinaturasDoc = diagDoc?.totalAssinaturasNoDoc || 0
                     const faltantesNesteDoc = diagDoc?.faltantes || []
+                    const totalPagsEsteDoc = Math.max(1, doc.totalPaginas || 1)
+                    const isNaUltimaDesteDoc = isAtivo && paginaAtualNoDoc === totalPagsEsteDoc
 
                     return (
                       <div
@@ -1642,11 +1781,11 @@ export function PosicionadorAssinaturasModal({
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          gap: 8,
+                          gap: 6,
                           transition: 'all 0.15s ease',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                           <div
                             style={{
                               width: 20,
@@ -1664,7 +1803,7 @@ export function PosicionadorAssinaturasModal({
                           >
                             {totalAssinaturasDoc > 0 ? <Check size={11} strokeWidth={3} /> : idx + 1}
                           </div>
-                          <div style={{ minWidth: 0 }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
                             <div
                               style={{
                                 fontSize: 12,
@@ -1681,20 +1820,47 @@ export function PosicionadorAssinaturasModal({
                           </div>
                         </div>
 
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: 999,
-                            background: totalAssinaturasDoc > 0 ? '#ecfdf5' : '#ffffff',
-                            color: totalAssinaturasDoc > 0 ? '#047857' : '#64748b',
-                            border: totalAssinaturasDoc > 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {totalAssinaturasDoc > 0 ? `${totalAssinaturasDoc} ✓` : `${doc.totalPaginas} pág`}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          {totalPagsEsteDoc > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleIrParaUltimaPaginaDoArquivo(idx, e)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                background: isNaUltimaDesteDoc ? '#dbeafe' : '#eff6ff',
+                                color: '#1d4ed8',
+                                border: isNaUltimaDesteDoc ? '1px solid #60a5fa' : '1px solid #bfdbfe',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title={`Ir direto para a última página (${totalPagsEsteDoc}) de "${doc.nome}"`}
+                            >
+                              <span>Últ. pág ({totalPagsEsteDoc})</span>
+                              <ChevronsRight size={11} />
+                            </button>
+                          )}
+
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: 999,
+                              background: totalAssinaturasDoc > 0 ? '#ecfdf5' : '#ffffff',
+                              color: totalAssinaturasDoc > 0 ? '#047857' : '#64748b',
+                              border: totalAssinaturasDoc > 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {totalAssinaturasDoc > 0 ? `${totalAssinaturasDoc} ✓` : `${totalPagsEsteDoc} pág`}
+                          </span>
+                        </div>
                       </div>
                     )
                   })}
@@ -1703,7 +1869,7 @@ export function PosicionadorAssinaturasModal({
             ) : (
               <div
                 style={{
-                  padding: '8px 12px',
+                  padding: '8px 10px',
                   borderRadius: 10,
                   background: '#ffffff',
                   border: '1px solid #e2e8f0',
@@ -1713,7 +1879,7 @@ export function PosicionadorAssinaturasModal({
                   gap: 8,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                   <FileText size={15} color="#2563eb" style={{ flexShrink: 0 }} />
                   <span
                     style={{
@@ -1729,21 +1895,96 @@ export function PosicionadorAssinaturasModal({
                     {docAtivo?.nome || 'Documento'}
                   </span>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
-                  {totalPaginasDocAtivo} {totalPaginasDocAtivo === 1 ? 'página' : 'páginas'}
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                    {totalPaginasDocAtivo} {totalPaginasDocAtivo === 1 ? 'pág.' : 'págs'}
+                  </span>
+                  {totalPaginasDocAtivo > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleIrParaUltimaPaginaDoArquivo(0, e)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        padding: '3px 7px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        background: paginaAtualNoDoc === totalPaginasDocAtivo ? '#dbeafe' : '#eff6ff',
+                        color: '#1d4ed8',
+                        border: paginaAtualNoDoc === totalPaginasDocAtivo ? '1px solid #60a5fa' : '1px solid #bfdbfe',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title={`Ir direto para a última página (Página ${totalPaginasDocAtivo})`}
+                    >
+                      <span>Última pág.</span>
+                      <ChevronsRight size={11} />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
             {/* SEÇÃO 2: PESSOAS PARA ASSINAR */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Pessoas para Assinar
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
-                  Página atual: {paginaAtualNoDoc}/{totalPaginasDocAtivo}
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
+                    Página atual: {paginaAtualNoDoc}/{totalPaginasDocAtivo}
+                  </span>
+                  {totalPaginasDocAtivo > 1 && (
+                    paginaAtualNoDoc < totalPaginasDocAtivo ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleIrParaUltimaPaginaDoArquivo(docAtivoIndex, e)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 5,
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          cursor: 'pointer',
+                        }}
+                        title={`Pular para a última página (${totalPaginasDocAtivo})`}
+                      >
+                        <span>Última</span>
+                        <ChevronsRight size={10} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex, e)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '1.5px 6px',
+                          borderRadius: 5,
+                          background: '#f8fafc',
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          cursor: 'pointer',
+                        }}
+                        title="Voltar para a 1ª página"
+                      >
+                        <ChevronsLeft size={10} />
+                        <span>1ª pág</span>
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2176,8 +2417,8 @@ export function PosicionadorAssinaturasModal({
                 <div />
               )}
 
-              {/* Indicador Central de Página Atual (Rolagem com Mouse) + Troca de Arquivo quando múltiplos */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {/* Indicador Central de Página Atual + Navegação Rápida (1ª / Última Página) + Troca de Arquivo */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {docsProcessados.length > 1 && (
                   <button
                     type="button"
@@ -2211,23 +2452,113 @@ export function PosicionadorAssinaturasModal({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6,
+                    gap: 4,
                     background: '#f8fafc',
                     border: '1px solid #e2e8f0',
-                    padding: '4px 12px',
+                    padding: '3px 6px',
                     borderRadius: 999,
                     fontSize: 11.5,
                     color: '#475569',
                     fontWeight: 600,
                   }}
                 >
-                  <span style={{ color: '#0f172a', fontWeight: 700 }}>
+                  {totalPaginasDocAtivo > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex, e)}
+                        disabled={paginaAtualNoDoc <= 1}
+                        style={{
+                          background: paginaAtualNoDoc > 1 ? '#ffffff' : 'transparent',
+                          border: paginaAtualNoDoc > 1 ? '1px solid #cbd5e1' : '1px solid transparent',
+                          color: paginaAtualNoDoc > 1 ? '#334155' : '#cbd5e1',
+                          cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
+                          padding: '2px 6px',
+                          borderRadius: 999,
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Ir para a primeira página (Página 1)"
+                      >
+                        <ChevronsLeft size={12} />
+                        <span>1ª</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => rolarParaPagina(paginaAtualNoDoc - 1)}
+                        disabled={paginaAtualNoDoc <= 1}
+                        style={{
+                          background: paginaAtualNoDoc > 1 ? '#ffffff' : 'transparent',
+                          border: paginaAtualNoDoc > 1 ? '1px solid #cbd5e1' : '1px solid transparent',
+                          color: paginaAtualNoDoc > 1 ? '#334155' : '#cbd5e1',
+                          cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: 999,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Página anterior"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                    </>
+                  )}
+
+                  <span style={{ color: '#0f172a', fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
                     Página {paginaAtualNoDoc} de {totalPaginasDocAtivo}
                   </span>
+
                   {totalPaginasDocAtivo > 1 && (
-                    <span style={{ color: '#64748b', fontSize: 11, fontWeight: 500 }}>
-                      · Role com o mouse para ver todas as páginas
-                    </span>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => rolarParaPagina(paginaAtualNoDoc + 1)}
+                        disabled={paginaAtualNoDoc >= totalPaginasDocAtivo}
+                        style={{
+                          background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#ffffff' : 'transparent',
+                          border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #cbd5e1' : '1px solid transparent',
+                          color: paginaAtualNoDoc < totalPaginasDocAtivo ? '#334155' : '#cbd5e1',
+                          cursor: paginaAtualNoDoc >= totalPaginasDocAtivo ? 'not-allowed' : 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: 999,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title="Próxima página"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => handleIrParaUltimaPaginaDoArquivo(docAtivoIndex, e)}
+                        style={{
+                          background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#eff6ff' : '#ecfdf5',
+                          border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #93c5fd' : '1px solid #a7f3d0',
+                          color: paginaAtualNoDoc < totalPaginasDocAtivo ? '#1d4ed8' : '#047857',
+                          cursor: 'pointer',
+                          padding: '2px 9px',
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          transition: 'all 0.15s ease',
+                        }}
+                        title={`Ir diretamente para a última página deste arquivo (Página ${totalPaginasDocAtivo})`}
+                      >
+                        <span>Última página ({totalPaginasDocAtivo})</span>
+                        <ChevronsRight size={13} />
+                      </button>
+                    </>
                   )}
                 </div>
 

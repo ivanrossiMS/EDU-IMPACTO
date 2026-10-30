@@ -359,6 +359,11 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
       if (meta?.call_id) callIds.add(String(meta.call_id))
     } else if (l.type === 'calendario') {
       if (meta?.item_id) eventoIds.add(String(meta.item_id))
+      if (Array.isArray(meta?.evento_ids)) {
+        for (const eid of meta.evento_ids) {
+          if (eid) eventoIds.add(String(eid))
+        }
+      }
       const baseId = itemIdStr ? itemIdStr.replace(/-reminder.*$/, '').split('_aluno_')[0].split('_perfil_')[0].replace(/-\d+$/, '') : null
       if (baseId && !baseId.startsWith('cal_dia_') && !baseId.startsWith('cal_lembrete_')) eventoIds.add(baseId)
     } else if (l.type === 'frequencia') {
@@ -386,7 +391,7 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
       ? supabase.from('saida_calls').select('id, dados').in('id', Array.from(callIds))
       : Promise.resolve({ data: [] }),
     eventoIds.size > 0
-      ? supabase.from('eventos_agenda').select('id, titulo, criado_por, dados').in('id', Array.from(eventoIds))
+      ? supabase.from('eventos_agenda').select('id, titulo, criado_por, turmas, dados').in('id', Array.from(eventoIds))
       : Promise.resolve({ data: [] }),
     freqIds.size > 0
       ? supabase.from('frequencias').select('id, aluno_id, data, presente, dados').in('id', Array.from(freqIds))
@@ -436,6 +441,7 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
     'sistema', 'automatico', 'automático', 'portaria', 'portaria escolar', 'portaria & saida',
     'secretaria', 'secretaria academica', 'catraca', 'catraca idface', 'catraca digital idface',
     'totem', 'admin', 'admin logado', 'colaborador', 'colaboradora', 'colaborador(a)',
+    'usuario', 'usuário', 'usuario(a)', 'usuário(a)', 'user',
     'professor', 'professora', 'coordenacao', 'coordenação', 'coordenacao escolar',
     'coordenacao disciplinar', 'equipe pedagogica', 'equipe escolar', 'colegio impacto',
     'departamento financeiro', 'financeiro', 'manual', 'manual (auto)'
@@ -874,9 +880,12 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
 
     // 7. Calendário & Eventos
     if (!sender && l.type === 'calendario') {
-      const baseId = meta?.item_id || (itemIdStr ? itemIdStr.split('_aluno_')[0].replace(/-\d+$/, '') : null)
-      const ev = baseId ? evMap.get(String(baseId)) : null
-      const evCreator =
+      const candidateEvId =
+        meta?.item_id ||
+        (Array.isArray(meta?.evento_ids) && meta.evento_ids[0] ? String(meta.evento_ids[0]) : null) ||
+        (itemIdStr ? itemIdStr.split('_aluno_')[0].split('_perfil_')[0].replace(/-\d+$/, '') : null)
+      const ev = candidateEvId ? evMap.get(String(candidateEvId)) : null
+      const rawCreator =
         ev?.criado_por ||
         ev?.dados?.criadoPor ||
         ev?.dados?.criado_por ||
@@ -884,13 +893,18 @@ async function batchResolveSenders(logs: any[], supabase: any): Promise<Map<stri
         ev?.dados?.autor ||
         ev?.dados?.usuarioNome ||
         meta?.sender_name
+      const evCreator = rawCreator && !isGenericSenderName(rawCreator) ? rawCreator : null
       const u = findUser(l.user_id || meta?.sender_id || ev?.dados?.usuarioId, evCreator)
-      if (u || (evCreator && !isGenericSenderName(evCreator))) {
-        sender = buildColabSender(u, evCreator, 'Calendário de Eventos')
+      if (u || evCreator) {
+        sender = buildColabSender(u, evCreator, ev?.dados?.usuarioCargo || meta?.sender_cargo || 'Calendário de Eventos', ev?.dados?.usuarioFoto || meta?.sender_foto)
       } else {
+        const eqTurma = Array.isArray(ev?.turmas)
+          ? ev.turmas.find((t: any) => /coordena/i.test(String(t || '')))
+          : null
+        const coordLabel = eqTurma ? String(eqTurma).trim() : 'Coordenação Escolar'
         sender = {
-          nome: 'Coordenação Escolar',
-          friendlyName: 'Coordenação',
+          nome: coordLabel,
+          friendlyName: eqTurma ? coordLabel : 'Coordenação',
           subtitulo: 'Calendário de Eventos',
           tipo: 'colaborador',
           foto: null,
