@@ -274,6 +274,12 @@ export interface Perfil {
   bloqueadoSimulados?: boolean
   bloqueadoProvasOnline?: boolean
   bloqueadoCredImpacto?: boolean
+  bloqueadoKpisDashboard?: boolean
+  bloqueadoCardsDashboard?: string[]
+  bloqueadoKpisAlunos?: boolean
+  bloqueadoCardsAlunos?: string[]
+  bloqueadoKpisTurmas?: boolean
+  bloqueadoCardsTurmas?: string[]
 }
 
 // ─── AGENDA ESCOLAR ───────────────────────────────────────────────

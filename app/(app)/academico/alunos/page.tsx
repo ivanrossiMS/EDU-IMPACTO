@@ -9,9 +9,11 @@ import {
   Loader2, Lock, AlertTriangle, CheckCircle2, Info,
   ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck,
   Lightbulb, CloudSun, CircleDot, Clock, CheckCircle, GraduationCap,
-  UserCheck, UserX, Copy
+  UserCheck, UserX, Copy, EyeOff
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
+import { resolveUserPerfil, isAlunosCardHidden, isAnyAlunosCardHidden } from '@/lib/auth/moduleRouting'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { useApiQuery } from '@/hooks/useApi'
@@ -103,8 +105,22 @@ export interface ObservacaoItem {
 }
 
 export default function AlunosPage() {
-  const { cfgNiveisEnsino, cfgCalendarioLetivo, cfgPadroesPagamento, logSystemAction } = useData()
+  const { cfgNiveisEnsino, cfgCalendarioLetivo, cfgPadroesPagamento, logSystemAction, perfis, perfisLoading } = useData()
+  const { currentUser, currentUserPerfil, hydrated } = useApp()
   const queryClient = useQueryClient()
+
+  // ── Resolução de Permissões de Visualização dos Cards (Zero-Flash)
+  const userPerfilObj = useMemo(
+    () => resolveUserPerfil(perfis, currentUserPerfil, currentUser),
+    [perfis, currentUserPerfil, currentUser]
+  )
+  const isResolvingPerms = !hydrated || (perfisLoading && (!perfis || perfis.length === 0))
+  const hideAlunosTotalKpi = isAlunosCardHidden(userPerfilObj, 'total')
+  const hideAlunosAtivosKpi = isAlunosCardHidden(userPerfilObj, 'ativos')
+  const hideAlunosInativosKpi = isAlunosCardHidden(userPerfilObj, 'inativos')
+  const hideAlunosIntegralKpi = isAlunosCardHidden(userPerfilObj, 'integral')
+  const allAlunosKpisHidden = hideAlunosTotalKpi && hideAlunosAtivosKpi && hideAlunosInativosKpi && hideAlunosIntegralKpi
+  const anyAlunosKpiHidden = isAnyAlunosCardHidden(userPerfilObj)
   
   const [busca, setBusca] = useState('')
   const [todasTurmas, setTodasTurmas] = useState<any[]>([])
@@ -1022,7 +1038,7 @@ export default function AlunosPage() {
     inativos: number
     integral: number
     integralAtivos: number
-  }>(['alunos-stats'], '/api/alunos/stats', {}, { staleTime: 30000 })
+  }>(['alunos-stats'], '/api/alunos/stats', {}, { staleTime: 30000, enabled: !isResolvingPerms && !allAlunosKpisHidden })
 
   useEffect(() => {
     const fetchTodasTurmas = async () => {
@@ -2795,6 +2811,7 @@ export default function AlunosPage() {
           {[
             {
               id: 'total',
+              hidden: hideAlunosTotalKpi,
               label: 'Total de Alunos',
               value: statsData?.total ?? 0,
               sub: 'Cadastros no sistema',
@@ -2815,6 +2832,7 @@ export default function AlunosPage() {
             },
             {
               id: 'ativos',
+              hidden: hideAlunosAtivosKpi,
               label: 'Alunos Ativos',
               value: statsData?.ativos ?? 0,
               sub: 'Matriculados no ano',
@@ -2835,6 +2853,7 @@ export default function AlunosPage() {
             },
             {
               id: 'inativos',
+              hidden: hideAlunosInativosKpi,
               label: 'Alunos Inativos',
               value: statsData?.inativos ?? 0,
               sub: 'Desativados / trancados',
@@ -2855,6 +2874,7 @@ export default function AlunosPage() {
             },
             {
               id: 'integral',
+              hidden: hideAlunosIntegralKpi,
               label: 'Integral / Intermediário',
               value: statsData?.integralAtivos ?? statsData?.integral ?? 0,
               sub: 'Apenas alunos ativos',
@@ -2937,8 +2957,34 @@ export default function AlunosPage() {
                       lineHeight: 1.1
                     }}
                   >
-                    {loadingStats ? (
+                    {isResolvingPerms || (loadingStats && !kpi.hidden) ? (
                       <Loader2 className="animate-spin" size={24} style={{ color: kpi.color, margin: '2px 0' }} />
+                    ) : kpi.hidden ? (
+                      <span
+                        aria-label="Dado restrito para este perfil"
+                        title="Visualização restrita para o seu perfil"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, userSelect: 'none' }}
+                      >
+                        <span style={{ letterSpacing: '0.12em', opacity: 0.55 }}>••••</span>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            background: kpi.bg,
+                            color: kpi.color,
+                            border: `1px solid ${kpi.bd}`,
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          <EyeOff size={11} strokeWidth={2.4} />
+                          <span>Oculto</span>
+                        </span>
+                      </span>
                     ) : (
                       kpi.value
                     )}
@@ -2986,7 +3032,14 @@ export default function AlunosPage() {
                     textOverflow: 'ellipsis'
                   }}
                 >
-                  {kpi.sub}
+                  {!isResolvingPerms && kpi.hidden ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Lock size={10} style={{ opacity: 0.75 }} />
+                      <span>Visualização restrita • Clique p/ filtrar</span>
+                    </span>
+                  ) : (
+                    kpi.sub
+                  )}
                 </div>
               </div>
             </div>
@@ -3404,9 +3457,13 @@ export default function AlunosPage() {
                 <option value={25}>25</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
-                <option value={999999}>Todos</option>
+                {!isResolvingPerms && !anyAlunosKpiHidden && (
+                  <option value={999999}>Todos</option>
+                )}
               </select>
-              <span>de {total} alunos</span>
+              <span>
+                {isResolvingPerms || anyAlunosKpiHidden ? 'por página' : `de ${total} alunos`}
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 4 }}>

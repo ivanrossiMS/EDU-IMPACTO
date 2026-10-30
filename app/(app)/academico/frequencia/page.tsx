@@ -1902,8 +1902,12 @@ export default function FrequenciaPage() {
         })
         
         const calc = calcularFrequenciaDia(tempos, schedule.segmento)
-        const existing = freqTurma?.find(f => String(f.aluno_id) === String(a.id) && String(f.data).startsWith(dia))
+        const targetIdKey = normalizeAlunoIdKey(a.id)
+        const existing =
+          freqTurma?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === targetIdKey && isSameDay(f.data, dia)) ||
+          combinedFreqs?.find(f => normalizeAlunoIdKey(f.aluno_id || f.alunoId) === targetIdKey && isSameDay(f.data, dia))
         const safeExistingId = existing?.id && !String(existing.id).startsWith('CATRACA-') ? existing.id : undefined
+        const hasPersistedRecord = Boolean(safeExistingId)
         
         const isAllDash = Object.values(tempos).every(v => v === '-')
         if (isAllDash) {
@@ -1935,7 +1939,6 @@ export default function FrequenciaPage() {
           return
         }
 
-        const targetIdKey = normalizeAlunoIdKey(a.id)
         const portariaEv = (portariaEventsList || []).find((ev: any) => {
           const evAlunoId = normalizeAlunoIdKey(ev.aluno_id || ev.alunoId || '')
           const evEquipId = normalizeAlunoIdKey(ev.user_id_equipamento || '')
@@ -1994,14 +1997,60 @@ export default function FrequenciaPage() {
           : (customEntrada || horaCatraca || existingHoraEntrada || nowTime)
 
         // Verificar se houve alteração real em relação ao registro existente no banco
-        const existingTempos = (existing?.tempos || existing?.dados?.tempos || {}) as Record<string, string>
-        const calcTempos = calc.temposEfetivos || {}
-        const temposKeys = Array.from(new Set([...Object.keys(existingTempos), ...Object.keys(calcTempos)]))
-        const isTemposDifferent = temposKeys.some(k => (existingTempos[k] || '-') !== (calcTempos[k] || '-'))
-        const isPresenteDifferent = existing ? Boolean(existing.presente) !== Boolean(calc.presente) : true
-        const isJustificativaDifferent = existing ? Boolean(existing.justificativa) !== Boolean(calc.justificativa) : false
+        const rawExistingTempos = (existing?.tempos || existing?.dados?.tempos) as Record<string, string> | undefined
+        const hasValidExistingTempos = Boolean(
+          rawExistingTempos &&
+          typeof rawExistingTempos === 'object' &&
+          Object.values(rawExistingTempos).some(v => v === 'P' || v === 'F' || v === 'J')
+        )
+        const effectiveExistingTempos: Record<string, string> = {}
+        if (hasPersistedRecord && !isExistingSaidaOnly) {
+          if (hasValidExistingTempos && rawExistingTempos) {
+            schedule.tempos.forEach(t => {
+              effectiveExistingTempos[t.id] = rawExistingTempos[t.id] || '-'
+            })
+          } else {
+            const overallExistingStatus: PresStatus =
+              existing?.justificativa === 'Justificada' || String(existing?.justificativa || '').toLowerCase().includes('justifica')
+                ? 'J'
+                : (existing?.presente ? 'P' : 'F')
+            schedule.tempos.forEach(t => {
+              effectiveExistingTempos[t.id] = overallExistingStatus
+            })
+          }
+        }
 
-        const hasChanged = !existing || isPresenteDifferent || isJustificativaDifferent || isTemposDifferent
+        const calcTempos = calc.temposEfetivos || {}
+        const temposKeys = Array.from(new Set([...Object.keys(effectiveExistingTempos), ...Object.keys(calcTempos)]))
+        const isTemposDifferent = temposKeys.some(k => (effectiveExistingTempos[k] || '-') !== (calcTempos[k] || '-'))
+        const isPresenteDifferent = hasPersistedRecord && !isExistingSaidaOnly ? Boolean(existing.presente) !== Boolean(calc.presente) : true
+        const isJustificativaDifferent = hasPersistedRecord && !isExistingSaidaOnly
+          ? String(existing?.justificativa || '').trim() !== String(calc.justificativa || '').trim()
+          : false
+
+        const existingHorarioIndefinido = Boolean(existing?.dados?.horarioIndefinido || existing?.horarioIndefinido)
+        const isEntradaDifferent =
+          (existingHoraEntrada || null) !== (finalHoraEntrada || null) ||
+          existingHorarioIndefinido !== isHorarioIndefinido
+
+        const effectiveSaidaCancelada = isSaidaCancelada && !customSaida ? true : false
+        const existingSaidaCancelada = Boolean(existing?.dados?.saidaCancelada || existing?.saidaCancelada)
+        const effectiveSaidaHorario = effectiveSaidaCancelada ? null : (customSaida || existing?.dados?.saidaHorario || null)
+        const existingSaidaHorario = existing?.dados?.saidaHorario || existing?.saidaHorario || null
+        const effectiveSaidaResp = effectiveSaidaCancelada ? null : (customRespSaida || existing?.dados?.saidaResponsavel || null)
+        const existingSaidaResp = existing?.dados?.saidaResponsavel || existing?.saidaResponsavel || null
+        const isSaidaDifferent =
+          effectiveSaidaCancelada !== existingSaidaCancelada ||
+          (formatTimeFromIso(effectiveSaidaHorario) || effectiveSaidaHorario || null) !== (formatTimeFromIso(existingSaidaHorario) || existingSaidaHorario || null) ||
+          (effectiveSaidaResp || null) !== (existingSaidaResp || null)
+
+        const hasStatusChanged = !hasPersistedRecord || isExistingSaidaOnly || isPresenteDifferent || isJustificativaDifferent
+        const hasAnyModification = hasStatusChanged || isTemposDifferent || isEntradaDifferent || isSaidaDifferent
+
+        // Se o aluno já possui frequência registrada no banco e nada foi alterado para ele, não salvar novamente
+        if (!hasAnyModification) {
+          return
+        }
 
         recordsToSave.push({
           id: safeExistingId,
@@ -2012,7 +2061,7 @@ export default function FrequenciaPage() {
           presente: calc.presente,
           justificativa: calc.justificativa,
           tempos: calc.temposEfetivos,
-          notifyPush: hasChanged,
+          notifyPush: hasStatusChanged,
           registradoPor: isCatraca && calc.presente && !isHorarioIndefinido ? (!isExistingSaidaOnly && existingRegPor ? existingRegPor : 'Catraca iDFace') : 'Manual',
           origem: isCatraca && calc.presente && !isHorarioIndefinido ? 'catraca' : 'manual',
           horaRegistro: finalHoraEntrada,
@@ -2156,6 +2205,50 @@ export default function FrequenciaPage() {
       }
 
       const safeManualId = existingFreq?.id && !String(existingFreq.id).startsWith('CATRACA-') ? existingFreq.id : undefined
+      const hasPersistedManual = Boolean(safeManualId) && !isExistingSaidaOnly
+
+      const hasValidExistingManualTempos = Boolean(
+        rawExistingTempos &&
+        typeof rawExistingTempos === 'object' &&
+        Object.values(rawExistingTempos).some(v => v === 'P' || v === 'F' || v === 'J')
+      )
+      const effectiveExistingManualTempos: Record<string, string> = {}
+      if (hasPersistedManual) {
+        if (hasValidExistingManualTempos && rawExistingTempos) {
+          schedule.tempos.forEach(t => {
+            effectiveExistingManualTempos[t.id] = rawExistingTempos[t.id] || '-'
+          })
+        } else {
+          const overallExistingStatus: PresStatus =
+            existingFreq?.justificativa === 'Justificada' || String(existingFreq?.justificativa || '').toLowerCase().includes('justifica')
+              ? 'J'
+              : (existingFreq?.presente ? 'P' : 'F')
+          schedule.tempos.forEach(t => {
+            effectiveExistingManualTempos[t.id] = overallExistingStatus
+          })
+        }
+      }
+
+      const calcManualTempos = calc.temposEfetivos || {}
+      const manualTemposKeys = Array.from(new Set([...Object.keys(effectiveExistingManualTempos), ...Object.keys(calcManualTempos)]))
+      const isManualTemposDifferent = manualTemposKeys.some(k => (effectiveExistingManualTempos[k] || '-') !== (calcManualTempos[k] || '-'))
+      const isManualPresenteDifferent = hasPersistedManual ? Boolean(existingFreq.presente) !== Boolean(calc.presente) : true
+      const isManualJustificativaDifferent = hasPersistedManual
+        ? String(existingFreq?.justificativa || '').trim() !== String(calc.justificativa || '').trim()
+        : false
+      const existingManualHora = (!isExistingSaidaOnly && existingFreq?.presente !== false)
+        ? (existingFreq?.dados?.horaEntrada || existingFreq?.horaRegistro || existingFreq?.dados?.horaRegistro || null)
+        : null
+      const isManualEntradaDifferent =
+        (existingManualHora || null) !== (finalHoraRegistro || null) ||
+        Boolean(existingFreq?.dados?.horarioIndefinido || existingFreq?.horarioIndefinido) !== isHorarioIndefinido
+
+      const hasManualStatusChanged = !hasPersistedManual || isManualPresenteDifferent || isManualJustificativaDifferent
+      const hasAnyManualModification = hasManualStatusChanged || isManualTemposDifferent || isManualEntradaDifferent
+
+      if (!hasAnyManualModification) {
+        continue
+      }
 
       recordsToSave.push({
         id: safeManualId,
@@ -2166,6 +2259,7 @@ export default function FrequenciaPage() {
         presente: calc.presente,
         justificativa: calc.justificativa,
         tempos: calc.temposEfetivos,
+        notifyPush: hasManualStatusChanged,
         registradoPor: isCatraca && calc.presente && !isHorarioIndefinido ? (!isExistingSaidaOnly && existingRegPor ? existingRegPor : 'Catraca iDFace') : 'Manual',
         origem: isCatraca && calc.presente && !isHorarioIndefinido ? 'catraca' : 'manual',
         horaRegistro: finalHoraRegistro,

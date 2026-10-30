@@ -210,19 +210,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const mergeExistingAttendanceLogs = async (rowsToSave: any[]) => {
-      if (!rowsToSave.length) return rowsToSave
-      const rowIds = rowsToSave.map(r => r.id).filter(Boolean)
-      if (!rowIds.length) return rowsToSave
-      const { data: existingRows } = await supabaseServer
-        .from('frequencias')
-        .select('id, dados')
-        .in('id', rowIds)
-      const existingMap = new Map<string, any>((existingRows || []).map(r => [String(r.id), r.dados || {}]))
+    const mergeExistingAttendanceLogs = async (itemsToProcess: Array<{ row: any; notifyPush: boolean }>) => {
+      if (!itemsToProcess.length) return []
+      const rowIds = itemsToProcess.map(i => i.row.id).filter(Boolean)
+      const { data: existingRows } = rowIds.length > 0
+        ? await supabaseServer
+            .from('frequencias')
+            .select('id, aluno_id, turma_id, data, presente, justificativa, dados')
+            .in('id', rowIds)
+        : { data: [] as any[] }
+      const existingRowMap = new Map<string, any>((existingRows || []).map(r => [String(r.id), r]))
       const saidaKeys = new Set(['saidas', 'totalSaidas', 'ultimaSaida', 'saidaHorario', 'saidaResponsavel', 'saidaOrigem'])
       const preserveKeys = ['saidas', 'entradas', 'totalSaidas', 'totalEntradas', 'ultimaSaida', 'ultimaEntrada', 'saidaHorario', 'saidaResponsavel', 'saidaOrigem', 'horaEntrada']
-      return rowsToSave.map(r => {
-        const prevDados = existingMap.get(String(r.id)) || {}
+
+      return itemsToProcess.map(item => {
+        const r = item.row
+        const existingRow = existingRowMap.get(String(r.id))
+        const prevDados = existingRow?.dados || {}
         const mergedDados: Record<string, any> = { ...(r.dados || {}) }
         const hasNewSaida = Boolean(mergedDados.saidaHorario && String(mergedDados.saidaHorario).trim().length > 0)
         const isSaidaCancelada = !hasNewSaida && (
@@ -266,7 +270,62 @@ export async function POST(request: Request) {
             mergedDados.horaRegistro = prevDados.horaEntrada
           }
         }
-        return { ...r, dados: mergedDados }
+
+        const mergedRow = { ...r, dados: mergedDados }
+
+        if (!existingRow || prevWasSaidaOnly) {
+          return {
+            row: mergedRow,
+            existingRow: existingRow || null,
+            hasDbChanges: true,
+            shouldNotifyPush: item.notifyPush !== false
+          }
+        }
+
+        const prevIsJustified = Boolean(existingRow.justificativa && String(existingRow.justificativa).trim().length > 0)
+        const prevIsPresent = existingRow.presente !== false && !prevIsJustified
+        const prevStatusKey = prevIsJustified ? 'justificada' : (prevIsPresent ? 'presente' : 'falta')
+
+        const newIsJustified = Boolean(mergedRow.justificativa && String(mergedRow.justificativa).trim().length > 0)
+        const newIsPresent = mergedRow.presente !== false && !newIsJustified
+        const newStatusKey = newIsJustified ? 'justificada' : (newIsPresent ? 'presente' : 'falta')
+
+        const isStatusDifferent =
+          Boolean(existingRow.presente) !== Boolean(mergedRow.presente) ||
+          String(existingRow.justificativa || '').trim() !== String(mergedRow.justificativa || '').trim()
+
+        const prevTempos = prevDados.tempos && typeof prevDados.tempos === 'object' ? prevDados.tempos : null
+        const newTempos = mergedDados.tempos && typeof mergedDados.tempos === 'object' ? mergedDados.tempos : null
+        let isTemposDifferent = false
+        if (newTempos) {
+          if (prevTempos) {
+            const keys = Array.from(new Set([...Object.keys(prevTempos), ...Object.keys(newTempos)]))
+            isTemposDifferent = keys.some(k => (prevTempos[k] || '-') !== (newTempos[k] || '-'))
+          } else {
+            const implicitStatus = prevIsJustified ? 'J' : (prevIsPresent ? 'P' : 'F')
+            isTemposDifferent = Object.values(newTempos).some(v => (v || '-') !== implicitStatus)
+          }
+        }
+
+        const isEntradaDifferent =
+          (prevDados.horaEntrada || null) !== (mergedDados.horaEntrada || null) ||
+          Boolean(prevDados.horarioIndefinido) !== Boolean(mergedDados.horarioIndefinido)
+
+        const isSaidaDifferent =
+          Boolean(prevDados.saidaCancelada) !== Boolean(mergedDados.saidaCancelada) ||
+          (prevDados.saidaHorario || null) !== (mergedDados.saidaHorario || null) ||
+          (prevDados.saidaResponsavel || null) !== (mergedDados.saidaResponsavel || null)
+
+        const hasDbChanges = isStatusDifferent || isTemposDifferent || isEntradaDifferent || isSaidaDifferent
+        // Somente envia push se houve mudança efetiva no status geral do dia (ex: de falta para presente ou vice-versa)
+        const shouldNotifyPush = item.notifyPush !== false && prevStatusKey !== newStatusKey
+
+        return {
+          row: mergedRow,
+          existingRow,
+          hasDbChanges,
+          shouldNotifyPush
+        }
       })
     }
 
@@ -274,11 +333,15 @@ export async function POST(request: Request) {
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       
-      const items = body.map(f => buildRow(f, userName, user.id))
-      const rows = await mergeExistingAttendanceLogs(items.map(i => i.row))
+      const rawItems = body.map(f => buildRow(f, userName, user.id))
+      const processedItems = await mergeExistingAttendanceLogs(rawItems)
+      const changedItems = processedItems.filter(i => i.hasDbChanges)
+      const rows = changedItems.map(i => i.row)
 
-      const { error } = await supabase.from('frequencias').upsert(rows)
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      if (rows.length > 0) {
+        const { error } = await supabase.from('frequencias').upsert(rows)
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      }
 
       const cancelledRows = rows.filter(r => r.dados?.saidaCancelada === true && r.aluno_id && r.data)
       if (cancelledRows.length > 0) {
@@ -294,17 +357,20 @@ export async function POST(request: Request) {
         )
       }
 
+      const itemsToNotify = changedItems.filter(i => i.shouldNotifyPush)
+
       // ⚡ OTIMIZAÇÃO: Processamento de Push em background assíncrono em lotes reais de 20
       const dispatchBatchPushes = async () => {
         try {
-          const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
+          if (itemsToNotify.length === 0) return
+          const targetData = await getStudentTargetsForComunicados({ targetStudents: itemsToNotify.map(i => String(i.row.aluno_id)) })
           const chunkSize = 20
 
-          for (let i = 0; i < items.length; i += chunkSize) {
-            const chunk = items.slice(i, i + chunkSize)
+          for (let i = 0; i < itemsToNotify.length; i += chunkSize) {
+            const chunk = itemsToNotify.slice(i, i + chunkSize)
             await Promise.allSettled(
               chunk.map(async (item) => {
-                if (item.notifyPush === false) return
+                if (!item.shouldNotifyPush) return
 
                 const row = item.row
                 const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
@@ -339,6 +405,7 @@ export async function POST(request: Request) {
                     type: 'frequencia',
                     itemId: pushItemId,
                     collapseId: `freq_${row.id}`,
+                    senderUserId: user.id,
                     title: pushTitle,
                     message: pushMsg,
                     targetUserIds: studentInfo.responsaveis_ids,
@@ -361,19 +428,27 @@ export async function POST(request: Request) {
         }
       }
 
-      if (typeof (globalThis as any).waitUntil === 'function') {
-        (globalThis as any).waitUntil(dispatchBatchPushes())
-      } else {
-        dispatchBatchPushes().catch(err => console.error('[Frequencias Push Catch]', err))
+      if (itemsToNotify.length > 0) {
+        if (typeof (globalThis as any).waitUntil === 'function') {
+          (globalThis as any).waitUntil(dispatchBatchPushes())
+        } else {
+          dispatchBatchPushes().catch(err => console.error('[Frequencias Push Catch]', err))
+        }
       }
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
     const item = buildRow(body, userName, user.id)
-    const [mergedRow] = await mergeExistingAttendanceLogs([item.row])
-    const { data, error } = await supabase.from('frequencias').upsert(mergedRow).select().single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    const [processedSingle] = await mergeExistingAttendanceLogs([item])
+    const mergedRow = processedSingle.row
+
+    let data = processedSingle.existingRow || mergedRow
+    if (processedSingle.hasDbChanges) {
+      const { data: upsertedData, error } = await supabase.from('frequencias').upsert(mergedRow).select().single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      data = upsertedData
+    }
 
     if (mergedRow.dados?.saidaCancelada === true && mergedRow.aluno_id && mergedRow.data) {
       await supabaseServer
@@ -384,7 +459,7 @@ export async function POST(request: Request) {
         .neq('id', String(mergedRow.id))
     }
 
-    if (item.notifyPush !== false) {
+    if (processedSingle.shouldNotifyPush) {
       const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
       if (targetIds.length > 0) {
         const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
@@ -411,6 +486,7 @@ export async function POST(request: Request) {
           type: 'frequencia',
           itemId: pushItemId,
           collapseId: `freq_${data.id}`,
+          senderUserId: user.id,
           title: pushTitle,
           message: pushMsg,
           targetUserIds: targetIds,

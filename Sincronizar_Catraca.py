@@ -120,21 +120,14 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
 def garantir_instancia_unica():
     """
-    Garante que processos em segundo plano não fiquem duplicados.
-    Se estiver rodando como console interativo (python.exe), encerra processos ocultos (pythonw.exe).
-    Se estiver rodando em segundo plano (pythonw.exe), NÃO encerra a si próprio!
+    Garante que processos anteriores (python.exe ou pythonw.exe) sejam encerrados automaticamente
+    ao abrir a nova versão, sem nunca encerrar o próprio processo atual (my_pid).
     """
     if sys.platform == "win32":
         try:
-            exe_name = os.path.basename(sys.executable).lower()
             my_pid = os.getpid()
-            if "pythonw" not in exe_name:
-                # Se estamos abrindo uma janela interativa (python.exe), encerra processos ocultos (pythonw.exe)
-                subprocess.run(["taskkill", "/F", "/IM", "pythonw.exe"], capture_output=True)
-            else:
-                # Se estamos rodando como pythonw.exe, mata apenas OUTROS processos pythonw, nunca a si mesmo
-                cmd = f'powershell -NoProfile -Command "Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force"'
-                subprocess.run(cmd, shell=True, capture_output=True)
+            cmd = f'powershell -NoProfile -Command "Get-Process python, pythonw -ErrorAction SilentlyContinue | Where-Object {{ $_.Id -ne {my_pid} }} | Stop-Process -Force"'
+            subprocess.run(cmd, shell=True, capture_output=True)
         except Exception:
             pass
 
@@ -144,18 +137,36 @@ def garantir_instancia_unica():
 SESSION_POOL = {}
 POOL_LOCK = threading.Lock()
 
-# Cache de presenças do dia para evitar repetição e classificar saídas
+# Cache de presenças do dia e histórico persistente de IDs de log para evitar reprocessamento na virada do dia
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 hoje_iso_global = date.today().strftime('%Y_%m_%d')
-CACHE_ENTRADA_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso_global}.txt")
-CACHE_ENTRADA_LOGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_logs_{hoje_iso_global}.txt")
-CACHE_SAIDA_FILE        = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso_global}.txt")
+CACHE_ENTRADA_FILE        = os.path.join(BASE_DIR, f"sincronizados_entrada_{hoje_iso_global}.txt")
+CACHE_ENTRADA_LOGS_FILE   = os.path.join(BASE_DIR, f"sincronizados_entrada_logs_{hoje_iso_global}.txt")
+CACHE_SAIDA_FILE          = os.path.join(BASE_DIR, f"sincronizados_saida_{hoje_iso_global}.txt")
+CACHE_LOGS_HISTORICO_FILE = os.path.join(BASE_DIR, "sincronizados_logs_historico.txt")
 
 MEM_ENTRADAS_HOJE      = set()
 MEM_ENTRADAS_LOGS_HOJE = set()
 MEM_SAIDAS_HOJE        = set()
+MEM_LOGS_HISTORICOS    = set()
 ULTIMA_ENTRADA_ALUNO   = {}
 CONFIG_MULTIPLAS_ENTRADAS = False
 CACHE_LOCK             = threading.Lock()
+
+
+def obter_data_log_iso(ts):
+    """Retorna a data real do log da catraca no formato YYYY_MM_DD (sem contaminar dias diferentes)."""
+    if not ts:
+        return date.today().strftime('%Y_%m_%d')
+    try:
+        return datetime.fromtimestamp(int(ts), timezone.utc).strftime('%Y_%m_%d')
+    except Exception:
+        return date.today().strftime('%Y_%m_%d')
+
+
+def is_log_de_hoje(ts):
+    """Verifica se o timestamp do log da catraca pertence estritamente à data de hoje."""
+    return obter_data_log_iso(ts) == date.today().strftime('%Y_%m_%d')
 
 
 def carregar_caches_locais():
@@ -163,22 +174,23 @@ def carregar_caches_locais():
     hoje_iso = date.today().strftime('%Y_%m_%d')
     if hoje_iso != hoje_iso_global:
         hoje_iso_global = hoje_iso
-        CACHE_ENTRADA_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_{hoje_iso}.txt")
-        CACHE_ENTRADA_LOGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_entrada_logs_{hoje_iso}.txt")
-        CACHE_SAIDA_FILE        = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_saida_{hoje_iso}.txt")
+        CACHE_ENTRADA_FILE      = os.path.join(BASE_DIR, f"sincronizados_entrada_{hoje_iso}.txt")
+        CACHE_ENTRADA_LOGS_FILE = os.path.join(BASE_DIR, f"sincronizados_entrada_logs_{hoje_iso}.txt")
+        CACHE_SAIDA_FILE        = os.path.join(BASE_DIR, f"sincronizados_saida_{hoje_iso}.txt")
         with CACHE_LOCK:
             MEM_ENTRADAS_HOJE.clear()
             MEM_ENTRADAS_LOGS_HOJE.clear()
             MEM_SAIDAS_HOJE.clear()
             ULTIMA_ENTRADA_ALUNO.clear()
 
-    legacy_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{hoje_iso}.txt")
+    legacy_cache_file = os.path.join(BASE_DIR, f"sincronizados_{hoje_iso}.txt")
 
     with CACHE_LOCK:
         for cf, target_set in [
             (CACHE_ENTRADA_FILE, MEM_ENTRADAS_HOJE),
             (CACHE_ENTRADA_LOGS_FILE, MEM_ENTRADAS_LOGS_HOJE),
             (CACHE_SAIDA_FILE, MEM_SAIDAS_HOJE),
+            (CACHE_LOGS_HISTORICO_FILE, MEM_LOGS_HISTORICOS),
             (legacy_cache_file, MEM_ENTRADAS_HOJE)
         ]:
             if os.path.exists(cf):
@@ -192,7 +204,28 @@ def carregar_caches_locais():
                     pass
 
 
-def registrar_cache_entrada(uid):
+def sincronizar_cache_entrada_com_erp(reg_ent_erp):
+    """
+    Sincroniza MEM_ENTRADAS_HOJE com a verdade oficial do banco do ERP (frequencias de hoje),
+    eliminando qualquer ID que tenha sido gravado indevidamente por logs de dias anteriores.
+    """
+    with CACHE_LOCK:
+        MEM_ENTRADAS_HOJE.clear()
+        for uid in reg_ent_erp:
+            if uid:
+                MEM_ENTRADAS_HOJE.add(str(uid))
+        try:
+            with open(CACHE_ENTRADA_FILE, "w", encoding="utf-8") as f:
+                for uid in sorted(MEM_ENTRADAS_HOJE):
+                    f.write(str(uid) + "\n")
+        except Exception:
+            pass
+
+
+def registrar_cache_entrada(uid, log_ts=None):
+    """Registra o aluno no cache de entradas de HOJE somente se o log for comprovadamente de hoje."""
+    if log_ts is not None and not is_log_de_hoje(log_ts):
+        return
     with CACHE_LOCK:
         MEM_ENTRADAS_HOJE.add(str(uid))
         try:
@@ -202,24 +235,54 @@ def registrar_cache_entrada(uid):
             pass
 
 
-def registrar_cache_entrada_log(log_id):
+def registrar_cache_log_historico(log_key):
+    """Persiste a chave composta (catraca:log_id) entre dias para não reprocessar logs de ontem no startup."""
+    with CACHE_LOCK:
+        if str(log_key) in MEM_LOGS_HISTORICOS:
+            return
+        MEM_LOGS_HISTORICOS.add(str(log_key))
+        try:
+            with open(CACHE_LOGS_HISTORICO_FILE, "a", encoding="utf-8") as f:
+                f.write(str(log_key) + "\n")
+            # Compactação automática caso passe de 12.000 linhas
+            if len(MEM_LOGS_HISTORICOS) > 12000 and os.path.exists(CACHE_LOGS_HISTORICO_FILE):
+                with open(CACHE_LOGS_HISTORICO_FILE, "r", encoding="utf-8") as f:
+                    linhas = [l.strip() for l in f if l.strip()]
+                if len(linhas) > 10000:
+                    ultimas = linhas[-8000:]
+                    MEM_LOGS_HISTORICOS.clear()
+                    MEM_LOGS_HISTORICOS.update(ultimas)
+                    with open(CACHE_LOGS_HISTORICO_FILE, "w", encoding="utf-8") as fw:
+                        for l in ultimas:
+                            fw.write(l + "\n")
+        except Exception:
+            pass
+
+
+def registrar_cache_entrada_log(log_id, cat_key=None):
+    composite = f"{cat_key}:{log_id}" if cat_key else str(log_id)
     with CACHE_LOCK:
         MEM_ENTRADAS_LOGS_HOJE.add(str(log_id))
+        MEM_ENTRADAS_LOGS_HOJE.add(composite)
         try:
             with open(CACHE_ENTRADA_LOGS_FILE, "a", encoding="utf-8") as f:
-                f.write(str(log_id) + "\n")
+                f.write(composite + "\n")
         except Exception:
             pass
+    registrar_cache_log_historico(composite)
 
 
-def registrar_cache_saida(log_id):
+def registrar_cache_saida(log_id, cat_key=None):
+    composite = f"{cat_key}:{log_id}" if cat_key else str(log_id)
     with CACHE_LOCK:
         MEM_SAIDAS_HOJE.add(str(log_id))
+        MEM_SAIDAS_HOJE.add(composite)
         try:
             with open(CACHE_SAIDA_FILE, "a", encoding="utf-8") as f:
-                f.write(str(log_id) + "\n")
+                f.write(composite + "\n")
         except Exception:
             pass
+    registrar_cache_log_historico(composite)
 
 
 def carregar_estado_catracas():
@@ -583,7 +646,7 @@ def carregar_registrados_do_erp():
                 print(f"  [CONFIG ERP] Modo de Multiplas Entradas: {status_txt}")
             return reg_entrada, reg_saida, dispositivos
     except Exception as e:
-        return set(), set(), []
+        return None, None, []
 
 
 def processar_fila_pendencias_erp():
@@ -706,16 +769,24 @@ def processar_fila_pendencias_erp():
 
 
 def thread_background_erp():
-    """Executa a checagem de filas do ERP e atualizacao de cache a cada 20 segundos."""
+    """Executa a checagem de filas do ERP, reconciliação diária e calibração de relógio em background."""
+    ciclo_bg = 0
     while True:
         try:
+            ciclo_bg += 1
             # 1. Processar fila de cadastros e fotos do ERP
             processar_fila_pendencias_erp()
-            # 2. Atualizar cache de presencas confirmadas e modo operacional no ERP
+            # 2. Atualizar cache de presencas confirmadas e modo operacional no ERP (limpando contaminações)
             reg_ent, reg_sai, _ = carregar_registrados_do_erp()
-            if reg_ent:
-                with CACHE_LOCK:
-                    MEM_ENTRADAS_HOJE.update(reg_ent)
+            if reg_ent is not None:
+                sincronizar_cache_entrada_com_erp(reg_ent)
+            # 3. A cada 5 minutos (15 ciclos de 20s), auditar e recuperar qualquer log de hoje que tenha ficado para trás
+            if ciclo_bg % 15 == 0:
+                reconciliar_logs_hoje_catracas(CATRACAS)
+            # 4. A cada 30 minutos (90 ciclos de 20s), recalibrar o relógio das catracas contra quedas de energia
+            if ciclo_bg % 90 == 0:
+                for cat in CATRACAS:
+                    sincronizar_relogio_catraca(cat)
         except Exception:
             pass
         time.sleep(20)
@@ -749,7 +820,64 @@ def executar_varredura_paralela(estado):
     return eventos_por_catraca
 
 
-def processar_eventos_detectados(eventos_por_catraca, estado):
+def reconciliar_logs_hoje_catracas(catracas):
+    """
+    Varredura de integridade do dia atual:
+    Busca na memória SQLite de cada catraca todos os logs gerados HOJE (time >= 00:00:00 de hoje)
+    e envia automaticamente qualquer passagem de hoje que ainda não esteja em MEM_ENTRADAS_LOGS_HOJE / MEM_SAIDAS_HOJE.
+    Garante auto-recuperação imediata mesmo se o cursor já tiver avançado!
+    """
+    hoje = date.today()
+    ts_inicio_hoje = int(datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    lote_recuperacao = []
+
+    with CACHE_LOCK:
+        logs_ent_proc = set(MEM_ENTRADAS_LOGS_HOJE)
+        logs_sai_proc = set(MEM_SAIDAS_HOJE)
+        logs_hist_proc = set(MEM_LOGS_HISTORICOS)
+
+    for cat in catracas:
+        cat_key = cat.get("id") or cat["ip"]
+        try:
+            r = call_catraca_fcgi(cat, "load_objects.fcgi", {
+                "object": "access_logs",
+                "where": {"access_logs": {"time": {">=": ts_inicio_hoje}}},
+                "limit": 1000,
+            }, timeout=5)
+            logs_hoje = r.get("access_logs", []) if r else []
+            if not logs_hoje:
+                continue
+
+            logs_hoje = sorted(logs_hoje, key=lambda x: x.get("id", 0))
+            faltantes = []
+            for l in logs_hoje:
+                if l.get("user_id", 0) <= 0:
+                    continue
+                if not is_log_de_hoje(l.get("time", 0)):
+                    continue
+                lid = str(l.get("id", ""))
+                comp = f"{cat_key}:{lid}"
+                if (
+                    comp not in logs_ent_proc and
+                    comp not in logs_sai_proc and
+                    comp not in logs_hist_proc and
+                    lid not in logs_ent_proc and
+                    lid not in logs_sai_proc
+                ):
+                    faltantes.append(l)
+
+            if faltantes:
+                print(f"  [AUTO-HEAL] [{cat['nome']}] Recuperando {len(faltantes)} passagem(ns) de hoje que faltavam no ERP...")
+                lote_recuperacao.append((cat, cat_key, 0, faltantes))
+        except Exception:
+            pass
+
+    if lote_recuperacao:
+        estado_dummy = {}
+        processar_eventos_detectados(lote_recuperacao, estado_dummy, salvar_cursor=False)
+
+
+def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True):
     estado_alterado = False
 
     for cat, cat_key, last_id, logs in eventos_por_catraca:
@@ -757,7 +885,7 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         max_log_id = max([l.get("id", 0) for l in logs], default=0)
 
         if not reconhecidos:
-            if max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
+            if salvar_cursor and max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
                 estado[cat_key] = max_log_id
                 estado_alterado = True
             continue
@@ -771,6 +899,7 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
             entradas_atuais = set(MEM_ENTRADAS_HOJE)
             entradas_logs_atuais = set(MEM_ENTRADAS_LOGS_HOJE)
             saidas_enviadas = set(MEM_SAIDAS_HOJE)
+            logs_historicos = set(MEM_LOGS_HISTORICOS)
             multiplas_entradas = CONFIG_MULTIPLAS_ENTRADAS
 
         logs_entrada = []
@@ -804,18 +933,31 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         # ── PROCESSAR SAÍDAS ──
         for log in logs_saida:
             lid = str(log.get("id", ""))
+            comp_key = f"{cat_key}:{lid}"
             uid = str(log.get("user_id", "?"))
-            if lid in saidas_enviadas:
-                continue
+            log_ts = int(log.get("time", 0) or 0)
+            log_hoje = is_log_de_hoje(log_ts)
+
+            if not log_hoje:
+                if comp_key in logs_historicos:
+                    continue
+            else:
+                if comp_key in saidas_enviadas or lid in saidas_enviadas:
+                    continue
 
             t_inicio = time.time()
-            hora = formatar_hora(log.get("time", 0))
+            hora = formatar_hora(log_ts)
             nome_disp = "Saida - Rua das Garças" if (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else cat['nome']
             try:
                 res = enviar_para_webhook(log, cat, tipo_override="saida")
                 latencia = time.time() - t_inicio
-                registrar_cache_saida(lid)
-                saidas_enviadas.add(lid)
+                if log_hoje:
+                    registrar_cache_saida(lid, cat_key=cat_key)
+                    saidas_enviadas.add(lid)
+                    saidas_enviadas.add(comp_key)
+                else:
+                    registrar_cache_log_historico(comp_key)
+                logs_historicos.add(comp_key)
                 print(f"\n  ==============================================================")
                 print(f"  [SAIDA CONFIRMADA] {nome_disp}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
@@ -829,36 +971,48 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
         for log in logs_entrada:
             uid = str(log.get("user_id", "?"))
             lid = str(log.get("id", ""))
+            comp_key = f"{cat_key}:{lid}"
+            log_ts = int(log.get("time", 0) or 0)
+            log_hoje = is_log_de_hoje(log_ts)
 
-            if not multiplas_entradas:
-                # MODO 1: APENAS PRIMEIRA ENTRADA (Padrão atual - deduplica por uid do aluno)
-                if uid in entradas_atuais:
+            # 1. Se for log de dia anterior (ex: recuo de cursor no startup pela manhã):
+            #    Jamais contamina MEM_ENTRADAS_HOJE! E se já foi enviado antes, pula.
+            if not log_hoje:
+                if comp_key in logs_historicos:
                     continue
             else:
-                # MODO 2: TODAS AS ENTRADAS ATIVAS (Deduplica por lid do log)
-                if lid in entradas_logs_atuais:
+                # 2. Se for log de HOJE: deduplica pelo ID único do log na catraca.
+                #    Nunca descarta a passagem antes de enviar ao Webhook apenas porque uid estava em memória,
+                #    pois o Webhook registra a auditoria em portaria_eventos e controla a 1ª entrada em frequencias.
+                if comp_key in entradas_logs_atuais or lid in entradas_logs_atuais:
                     continue
 
-                # Proteção anti-duplicação/anti-flap: não reenviar se o mesmo aluno passou há menos de 120 segundos
-                agora_ts = time.time()
+                # Proteção anti-bounce (60s pelo relógio do evento): evita disparo duplo se o aluno parar na frente da câmera
                 ultimo_ts = ULTIMA_ENTRADA_ALUNO.get(uid, 0)
-                if ultimo_ts > 0 and (agora_ts - ultimo_ts) < 120:
-                    registrar_cache_entrada_log(lid)
+                if log_ts > 0 and ultimo_ts > 0 and abs(log_ts - ultimo_ts) < 60:
+                    registrar_cache_entrada_log(lid, cat_key=cat_key)
                     entradas_logs_atuais.add(lid)
+                    entradas_logs_atuais.add(comp_key)
                     continue
 
             t_inicio = time.time()
-            hora = formatar_hora(log.get("time", 0))
+            hora = formatar_hora(log_ts)
             try:
                 res = enviar_para_webhook(log, cat, tipo_override="entrada")
                 latencia = time.time() - t_inicio
-                is_reentrada = multiplas_entradas and (uid in entradas_atuais)
-                registrar_cache_entrada(uid)
-                registrar_cache_entrada_log(lid)
-                entradas_atuais.add(uid)
-                entradas_logs_atuais.add(lid)
-                ULTIMA_ENTRADA_ALUNO[uid] = time.time()
-                tag_tipo = "REENTRADA CONFIRMADA" if is_reentrada else "ENTRADA CONFIRMADA"
+                is_reentrada = log_hoje and multiplas_entradas and (uid in entradas_atuais)
+                if log_hoje:
+                    registrar_cache_entrada(uid, log_ts=log_ts)
+                    registrar_cache_entrada_log(lid, cat_key=cat_key)
+                    entradas_atuais.add(uid)
+                    entradas_logs_atuais.add(lid)
+                    entradas_logs_atuais.add(comp_key)
+                    if log_ts > 0:
+                        ULTIMA_ENTRADA_ALUNO[uid] = log_ts
+                else:
+                    registrar_cache_log_historico(comp_key)
+                logs_historicos.add(comp_key)
+                tag_tipo = "REENTRADA CONFIRMADA" if is_reentrada else ("ENTRADA HISTORICA SYNC" if not log_hoje else "ENTRADA CONFIRMADA")
                 print(f"\n  ==============================================================")
                 print(f"  [{tag_tipo}] {cat['nome']}")
                 print(f"     Aluno ID: {uid:<6} | Hora: {hora} | Log #{lid}")
@@ -869,11 +1023,11 @@ def processar_eventos_detectados(eventos_por_catraca, estado):
                 print(f"  [ERRO] Erro ao enviar ENTRADA do aluno {uid}: {e}")
 
         # Atualiza o cursor apenas se todos os envios do lote tiveram sucesso
-        if not houve_erro_envio and max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
+        if salvar_cursor and not houve_erro_envio and max_log_id > 0 and max_log_id != estado.get(cat_key, 0):
             estado[cat_key] = max_log_id
             estado_alterado = True
 
-    if estado_alterado:
+    if salvar_cursor and estado_alterado:
         salvar_estado_catracas(estado)
 
 
@@ -1062,12 +1216,15 @@ def main():
     # 3. Consulta inicial ao ERP para atualizar entradas do dia e configuracoes
     print("  [ERP] Consultando dados iniciais no ERP...")
     reg_ent, reg_sai, disp_erp = carregar_registrados_do_erp()
-    if reg_ent:
-        with CACHE_LOCK:
-            MEM_ENTRADAS_HOJE.update(reg_ent)
-        print(f"     [OK] {len(MEM_ENTRADAS_HOJE)} aluno(s) com entrada confirmada hoje no ERP.")
+    if reg_ent is not None:
+        sincronizar_cache_entrada_com_erp(reg_ent)
+        print(f"     [OK] {len(MEM_ENTRADAS_HOJE)} aluno(s) com entrada confirmada hoje no ERP (cache saneado).")
     status_modo = "ATIVADO (Registrando TODAS as entradas/reentradas)" if CONFIG_MULTIPLAS_ENTRADAS else "DESATIVADO (Apenas 1ª entrada do dia)"
     print(f"     [CONFIG] Modo de Multiplas Entradas: {status_modo}")
+
+    # 3.5. Varredura de integridade do dia atual: recupera qualquer passagem de hoje que tenha sido pulada anteriormente
+    print("  [INTEGRIDADE] Auditando passagens de hoje na memória das catracas...")
+    reconciliar_logs_hoje_catracas(CATRACAS)
 
     # 4. Iniciar Background Worker para fila de cadastros e fotos do ERP
     bg_thread = threading.Thread(target=thread_background_erp, daemon=True)

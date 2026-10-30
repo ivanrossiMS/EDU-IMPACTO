@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { 
   Users, Search, Plus, Filter, 
   School, Calendar, BookOpen, 
   ChevronLeft, ChevronRight, Edit, Trash2,
-  FileSpreadsheet, AlertTriangle, X, Sparkles, ArrowUpDown, Printer
+  FileSpreadsheet, AlertTriangle, X, Sparkles, ArrowUpDown, Printer,
+  EyeOff, Loader2
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
+import { resolveUserPerfil, isTurmasCardHidden } from '@/lib/auth/moduleRouting'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { UpdatingIndicator } from '@/components/skeletons/States'
 import { useApiQuery } from '@/hooks/useApi'
@@ -30,8 +33,20 @@ const getTurnoBadgeStyle = (turno: string) => {
 }
 
 export default function TurmasPage() {
-  const { cfgNiveisEnsino, cfgSeries, cfgTurnos, cfgCalendarioLetivo, logSystemAction } = useData()
+  const { cfgNiveisEnsino, cfgSeries, cfgTurnos, cfgCalendarioLetivo, logSystemAction, perfis, perfisLoading } = useData()
+  const { currentUser, currentUserPerfil, hydrated } = useApp()
   const queryClient = useQueryClient()
+
+  // ── Resolução de Permissões de Visualização dos Cards (Zero-Flash)
+  const userPerfilObj = useMemo(
+    () => resolveUserPerfil(perfis, currentUserPerfil, currentUser),
+    [perfis, currentUserPerfil, currentUser]
+  )
+  const isResolvingPerms = !hydrated || (perfisLoading && (!perfis || perfis.length === 0))
+  const hideTurmasTotalKpi = isTurmasCardHidden(userPerfilObj, 'total_turmas')
+  const hideTurmasAlunosKpi = isTurmasCardHidden(userPerfilObj, 'alunos_matriculados')
+  const hideTurmasIntegralKpi = isTurmasCardHidden(userPerfilObj, 'integral')
+  const hideTurmasVagasKpi = isTurmasCardHidden(userPerfilObj, 'vagas_ocupadas')
   
   const [search, setSearch] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -638,7 +653,38 @@ export default function TurmasPage() {
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total de Turmas</p>
-              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalTurmas ?? totalItens}</h3>
+              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                {isResolvingPerms || (loading && !hideTurmasTotalKpi) ? (
+                  <Loader2 className="animate-spin" size={18} style={{ color: '#2563eb', margin: '3px 0' }} />
+                ) : hideTurmasTotalKpi ? (
+                  <span
+                    aria-label="Dado restrito para este perfil"
+                    title="Visualização restrita para o seu perfil"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+                  >
+                    <span style={{ letterSpacing: '0.12em', opacity: 0.55 }}>••••</span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: 'rgba(37, 99, 235, 0.08)',
+                        color: '#2563eb',
+                        border: '1px solid rgba(37, 99, 235, 0.22)',
+                      }}
+                    >
+                      <EyeOff size={10} strokeWidth={2.4} />
+                      <span>Oculto</span>
+                    </span>
+                  </span>
+                ) : (
+                  stats?.totalTurmas ?? totalItens
+                )}
+              </h3>
             </div>
           </div>
         </div>
@@ -651,7 +697,38 @@ export default function TurmasPage() {
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Alunos Matriculados</p>
-              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosMatriculados ?? 0}</h3>
+              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                {isResolvingPerms || (loading && !hideTurmasAlunosKpi) ? (
+                  <Loader2 className="animate-spin" size={18} style={{ color: '#10b981', margin: '3px 0' }} />
+                ) : hideTurmasAlunosKpi ? (
+                  <span
+                    aria-label="Dado restrito para este perfil"
+                    title="Visualização restrita para o seu perfil"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+                  >
+                    <span style={{ letterSpacing: '0.12em', opacity: 0.55 }}>••••</span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        color: '#10b981',
+                        border: '1px solid rgba(16, 185, 129, 0.22)',
+                      }}
+                    >
+                      <EyeOff size={10} strokeWidth={2.4} />
+                      <span>Oculto</span>
+                    </span>
+                  </span>
+                ) : (
+                  stats?.totalAlunosMatriculados ?? 0
+                )}
+              </h3>
             </div>
           </div>
         </div>
@@ -680,17 +757,48 @@ export default function TurmasPage() {
             e.currentTarget.style.borderColor = '#e2e8f0'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div className="turmas-kpi-card-inner" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
               <div className="turmas-kpi-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px', flexShrink: 0 }}>
                 <Sparkles size={20} />
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Integral / Intermed.</p>
-                <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
+                <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {isResolvingPerms || (loading && !hideTurmasIntegralKpi) ? (
+                    <Loader2 className="animate-spin" size={18} style={{ color: '#8b5cf6', margin: '3px 0' }} />
+                  ) : hideTurmasIntegralKpi ? (
+                    <span
+                      aria-label="Dado restrito para este perfil"
+                      title="Visualização restrita para o seu perfil"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+                    >
+                      <span style={{ letterSpacing: '0.12em', opacity: 0.55 }}>••••</span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          background: 'rgba(139, 92, 246, 0.08)',
+                          color: '#8b5cf6',
+                          border: '1px solid rgba(139, 92, 246, 0.22)',
+                        }}
+                      >
+                        <EyeOff size={10} strokeWidth={2.4} />
+                        <span>Oculto</span>
+                      </span>
+                    </span>
+                  ) : (
+                    stats?.totalAlunosIntegral ?? 0
+                  )}
+                </h3>
               </div>
             </div>
-            <span className="turmas-kpi-badge" style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 600, background: 'rgba(139, 92, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
+            <span className="turmas-kpi-badge" style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 600, background: 'rgba(139, 92, 246, 0.08)', padding: '4px 8px', borderRadius: '6px', flexShrink: 0 }}>
               Ver alunos &rarr;
             </span>
           </div>
@@ -705,7 +813,36 @@ export default function TurmasPage() {
             <div style={{ minWidth: 0, flex: 1 }}>
               <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Vagas Ocupadas</p>
               <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                {stats?.vagasOcupadasPercent ?? 0}%
+                {isResolvingPerms || (loading && !hideTurmasVagasKpi) ? (
+                  <Loader2 className="animate-spin" size={18} style={{ color: '#f59e0b', margin: '3px 0' }} />
+                ) : hideTurmasVagasKpi ? (
+                  <span
+                    aria-label="Dado restrito para este perfil"
+                    title="Visualização restrita para o seu perfil"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, userSelect: 'none' }}
+                  >
+                    <span style={{ letterSpacing: '0.12em', opacity: 0.55 }}>••••</span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: 'rgba(245, 158, 11, 0.08)',
+                        color: '#f59e0b',
+                        border: '1px solid rgba(245, 158, 11, 0.22)',
+                      }}
+                    >
+                      <EyeOff size={10} strokeWidth={2.4} />
+                      <span>Oculto</span>
+                    </span>
+                  </span>
+                ) : (
+                  `${stats?.vagasOcupadasPercent ?? 0}%`
+                )}
               </h3>
             </div>
           </div>
@@ -845,7 +982,9 @@ export default function TurmasPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <span style={{ fontSize: '13px', color: '#64748b' }}>
-              Mostrando {turmas.length} de {totalItens} turmas
+              {isResolvingPerms || hideTurmasTotalKpi
+                ? `Mostrando ${turmas.length} turmas nesta página`
+                : `Mostrando ${turmas.length} de ${totalItens} turmas`}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Exibir:</span>
@@ -1503,7 +1642,9 @@ export default function TurmasPage() {
               </button>
 
               <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-                {filteredIntegralAlunos.length} de {alunosIntegralList.length} alunos
+                {isResolvingPerms || hideTurmasIntegralKpi
+                  ? 'Contagem restrita'
+                  : `${filteredIntegralAlunos.length} de ${alunosIntegralList.length} alunos`}
               </div>
             </div>
 
@@ -1650,7 +1791,10 @@ export default function TurmasPage() {
             {/* Footer com resumo e botões */}
             <div style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
-                Total de alunos no Integral / Intermediário: <strong style={{ color: '#6d28d9' }}>{alunosIntegralList.length}</strong>
+                Total de alunos no Integral / Intermediário:{' '}
+                <strong style={{ color: '#6d28d9' }}>
+                  {isResolvingPerms || hideTurmasIntegralKpi ? '••••' : alunosIntegralList.length}
+                </strong>
               </span>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button 

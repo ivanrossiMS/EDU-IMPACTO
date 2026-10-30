@@ -6,7 +6,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers, Key } from 'lucide-react'
+import { Search, Plus, Shield, Eye, EyeOff, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers, Key } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData, Perfil } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -14,7 +14,15 @@ import { AuthAlunosTab } from '@/components/usuarios/AuthAlunosTab'
 import { AuthResponsaveisTab } from '@/components/usuarios/AuthResponsaveisTab'
 import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
 import { ALL_NAV_GROUPS } from '@/components/layout/Sidebar'
-import { setCachedPerfis } from '@/lib/auth/moduleRouting'
+import {
+  setCachedPerfis,
+  DASHBOARD_KPI_CARDS_META,
+  ALUNOS_KPI_CARDS_META,
+  TURMAS_KPI_CARDS_META,
+  isDashboardCardHidden,
+  isAlunosCardHidden,
+  isTurmasCardHidden,
+} from '@/lib/auth/moduleRouting'
 
 interface ModulePage { key: string; label: string }
 interface ModuleGroup { key: string; label: string; icon: React.ReactNode; pages: ModulePage[] }
@@ -189,8 +197,16 @@ function Modal({ title, onClose, children, wide, zIndex = 1000 }: { title: strin
 
 export default function UsuariosPage() {
   const [tab, setTab] = useState<'usuarios' | 'alunos' | 'responsaveis' | 'perfis' | 'logs' | 'tipos-conta'>('usuarios')
-  const { activeModules, currentUserPerfil } = useApp()
-  const isDiretorGeral = currentUserPerfil === 'Diretor Geral'
+  const { activeModules, currentUserPerfil, currentUser } = useApp()
+  const isDiretorGeral =
+    currentUserPerfil === 'Diretor Geral' ||
+    currentUserPerfil === 'Administrador' ||
+    currentUserPerfil === 'Administrador Master' ||
+    currentUser?.perfil === 'Diretor Geral' ||
+    currentUser?.perfil === 'Administrador' ||
+    currentUser?.perfil === 'Administrador Master' ||
+    currentUser?.cargo === 'Administrador Master' ||
+    currentUser?.cargo === 'Diretor Geral'
 
   // Perfil editor always shows ALL modules (active state doesn't restrict editing)
   const activeModulosKeys = MODULES_CONFIG
@@ -263,7 +279,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
   const [perfilModalTab, setPerfilModalTab] = useState<'permissoes' | 'usuarios'>('permissoes')
   const [perfilUserSearch, setPerfilUserSearch] = useState('')
@@ -356,7 +372,7 @@ export default function UsuariosPage() {
   /* ── Perfil actions ── */
   /* ── Perfil actions ── */
   const openAddPerfil = () => {
-    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false })
+    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
     setEditingPerfilId(null)
     setPerfilModalTab('permissoes')
     setPerfilUserSearch('')
@@ -375,7 +391,13 @@ export default function UsuariosPage() {
       bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false,
       bloqueadoSimulados: p.bloqueadoSimulados || false,
       bloqueadoProvasOnline: p.bloqueadoProvasOnline || false,
-      bloqueadoCredImpacto: p.bloqueadoCredImpacto || false
+      bloqueadoCredImpacto: p.bloqueadoCredImpacto || false,
+      bloqueadoKpisDashboard: p.bloqueadoKpisDashboard || false,
+      bloqueadoCardsDashboard: Array.isArray(p.bloqueadoCardsDashboard) ? p.bloqueadoCardsDashboard : [],
+      bloqueadoKpisAlunos: p.bloqueadoKpisAlunos || false,
+      bloqueadoCardsAlunos: Array.isArray(p.bloqueadoCardsAlunos) ? p.bloqueadoCardsAlunos : [],
+      bloqueadoKpisTurmas: p.bloqueadoKpisTurmas || false,
+      bloqueadoCardsTurmas: Array.isArray(p.bloqueadoCardsTurmas) ? p.bloqueadoCardsTurmas : [],
     })
     setEditingPerfilId(p.id)
     setPerfilModalTab(defaultTab)
@@ -912,8 +934,27 @@ export default function UsuariosPage() {
                           <div style={{ width: 1, height: 32, background: 'hsl(var(--border-subtle))' }} />
                           <div style={{ flex: 1 }}>
                              <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restrições</div>
-                             <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', marginTop: 4 }}>
-                               {p.nome === 'Diretor Geral' ? 'Acesso Livre' : `${p.permissoes.length} Módulos`}
+                             <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                               <span>{p.nome === 'Diretor Geral' ? 'Acesso Livre' : `${p.permissoes.length} Módulos`}</span>
+                               {(p.bloqueadoKpisDashboard || (p.bloqueadoCardsDashboard && p.bloqueadoCardsDashboard.length > 0) || p.bloqueadoKpisAlunos || (p.bloqueadoCardsAlunos && p.bloqueadoCardsAlunos.length > 0) || p.bloqueadoKpisTurmas || (p.bloqueadoCardsTurmas && p.bloqueadoCardsTurmas.length > 0)) && (
+                                 <span
+                                   title="Visualização de KPIs restrita neste perfil"
+                                   style={{
+                                     display: 'inline-flex',
+                                     alignItems: 'center',
+                                     gap: 4,
+                                     fontSize: 10,
+                                     fontWeight: 700,
+                                     padding: '2px 6px',
+                                     borderRadius: 6,
+                                     background: 'rgba(245, 158, 11, 0.14)',
+                                     color: '#f59e0b',
+                                     border: '1px solid rgba(245, 158, 11, 0.28)',
+                                   }}
+                                 >
+                                   <EyeOff size={10} /> KPIs Ocultos
+                                 </span>
+                               )}
                              </div>
                           </div>
                       </div>
@@ -1186,6 +1227,357 @@ export default function UsuariosPage() {
                       onChange={() => setPerfilForm(p => ({ ...p, bloqueadoCredImpacto: !p.bloqueadoCredImpacto }))}
                       color="#10b981"
                     />
+                  </div>
+                </div>
+
+                {/* ── Privacidade e Visualização de Dados (Cards Superiores) ── */}
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label className="form-label" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <EyeOff size={13} style={{ color: '#f59e0b' }} />
+                      Privacidade e Visualização de Dados (Cards Superiores)
+                    </label>
+                    <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+                      A página carrega normalmente, ocultando apenas os números
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Card 1: Cards Superiores da Dashboard */}
+                    {(() => {
+                      const allDashKeys = DASHBOARD_KPI_CARDS_META.map(c => c.key)
+                      const hiddenDashKeys = perfilForm.bloqueadoKpisDashboard
+                        ? allDashKeys
+                        : (perfilForm.bloqueadoCardsDashboard || [])
+                      const isDashFullyBlocked = hiddenDashKeys.length === allDashKeys.length
+                      const isDashPartiallyBlocked = hiddenDashKeys.length > 0 && !isDashFullyBlocked
+
+                      const toggleAllDash = () => {
+                        setPerfilForm(p => {
+                          const currentlyAllHidden =
+                            Boolean(p.bloqueadoKpisDashboard) ||
+                            (p.bloqueadoCardsDashboard || []).length === allDashKeys.length
+                          if (currentlyAllHidden) {
+                            return { ...p, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [] }
+                          }
+                          return { ...p, bloqueadoKpisDashboard: true, bloqueadoCardsDashboard: allDashKeys }
+                        })
+                      }
+
+                      const toggleSingleDashCard = (cardKey: string) => {
+                        setPerfilForm(p => {
+                          const currentHidden = p.bloqueadoKpisDashboard
+                            ? [...allDashKeys]
+                            : [...(p.bloqueadoCardsDashboard || [])]
+                          const exists = currentHidden.includes(cardKey)
+                          const nextHidden = exists
+                            ? currentHidden.filter(k => k !== cardKey)
+                            : [...currentHidden, cardKey]
+                          const allHiddenNow = nextHidden.length === allDashKeys.length
+                          return {
+                            ...p,
+                            bloqueadoKpisDashboard: allHiddenNow,
+                            bloqueadoCardsDashboard: nextHidden,
+                          }
+                        })
+                      }
+
+                      return (
+                        <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: `1px solid ${hiddenDashKeys.length > 0 ? 'rgba(245, 158, 11, 0.35)' : 'hsl(var(--border-subtle))'}` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(99,102,241,0.28)' }}>
+                                📊
+                              </div>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                                  <span style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                                    Visualizar Dados dos Cards da Dashboard
+                                  </span>
+                                  {isDashFullyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(239,68,68,0.14)', color: '#ef4444' }}>
+                                      OCULTO
+                                    </span>
+                                  )}
+                                  {isDashPartiallyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                                      {hiddenDashKeys.length} DE {allDashKeys.length} OCULTOS
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>
+                                  Se desativado, oculta os valores de Total de Alunos, Taxa de Ocupação, Novas Matrículas e Ocorrências na Dashboard.
+                                </div>
+                              </div>
+                            </div>
+                            <ModernSwitch
+                              checked={!isDashFullyBlocked}
+                              onChange={toggleAllDash}
+                              color={isDashPartiallyBlocked ? '#f59e0b' : '#10b981'}
+                            />
+                          </div>
+
+                          {/* Sub-chips granulares por card */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+                            {DASHBOARD_KPI_CARDS_META.map(card => {
+                              const isHidden = hiddenDashKeys.includes(card.key)
+                              return (
+                                <button
+                                  key={card.key}
+                                  type="button"
+                                  onClick={() => toggleSingleDashCard(card.key)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '6px 11px',
+                                    borderRadius: 9,
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.18s ease',
+                                    background: isHidden ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                    color: isHidden ? '#ef4444' : '#10b981',
+                                    border: `1px solid ${isHidden ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)'}`,
+                                  }}
+                                  title={isHidden ? `Clique para liberar visualização de "${card.label}"` : `Clique para ocultar "${card.label}"`}
+                                >
+                                  {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                                  <span>{card.label}</span>
+                                  <span style={{ fontSize: 10, opacity: 0.8, fontWeight: 600 }}>
+                                    ({isHidden ? 'Oculto' : 'Visível'})
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Card 2: Cards Superiores da Página Alunos */}
+                    {(() => {
+                      const allAlunosKeys = ALUNOS_KPI_CARDS_META.map(c => c.key)
+                      const hiddenAlunosKeys = perfilForm.bloqueadoKpisAlunos
+                        ? allAlunosKeys
+                        : (perfilForm.bloqueadoCardsAlunos || [])
+                      const isAlunosFullyBlocked = hiddenAlunosKeys.length === allAlunosKeys.length
+                      const isAlunosPartiallyBlocked = hiddenAlunosKeys.length > 0 && !isAlunosFullyBlocked
+
+                      const toggleAllAlunos = () => {
+                        setPerfilForm(p => {
+                          const currentlyAllHidden =
+                            Boolean(p.bloqueadoKpisAlunos) ||
+                            (p.bloqueadoCardsAlunos || []).length === allAlunosKeys.length
+                          if (currentlyAllHidden) {
+                            return { ...p, bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [] }
+                          }
+                          return { ...p, bloqueadoKpisAlunos: true, bloqueadoCardsAlunos: allAlunosKeys }
+                        })
+                      }
+
+                      const toggleSingleAlunosCard = (cardKey: string) => {
+                        setPerfilForm(p => {
+                          const currentHidden = p.bloqueadoKpisAlunos
+                            ? [...allAlunosKeys]
+                            : [...(p.bloqueadoCardsAlunos || [])]
+                          const exists = currentHidden.includes(cardKey)
+                          const nextHidden = exists
+                            ? currentHidden.filter(k => k !== cardKey)
+                            : [...currentHidden, cardKey]
+                          const allHiddenNow = nextHidden.length === allAlunosKeys.length
+                          return {
+                            ...p,
+                            bloqueadoKpisAlunos: allHiddenNow,
+                            bloqueadoCardsAlunos: nextHidden,
+                          }
+                        })
+                      }
+
+                      return (
+                        <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: `1px solid ${hiddenAlunosKeys.length > 0 ? 'rgba(245, 158, 11, 0.35)' : 'hsl(var(--border-subtle))'}` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #f59e0b, #d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(245,158,11,0.28)' }}>
+                                🎓
+                              </div>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                                  <span style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                                    Visualizar Dados dos Cards da Página Alunos
+                                  </span>
+                                  {isAlunosFullyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(239,68,68,0.14)', color: '#ef4444' }}>
+                                      OCULTO
+                                    </span>
+                                  )}
+                                  {isAlunosPartiallyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                                      {hiddenAlunosKeys.length} DE {allAlunosKeys.length} OCULTOS
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>
+                                  Se desativado, oculta as contagens nos cards de Gestão de Alunos (Total, Ativos, Inativos e Integral), mantendo os filtros clicáveis.
+                                </div>
+                              </div>
+                            </div>
+                            <ModernSwitch
+                              checked={!isAlunosFullyBlocked}
+                              onChange={toggleAllAlunos}
+                              color={isAlunosPartiallyBlocked ? '#f59e0b' : '#10b981'}
+                            />
+                          </div>
+
+                          {/* Sub-chips granulares por card */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+                            {ALUNOS_KPI_CARDS_META.map(card => {
+                              const isHidden = hiddenAlunosKeys.includes(card.key)
+                              return (
+                                <button
+                                  key={card.key}
+                                  type="button"
+                                  onClick={() => toggleSingleAlunosCard(card.key)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '6px 11px',
+                                    borderRadius: 9,
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.18s ease',
+                                    background: isHidden ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                    color: isHidden ? '#ef4444' : '#10b981',
+                                    border: `1px solid ${isHidden ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)'}`,
+                                  }}
+                                  title={isHidden ? `Clique para liberar visualização de "${card.label}"` : `Clique para ocultar "${card.label}"`}
+                                >
+                                  {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                                  <span>{card.label}</span>
+                                  <span style={{ fontSize: 10, opacity: 0.8, fontWeight: 600 }}>
+                                    ({isHidden ? 'Oculto' : 'Visível'})
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Card 3: Cards Superiores da Página Gestão de Turmas */}
+                    {(() => {
+                      const allTurmasKeys = TURMAS_KPI_CARDS_META.map(c => c.key)
+                      const hiddenTurmasKeys = perfilForm.bloqueadoKpisTurmas
+                        ? allTurmasKeys
+                        : (perfilForm.bloqueadoCardsTurmas || [])
+                      const isTurmasFullyBlocked = hiddenTurmasKeys.length === allTurmasKeys.length
+                      const isTurmasPartiallyBlocked = hiddenTurmasKeys.length > 0 && !isTurmasFullyBlocked
+
+                      const toggleAllTurmas = () => {
+                        setPerfilForm(p => {
+                          const currentlyAllHidden =
+                            Boolean(p.bloqueadoKpisTurmas) ||
+                            (p.bloqueadoCardsTurmas || []).length === allTurmasKeys.length
+                          if (currentlyAllHidden) {
+                            return { ...p, bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] }
+                          }
+                          return { ...p, bloqueadoKpisTurmas: true, bloqueadoCardsTurmas: allTurmasKeys }
+                        })
+                      }
+
+                      const toggleSingleTurmasCard = (cardKey: string) => {
+                        setPerfilForm(p => {
+                          const currentHidden = p.bloqueadoKpisTurmas
+                            ? [...allTurmasKeys]
+                            : [...(p.bloqueadoCardsTurmas || [])]
+                          const exists = currentHidden.includes(cardKey)
+                          const nextHidden = exists
+                            ? currentHidden.filter(k => k !== cardKey)
+                            : [...currentHidden, cardKey]
+                          const allHiddenNow = nextHidden.length === allTurmasKeys.length
+                          return {
+                            ...p,
+                            bloqueadoKpisTurmas: allHiddenNow,
+                            bloqueadoCardsTurmas: nextHidden,
+                          }
+                        })
+                      }
+
+                      return (
+                        <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: `1px solid ${hiddenTurmasKeys.length > 0 ? 'rgba(245, 158, 11, 0.35)' : 'hsl(var(--border-subtle))'}` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #2563eb, #0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(37,99,235,0.28)' }}>
+                                🏫
+                              </div>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                                  <span style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                                    Visualizar Dados dos Cards da Página Turmas
+                                  </span>
+                                  {isTurmasFullyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(239,68,68,0.14)', color: '#ef4444' }}>
+                                      OCULTO
+                                    </span>
+                                  )}
+                                  {isTurmasPartiallyBlocked && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                                      {hiddenTurmasKeys.length} DE {allTurmasKeys.length} OCULTOS
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>
+                                  Se desativado, oculta as métricas nos cards superiores de Gestão de Turmas (Total de Turmas, Alunos Matriculados, Integral e Vagas Ocupadas).
+                                </div>
+                              </div>
+                            </div>
+                            <ModernSwitch
+                              checked={!isTurmasFullyBlocked}
+                              onChange={toggleAllTurmas}
+                              color={isTurmasPartiallyBlocked ? '#f59e0b' : '#10b981'}
+                            />
+                          </div>
+
+                          {/* Sub-chips granulares por card */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+                            {TURMAS_KPI_CARDS_META.map(card => {
+                              const isHidden = hiddenTurmasKeys.includes(card.key)
+                              return (
+                                <button
+                                  key={card.key}
+                                  type="button"
+                                  onClick={() => toggleSingleTurmasCard(card.key)}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '6px 11px',
+                                    borderRadius: 9,
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.18s ease',
+                                    background: isHidden ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                    color: isHidden ? '#ef4444' : '#10b981',
+                                    border: `1px solid ${isHidden ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)'}`,
+                                  }}
+                                  title={isHidden ? `Clique para liberar visualização de "${card.label}"` : `Clique para ocultar "${card.label}"`}
+                                >
+                                  {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                                  <span>{card.label}</span>
+                                  <span style={{ fontSize: 10, opacity: 0.8, fontWeight: 600 }}>
+                                    ({isHidden ? 'Oculto' : 'Visível'})
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
 

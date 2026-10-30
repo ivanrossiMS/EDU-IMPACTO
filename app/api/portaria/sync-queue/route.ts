@@ -12,7 +12,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
  */
 async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
   try {
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' })
     const todayStr = formatter.format(new Date())
 
     // ── OTIMIZAÇÃO DE ALTA PERFORMANCE ──
@@ -20,7 +20,7 @@ async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
     // na tabela 'portaria_eventos' que contém centenas de milhares de linhas e causava 522.
     const { data: freqHoje } = await supabase
       .from('frequencias')
-      .select('aluno_id, dados')
+      .select('aluno_id, presente, dados')
       .eq('data', todayStr)
 
     const alunoUuids = new Set<string>()
@@ -28,7 +28,17 @@ async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
       if (sentido === 'saida') {
         if (f.dados?.saidaHorario && f.aluno_id) alunoUuids.add(String(f.aluno_id))
       } else {
-        if (f.aluno_id) alunoUuids.add(String(f.aluno_id))
+        const regPor = String(f.dados?.registradoPor || '')
+        const origem = String(f.dados?.origem || '')
+        const isSaidaOnly =
+          origem === 'catraca_saida' ||
+          regPor.toLowerCase().includes('saída') ||
+          regPor.toLowerCase().includes('saida') ||
+          (!f.dados?.horaEntrada && !f.dados?.tempos && Boolean(f.dados?.saidaHorario))
+        // Somente considera registrado na portaria hoje se tiver presença ativa e horaEntrada preenchida
+        if (f.aluno_id && f.presente !== false && Boolean(f.dados?.horaEntrada) && !isSaidaOnly) {
+          alunoUuids.add(String(f.aluno_id))
+        }
       }
     }
 
@@ -106,7 +116,10 @@ export async function GET(req: NextRequest) {
       .eq('chave', 'portaria_config')
       .maybeSingle()
     const portariaConfig = configRow?.valor || {}
-    const permitir_multiplas_entradas = !!portariaConfig.permitir_multiplas_entradas
+    // O daemon local deve SEMPRE deduplicar por ID único de log (log_id) e enviar a passagem ao Webhook,
+    // deixando o próprio /api/portaria/webhook aplicar a regra de 'permitir_multiplas_entradas' na frequência e no Push.
+    const permitir_multiplas_entradas = true
+    const permitir_multiplas_entradas_erp = !!portariaConfig.permitir_multiplas_entradas
 
     if (!pendingRows || pendingRows.length === 0) {
       return NextResponse.json({
@@ -118,7 +131,8 @@ export async function GET(req: NextRequest) {
         total: count || 0,
         permitir_multiplas_entradas,
         config: {
-          permitir_multiplas_entradas
+          permitir_multiplas_entradas,
+          permitir_multiplas_entradas_erp
         }
       })
     }
@@ -237,7 +251,8 @@ export async function GET(req: NextRequest) {
       total: realTotal,
       permitir_multiplas_entradas,
       config: {
-        permitir_multiplas_entradas
+        permitir_multiplas_entradas,
+        permitir_multiplas_entradas_erp
       }
     })
   } catch (err: any) {

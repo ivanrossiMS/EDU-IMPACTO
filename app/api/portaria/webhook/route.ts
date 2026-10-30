@@ -975,14 +975,16 @@ export async function POST(req: Request) {
                   if (targetIds.length > 0) {
                     await sendAgendaPushNotification({
                       type: 'frequencia',
-                      itemId: String(freqId),
+                      itemId: `${freqId}_presente`,
+                      collapseId: `freq_${freqId}`,
                       title: '✅ Presença Confirmada',
                       message: `A presença de ${nomeAmigavel} foi confirmada na escola (Entrada às ${localTimeStr}).`,
                       targetUserIds: targetIds,
                       targetUrl: `/agenda-digital/${alunoId}/frequencia`,
                       metadata: {
                         aluno_id: String(alunoId),
-                        data: String(localDate)
+                        data: String(localDate),
+                        status: 'presente'
                       }
                     })
                     console.log(`✅ [Portaria Webhook] Push de Presença Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)

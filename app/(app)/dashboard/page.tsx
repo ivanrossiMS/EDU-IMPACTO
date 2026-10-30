@@ -5,12 +5,13 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import { useData, Tarefa } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
+import { resolveUserPerfil, isDashboardCardHidden } from '@/lib/auth/moduleRouting'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
   CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2,
   Layers, PackageCheck, Clock, ArrowUpRight, CheckCircle2, BookOpen,
-  Activity, Sparkles
+  Activity, Sparkles, EyeOff, Lock
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -95,15 +96,27 @@ const PATHS = {
 }
 
 export default function DashboardPage() {
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil, hydrated } = useApp()
   const hoje = new Date()
   const mesStr  = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
   const mesPrev = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
   const mesPrevStr = `${mesPrev.getFullYear()}-${String(mesPrev.getMonth() + 1).padStart(2, '0')}`
   const [refreshKey] = useState(0)
 
-  // ── Context Data (Calendar, Tasks & Ocorrências)
-  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [], ocorrencias: contextOcorrencias = [], loading: loadContext = false } = useData() as any
+  // ── Context Data (Calendar, Tasks, Perfis & Ocorrências)
+  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [], ocorrencias: contextOcorrencias = [], perfis = [], perfisLoading = false, loading: loadContext = false } = useData() as any
+
+  // ── Resolução de Permissões de Visualização dos Cards (Zero-Flash)
+  const userPerfilObj = useMemo(
+    () => resolveUserPerfil(perfis, currentUserPerfil, currentUser),
+    [perfis, currentUserPerfil, currentUser]
+  )
+  const isResolvingPerms = !hydrated || (perfisLoading && (!perfis || perfis.length === 0))
+  const hideTotalAlunosKpi = isDashboardCardHidden(userPerfilObj, 'total_alunos')
+  const hideTaxaOcupacaoKpi = isDashboardCardHidden(userPerfilObj, 'taxa_ocupacao')
+  const hideNovasMatriculasKpi = isDashboardCardHidden(userPerfilObj, 'novas_matriculas')
+  const hideOcorrenciasKpi = isDashboardCardHidden(userPerfilObj, 'ocorrencias')
+  const allServerKpisHidden = hideTotalAlunosKpi && hideTaxaOcupacaoKpi && hideNovasMatriculasKpi
 
   // ── Modais
   const [modalAnivOpen, setModalAnivOpen] = useState(false)
@@ -131,7 +144,7 @@ export default function DashboardPage() {
     ['dashboard-kpis', mesStr, mesPrevStr, String(refreshKey)],
     `/api/financeiro/dashboard?mes=${mesStr}&mesPrev=${mesPrevStr}`,
     {},
-    { staleTime: 60_000 }
+    { staleTime: 60_000, enabled: !isResolvingPerms && !allServerKpisHidden }
   )
   const kpis = kpiData || {}
   const {
@@ -207,6 +220,8 @@ export default function DashboardPage() {
 
   const kpiCards = [
     { 
+      key: 'total_alunos' as const,
+      hidden: hideTotalAlunosKpi,
       label: 'Total de Alunos', 
       category: 'CORPO DISCENTE',
       value: formatNumber(totalAlunos), 
@@ -224,6 +239,8 @@ export default function DashboardPage() {
       gradient: 'linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #06b6d4 100%)'
     },
     { 
+      key: 'taxa_ocupacao' as const,
+      hidden: hideTaxaOcupacaoKpi,
       label: 'Taxa de Ocupação', 
       category: 'INFRAESTRUTURA',
       value: fmtPct(taxaOcupacao), 
@@ -241,6 +258,8 @@ export default function DashboardPage() {
       gradient: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #c084fc 100%)'
     },
     { 
+      key: 'novas_matriculas' as const,
+      hidden: hideNovasMatriculasKpi,
       label: 'Novas Matrículas', 
       category: 'EXPANSÃO MENSAL',
       value: formatNumber(novasMatriculas), 
@@ -258,6 +277,8 @@ export default function DashboardPage() {
       gradient: 'linear-gradient(90deg, #047857 0%, #10b981 50%, #34d399 100%)'
     },
     { 
+      key: 'ocorrencias' as const,
+      hidden: hideOcorrenciasKpi,
       label: 'Ocorrências', 
       category: 'ACOMPANHAMENTO',
       value: formatNumber(ocorrencias.length), 
@@ -390,29 +411,56 @@ export default function DashboardPage() {
                 {/* Big Hero Value + Live Metric Pill */}
                 <div className="dashboard-kpi-value-row">
                   <div className="dashboard-kpi-value">
-                    {loadKpis ? (
+                    {isResolvingPerms || (!kpi.hidden && (kpi.key === 'ocorrencias' ? loadOcorr : loadKpis)) ? (
                       <Loader2 className="animate-spin" size={24} color={kpi.color} style={{ margin: '3px 0' }} />
+                    ) : kpi.hidden ? (
+                      <span
+                        aria-label="Dado restrito para este perfil"
+                        title="Visualização restrita para o seu perfil"
+                        style={{ letterSpacing: '0.14em', opacity: 0.55, userSelect: 'none' }}
+                      >
+                        ••••
+                      </span>
                     ) : (
                       kpi.value
                     )}
                   </div>
-                  {!loadKpis && (
+                  {!isResolvingPerms && (kpi.hidden || !(kpi.key === 'ocorrencias' ? loadOcorr : loadKpis)) && (
                     <span
                       className="dashboard-kpi-metric-badge"
                       style={{
                         color: kpi.color,
                         background: kpi.lightBg,
-                        borderColor: kpi.borderTint
+                        borderColor: kpi.borderTint,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
                       }}
                     >
-                      {kpi.badge}
+                      {kpi.hidden ? (
+                        <>
+                          <EyeOff size={11} strokeWidth={2.4} />
+                          <span>Oculto</span>
+                        </>
+                      ) : (
+                        kpi.badge
+                      )}
                     </span>
                   )}
                 </div>
 
                 {/* Subtitle + Hover Action Arrow */}
                 <div className="dashboard-kpi-footer-row">
-                  <span className="dashboard-kpi-sub">{kpi.sub}</span>
+                  <span className="dashboard-kpi-sub" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {!isResolvingPerms && kpi.hidden ? (
+                      <>
+                        <Lock size={11} style={{ opacity: 0.75 }} />
+                        <span>Visualização restrita</span>
+                      </>
+                    ) : (
+                      kpi.sub
+                    )}
+                  </span>
                   <span className="dashboard-kpi-action-hint" style={{ color: kpi.color }}>
                     <ArrowUpRight size={13} strokeWidth={2.5} />
                   </span>
@@ -1673,7 +1721,7 @@ export default function DashboardPage() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <span className="dashboard-header-title">Ocorrências Recentes</span>
-                    {ocorrencias.length > 0 && (
+                    {!isResolvingPerms && !hideOcorrenciasKpi && ocorrencias.length > 0 && (
                       <span className="dashboard-header-count-pill">
                         {ocorrencias.length}
                       </span>
@@ -1703,7 +1751,7 @@ export default function DashboardPage() {
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 12, minWidth: 0, width: '100%' }}>
                     {/* Mini Telemetry Strip for Ocorrências */}
-                    {totalOc > 0 && (
+                    {!isResolvingPerms && !hideOcorrenciasKpi && totalOc > 0 && (
                       <div className="dashboard-ocorr-telemetry-strip">
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2093,7 +2141,11 @@ export default function DashboardPage() {
                     </span>
                     <span className="dashboard-engagement-pending-pill">
                       <Sparkles size={11} />
-                      <span>{formatNumber(totalPendentes)} aguardando 1º acesso</span>
+                      <span>
+                        {isResolvingPerms || hideTotalAlunosKpi
+                          ? '•••• aguardando 1º acesso'
+                          : `${formatNumber(totalPendentes)} aguardando 1º acesso`}
+                      </span>
                     </span>
                   </div>
 
@@ -2119,10 +2171,14 @@ export default function DashboardPage() {
                           WebkitTextFillColor: 'transparent'
                         }}
                       >
-                        {formatNumber(focusedRole ? focusedRole.active : totalAtivos)}
+                        {isResolvingPerms || hideTotalAlunosKpi
+                          ? '••••'
+                          : formatNumber(focusedRole ? focusedRole.active : totalAtivos)}
                       </span>
                       <span className="dashboard-engagement-total-label">
-                        / {formatNumber(focusedRole ? focusedRole.total : totalGeral)} ativos
+                        / {isResolvingPerms || hideTotalAlunosKpi
+                          ? '••••'
+                          : formatNumber(focusedRole ? focusedRole.total : totalGeral)} ativos
                       </span>
                       <span className="dashboard-engagement-context-chip">
                         {focusedRole ? focusedRole.label : 'Primeiro acesso realizado'}
@@ -2247,10 +2303,14 @@ export default function DashboardPage() {
                       <div className="dashboard-role-metrics-row">
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                           <span className="dashboard-role-value" style={{ color: role.color }}>
-                            {formatNumber(role.active)}
+                            {isResolvingPerms || (hideTotalAlunosKpi && role.key !== 'colab')
+                              ? '••••'
+                              : formatNumber(role.active)}
                           </span>
                           <span className="dashboard-role-total">
-                            / {formatNumber(role.total)}
+                            / {isResolvingPerms || (hideTotalAlunosKpi && role.key !== 'colab')
+                              ? '••••'
+                              : formatNumber(role.total)}
                           </span>
                         </div>
 
@@ -2289,7 +2349,9 @@ export default function DashboardPage() {
                           <span>
                             {role.pending === 0
                               ? '100% ativado'
-                              : `${formatNumber(role.pending)} pendente${role.pending === 1 ? '' : 's'}`}
+                              : isResolvingPerms || (hideTotalAlunosKpi && role.key !== 'colab')
+                                ? '•••• pendentes'
+                                : `${formatNumber(role.pending)} pendente${role.pending === 1 ? '' : 's'}`}
                           </span>
                         </span>
                         <span className="dashboard-role-footer-pct" style={{ color: role.color }}>

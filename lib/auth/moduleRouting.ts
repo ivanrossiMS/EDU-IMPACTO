@@ -280,3 +280,137 @@ export async function fetchPerfisWithCache(timeoutMs = 1500): Promise<Perfil[]> 
 
   return cached || DEFAULT_PERFIS
 }
+
+// ─── Controle de Ocultação de Indicadores (KPI Cards) por Perfil ──────────────
+
+export const DASHBOARD_KPI_CARDS_META = [
+  { key: 'total_alunos', label: 'Total de Alunos' },
+  { key: 'taxa_ocupacao', label: 'Taxa de Ocupação' },
+  { key: 'novas_matriculas', label: 'Novas Matrículas' },
+  { key: 'ocorrencias', label: 'Ocorrências' },
+] as const
+
+export const ALUNOS_KPI_CARDS_META = [
+  { key: 'total', label: 'Total de Alunos' },
+  { key: 'ativos', label: 'Alunos Ativos' },
+  { key: 'inativos', label: 'Alunos Inativos' },
+  { key: 'integral', label: 'Integral / Intermediário' },
+] as const
+
+export const TURMAS_KPI_CARDS_META = [
+  { key: 'total_turmas', label: 'Total de Turmas' },
+  { key: 'alunos_matriculados', label: 'Alunos Matriculados' },
+  { key: 'integral', label: 'Integral / Intermed.' },
+  { key: 'vagas_ocupadas', label: 'Vagas Ocupadas' },
+] as const
+
+const normalizePerfilToken = (str?: string) =>
+  (str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '')
+
+export function matchesPerfilName(userRoleOrPerfil?: string, targetPerfilNome?: string): boolean {
+  if (!userRoleOrPerfil || !targetPerfilNome) return false
+  if (userRoleOrPerfil.trim() === targetPerfilNome.trim()) return true
+  const u = normalizePerfilToken(userRoleOrPerfil)
+  const p = normalizePerfilToken(targetPerfilNome)
+  if (!u || !p) return false
+  if (u === p) return true
+
+  if ((u === 'coordenacao' || u === 'coordenador' || u === 'coordenadora') && (p === 'coordenacao' || p === 'coordenador' || p === 'coordenadora')) return true
+  if ((u.includes('direc') || u.includes('diretor')) && (p.includes('direc') || p.includes('diretor'))) return true
+  if (u.includes('portaria') && p.includes('portaria')) return true
+  if ((u === 'secretaria' || u === 'secretario') && (p === 'secretaria' || p === 'secretario')) return true
+  if ((u === 'familia' || u === 'responsavel') && (p === 'familia' || p === 'responsavel')) return true
+
+  return false
+}
+
+/**
+ * Resolve de forma resiliente o objeto `Perfil` correspondente ao usuário logado.
+ */
+export function resolveUserPerfil(
+  perfis: Perfil[] | null | undefined,
+  currentUserPerfil?: string,
+  currentUser?: { perfil?: string; cargo?: string } | null
+): Perfil | undefined {
+  const list = Array.isArray(perfis) && perfis.length > 0 ? perfis : DEFAULT_PERFIS
+  const candidates = [
+    currentUser?.perfil,
+    currentUserPerfil,
+    currentUser?.cargo,
+  ].filter(Boolean) as string[]
+
+  // 1. Prioriza match exato ou normalizado direto
+  for (const cand of candidates) {
+    const exact = list.find(p => p.nome === cand || normalizePerfilToken(p.nome) === normalizePerfilToken(cand))
+    if (exact) return exact
+  }
+
+  // 2. Match semântico por alias (Secretaria/Secretária, Coordenação/Coordenador, Portaria, etc.)
+  for (const cand of candidates) {
+    const semantic = list.find(p => matchesPerfilName(cand, p.nome))
+    if (semantic) return semantic
+  }
+
+  return undefined
+}
+
+/**
+ * Verifica se um card superior específico da Dashboard deve ter seus dados ocultados para o perfil.
+ */
+export function isDashboardCardHidden(perfilObj: Perfil | null | undefined, cardKey: string): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoKpisDashboard === true) return true
+  if (Array.isArray(perfilObj.bloqueadoCardsDashboard) && perfilObj.bloqueadoCardsDashboard.includes(cardKey)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Verifica se um card superior específico da página de Alunos deve ter seus dados ocultados para o perfil.
+ */
+export function isAlunosCardHidden(perfilObj: Perfil | null | undefined, cardKey: string): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoKpisAlunos === true) return true
+  if (Array.isArray(perfilObj.bloqueadoCardsAlunos) && perfilObj.bloqueadoCardsAlunos.includes(cardKey)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Verifica se qualquer indicador quantitativo de Alunos está oculto para o perfil
+ * (usado também para ocultar a contagem total no rodapé de paginação).
+ */
+export function isAnyAlunosCardHidden(perfilObj: Perfil | null | undefined): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoKpisAlunos === true) return true
+  if (Array.isArray(perfilObj.bloqueadoCardsAlunos) && perfilObj.bloqueadoCardsAlunos.length > 0) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Verifica se um card superior específico da página de Turmas deve ter seus dados ocultados para o perfil.
+ */
+export function isTurmasCardHidden(perfilObj: Perfil | null | undefined, cardKey: string): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoKpisTurmas === true) return true
+  if (Array.isArray(perfilObj.bloqueadoCardsTurmas) && perfilObj.bloqueadoCardsTurmas.includes(cardKey)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Verifica se qualquer indicador quantitativo de Turmas está oculto para o perfil.
+ */
+export function isAnyTurmasCardHidden(perfilObj: Perfil | null | undefined): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoKpisTurmas === true) return true
+  if (Array.isArray(perfilObj.bloqueadoCardsTurmas) && perfilObj.bloqueadoCardsTurmas.length > 0) {
+    return true
+  }
+  return false
+}
