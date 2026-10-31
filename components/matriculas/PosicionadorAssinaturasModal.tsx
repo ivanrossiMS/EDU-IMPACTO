@@ -534,7 +534,7 @@ export function PosicionadorAssinaturasModal({
     altura: 42,
   })
   const [presetCustomizado, setPresetCustomizado] = useState<boolean>(false)
-  const [zoom, setZoom] = useState<number>(80)
+  const [zoom, setZoom] = useState<number>(100)
   const [carregandoPdf, setCarregandoPdf] = useState<boolean>(true)
   const [erroPdf, setErroPdf] = useState<string | null>(null)
 
@@ -640,11 +640,11 @@ export function PosicionadorAssinaturasModal({
     [docAtivoIndex, rolarParaPagina]
   )
 
-  // Sincroniza posições iniciais e zoom 80% ao abrir o modal
+  // Sincroniza posições iniciais e zoom 100% (ajustado à altura da tela) ao abrir o modal
   useEffect(() => {
     if (aberto && !abertoAnteriorRef.current) {
       setPosicoes({ ...posicoesAtuais })
-      setZoom(80)
+      setZoom(100)
       setPresetCustomizado(false)
       setTamanhoPadraoPt({ largura: 117, altura: 42 })
 
@@ -778,8 +778,18 @@ export function PosicionadorAssinaturasModal({
       renderTasksRef.current = {}
 
       const numPages = pdfDocRef.current.numPages || 1
-      const availableWidth = typeof window !== 'undefined' && window.innerWidth > 960 ? window.innerWidth - 440 : 680
-      const maxDisplayWidth = Math.max(320, Math.min(availableWidth, 740))
+      const containerEl = scrollContainerRef.current
+      const containerWidth = containerEl?.clientWidth
+        ? Math.max(360, containerEl.clientWidth - 56)
+        : typeof window !== 'undefined' && window.innerWidth > 960
+        ? window.innerWidth - 440
+        : 640
+      const containerHeight = containerEl?.clientHeight
+        ? Math.max(420, containerEl.clientHeight - 58)
+        : typeof window !== 'undefined'
+        ? Math.max(460, window.innerHeight * 0.72)
+        : 580
+      const maxDisplayWidth = Math.max(320, Math.min(containerWidth, 720))
       const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1
 
       const paginasPreparadas: Array<{
@@ -789,7 +799,7 @@ export function PosicionadorAssinaturasModal({
         viewport: any
       }> = []
 
-      // Passo 1: Dimensiona todos os canvas/overlays imediatamente para estabilizar a altura total do scroll
+      // Passo 1: Dimensiona todos os canvas/overlays imediatamente (em 100%, a folha cabe inteira na área visível)
       for (let pNum = 1; pNum <= numPages; pNum++) {
         const page = await pdfDocRef.current.getPage(pNum)
         const canvas = canvasRefs.current[pNum]
@@ -798,7 +808,9 @@ export function PosicionadorAssinaturasModal({
         if (!ctx) continue
 
         const unscaledViewport = page.getViewport({ scale: 1 })
-        const baseScale = maxDisplayWidth / unscaledViewport.width
+        const fitWidthScale = maxDisplayWidth / unscaledViewport.width
+        const fitHeightScale = containerHeight / unscaledViewport.height
+        const baseScale = Math.min(fitWidthScale, fitHeightScale)
         const effectiveScale = baseScale * (zoom / 100)
         if (pNum === 1) {
           setCurrentScale(effectiveScale)
@@ -1720,34 +1732,83 @@ export function PosicionadorAssinaturasModal({
             background: '#f8fafc',
           }}
         >
-          {/* ── COLUNA ESQUERDA: PAINEL ORGANIZADO E DIRETO ── */}
+          {/* ── COLUNA ESQUERDA: PAINEL EM BLOCOS COM CABEÇALHOS GRADIENTES E SEPARAÇÃO CLARA ── */}
           <div
             style={{
-              width: 320,
+              width: 332,
               flexShrink: 0,
-              borderRight: '1px solid #e2e8f0',
-              background: '#f8fafc',
+              borderRight: '1px solid #cbd5e1',
+              background: '#f1f5f9',
               display: 'flex',
               flexDirection: 'column',
               overflowY: 'auto',
-              padding: '14px',
-              gap: 16,
+              padding: '12px',
+              gap: 14,
             }}
           >
-            {/* SEÇÃO 1: DOCUMENTOS (Compacta se 1 doc, Lista enxuta se múltiplos docs) */}
-            {docsProcessados.length > 1 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Documentos ({docsProcessados.length})
-                  </span>
-                  <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
-                    Doc {docAtivoIndex + 1} de {docsProcessados.length}
+            {/* SEÇÃO 1: DOCUMENTOS (BLOCO COM CABEÇALHO GRADIENTE AZUL MODERNO) */}
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: 14,
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 4px 12px -2px rgba(15, 23, 42, 0.06)',
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <FileText size={13} color="#93c5fd" />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {docsProcessados.length > 1 ? `Documentos (${docsProcessados.length})` : 'Documento'}
                   </span>
                 </div>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    background: 'rgba(255, 255, 255, 0.18)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    padding: '1.5px 8px',
+                    borderRadius: 999,
+                  }}
+                >
+                  {docsProcessados.length > 1
+                    ? `Arq. ${docAtivoIndex + 1} de ${docsProcessados.length}`
+                    : `${totalPaginasDocAtivo} ${totalPaginasDocAtivo === 1 ? 'pág.' : 'págs'}`}
+                </span>
+              </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {docsProcessados.map((doc, idx) => {
+              <div
+                style={{
+                  padding: '10px',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                {docsProcessados.length > 1 ? (
+                  docsProcessados.map((doc, idx) => {
                     const isAtivo = docAtivoIndex === idx
                     const diagDoc = diagnostico.porDocumento[idx]
                     const totalAssinaturasDoc = diagDoc?.totalAssinaturasNoDoc || 0
@@ -1768,45 +1829,46 @@ export function PosicionadorAssinaturasModal({
                           }
                         }}
                         style={{
-                          padding: '8px 10px',
-                          borderRadius: 10,
+                          padding: '9px 11px',
+                          borderRadius: 11,
                           cursor: 'pointer',
-                          background: isAtivo ? '#ffffff' : '#f1f5f9',
+                          background: '#ffffff',
                           border: isAtivo
-                            ? '1.5px solid #2563eb'
+                            ? '2px solid #2563eb'
                             : totalAssinaturasDoc > 0
-                            ? '1px solid #a7f3d0'
-                            : '1px solid #e2e8f0',
-                          boxShadow: isAtivo ? '0 2px 8px rgba(37, 99, 235, 0.08)' : 'none',
+                            ? '1.5px solid #6ee7b7'
+                            : '1px solid #cbd5e1',
+                          boxShadow: isAtivo
+                            ? '0 4px 12px rgba(37, 99, 235, 0.14)'
+                            : '0 2px 5px rgba(15, 23, 42, 0.04)',
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 6,
+                          flexDirection: 'column',
+                          gap: totalPagsEsteDoc > 1 ? 6 : 0,
                           transition: 'all 0.15s ease',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                          <div
-                            style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 5,
-                              background: totalAssinaturasDoc > 0 ? '#d1fae5' : isAtivo ? '#eff6ff' : '#e2e8f0',
-                              color: totalAssinaturasDoc > 0 ? '#047857' : isAtivo ? '#2563eb' : '#64748b',
-                              fontSize: 10.5,
-                              fontWeight: 800,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {totalAssinaturasDoc > 0 ? <Check size={11} strokeWidth={3} /> : idx + 1}
-                          </div>
-                          <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
                             <div
                               style={{
-                                fontSize: 12,
+                                width: 22,
+                                height: 22,
+                                borderRadius: 6,
+                                background: totalAssinaturasDoc > 0 ? '#10b981' : isAtivo ? '#2563eb' : '#e2e8f0',
+                                color: totalAssinaturasDoc > 0 || isAtivo ? '#ffffff' : '#475569',
+                                fontSize: 11,
+                                fontWeight: 800,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {totalAssinaturasDoc > 0 ? <Check size={12} strokeWidth={3} /> : idx + 1}
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 12.5,
                                 fontWeight: isAtivo ? 700 : 600,
                                 color: isAtivo ? '#0f172a' : '#334155',
                                 overflow: 'hidden',
@@ -1816,178 +1878,240 @@ export function PosicionadorAssinaturasModal({
                               title={doc.nome}
                             >
                               {doc.nome}
-                            </div>
+                            </span>
                           </div>
-                        </div>
-
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                          {totalPagsEsteDoc > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleIrParaUltimaPaginaDoArquivo(idx, e)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 2,
-                                fontSize: 10,
-                                fontWeight: 700,
-                                padding: '2px 6px',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                background: isNaUltimaDesteDoc ? '#dbeafe' : '#eff6ff',
-                                color: '#1d4ed8',
-                                border: isNaUltimaDesteDoc ? '1px solid #60a5fa' : '1px solid #bfdbfe',
-                                transition: 'all 0.15s ease',
-                              }}
-                              title={`Ir direto para a última página (${totalPagsEsteDoc}) de "${doc.nome}"`}
-                            >
-                              <span>Últ. pág ({totalPagsEsteDoc})</span>
-                              <ChevronsRight size={11} />
-                            </button>
-                          )}
 
                           <span
                             style={{
-                              fontSize: 10,
+                              fontSize: 10.5,
                               fontWeight: 700,
-                              padding: '2px 7px',
+                              padding: '2px 8px',
                               borderRadius: 999,
-                              background: totalAssinaturasDoc > 0 ? '#ecfdf5' : '#ffffff',
+                              background: totalAssinaturasDoc > 0 ? '#ecfdf5' : '#f1f5f9',
                               color: totalAssinaturasDoc > 0 ? '#047857' : '#64748b',
-                              border: totalAssinaturasDoc > 0 ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                              border: totalAssinaturasDoc > 0 ? '1px solid #6ee7b7' : '1px solid #cbd5e1',
                               flexShrink: 0,
                             }}
                           >
                             {totalAssinaturasDoc > 0 ? `${totalAssinaturasDoc} ✓` : `${totalPagsEsteDoc} pág`}
                           </span>
                         </div>
+
+                        {totalPagsEsteDoc > 1 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              paddingTop: 6,
+                              borderTop: '1px dashed #e2e8f0',
+                              gap: 6,
+                            }}
+                          >
+                            <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                              {isAtivo
+                                ? `Pág. ${paginaAtualNoDoc} de ${totalPagsEsteDoc}`
+                                : `${totalPagsEsteDoc} páginas`}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={(e) =>
+                                isNaUltimaDesteDoc
+                                  ? handleIrParaPrimeiraPaginaDoArquivo(idx, e)
+                                  : handleIrParaUltimaPaginaDoArquivo(idx, e)
+                              }
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                padding: '2.5px 8px',
+                                borderRadius: 6,
+                                cursor: 'pointer',
+                                background: isNaUltimaDesteDoc ? '#f1f5f9' : '#eff6ff',
+                                color: isNaUltimaDesteDoc ? '#334155' : '#1d4ed8',
+                                border: isNaUltimaDesteDoc ? '1px solid #cbd5e1' : '1px solid #93c5fd',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title={
+                                isNaUltimaDesteDoc
+                                  ? `Voltar para a 1ª página de "${doc.nome}"`
+                                  : `Ir direto para a última página (${totalPagsEsteDoc}) de "${doc.nome}"`
+                              }
+                            >
+                              {isNaUltimaDesteDoc ? (
+                                <>
+                                  <ChevronsLeft size={11} />
+                                  <span>Ir p/ 1ª pág.</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Última pág. ({totalPagsEsteDoc})</span>
+                                  <ChevronsRight size={11} />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
-                  })}
-                </div>
+                  })
+                ) : (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 11,
+                      background: '#ffffff',
+                      border: '1.5px solid #cbd5e1',
+                      boxShadow: '0 2px 5px rgba(15, 23, 42, 0.04)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: totalPaginasDocAtivo > 1 ? 7 : 0,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                        <FileText size={15} color="#2563eb" style={{ flexShrink: 0 }} />
+                        <span
+                          style={{
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: '#0f172a',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={docAtivo?.nome}
+                        >
+                          {docAtivo?.nome || 'Documento'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {totalPaginasDocAtivo > 1 && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingTop: 6,
+                          borderTop: '1px dashed #e2e8f0',
+                          gap: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                          Vendo pág. <strong style={{ color: '#0f172a' }}>{paginaAtualNoDoc}</strong> de {totalPaginasDocAtivo}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) =>
+                            paginaAtualNoDoc === totalPaginasDocAtivo
+                              ? handleIrParaPrimeiraPaginaDoArquivo(0, e)
+                              : handleIrParaUltimaPaginaDoArquivo(0, e)
+                          }
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '3px 9px',
+                            borderRadius: 7,
+                            cursor: 'pointer',
+                            background: paginaAtualNoDoc === totalPaginasDocAtivo ? '#f1f5f9' : '#eff6ff',
+                            color: paginaAtualNoDoc === totalPaginasDocAtivo ? '#334155' : '#1d4ed8',
+                            border: paginaAtualNoDoc === totalPaginasDocAtivo ? '1px solid #cbd5e1' : '1px solid #93c5fd',
+                            transition: 'all 0.15s ease',
+                          }}
+                          title={
+                            paginaAtualNoDoc === totalPaginasDocAtivo
+                              ? 'Voltar para a 1ª página'
+                              : `Ir direto para a última página (Página ${totalPaginasDocAtivo})`
+                          }
+                        >
+                          {paginaAtualNoDoc === totalPaginasDocAtivo ? (
+                            <>
+                              <ChevronsLeft size={12} />
+                              <span>Ir p/ 1ª pág.</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Última pág. ({totalPaginasDocAtivo})</span>
+                              <ChevronsRight size={12} />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            ) : (
+            </div>
+
+            {/* SEÇÃO 2: PESSOAS PARA ASSINAR (BLOCO COM CABEÇALHO GRADIENTE ESMERALDA/TEAL E CARDS SEPARADOS) */}
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: 14,
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 4px 12px -2px rgba(15, 23, 42, 0.06)',
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}
+            >
               <div
                 style={{
-                  padding: '8px 10px',
-                  borderRadius: 10,
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
+                  background: 'linear-gradient(135deg, #065f46 0%, #059669 55%, #0d9488 100%)',
+                  padding: '8px 12px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 8,
+                  gap: 6,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                  <FileText size={15} color="#2563eb" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <User size={13} color="#a7f3d0" />
                   <span
                     style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: '#0f172a',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
                       whiteSpace: 'nowrap',
                     }}
-                    title={docAtivo?.nome}
                   >
-                    {docAtivo?.nome || 'Documento'}
+                    Pessoas para Assinar
                   </span>
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                    {totalPaginasDocAtivo} {totalPaginasDocAtivo === 1 ? 'pág.' : 'págs'}
-                  </span>
-                  {totalPaginasDocAtivo > 1 && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleIrParaUltimaPaginaDoArquivo(0, e)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 3,
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        padding: '3px 7px',
-                        borderRadius: 6,
-                        cursor: 'pointer',
-                        background: paginaAtualNoDoc === totalPaginasDocAtivo ? '#dbeafe' : '#eff6ff',
-                        color: '#1d4ed8',
-                        border: paginaAtualNoDoc === totalPaginasDocAtivo ? '1px solid #60a5fa' : '1px solid #bfdbfe',
-                        transition: 'all 0.15s ease',
-                      }}
-                      title={`Ir direto para a última página (Página ${totalPaginasDocAtivo})`}
-                    >
-                      <span>Última pág.</span>
-                      <ChevronsRight size={11} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* SEÇÃO 2: PESSOAS PARA ASSINAR */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Pessoas para Assinar
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    background: 'rgba(255, 255, 255, 0.18)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    padding: '1.5px 8px',
+                    borderRadius: 999,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {signatarios.length} {signatarios.length === 1 ? 'pessoa' : 'pessoas'}
                 </span>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
-                    Página atual: {paginaAtualNoDoc}/{totalPaginasDocAtivo}
-                  </span>
-                  {totalPaginasDocAtivo > 1 && (
-                    paginaAtualNoDoc < totalPaginasDocAtivo ? (
-                      <button
-                        type="button"
-                        onClick={(e) => handleIrParaUltimaPaginaDoArquivo(docAtivoIndex, e)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '1.5px 6px',
-                          borderRadius: 5,
-                          background: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px solid #bfdbfe',
-                          cursor: 'pointer',
-                        }}
-                        title={`Pular para a última página (${totalPaginasDocAtivo})`}
-                      >
-                        <span>Última</span>
-                        <ChevronsRight size={10} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex, e)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '1.5px 6px',
-                          borderRadius: 5,
-                          background: '#f8fafc',
-                          color: '#475569',
-                          border: '1px solid #cbd5e1',
-                          cursor: 'pointer',
-                        }}
-                        title="Voltar para a 1ª página"
-                      >
-                        <ChevronsLeft size={10} />
-                        <span>1ª pág</span>
-                      </button>
-                    )
-                  )}
-                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div
+                style={{
+                  padding: '10px',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 9,
+                }}
+              >
                 {signatarios.map((sig) => {
                   const isAtivo = signatarioAtivoId === sig.id
                   const posEntriesNesteDoc = Object.entries(posicoes)
@@ -2006,285 +2130,192 @@ export function PosicionadorAssinaturasModal({
                   const posNaPaginaAtual = posEntryNaPaginaAtual?.[1]
                   const posKeyNaPaginaAtual = posEntryNaPaginaAtual?.[0]
 
-                  const assinaEmTodasAsPaginas =
-                    totalPaginasDocAtivo > 1 && posEntriesNesteDoc.length >= totalPaginasDocAtivo
-
                   return (
                     <div
                       key={sig.id}
                       onClick={() => setSignatarioAtivoId(sig.id)}
                       style={{
-                        padding: '10px 12px',
-                        borderRadius: 12,
+                        padding: '10px 11px',
+                        borderRadius: 11,
                         cursor: 'pointer',
                         background: '#ffffff',
                         border: isAtivo
                           ? `2px solid ${sig.cor}`
                           : posEntriesNesteDoc.length > 0
-                          ? '1px solid #cbd5e1'
-                          : '1px solid #e2e8f0',
-                        boxShadow: isAtivo ? `0 4px 12px ${sig.cor}1c` : '0 1px 2px rgba(15, 23, 42, 0.03)',
+                          ? '1.5px solid #6ee7b7'
+                          : '1px solid #cbd5e1',
+                        borderLeft: `4px solid ${isAtivo ? sig.cor : posEntriesNesteDoc.length > 0 ? '#10b981' : '#94a3b8'}`,
+                        boxShadow: isAtivo
+                          ? `0 5px 14px ${sig.cor}22`
+                          : '0 2px 6px rgba(15, 23, 42, 0.05)',
                         transition: 'all 0.15s ease',
                         display: 'flex',
-                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: 8,
                       }}
                     >
-                      {/* Linha Principal: Identificação + Status na Página Atual */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 }}>
-                          <div
-                            style={{
-                              width: 30,
-                              height: 30,
-                              borderRadius: 8,
-                              background: isAtivo ? sig.cor : `${sig.cor}15`,
-                              color: isAtivo ? '#ffffff' : sig.cor,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            {sig.tipo === 'escola' ? <Building2 size={15} /> : <User size={15} />}
-                          </div>
-
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div
-                              style={{
-                                fontSize: 12.5,
-                                fontWeight: 700,
-                                color: '#0f172a',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                              title={sig.nome}
-                            >
-                              {sig.nome}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 10.5,
-                                color: '#64748b',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {sig.cargo}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Status / Ação na Página Atual */}
-                        {posNaPaginaAtual && posKeyNaPaginaAtual ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              padding: '3px 7px',
-                              borderRadius: 7,
-                              background: '#ecfdf5',
-                              color: '#047857',
-                              border: '1px solid #a7f3d0',
-                              flexShrink: 0,
-                            }}
-                            title={`Posicionado na Página ${paginaAtualNoDoc}`}
-                          >
-                            <Check size={11} strokeWidth={3} />
-                            <span>Na Pág. {paginaAtualNoDoc}</span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoverPosicao(posKeyNaPaginaAtual, e)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#dc2626',
-                                cursor: 'pointer',
-                                padding: '0 0 0 2px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                              }}
-                              title={`Remover da Página ${paginaAtualNoDoc}`}
-                            >
-                              <X size={11} />
-                            </button>
-                          </span>
-                        ) : isAtivo ? (
-                          <span
-                            style={{
-                              fontSize: 10.5,
-                              fontWeight: 700,
-                              color: sig.cor,
-                              background: `${sig.cor}12`,
-                              padding: '3px 8px',
-                              borderRadius: 7,
-                              flexShrink: 0,
-                            }}
-                          >
-                            Clique na folha →
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              fontSize: 10.5,
-                              fontWeight: 600,
-                              color: '#94a3b8',
-                              flexShrink: 0,
-                            }}
-                          >
-                            Selecionar
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Barra Unificada de Páginas (Exibida quando o documento tem mais de 1 página) */}
-                      {totalPaginasDocAtivo > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 }}>
                         <div
                           style={{
+                            width: 30,
+                            height: 30,
+                            borderRadius: 8,
+                            background: isAtivo ? sig.cor : `${sig.cor}15`,
+                            color: isAtivo ? '#ffffff' : sig.cor,
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 6,
-                            paddingTop: 6,
-                            borderTop: '1px solid #f1f5f9',
-                            flexWrap: 'wrap',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            transition: 'all 0.15s ease',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                            {Array.from({ length: totalPaginasDocAtivo }, (_, i) => i + 1).map((pNum) => {
-                              const entryPag = posEntriesNesteDoc.find(
-                                ([_, pItem]) => obterPaginaRelativaNoDoc(pItem, docAtivo, docsProcessados.length) === pNum
-                              )
-                              const temNaPag = Boolean(entryPag)
-                              const isPagAtual = pNum === paginaAtualNoDoc
-
-                              return (
-                                <span
-                                  key={pNum}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 2,
-                                    fontSize: 10,
-                                    fontWeight: temNaPag || isPagAtual ? 700 : 600,
-                                    padding: '2px 6px',
-                                    borderRadius: 6,
-                                    background: temNaPag
-                                      ? '#ecfdf5'
-                                      : isPagAtual
-                                      ? '#eff6ff'
-                                      : '#f8fafc',
-                                    color: temNaPag
-                                      ? '#047857'
-                                      : isPagAtual
-                                      ? '#1d4ed8'
-                                      : '#64748b',
-                                    border: temNaPag
-                                      ? '1px solid #a7f3d0'
-                                      : isPagAtual
-                                      ? '1px solid #93c5fd'
-                                      : '1px solid #e2e8f0',
-                                  }}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSignatarioAtivoId(sig.id)
-                                      rolarParaPagina(pNum)
-                                    }}
-                                    style={{
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: 'inherit',
-                                      font: 'inherit',
-                                      cursor: 'pointer',
-                                      padding: 0,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 2,
-                                    }}
-                                    title={temNaPag ? `Assinado na Página ${pNum} (clique para rolar até ela)` : `Rolar para Página ${pNum}`}
-                                  >
-                                    {temNaPag && <Check size={9} strokeWidth={3} />}
-                                    <span>Pág. {pNum}</span>
-                                  </button>
-                                  {temNaPag && entryPag && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => handleRemoverPosicao(entryPag[0], e)}
-                                      style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: '#dc2626',
-                                        cursor: 'pointer',
-                                        padding: '0 0 0 2px',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                      }}
-                                      title={`Remover assinatura da Página ${pNum}`}
-                                    >
-                                      <X size={9} />
-                                    </button>
-                                  )}
-                                </span>
-                              )
-                            })}
-                          </div>
-
-                          {/* Botão Único de Ação Rápida para Todas as Páginas desta Pessoa */}
-                          {!assinaEmTodasAsPaginas ? (
-                            <button
-                              type="button"
-                              onClick={(e) => handleReplicarSignatarioEmTodasPaginas(sig.id, e)}
-                              style={{
-                                background: '#eff6ff',
-                                border: '1px solid #bfdbfe',
-                                color: '#1d4ed8',
-                                fontSize: 10,
-                                fontWeight: 700,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                flexShrink: 0,
-                              }}
-                              title={`Colocar a assinatura de ${sig.nome} em todas as ${totalPaginasDocAtivo} páginas`}
-                            >
-                              <Layers size={10} /> Todas as págs
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoverSignatarioDoDocAtivo(sig.id, e)}
-                              style={{
-                                background: '#fff1f2',
-                                border: '1px solid #fecdd3',
-                                color: '#e11d48',
-                                fontSize: 10,
-                                fontWeight: 600,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                flexShrink: 0,
-                              }}
-                              title="Limpar todas as páginas desta pessoa"
-                            >
-                              <Trash2 size={9} /> Limpar
-                            </button>
-                          )}
+                          {sig.tipo === 'escola' ? <Building2 size={15} /> : <User size={15} />}
                         </div>
+
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                            title={sig.nome}
+                          >
+                            {sig.nome}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 10.5,
+                              color: '#64748b',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {sig.cargo}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status enxuto da pessoa */}
+                      {posNaPaginaAtual && posKeyNaPaginaAtual ? (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '3px 7px',
+                            borderRadius: 7,
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            border: '1px solid #6ee7b7',
+                            flexShrink: 0,
+                          }}
+                          title={`Posicionado na Página ${paginaAtualNoDoc}`}
+                        >
+                          <Check size={11} strokeWidth={3} />
+                          <span>Pág. {paginaAtualNoDoc}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoverPosicao(posKeyNaPaginaAtual, e)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              padding: '0 0 0 2px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title={`Remover da Página ${paginaAtualNoDoc}`}
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ) : posEntriesNesteDoc.length > 0 ? (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSignatarioAtivoId(sig.id)
+                            const ultimaEntry = posEntriesNesteDoc[posEntriesNesteDoc.length - 1]
+                            const pagAlvo = obterPaginaRelativaNoDoc(ultimaEntry[1], docAtivo, docsProcessados.length)
+                            rolarParaPagina(pagAlvo)
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            padding: '3px 7px',
+                            borderRadius: 7,
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            border: '1px solid #6ee7b7',
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                          }}
+                          title="Clique para ir até a página onde esta pessoa assinou"
+                        >
+                          <Check size={11} strokeWidth={3} />
+                          <span>
+                            {posEntriesNesteDoc.length === 1
+                              ? `Pág. ${obterPaginaRelativaNoDoc(posEntriesNesteDoc[0][1], docAtivo, docsProcessados.length)}`
+                              : `${posEntriesNesteDoc.length} págs`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoverSignatarioDoDocAtivo(sig.id, e)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              padding: '0 0 0 2px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title="Remover assinatura desta pessoa"
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      ) : isAtivo ? (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: sig.cor,
+                            background: `${sig.cor}12`,
+                            border: `1px solid ${sig.cor}30`,
+                            padding: '3px 8px',
+                            borderRadius: 7,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Clique na folha →
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            color: '#64748b',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            padding: '2.5px 7px',
+                            borderRadius: 6,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Selecionar
+                        </span>
                       )}
                     </div>
                   )
@@ -2292,64 +2323,114 @@ export function PosicionadorAssinaturasModal({
               </div>
             </div>
 
-            {/* SEÇÃO 3: TAMANHO DA ASSINATURA (COMPACTO) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Tamanho da Assinatura
-                </span>
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
+            {/* SEÇÃO 3: TAMANHO DA ASSINATURA (BLOCO COM CABEÇALHO GRADIENTE ÍNDIGO/ROXO) */}
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: 14,
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 4px 12px -2px rgba(15, 23, 42, 0.06)',
+                overflow: 'hidden',
+                marginTop: 'auto',
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #312e81 0%, #4f46e5 60%, #6366f1 100%)',
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Maximize2 size={12} color="#c7d2fe" />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    Tamanho da Assinatura
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    background: 'rgba(255, 255, 255, 0.18)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    padding: '1.5px 8px',
+                    borderRadius: 999,
+                  }}
+                >
                   {larguraAtivaPt} × {alturaAtivaPt} pt
                 </span>
               </div>
 
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 5,
-                  background: '#ffffff',
-                  padding: 4,
-                  borderRadius: 10,
-                  border: '1px solid #e2e8f0',
+                  padding: '10px',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
                 }}
               >
-                {[
-                  { label: 'P', desc: 'Pequena', l: 100, a: 36 },
-                  { label: 'M', desc: 'Ideal', l: 117, a: 42 },
-                  { label: 'G', desc: 'Grande', l: 145, a: 48 },
-                  { label: 'GG', desc: 'Extra', l: 175, a: 54 },
-                ].map((preset) => {
-                  const isPresetAtivo = Math.abs(larguraAtivaPt - preset.l) < 12
-                  return (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => handleAplicarPresetTamanho(preset.l, preset.a)}
-                      style={{
-                        background: isPresetAtivo ? '#eff6ff' : 'transparent',
-                        border: isPresetAtivo ? '1.5px solid #2563eb' : '1px solid transparent',
-                        color: isPresetAtivo ? '#1d4ed8' : '#475569',
-                        borderRadius: 7,
-                        padding: '5px 4px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                        transition: 'all 0.15s ease',
-                      }}
-                      title={`${preset.desc} (${preset.l}×${preset.a} pt)`}
-                    >
-                      <span style={{ fontSize: 11.5, fontWeight: 800 }}>{preset.label}</span>
-                      <span style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.75 }}>{preset.desc}</span>
-                    </button>
-                  )
-                })}
-              </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 5,
+                    background: '#ffffff',
+                    padding: 4,
+                    borderRadius: 10,
+                    border: '1px solid #cbd5e1',
+                  }}
+                >
+                  {[
+                    { label: 'P', desc: 'Pequena', l: 100, a: 36 },
+                    { label: 'M', desc: 'Ideal', l: 117, a: 42 },
+                    { label: 'G', desc: 'Grande', l: 145, a: 48 },
+                    { label: 'GG', desc: 'Extra', l: 175, a: 54 },
+                  ].map((preset) => {
+                    const isPresetAtivo = Math.abs(larguraAtivaPt - preset.l) < 12
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => handleAplicarPresetTamanho(preset.l, preset.a)}
+                        style={{
+                          background: isPresetAtivo ? '#eef2ff' : 'transparent',
+                          border: isPresetAtivo ? '1.5px solid #4f46e5' : '1px solid transparent',
+                          color: isPresetAtivo ? '#4338ca' : '#475569',
+                          borderRadius: 7,
+                          padding: '5px 4px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4,
+                          transition: 'all 0.15s ease',
+                        }}
+                        title={`${preset.desc} (${preset.l}×${preset.a} pt)`}
+                      >
+                        <span style={{ fontSize: 11.5, fontWeight: 800 }}>{preset.label}</span>
+                        <span style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.8 }}>{preset.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
 
-              <div style={{ fontSize: 10.5, color: '#64748b', padding: '2px 2px 0', lineHeight: 1.4 }}>
-                Dica: role a folha com o mouse para navegar pelas páginas e clique onde desejar assinar.
+                <div style={{ fontSize: 10.5, color: '#64748b', padding: '0 2px', lineHeight: 1.4 }}>
+                  Dica: role a folha com o mouse para navegar pelas páginas e clique onde desejar assinar.
+                </div>
               </div>
             </div>
           </div>
@@ -2364,259 +2445,365 @@ export function PosicionadorAssinaturasModal({
               background: '#f1f5f9',
             }}
           >
-            {/* Barra de Ferramentas Superior do Documento (1 Linha Limpa: Pessoa Ativa + Indicador de Rolagem + Zoom) */}
+            {/* Barra de Ferramentas Superior do Documento (Linha Única Alinhada, Limpa e Fácil de Ler) */}
             <div
               style={{
+                minHeight: 50,
                 padding: '8px 16px',
                 background: '#ffffff',
                 borderBottom: '1px solid #e2e8f0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: 10,
+                gap: 12,
                 flexShrink: 0,
+                flexWrap: 'nowrap',
               }}
             >
-              {/* Indicador de Quem Está Sendo Posicionado Agora */}
+              {/* ZONA 1 (Esquerda): Indicador de Quem Está Sendo Posicionado Agora */}
               {sigAtivoObj ? (
                 <div
                   style={{
+                    height: 34,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 7,
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    background: `${sigAtivoObj.cor}12`,
-                    border: `1px solid ${sigAtivoObj.cor}38`,
+                    gap: 8,
+                    padding: '0 12px',
+                    borderRadius: 9,
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
                     minWidth: 0,
+                    maxWidth: 270,
                   }}
                 >
                   <span
                     style={{
-                      width: 8,
-                      height: 8,
+                      width: 9,
+                      height: 9,
                       borderRadius: '50%',
                       background: sigAtivoObj.cor,
+                      boxShadow: `0 0 0 3px ${sigAtivoObj.cor}22`,
                       flexShrink: 0,
                     }}
                   />
                   <span
                     style={{
-                      fontSize: 11.5,
-                      color: '#334155',
+                      fontSize: 12,
+                      color: '#64748b',
                       fontWeight: 600,
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                     }}
+                    title={`Posicionando: ${sigAtivoObj.nome}`}
                   >
-                    Posicionando: <strong style={{ color: '#0f172a' }}>{sigAtivoObj.nome}</strong>
+                    Posicionando: <strong style={{ color: '#0f172a', fontWeight: 700 }}>{sigAtivoObj.nome}</strong>
                   </span>
                 </div>
               ) : (
                 <div />
               )}
 
-              {/* Indicador Central de Página Atual + Navegação Rápida (1ª / Última Página) + Troca de Arquivo */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {/* ZONA 2 (Centro): Barra Unificada de Navegação (Arquivos + Páginas + Salto Rápido) */}
+              <div
+                style={{
+                  height: 34,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  padding: '3px 5px',
+                  borderRadius: 10,
+                  flexShrink: 0,
+                }}
+              >
+                {/* Seletor enxuto de arquivo quando há múltiplos documentos */}
                 {docsProcessados.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (docAtivoIndex > 0) {
-                        setDocAtivoIndex(i => i - 1)
-                        setPaginaAtualNoDoc(1)
-                      }
-                    }}
-                    disabled={docAtivoIndex <= 0}
-                    style={{
-                      background: docAtivoIndex > 0 ? '#eff6ff' : '#f8fafc',
-                      border: docAtivoIndex > 0 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                      color: docAtivoIndex > 0 ? '#1d4ed8' : '#cbd5e1',
-                      cursor: docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
-                      padding: '4px 9px',
-                      borderRadius: 7,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3,
-                    }}
-                    title="Voltar para o arquivo anterior"
-                  >
-                    <ChevronLeft size={13} /> Arquivo Anterior
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (docAtivoIndex > 0) {
+                          setDocAtivoIndex(i => i - 1)
+                          setPaginaAtualNoDoc(1)
+                        }
+                      }}
+                      disabled={docAtivoIndex <= 0}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 7,
+                        background: docAtivoIndex > 0 ? '#ffffff' : 'transparent',
+                        border: docAtivoIndex > 0 ? '1px solid #cbd5e1' : '1px solid transparent',
+                        color: docAtivoIndex > 0 ? '#1e293b' : '#cbd5e1',
+                        cursor: docAtivoIndex <= 0 ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                      title="Arquivo anterior"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        color: '#334155',
+                        padding: '0 6px',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={docAtivo?.nome}
+                    >
+                      Arq. {docAtivoIndex + 1}/{docsProcessados.length}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (docAtivoIndex < docsProcessados.length - 1) {
+                          setDocAtivoIndex(i => i + 1)
+                          setPaginaAtualNoDoc(1)
+                        }
+                      }}
+                      disabled={docAtivoIndex >= docsProcessados.length - 1}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 7,
+                        background: docAtivoIndex < docsProcessados.length - 1 ? '#ffffff' : 'transparent',
+                        border: docAtivoIndex < docsProcessados.length - 1 ? '1px solid #cbd5e1' : '1px solid transparent',
+                        color: docAtivoIndex < docsProcessados.length - 1 ? '#1e293b' : '#cbd5e1',
+                        cursor: docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                      title="Próximo arquivo"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+
+                    <span
+                      style={{
+                        width: 1,
+                        height: 18,
+                        background: '#cbd5e1',
+                        margin: '0 3px',
+                        flexShrink: 0,
+                      }}
+                    />
+                  </>
                 )}
 
-                <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    padding: '3px 6px',
-                    borderRadius: 999,
-                    fontSize: 11.5,
-                    color: '#475569',
-                    fontWeight: 600,
-                  }}
-                >
-                  {totalPaginasDocAtivo > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex, e)}
-                        disabled={paginaAtualNoDoc <= 1}
-                        style={{
-                          background: paginaAtualNoDoc > 1 ? '#ffffff' : 'transparent',
-                          border: paginaAtualNoDoc > 1 ? '1px solid #cbd5e1' : '1px solid transparent',
-                          color: paginaAtualNoDoc > 1 ? '#334155' : '#cbd5e1',
-                          cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
-                          padding: '2px 6px',
-                          borderRadius: 999,
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 2,
-                          transition: 'all 0.15s ease',
-                        }}
-                        title="Ir para a primeira página (Página 1)"
-                      >
-                        <ChevronsLeft size={12} />
-                        <span>1ª</span>
-                      </button>
+                {totalPaginasDocAtivo > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => rolarParaPagina(paginaAtualNoDoc - 1)}
+                      disabled={paginaAtualNoDoc <= 1}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 7,
+                        background: paginaAtualNoDoc > 1 ? '#ffffff' : 'transparent',
+                        border: paginaAtualNoDoc > 1 ? '1px solid #cbd5e1' : '1px solid transparent',
+                        color: paginaAtualNoDoc > 1 ? '#334155' : '#cbd5e1',
+                        cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                      title="Página anterior"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => rolarParaPagina(paginaAtualNoDoc - 1)}
-                        disabled={paginaAtualNoDoc <= 1}
-                        style={{
-                          background: paginaAtualNoDoc > 1 ? '#ffffff' : 'transparent',
-                          border: paginaAtualNoDoc > 1 ? '1px solid #cbd5e1' : '1px solid transparent',
-                          color: paginaAtualNoDoc > 1 ? '#334155' : '#cbd5e1',
-                          cursor: paginaAtualNoDoc <= 1 ? 'not-allowed' : 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: 999,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="Página anterior"
-                      >
-                        <ChevronLeft size={13} />
-                      </button>
-                    </>
-                  )}
+                    {/* Botões numerados uniformes de acesso direto às páginas */}
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        padding: '0 2px',
+                        maxWidth: 260,
+                        overflowX: 'auto',
+                      }}
+                    >
+                      {Array.from({ length: totalPaginasDocAtivo }, (_, i) => i + 1).map((pNum) => {
+                        const isPagAtiva = pNum === paginaAtualNoDoc
+                        const qtdAssinaturasPag = diagDocAtivo?.contagemPorPagina?.[pNum] || 0
+                        return (
+                          <button
+                            key={pNum}
+                            type="button"
+                            onClick={() => rolarParaPagina(pNum)}
+                            style={{
+                              minWidth: 26,
+                              height: 26,
+                              padding: '0 7px',
+                              borderRadius: 7,
+                              fontSize: 12,
+                              fontWeight: isPagAtiva || qtdAssinaturasPag > 0 ? 800 : 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 2.5,
+                              background: isPagAtiva
+                                ? '#2563eb'
+                                : qtdAssinaturasPag > 0
+                                ? '#ecfdf5'
+                                : '#ffffff',
+                              color: isPagAtiva
+                                ? '#ffffff'
+                                : qtdAssinaturasPag > 0
+                                ? '#047857'
+                                : '#475569',
+                              border: isPagAtiva
+                                ? '1px solid #1d4ed8'
+                                : qtdAssinaturasPag > 0
+                                ? '1px solid #a7f3d0'
+                                : '1px solid #e2e8f0',
+                              boxShadow: isPagAtiva ? '0 2px 5px rgba(37, 99, 235, 0.25)' : 'none',
+                              transition: 'all 0.15s ease',
+                              flexShrink: 0,
+                            }}
+                            title={`Ir para a Página ${pNum}${qtdAssinaturasPag > 0 ? ` (${qtdAssinaturasPag} assinatura(s))` : ''}`}
+                          >
+                            <span>{pNum}</span>
+                            {qtdAssinaturasPag > 0 && !isPagAtiva && <Check size={9.5} strokeWidth={3} />}
+                          </button>
+                        )
+                      })}
+                    </div>
 
-                  <span style={{ color: '#0f172a', fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
-                    Página {paginaAtualNoDoc} de {totalPaginasDocAtivo}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={() => rolarParaPagina(paginaAtualNoDoc + 1)}
+                      disabled={paginaAtualNoDoc >= totalPaginasDocAtivo}
+                      style={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 7,
+                        background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#ffffff' : 'transparent',
+                        border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #cbd5e1' : '1px solid transparent',
+                        color: paginaAtualNoDoc < totalPaginasDocAtivo ? '#334155' : '#cbd5e1',
+                        cursor: paginaAtualNoDoc >= totalPaginasDocAtivo ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                      title="Próxima página"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
 
-                  {totalPaginasDocAtivo > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => rolarParaPagina(paginaAtualNoDoc + 1)}
-                        disabled={paginaAtualNoDoc >= totalPaginasDocAtivo}
-                        style={{
-                          background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#ffffff' : 'transparent',
-                          border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #cbd5e1' : '1px solid transparent',
-                          color: paginaAtualNoDoc < totalPaginasDocAtivo ? '#334155' : '#cbd5e1',
-                          cursor: paginaAtualNoDoc >= totalPaginasDocAtivo ? 'not-allowed' : 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: 999,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                        title="Próxima página"
-                      >
-                        <ChevronRight size={13} />
-                      </button>
+                    <span
+                      style={{
+                        width: 1,
+                        height: 18,
+                        background: '#cbd5e1',
+                        margin: '0 3px',
+                        flexShrink: 0,
+                      }}
+                    />
 
+                    {/* Botão Inteligente de Salto Rápido (Última página <-> 1ª página) */}
+                    {paginaAtualNoDoc < totalPaginasDocAtivo ? (
                       <button
                         type="button"
                         onClick={(e) => handleIrParaUltimaPaginaDoArquivo(docAtivoIndex, e)}
                         style={{
-                          background: paginaAtualNoDoc < totalPaginasDocAtivo ? '#eff6ff' : '#ecfdf5',
-                          border: paginaAtualNoDoc < totalPaginasDocAtivo ? '1px solid #93c5fd' : '1px solid #a7f3d0',
-                          color: paginaAtualNoDoc < totalPaginasDocAtivo ? '#1d4ed8' : '#047857',
-                          cursor: 'pointer',
-                          padding: '2px 9px',
-                          borderRadius: 999,
-                          fontSize: 11,
+                          height: 26,
+                          padding: '0 10px',
+                          borderRadius: 7,
+                          background: '#eff6ff',
+                          border: '1px solid #93c5fd',
+                          color: '#1d4ed8',
+                          fontSize: 11.5,
                           fontWeight: 700,
+                          cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 3,
+                          gap: 4,
+                          whiteSpace: 'nowrap',
                           transition: 'all 0.15s ease',
                         }}
-                        title={`Ir diretamente para a última página deste arquivo (Página ${totalPaginasDocAtivo})`}
+                        title={`Ir diretamente para a última página (Página ${totalPaginasDocAtivo})`}
                       >
-                        <span>Última página ({totalPaginasDocAtivo})</span>
+                        <span>Última pág. ({totalPaginasDocAtivo})</span>
                         <ChevronsRight size={13} />
                       </button>
-                    </>
-                  )}
-                </div>
-
-                {docsProcessados.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (docAtivoIndex < docsProcessados.length - 1) {
-                        setDocAtivoIndex(i => i + 1)
-                        setPaginaAtualNoDoc(1)
-                      }
-                    }}
-                    disabled={docAtivoIndex >= docsProcessados.length - 1}
-                    style={{
-                      background: docAtivoIndex < docsProcessados.length - 1 ? '#eff6ff' : '#f8fafc',
-                      border: docAtivoIndex < docsProcessados.length - 1 ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
-                      color: docAtivoIndex < docsProcessados.length - 1 ? '#1d4ed8' : '#cbd5e1',
-                      cursor: docAtivoIndex >= docsProcessados.length - 1 ? 'not-allowed' : 'pointer',
-                      padding: '4px 9px',
-                      borderRadius: 7,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3,
-                    }}
-                    title="Avançar para o próximo arquivo"
-                  >
-                    Próximo Arquivo <ChevronRight size={13} />
-                  </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => handleIrParaPrimeiraPaginaDoArquivo(docAtivoIndex, e)}
+                        style={{
+                          height: 26,
+                          padding: '0 10px',
+                          borderRadius: 7,
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          color: '#334155',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Voltar para a primeira página (Página 1)"
+                      >
+                        <ChevronsLeft size={13} />
+                        <span>1ª página</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ color: '#0f172a', fontSize: 12, fontWeight: 700, padding: '0 10px', whiteSpace: 'nowrap' }}>
+                    Página 1 de 1
+                  </span>
                 )}
               </div>
 
-              {/* Controles de Zoom (Inicia em 80%) */}
+              {/* ZONA 3 (Direita): Controles de Zoom Padronizados */}
               <div
                 style={{
+                  height: 34,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 3,
                   background: '#f8fafc',
                   border: '1px solid #e2e8f0',
-                  padding: '3px 5px',
-                  borderRadius: 9,
+                  padding: '3px 4px',
+                  borderRadius: 10,
                   flexShrink: 0,
                 }}
               >
                 <button
                   type="button"
-                  onClick={() => setZoom(z => Math.max(50, z - 10))}
+                  onClick={() => setZoom(z => Math.max(60, z - 15))}
                   style={{
+                    width: 26,
+                    height: 26,
                     background: '#ffffff',
                     border: '1px solid #e2e8f0',
                     color: '#334155',
-                    padding: '4px 5px',
-                    borderRadius: 6,
+                    borderRadius: 7,
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
                   }}
                   title="Reduzir zoom"
                 >
@@ -2624,38 +2811,67 @@ export function PosicionadorAssinaturasModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setZoom(80)}
+                  onClick={() => setZoom(100)}
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    fontSize: 11,
+                    height: 26,
+                    background: zoom === 100 ? '#eff6ff' : 'transparent',
+                    border: zoom === 100 ? '1px solid #bfdbfe' : '1px solid transparent',
+                    borderRadius: 7,
+                    fontSize: 11.5,
                     fontWeight: 700,
-                    color: '#334155',
-                    minWidth: 38,
+                    color: zoom === 100 ? '#1d4ed8' : '#334155',
+                    minWidth: 46,
+                    padding: '0 6px',
                     textAlign: 'center',
                     cursor: 'pointer',
                   }}
-                  title="Restaurar zoom padrão (80%)"
+                  title="Ajustar folha inteira na tela (100%)"
                 >
                   {zoom}%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setZoom(z => Math.min(150, z + 10))}
+                  onClick={() => setZoom(z => Math.min(190, z + 15))}
                   style={{
+                    width: 26,
+                    height: 26,
                     background: '#ffffff',
                     border: '1px solid #e2e8f0',
                     color: '#334155',
-                    padding: '4px 5px',
-                    borderRadius: 6,
+                    borderRadius: 7,
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
                   }}
                   title="Aumentar zoom"
                 >
                   <ZoomIn size={13} />
                 </button>
+                {zoom !== 100 && (
+                  <button
+                    type="button"
+                    onClick={() => setZoom(100)}
+                    style={{
+                      height: 26,
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      color: '#1d4ed8',
+                      padding: '0 8px',
+                      borderRadius: 7,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    title="Encaixar página inteira na tela"
+                  >
+                    <Maximize2 size={11} /> Ajustar
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2890,27 +3106,6 @@ export function PosicionadorAssinaturasModal({
                                     </span>
 
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                      {totalPaginasDocAtivo > 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => handleReplicarSignatarioEmTodasPaginas(pos.signatarioId, e)}
-                                          style={{
-                                            background: '#eff6ff',
-                                            border: '1px solid #93c5fd',
-                                            color: '#1d4ed8',
-                                            cursor: 'pointer',
-                                            padding: '1px 3px',
-                                            borderRadius: 3,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            fontSize: 7.5,
-                                            fontWeight: 700,
-                                          }}
-                                          title={`Replicar esta posição em todas as ${totalPaginasDocAtivo} páginas deste documento`}
-                                        >
-                                          <Layers size={7.5} />
-                                        </button>
-                                      )}
                                       <button
                                         type="button"
                                         onClick={(e) => handleAjustarTamanho(posKey, -10, e)}
