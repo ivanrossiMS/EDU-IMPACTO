@@ -11,11 +11,12 @@ import {
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
   CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2,
   Layers, PackageCheck, Clock, ArrowUpRight, CheckCircle2, BookOpen,
-  Activity, Sparkles, EyeOff, Lock
+  Activity, Sparkles, EyeOff, Lock, Mail
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { FirstAccessInviteCampaignModal, type CampaignCategoryFilter } from '@/components/usuarios/FirstAccessInviteCampaignModal'
 
 // ── Helpers
 const fmtPct = (v: number) => `${v.toFixed(1)}%`
@@ -122,6 +123,8 @@ export default function DashboardPage() {
   const [modalAnivOpen, setModalAnivOpen] = useState(false)
   const [anivFiltroAno, setAnivFiltroAno] = useState('Todos')
   const [anivFiltroTurma, setAnivFiltroTurma] = useState('Todas')
+  const [inviteCampaignOpen, setInviteCampaignOpen] = useState(false)
+  const [inviteCampaignCategory, setInviteCampaignCategory] = useState<CampaignCategoryFilter>('responsavel')
   
   // ── Filtros Dashboard
   const [filtroTarefas, setFiltroTarefas] = useState<'todas' | 'pendentes' | 'concluidas'>('todas')
@@ -304,8 +307,10 @@ export default function DashboardPage() {
       : (aniversariantesList as any)?.data || []
       
     if (!list || list.length === 0) return []
+    const diaHoje = new Date().getDate()
+
     return list.map((a: any) => {
-      let turmaNome = a.turma || 'S/T'
+      let turmaNome = a.turmaNome || a.turma || 'S/T'
       const tObj = turmas.find((t: any) => t.id === a.turma || t.codigo === a.turma)
       if (tObj) turmaNome = tObj.nome
 
@@ -318,7 +323,18 @@ export default function DashboardPage() {
         foto: a.foto || null,
         timestamp: new Date().getTime()
       }
-    }).sort((a: any, b: any) => a.dia - b.dia)
+    }).sort((a: any, b: any) => {
+      const aProximo = a.dia >= diaHoje
+      const bProximo = b.dia >= diaHoje
+
+      // Prioriza aniversariantes de hoje e dos próximos dias do mês (ordem crescente)
+      if (aProximo && !bProximo) return -1
+      if (!aProximo && bProximo) return 1
+      if (aProximo && bProximo) return a.dia - b.dia
+
+      // Para dias que já passaram no mês, exibe os mais próximos da data atual primeiro
+      return b.dia - a.dia
+    })
   }, [aniversariantesList, turmas])
 
   // Orders summary logic moved to backend API (/api/administrativo/pedidos-summary)
@@ -2134,19 +2150,65 @@ export default function DashboardPage() {
 
                 {/* Main Telemetry Copy & Distribution Bar */}
                 <div className="dashboard-engagement-hero-copy">
-                  <div className="dashboard-engagement-badge-row">
+                  <div className="dashboard-engagement-badge-row" style={{ flexWrap: 'wrap', gap: 8 }}>
                     <span className="dashboard-engagement-live-pill">
                       <span className="dashboard-engagement-live-dot" />
                       <span>TELEMETRIA DE ACESSOS</span>
                     </span>
-                    <span className="dashboard-engagement-pending-pill">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetCat: CampaignCategoryFilter =
+                          engRoleFocus === 'alunos'
+                            ? 'aluno'
+                            : engRoleFocus === 'colab'
+                              ? 'colaborador'
+                              : 'responsavel'
+                        setInviteCampaignCategory(targetCat)
+                        setInviteCampaignOpen(true)
+                      }}
+                      className="dashboard-engagement-pending-pill"
+                      title="Abrir Central de Convite de 1º Acesso (Apenas usuários que nunca acessaram)"
+                      style={{ cursor: 'pointer', border: '1px solid rgba(99, 102, 241, 0.22)' }}
+                    >
                       <Sparkles size={11} />
                       <span>
                         {isResolvingPerms || hideTotalAlunosKpi
                           ? '•••• aguardando 1º acesso'
                           : `${formatNumber(totalPendentes)} aguardando 1º acesso`}
                       </span>
-                    </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetCat: CampaignCategoryFilter =
+                          engRoleFocus === 'alunos'
+                            ? 'aluno'
+                            : engRoleFocus === 'colab'
+                              ? 'colaborador'
+                              : 'responsavel'
+                        setInviteCampaignCategory(targetCat)
+                        setInviteCampaignOpen(true)
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '5px 12px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(5, 150, 105, 0.32)',
+                        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14) 0%, rgba(37, 99, 235, 0.12) 100%)',
+                        color: '#047857',
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        transition: 'all 0.18s ease',
+                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.12)',
+                      }}
+                    >
+                      <Mail size={12} />
+                      <span>Convidar p/ 1º Acesso (E-mail)</span>
+                    </button>
                   </div>
 
                   <div className="dashboard-engagement-title-row">
@@ -2344,16 +2406,38 @@ export default function DashboardPage() {
 
                       {/* Footer Micro-Status */}
                       <div className="dashboard-role-footer">
-                        <span className="dashboard-role-footer-status">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const targetCat: CampaignCategoryFilter =
+                              role.key === 'alunos'
+                                ? 'aluno'
+                                : role.key === 'colab'
+                                  ? 'colaborador'
+                                  : 'responsavel'
+                            setInviteCampaignCategory(targetCat)
+                            setInviteCampaignOpen(true)
+                          }}
+                          className="dashboard-role-footer-status"
+                          title={`Convidar ${role.label.toLowerCase()} pendentes de 1º acesso por e-mail`}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            font: 'inherit',
+                          }}
+                        >
                           <Activity size={11} style={{ color: role.accent, flexShrink: 0 }} />
-                          <span>
+                          <span style={{ textDecoration: role.pending > 0 ? 'underline' : 'none', textUnderlineOffset: 3 }}>
                             {role.pending === 0
                               ? '100% ativado'
                               : isResolvingPerms || (hideTotalAlunosKpi && role.key !== 'colab')
                                 ? '•••• pendentes'
                                 : `${formatNumber(role.pending)} pendente${role.pending === 1 ? '' : 's'}`}
                           </span>
-                        </span>
+                        </button>
                         <span className="dashboard-role-footer-pct" style={{ color: role.color }}>
                           {role.pct >= 80 ? 'Ótimo' : role.pct >= 35 ? 'Em avanço' : 'Atenção'}
                         </span>
@@ -2476,6 +2560,13 @@ export default function DashboardPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Central de Campanha de E-mail (Usuários Sem 1º Acesso) ── */}
+      <FirstAccessInviteCampaignModal
+        isOpen={inviteCampaignOpen}
+        onClose={() => setInviteCampaignOpen(false)}
+        defaultCategory={inviteCampaignCategory}
+      />
     </div>
   )
 }

@@ -50,7 +50,7 @@ function VisibilidadeSelector({
 }: {
   turmasSel: string[]
   usuarioSel: string
-  tipo: 'todos' | 'turmas' | 'usuario'
+  tipo: '' | 'todos' | 'turmas' | 'usuario'
   onOpenModal: (type: 'turmas' | 'usuario') => void
   onChangeTipo: (tipo: 'todos' | 'turmas' | 'usuario') => void
 }) {
@@ -85,6 +85,23 @@ function VisibilidadeSelector({
       </div>
 
       {/* Conteúdo Dinâmico */}
+      {!tipo && (
+        <div style={{
+          padding: '12px 14px',
+          textAlign: 'center',
+          background: 'rgba(245, 158, 11, 0.06)',
+          borderRadius: 14,
+          border: '1.5px dashed rgba(245, 158, 11, 0.35)',
+          width: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box'
+        }}>
+          <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600, lineHeight: 1.4 }}>
+            Selecione uma opção de público-alvo acima (Obrigatório).
+          </span>
+        </div>
+      )}
+
       {tipo === 'todos' && (
         <div style={{
           padding: '14px 16px',
@@ -232,9 +249,17 @@ export default function CalendarioPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'>>(BLANK_EVENTO)
 
-  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
-    tipo: 'todos', turmasSel: [], usuario: 'Todos',
+  const [visibilidade, setVisibilidade] = useState<{ tipo: '' | 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
+    tipo: '', turmasSel: [], usuario: 'Todos',
   })
+
+  const isPublicoAlvoValido = useMemo(() => {
+    if (!visibilidade.tipo) return false
+    if (visibilidade.tipo === 'todos') return true
+    if (visibilidade.tipo === 'turmas') return visibilidade.turmasSel.length > 0
+    if (visibilidade.tipo === 'usuario') return Boolean(visibilidade.usuario && visibilidade.usuario !== 'Todos')
+    return false
+  }, [visibilidade])
 
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
@@ -261,6 +286,18 @@ export default function CalendarioPage() {
 
   const handleAdd = async () => {
     if (!form.titulo.trim() || !form.data) return
+    if (!visibilidade.tipo) {
+      alert('Selecione o público-alvo do evento.')
+      return
+    }
+    if (visibilidade.tipo === 'turmas' && visibilidade.turmasSel.length === 0) {
+      alert('Selecione pelo menos um grupo ou turma para o público-alvo.')
+      return
+    }
+    if (visibilidade.tipo === 'usuario' && (!visibilidade.usuario || visibilidade.usuario === 'Todos')) {
+      alert('Selecione um usuário para o público-alvo.')
+      return
+    }
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
       : visibilidade.tipo === 'todos' ? ['TODOS']
       : []
@@ -314,7 +351,7 @@ export default function CalendarioPage() {
       }).catch(err => console.error('[Calendario Admin] Erro ao salvar novo evento:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' })
     setEditingId(null)
     setShowModal(false)
   }
@@ -355,7 +392,7 @@ export default function CalendarioPage() {
       unidade: ev.unidade, turmas: [],
       diaTodo: (ev as any).diaTodo || false,
     })
-    let t = 'todos';
+    let t: '' | 'todos' | 'turmas' | 'usuario' = '';
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
 
@@ -365,22 +402,26 @@ export default function CalendarioPage() {
     }
     if (!Array.isArray(rawTurmas)) rawTurmas = []
 
-    if (rawTurmas && rawTurmas.length > 0 && !String(rawTurmas[0]).toUpperCase().startsWith('TODOS')) {
-      t = 'turmas';
-      turmasSel = rawTurmas;
+    if (rawTurmas && rawTurmas.length > 0) {
+      if (String(rawTurmas[0]).toUpperCase().startsWith('TODOS') || String(rawTurmas[0]).toUpperCase() === 'TODA A ESCOLA' || String(rawTurmas[0]).toUpperCase() === 'TODAS') {
+        t = 'todos';
+      } else {
+        t = 'turmas';
+        turmasSel = rawTurmas;
+      }
     } else if ((ev as any).visibilidadeUsuario) {
       t = 'usuario';
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
-    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr })
+    setVisibilidade({ tipo: t, turmasSel, usuario: usuarioStr })
     setEditingId(ev.id)
     setShowModal(true)
   }
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' })
     setEditingId(null)
     setShowModal(true)
   }
@@ -1124,7 +1165,7 @@ export default function CalendarioPage() {
             </button>
 
             <button
-              onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}
+              onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}
               style={{
                 height: 44,
                 padding: '0 18px',
@@ -2121,9 +2162,11 @@ export default function CalendarioPage() {
                   </button>
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={isPublicoAlvoValido ? { scale: 1.01 } : undefined}
+                    whileTap={isPublicoAlvoValido ? { scale: 0.98 } : undefined}
                     className="ad-ev-btn-submit"
+                    disabled={!isPublicoAlvoValido}
+                    style={!isPublicoAlvoValido ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
                     onClick={handleAdd}
                   >
                     <Check size={16} strokeWidth={2.6} />

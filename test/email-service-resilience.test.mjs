@@ -6,6 +6,10 @@ import {
   sendMailWithResilience,
   enviarCodigoOtpEmail,
   enviarCopiaContratoAssinadoEmail,
+  enviarEmailConvitePrimeiroAcessoApp,
+  gerarHtmlConvitePrimeiroAcessoApp,
+  DEFAULT_GOOGLE_PLAY_URL,
+  DEFAULT_APP_STORE_URL,
   enviarEmailTeste,
   getCapturedEmails,
   clearCapturedEmails,
@@ -163,5 +167,71 @@ test('EmailService - Isolamento de Ambiente de Testes (Mock Sink & Proteção SM
     const res = await enviarEmailTeste(fakeCfg, 'qualquer-coisa@example.com')
     assert.equal(res.success, false)
     assert.ok(res.error?.includes('Null MX') || res.error?.includes('RFC 2606'))
+  })
+
+  await t.test('gerarHtmlConvitePrimeiroAcessoApp gera HTML ultra-moderno com links das lojas iOS e Android e funcionalidades da Agenda Digital', () => {
+    assert.equal(
+      DEFAULT_GOOGLE_PLAY_URL,
+      'https://play.google.com/store/apps/details?id=br.com.impactoedu.agenda'
+    )
+    assert.equal(
+      DEFAULT_APP_STORE_URL,
+      'https://apps.apple.com/br/app/impacto-edu/id6798868153'
+    )
+
+    const html = gerarHtmlConvitePrimeiroAcessoApp({
+      nomeDestinatario: 'Maria Fernanda',
+      emailDestinatario: 'maria.fernanda@gmail.com',
+      categoria: 'responsavel',
+      alunosVinculados: [
+        { nome: 'Lucas Silva', turma: '8º Ano A' },
+        { nome: 'Beatriz Silva', turma: '5º Ano B' },
+      ],
+    })
+
+    assert.ok(html.includes('https://play.google.com/store/apps/details?id=br.com.impactoedu.agenda'))
+    assert.ok(html.includes('https://apps.apple.com/br/app/impacto-edu/id6798868153'))
+    assert.ok(html.includes('step=first_access_verify'))
+    assert.ok(html.includes('Lucas Silva'))
+    assert.ok(html.includes('Beatriz Silva'))
+    assert.ok(html.includes('Saída Inteligente'))
+    assert.ok(html.includes('Agenda Digital'))
+  })
+
+  await t.test('enviarEmailConvitePrimeiroAcessoApp intercepta destinatários fictícios e dispara no mock sink com smtpConfigOverride', async () => {
+    const suppressed = await enviarEmailConvitePrimeiroAcessoApp({
+      destinatario: 'pai.ficticio@example.com',
+      nomeDestinatario: 'Pai Fictício',
+      categoria: 'responsavel',
+    })
+    assert.equal(suppressed.success, true)
+    assert.equal(suppressed.simulated, true)
+    assert.ok(suppressed.messageId?.startsWith('suppressed-fa-invite-'))
+
+    const fakeCfg = {
+      host: 'smtp-ficticio.invalid',
+      port: 587,
+      secure: false,
+      user: 'test@escola.local',
+      pass: 'secret',
+      fromEmail: 'direcao@colegioimpacto.net',
+      fromName: 'Colégio Impacto',
+    }
+
+    const res = await enviarEmailConvitePrimeiroAcessoApp({
+      destinatario: 'pai.responsavel@gmail.com',
+      nomeDestinatario: 'Carlos Eduardo',
+      categoria: 'responsavel',
+      alunosVinculados: [{ nome: 'Gabriel Oliveira', turma: '9º Ano A' }],
+      smtpConfigOverride: fakeCfg,
+    })
+
+    assert.equal(res.success, true)
+    assert.equal(res.simulated, true)
+    const captured = getCapturedEmails()
+    assert.equal(captured.length, 1)
+    assert.equal(captured[0].to, 'pai.responsavel@gmail.com')
+    assert.ok(captured[0].subject.includes('Carlos'))
+    assert.ok(captured[0].subject.includes('Agenda Digital'))
   })
 })

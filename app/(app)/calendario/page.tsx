@@ -45,7 +45,7 @@ function VisibilidadeSelector({
 }: {
   turmasSel: string[]
   usuarioSel: string
-  tipo: 'todos' | 'turmas' | 'usuario'
+  tipo: '' | 'todos' | 'turmas' | 'usuario'
   anoTodos?: string
   anosLetivos?: string[]
   onChangeAnoTodos?: (ano: string) => void
@@ -81,6 +81,28 @@ function VisibilidadeSelector({
       </div>
 
       {/* Conteúdo Dinâmico */}
+      {!tipo && (
+        <div style={{
+          padding: '12px 14px',
+          background: 'rgba(245, 158, 11, 0.06)',
+          borderRadius: 13,
+          border: '1.5px dashed rgba(245, 158, 11, 0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          textAlign: 'left',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(245, 158, 11, 0.14)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Info size={16} strokeWidth={2.2} />
+          </div>
+          <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600, lineHeight: 1.35 }}>
+            Selecione uma opção de público-alvo acima (Obrigatório).
+          </span>
+        </div>
+      )}
+
       {tipo === 'todos' && (
         <div className="ad-vis-panel-all">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', width: '100%' }}>
@@ -207,9 +229,17 @@ export default function CalendarioPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
 
-  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
-    tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: ''
+  const [visibilidade, setVisibilidade] = useState<{ tipo: '' | 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
+    tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: ''
   })
+
+  const isPublicoAlvoValido = useMemo(() => {
+    if (!visibilidade.tipo) return false
+    if (visibilidade.tipo === 'todos') return anosLetivos.length === 0 || Boolean(visibilidade.anoTodos)
+    if (visibilidade.tipo === 'turmas') return visibilidade.turmasSel.length > 0
+    if (visibilidade.tipo === 'usuario') return Boolean(visibilidade.usuario && visibilidade.usuario !== 'Todos')
+    return false
+  }, [visibilidade, anosLetivos])
 
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
@@ -315,8 +345,20 @@ export default function CalendarioPage() {
 
   const handleAdd = () => {
     if (!form.titulo.trim() || !form.data) return
-    if (visibilidade.tipo === 'todos' && !visibilidade.anoTodos) {
+    if (!visibilidade.tipo) {
+      alert('Selecione o público-alvo do evento.')
+      return
+    }
+    if (visibilidade.tipo === 'todos' && anosLetivos.length > 0 && !visibilidade.anoTodos) {
       alert('Selecione um Ano Letivo para Toda a instituição.')
+      return
+    }
+    if (visibilidade.tipo === 'turmas' && visibilidade.turmasSel.length === 0) {
+      alert('Selecione pelo menos um grupo ou turma para o público-alvo.')
+      return
+    }
+    if (visibilidade.tipo === 'usuario' && (!visibilidade.usuario || visibilidade.usuario === 'Todos')) {
+      alert('Selecione um usuário para o público-alvo.')
       return
     }
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
@@ -388,7 +430,7 @@ export default function CalendarioPage() {
       }).catch(err => console.error('[Calendario] Erro ao salvar novos eventos:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(false)
   }
@@ -416,7 +458,7 @@ export default function CalendarioPage() {
       unidade: ev.unidade, turmas: [],
       diaTodo: (ev as any).diaTodo || false,
     })
-    let t = 'todos';
+    let t: '' | 'todos' | 'turmas' | 'usuario' = '';
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
     let anoTodosStr = '';
@@ -425,7 +467,9 @@ export default function CalendarioPage() {
       if (ev.turmas[0].startsWith('TODOS:')) {
         t = 'todos';
         anoTodosStr = ev.turmas[0].split(':')[1] || '';
-      } else if (ev.turmas[0] !== 'TODOS') {
+      } else if (ev.turmas[0] === 'TODOS' || ev.turmas[0] === 'TODA A ESCOLA' || ev.turmas[0] === 'TODAS') {
+        t = 'todos';
+      } else {
         t = 'turmas';
         turmasSel = ev.turmas;
       }
@@ -434,14 +478,14 @@ export default function CalendarioPage() {
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
-    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
+    setVisibilidade({ tipo: t, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
     setEditingId(ev.id)
     setShowModal(true)
   }
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(true)
   }
@@ -1379,7 +1423,7 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         </div>
         <button 
           className="btn btn-primary" 
-          onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
+          onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
           style={{ background: '#4f46e5', border: 'none', borderRadius: 12, padding: '0 24px', height: 44, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)' }}
         >
           <Plus size={16} /> Novo Evento
@@ -2167,9 +2211,11 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
                   </button>
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={isPublicoAlvoValido ? { scale: 1.01 } : undefined}
+                    whileTap={isPublicoAlvoValido ? { scale: 0.98 } : undefined}
                     className="ad-ev-btn-save"
+                    disabled={!isPublicoAlvoValido}
+                    style={!isPublicoAlvoValido ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
                     onClick={handleAdd}
                   >
                     <Check size={16} strokeWidth={2.8} />

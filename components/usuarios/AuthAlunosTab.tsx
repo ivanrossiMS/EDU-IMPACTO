@@ -173,6 +173,28 @@ export function AuthAlunosTab() {
 
   // Derived list: academic students
   const { data: usersData } = useApiQuery<any[]>(['usuarios'], '/api/configuracoes/usuarios')
+  const { data: inviteHistoryResp } = useApiQuery<any>(
+    ['first-access-invite-history'],
+    '/api/comunicacao/primeiro-acesso-pendentes?historyOnly=true'
+  )
+  const inviteHistoryMap: Record<string, { sentAt: string; count: number }> =
+    inviteHistoryResp?.history && typeof inviteHistoryResp.history === 'object'
+      ? inviteHistoryResp.history
+      : {}
+
+  const formatInviteSentDate = (iso?: string) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      if (isNaN(d.getTime())) return ''
+      return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`
+    } catch {
+      return ''
+    }
+  }
 
   // Merge with auth data and filter
   const displayed = alunos.map(aluno => {
@@ -216,6 +238,8 @@ export function AuthAlunosTab() {
       auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
     }
 
+    const inviteSentInfo = searchEmail ? inviteHistoryMap[searchEmail] || null : null
+
     return { 
       ...aluno,
       email: effectiveEmail,
@@ -223,7 +247,8 @@ export function AuthAlunosTab() {
       celular: effectivePhone,
       matricula: studentLogin,
       codigo: studentLogin,
-      auth 
+      auth,
+      inviteSentInfo,
     }
   }).filter(item => {
     if (!debouncedSearch && !search) return true
@@ -435,7 +460,31 @@ export function AuthAlunosTab() {
                       <td style={{ fontSize: 12, color: (a.email || a.auth?.email) ? 'inherit' : 'hsl(var(--text-muted))' }}>
                         {a.email || a.auth?.email || '-'}
                       </td>
-                      <td style={{ fontSize: 12, color: a.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{a.auth?.last_login || 'Nunca acessou'}</td>
+                      <td style={{ fontSize: 12, color: a.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>{a.auth?.last_login || 'Nunca acessou'}</span>
+                          {(!a.auth?.last_login || a.auth?.last_login === 'Nunca acessou') && a.inviteSentInfo?.sentAt && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                                background: '#dcfce7',
+                                border: '1px solid #bbf7d0',
+                                color: '#15803d',
+                                fontSize: 10.5,
+                                fontWeight: 800,
+                                width: 'fit-content',
+                              }}
+                            >
+                              📨 Enviado em {formatInviteSentDate(a.inviteSentInfo.sentAt)}
+                              {a.inviteSentInfo.count > 1 ? ` (${a.inviteSentInfo.count}x)` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td>{badgeStatus(currentStatus)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>

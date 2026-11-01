@@ -6,13 +6,14 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { Search, Plus, Shield, Eye, EyeOff, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers, Key } from 'lucide-react'
+import { Search, Plus, Shield, Eye, EyeOff, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers, Key, Mail } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData, Perfil } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { AuthAlunosTab } from '@/components/usuarios/AuthAlunosTab'
 import { AuthResponsaveisTab } from '@/components/usuarios/AuthResponsaveisTab'
 import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
+import { FirstAccessInviteCampaignModal } from '@/components/usuarios/FirstAccessInviteCampaignModal'
 import { ALL_NAV_GROUPS } from '@/components/layout/Sidebar'
 import {
   setCachedPerfis,
@@ -274,6 +275,30 @@ export default function UsuariosPage() {
   const [isSavingUser, setIsSavingUser] = useState(false)
   const [firstAccessModalOpen, setFirstAccessModalOpen] = useState(false)
   const [firstAccessTarget, setFirstAccessTarget] = useState<FirstAccessTargetUser | null>(null)
+  const [inviteCampaignModalOpen, setInviteCampaignModalOpen] = useState(false)
+
+  const { data: inviteHistoryResp } = useApiQuery<any>(
+    ['first-access-invite-history'],
+    '/api/comunicacao/primeiro-acesso-pendentes?historyOnly=true'
+  )
+  const inviteHistoryMap: Record<string, { sentAt: string; count: number }> =
+    inviteHistoryResp?.history && typeof inviteHistoryResp.history === 'object'
+      ? inviteHistoryResp.history
+      : {}
+
+  const formatInviteSentDate = (iso?: string) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      if (isNaN(d.getTime())) return ''
+      return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`
+    } catch {
+      return ''
+    }
+  }
 
   /* Perfil CRUD state */
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
@@ -580,7 +605,23 @@ export default function UsuariosPage() {
           <h1 className="page-title">Usuários & Acessos</h1>
           <p className="page-subtitle">Controle de usuários, perfis, permissões e auditoria de acesso</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setInviteCampaignModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              border: '1px solid rgba(16,185,129,0.4)',
+              background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(37,99,235,0.1) 100%)',
+              color: '#059669',
+              fontWeight: 800,
+            }}
+          >
+            <Mail size={13} />
+            Campanha E-mail 1º Acesso (App / Lojas)
+          </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => openFirstAccessGenerator(null)}
@@ -734,7 +775,32 @@ export default function UsuariosPage() {
                       <td>
                         <span className="badge badge-primary" style={{ background: p ? `${p.cor}20` : undefined, color: p?.cor }}>{u.perfil}</span>
                       </td>
-                      <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{u.ultimoAcesso || '—'}</td>
+                      <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>{u.ultimoAcesso || '—'}</span>
+                          {(!u.ultimoAcesso || u.ultimoAcesso === 'Nunca acessou') &&
+                            u.email &&
+                            inviteHistoryMap[u.email.trim().toLowerCase()]?.sentAt && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#dcfce7',
+                                  border: '1px solid #bbf7d0',
+                                  color: '#15803d',
+                                  fontSize: 10.5,
+                                  fontWeight: 800,
+                                  width: 'fit-content',
+                                }}
+                              >
+                                📨 Enviado em {formatInviteSentDate(inviteHistoryMap[u.email.trim().toLowerCase()].sentAt)}
+                              </span>
+                            )}
+                        </div>
+                      </td>
                       <td>{u.twofa ? <span className="badge badge-success"><Shield size={9} />Ativo</span> : <span className="badge badge-neutral">Inativo</span>}</td>
                       <td><span className={`badge ${u.status === 'ativo' ? 'badge-success' : 'badge-neutral'}`}>{u.status}</span></td>
                       <td>
@@ -983,7 +1049,32 @@ export default function UsuariosPage() {
                       <td style={{ fontSize: 12, fontWeight: 600 }}>{u.nome}</td>
                       <td style={{ fontSize: 12 }}>Login</td>
                       <td><span className="badge badge-neutral" style={{ fontSize: 10 }}>Dashboard</span></td>
-                      <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{u.ultimoAcesso || '—'}</td>
+                      <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>{u.ultimoAcesso || '—'}</span>
+                          {(!u.ultimoAcesso || u.ultimoAcesso === 'Nunca acessou') &&
+                            u.email &&
+                            inviteHistoryMap[u.email.trim().toLowerCase()]?.sentAt && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#dcfce7',
+                                  border: '1px solid #bbf7d0',
+                                  color: '#15803d',
+                                  fontSize: 10.5,
+                                  fontWeight: 800,
+                                  width: 'fit-content',
+                                }}
+                              >
+                                📨 Enviado em {formatInviteSentDate(inviteHistoryMap[u.email.trim().toLowerCase()].sentAt)}
+                              </span>
+                            )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -2186,6 +2277,18 @@ export default function UsuariosPage() {
               : `Acesso reiniciado (${user.nome})`,
             { registroId: user.id }
           )
+        }}
+      />
+
+      <FirstAccessInviteCampaignModal
+        isOpen={inviteCampaignModalOpen}
+        onClose={() => setInviteCampaignModalOpen(false)}
+        defaultCategory={tab === 'alunos' ? 'aluno' : tab === 'usuarios' ? 'colaborador' : 'responsavel'}
+        onCampaignSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+          queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['responsaveis_auth_tab'] })
+          queryClient.invalidateQueries({ queryKey: ['first-access-invite-history'] })
         }}
       />
     </div>

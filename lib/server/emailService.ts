@@ -13,6 +13,23 @@ import net from 'net'
 import { getAdminClient } from './supabaseAdminSingleton'
 import { IMPACTO_LOGO_DATA_URI } from '@/components/ui/impactoLogoBase64'
 import { isNonDeliverableTestEmail } from '@/lib/utils/emailValidation'
+import {
+  DEFAULT_APP_STORE_URL,
+  DEFAULT_GOOGLE_PLAY_URL,
+  gerarHtmlConvitePrimeiroAcessoApp,
+  gerarTextoPlanoConvitePrimeiroAcessoApp,
+  type AlunoVinculadoConvite,
+  type ConvitePrimeiroAcessoTemplateParams,
+} from '@/lib/utils/firstAccessEmailTemplate'
+
+export {
+  DEFAULT_APP_STORE_URL,
+  DEFAULT_GOOGLE_PLAY_URL,
+  gerarHtmlConvitePrimeiroAcessoApp,
+  gerarTextoPlanoConvitePrimeiroAcessoApp,
+  type AlunoVinculadoConvite,
+  type ConvitePrimeiroAcessoTemplateParams,
+}
 
 const IMPACTO_LOGO_BUFFER = Buffer.from(
   IMPACTO_LOGO_DATA_URI.replace(/^data:image\/\w+;base64,/, ''),
@@ -154,8 +171,8 @@ export function createTransporter(cfg: SmtpConfig, options: { pool?: boolean } =
   const transporter = nodemailer.createTransport({
     name: 'colegioimpacto.net',
     pool: usePool,
-    maxConnections: usePool ? 3 : undefined,
-    maxMessages: usePool ? 100 : undefined,
+    maxConnections: usePool ? 1 : undefined,
+    maxMessages: usePool ? 35 : undefined,
     host: cfg.host,
     port,
     secure: isSecure,
@@ -198,7 +215,7 @@ export async function sendMailWithResilience(
   cfg: SmtpConfig,
   mailOptions: SendMailOptions,
   maxRetries = 2,
-  options?: { useFreshConnection?: boolean }
+  options?: { useFreshConnection?: boolean; failFastOnRateLimit?: boolean }
 ): Promise<SentMessageInfo> {
   // 1. Extração e normalização de todos os destinatários informados (to, cc, bcc)
   const extractRecipients = (target: any): string[] => {
@@ -316,9 +333,23 @@ export async function sendMailWithResilience(
       // Limpa socket corrompido para nova conexão
       resetTransporterPool()
 
+      const isRateLimited =
+        err.responseCode === 452 ||
+        msg.includes('452') ||
+        msg.includes('4.7.1') ||
+        msg.toLowerCase().includes('slow down') ||
+        msg.toLowerCase().includes('too many') ||
+        msg.toLowerCase().includes('rate limit')
+
+      // Em campanhas em lote, se o servidor SMTP informou limite de taxa (452 4.7.1),
+      // aborta imediatamente sem martelar portas alternativas para permitir o Auto-Cooldown limpo
+      if (isRateLimited && options?.failFastOnRateLimit) {
+        ;(err as any).isRateLimitError = true
+        throw err
+      }
+
       if (attempt < maxRetries && isTransient) {
         // Se for alerta de taxa de envio da Locaweb (452 slow down), aguarda intervalo maior para respiro do servidor
-        const isRateLimited = err.responseCode === 452 || msg.includes('slow down') || msg.includes('too many')
         const delay = isRateLimited
           ? 2000 * attempt + Math.floor(Math.random() * 500)
           : 600 * attempt + Math.floor(Math.random() * 300)
@@ -1700,5 +1731,128 @@ export async function enviarEmailCredenciaisPrimeiroAcesso(params: {
     }
   }
 }
+
+/**
+ * Dispara o e-mail ultra-moderno de convite para Primeiro Acesso + Download do App (iOS e Android)
+ * e apresentação completa da Agenda Digital para usuários que ainda nunca acessaram o sistema.
+ */
+export async function enviarEmailConvitePrimeiroAcessoApp(
+  params: {
+    destinatario: string
+    nomeDestinatario: string
+    categoria?: 'responsavel' | 'aluno' | 'colaborador'
+    alunosVinculados?: AlunoVinculadoConvite[]
+    firstAccessUrl?: string
+    googlePlayUrl?: string
+    appStoreUrl?: string
+    smtpConfigOverride?: SmtpConfig | null
+    useFreshConnection?: boolean
+    failFastOnRateLimit?: boolean
+  }
+): Promise<{
+  success: boolean
+  simulated?: boolean
+  rateLimited?: boolean
+  messageId?: string
+  error?: string
+}> {
+  const destLimpo = (params.destinatario || '').trim().toLowerCase()
+
+  if (isNonDeliverableTestEmail(destLimpo)) {
+    console.warn(
+      `[EmailService] [SUPRIMIDO CONVITE 1º ACESSO APP] Destinatário fictício interceptado: ${destLimpo}.`
+    )
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-fa-invite-${Date.now()}`,
+    }
+  }
+
+  const cfg =
+    params.smtpConfigOverride !== undefined ? params.smtpConfigOverride : await getSmtpConfig()
+
+  const htmlContent = gerarHtmlConvitePrimeiroAcessoApp({
+    nomeDestinatario: params.nomeDestinatario,
+    emailDestinatario: destLimpo,
+    categoria: params.categoria || 'responsavel',
+    alunosVinculados: params.alunosVinculados,
+    firstAccessUrl: params.firstAccessUrl,
+    googlePlayUrl: params.googlePlayUrl || DEFAULT_GOOGLE_PLAY_URL,
+    appStoreUrl: params.appStoreUrl || DEFAULT_APP_STORE_URL,
+  })
+
+  const plainText = gerarTextoPlanoConvitePrimeiroAcessoApp({
+    nomeDestinatario: params.nomeDestinatario,
+    emailDestinatario: destLimpo,
+    categoria: params.categoria || 'responsavel',
+    alunosVinculados: params.alunosVinculados,
+    firstAccessUrl: params.firstAccessUrl,
+    googlePlayUrl: params.googlePlayUrl || DEFAULT_GOOGLE_PLAY_URL,
+    appStoreUrl: params.appStoreUrl || DEFAULT_APP_STORE_URL,
+  })
+
+  if (!cfg) {
+    console.info(
+      `[EmailService] [SIMULAÇÃO CONVITE 1º ACESSO APP] Para: ${destLimpo} | Nome: ${params.nomeDestinatario}`
+    )
+    return {
+      success: true,
+      simulated: true,
+      messageId: `simulated-fa-invite-${Date.now()}`,
+    }
+  }
+
+  try {
+    const antiThreadToken = Date.now().toString().slice(-4)
+    const msgId = `<fa-invite-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+    const primeiroNome = (params.nomeDestinatario || 'Família').trim().split(/\s+/)[0]
+
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"Colégio Impacto • App & Agenda Digital" <${cfg.fromEmail || cfg.user}>`,
+        to: destLimpo,
+        subject: `📲 ${primeiroNome}, seu 1º Acesso ao App & Agenda Digital do Colégio Impacto está liberado! [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `fa-invite-${Date.now()}`,
+        },
+      },
+      2,
+      {
+        useFreshConnection: params.useFreshConnection ?? false,
+        failFastOnRateLimit: params.failFastOnRateLimit ?? true,
+      }
+    )
+
+    return {
+      success: true,
+      simulated: Boolean((info as any)?.response?.includes('Mocked') || (info as any)?.response?.includes('Suppressed')),
+      messageId: info.messageId,
+    }
+  } catch (err: any) {
+    const msg = String(err?.message || '')
+    const isRateLimited =
+      Boolean(err?.isRateLimitError) ||
+      err?.responseCode === 452 ||
+      msg.includes('452') ||
+      msg.includes('4.7.1') ||
+      msg.toLowerCase().includes('too many') ||
+      msg.toLowerCase().includes('slow down') ||
+      msg.toLowerCase().includes('rate limit')
+
+    console.error('[EmailService] Erro ao enviar convite de Primeiro Acesso do App:', msg)
+    return {
+      success: false,
+      rateLimited: isRateLimited,
+      error: msg,
+    }
+  }
+}
+
 
 

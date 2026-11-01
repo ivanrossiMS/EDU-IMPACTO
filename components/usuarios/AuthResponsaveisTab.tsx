@@ -4,13 +4,14 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import React, { useState, useMemo, useEffect } from 'react'
-import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users, RotateCcw } from 'lucide-react'
+import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users, RotateCcw, Mail } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import { FirstAccessGeneratorModal, FirstAccessTargetUser } from '@/components/usuarios/FirstAccessGeneratorModal'
+import { FirstAccessInviteCampaignModal, type PreselectedInviteUser } from '@/components/usuarios/FirstAccessInviteCampaignModal'
 
 const TableSkeleton = () => (
   <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
@@ -93,6 +94,8 @@ export function AuthResponsaveisTab() {
   const [resetModal, setResetModal] = useState<any | null>(null)
   const [linksModal, setLinksModal] = useState<any | null>(null)
   const [firstAccessTarget, setFirstAccessTarget] = useState<FirstAccessTargetUser | null>(null)
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [preselectedInviteUser, setPreselectedInviteUser] = useState<PreselectedInviteUser | null>(null)
   
   // States for resetting password
   const [resetParams, setResetParams] = useState({ mode: 'auto', password: '', confirm: '', sendSms: false, sendEmail: false, requireChange: true })
@@ -123,6 +126,29 @@ export function AuthResponsaveisTab() {
   }
 
   const { data: usersData } = useApiQuery<any[]>(['usuarios'], '/api/configuracoes/usuarios')
+  const { data: inviteHistoryResp } = useApiQuery<any>(
+    ['first-access-invite-history'],
+    '/api/comunicacao/primeiro-acesso-pendentes?historyOnly=true'
+  )
+  const inviteHistoryMap: Record<string, { sentAt: string; count: number }> =
+    inviteHistoryResp?.history && typeof inviteHistoryResp.history === 'object'
+      ? inviteHistoryResp.history
+      : {}
+  const [inviteFilter, setInviteFilter] = useState<'all' | 'invited_no_access' | 'not_invited_no_access' | 'accessed'>('all')
+
+  const formatInviteSentDate = (iso?: string) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      if (isNaN(d.getTime())) return ''
+      return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`
+    } catch {
+      return ''
+    }
+  }
 
   // Merge with auth data and filter
   const displayed = guardians.map(g => {
@@ -172,8 +198,16 @@ export function AuthResponsaveisTab() {
     }
 
     const colabUser = searchEmail ? (usersData || []).find((u: any) => u.email && u.email.toLowerCase() === searchEmail && u.cargo !== 'Responsáveis' && u.cargo !== 'Alunos') : null
+    const cleanEmailKey = (effectiveEmail || '').trim().toLowerCase()
+    const inviteSentInfo = cleanEmailKey ? inviteHistoryMap[cleanEmailKey] || null : null
 
-    return { ...g, email: effectiveEmail, celular: effectivePhone, telefone: effectivePhone, auth, colabUser }
+    return { ...g, email: effectiveEmail, celular: effectivePhone, telefone: effectivePhone, auth, colabUser, inviteSentInfo }
+  }).filter(g => {
+    const hasAccessed = Boolean(g.auth?.last_login && g.auth.last_login !== 'Nunca acessou')
+    if (inviteFilter === 'accessed') return hasAccessed
+    if (inviteFilter === 'invited_no_access') return !hasAccessed && Boolean(g.inviteSentInfo?.sentAt)
+    if (inviteFilter === 'not_invited_no_access') return !hasAccessed && !g.inviteSentInfo?.sentAt
+    return true
   })
 
 
@@ -302,9 +336,44 @@ export function AuthResponsaveisTab() {
             <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
             <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
           </select>
+          <select
+            value={inviteFilter}
+            onChange={(e) => setInviteFilter(e.target.value as any)}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 700 }}
+          >
+            <option value="all">Filtro Acesso/Convite: Todos</option>
+            <option value="invited_no_access">📨 Sem Acesso • Convite Já Enviado</option>
+            <option value="not_invited_no_access">⏳ Sem Acesso • Falta Enviar Convite</option>
+            <option value="accessed">✅ Já Realizou 1º Acesso</option>
+          </select>
         </div>
-        <div style={{ fontSize: 13, color: '#64748b' }}>
-          Total: <strong style={{ color: '#0f172a' }}>{totalItems}</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setPreselectedInviteUser(null)
+              setInviteModalOpen(true)
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '8px 14px',
+              borderRadius: 10,
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(37, 99, 235, 0.08) 100%)',
+              color: '#047857',
+              fontSize: 12.5,
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            <Mail size={14} />
+            Disparar Convite 1º Acesso (Pais s/ Acesso)
+          </button>
+          <div style={{ fontSize: 13, color: '#64748b' }}>
+            Total: <strong style={{ color: '#0f172a' }}>{totalItems}</strong>
+          </div>
         </div>
       </div>
 
@@ -380,10 +449,78 @@ export function AuthResponsaveisTab() {
                          </div>
                       </td>
                       <td style={{ fontSize: 12 }}>{g.email || g.auth?.email || '-'}</td>
-                      <td style={{ fontSize: 12, color: g.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{g.auth?.last_login || 'Nunca acessou'}</td>
+                      <td style={{ fontSize: 12, color: g.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span>{g.auth?.last_login || 'Nunca acessou'}</span>
+                          {(!g.auth?.last_login || g.auth?.last_login === 'Nunca acessou') && (
+                            g.inviteSentInfo?.sentAt ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#dcfce7',
+                                  border: '1px solid #bbf7d0',
+                                  color: '#15803d',
+                                  fontSize: 10.5,
+                                  fontWeight: 800,
+                                  width: 'fit-content',
+                                }}
+                                title={`Convite de 1º acesso enviado ${g.inviteSentInfo.count || 1}x. Último envio em ${formatInviteSentDate(g.inviteSentInfo.sentAt)}`}
+                              >
+                                📨 Enviado em {formatInviteSentDate(g.inviteSentInfo.sentAt)}
+                                {g.inviteSentInfo.count > 1 ? ` (${g.inviteSentInfo.count}x)` : ''}
+                              </span>
+                            ) : (g.email || g.auth?.email) ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#fffbeb',
+                                  border: '1px solid #fde68a',
+                                  color: '#b45309',
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  width: 'fit-content',
+                                }}
+                              >
+                                ⏳ Convite não enviado
+                              </span>
+                            ) : null
+                          )}
+                        </div>
+                      </td>
                       <td>{badgeStatus(currentStatus)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
+                          {(!g.auth?.last_login || g.auth?.last_login === 'Nunca acessou') && (
+                            <button
+                              className="btn btn-ghost btn-icon btn-sm"
+                              title="Enviar E-mail Convite de 1º Acesso (Com links iOS/Android do App)"
+                              style={{ color: '#059669' }}
+                              onClick={() => {
+                                setPreselectedInviteUser({
+                                  nome: g.nome,
+                                  email: g.email || g.auth?.email || '',
+                                  categoria: 'responsavel',
+                                  alunosVinculados: Array.isArray(g.alunos)
+                                    ? g.alunos.map((a: any) => ({
+                                        nome: a.nome || String(a),
+                                        turma: a.turma ? getTurmaNome(a.turma) : undefined,
+                                      }))
+                                    : [],
+                                })
+                                setInviteModalOpen(true)
+                              }}
+                            >
+                              <Mail size={13} />
+                            </button>
+                          )}
                           <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ guardian: g, auth: g.auth, form: { email: g.email || g.auth?.email || '', celular: g.celular || g.telefone || g.auth?.celular || '' } })}><Pencil size={13} /></button>
                           <button
                             className="btn btn-ghost btn-icon btn-sm"
@@ -572,6 +709,19 @@ export function AuthResponsaveisTab() {
               : `Redefinição de acesso (Responsável: ${user.nome})`,
             { registroId: user.id }
           )
+        }}
+      />
+
+      <FirstAccessInviteCampaignModal
+        isOpen={inviteModalOpen}
+        onClose={() => {
+          setInviteModalOpen(false)
+          setPreselectedInviteUser(null)
+        }}
+        defaultCategory="responsavel"
+        preselectedUser={preselectedInviteUser}
+        onCampaignSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['first-access-invite-history'] })
         }}
       />
     </div>
