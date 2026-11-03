@@ -196,7 +196,9 @@ export default function DashboardPage() {
   }, [usuariosData])
 
   // ── Derived Data
-  const todayStr = hoje.toISOString().slice(0, 10)
+  const formatLocalYMD = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const todayStr = formatLocalYMD(hoje)
   
   const tarefasFiltradas = useMemo(() => {
     if (!apenasMinhasTarefas) return tarefas
@@ -212,10 +214,9 @@ export default function DashboardPage() {
       ? tarefasPendentesList 
       : tarefasConcluidasList
 
-  const selectedDate = new Date(hoje);
-  selectedDate.setDate(hoje.getDate() + diaSelecionadoOffset);
-  const selectedDateStr = selectedDate.toISOString().slice(0, 10);
-  const eventosExibidos = eventosAgenda.filter((e: any) => e.data === selectedDateStr);
+  const selectedDate = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + diaSelecionadoOffset);
+  const selectedDateStr = formatLocalYMD(selectedDate);
+  const eventosExibidos = eventosAgenda.filter((e: any) => String(e.data || '').slice(0, 10) === selectedDateStr);
 
   const totalTurmasAtivas = turmas.length || kpis.nTurmas || 0
   const ocorrenciasConfirmadasCount = ocorrencias.filter((o: any) => !!o.ciencia_responsavel).length
@@ -1422,13 +1423,12 @@ export default function DashboardPage() {
                   {/* 7-Day Interactive Bento Strip */}
                   <div className="dashboard-agenda-bento-strip">
                     {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
-                      const d = new Date(hoje)
-                      d.setDate(hoje.getDate() + offset)
+                      const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + offset)
                       const isSelected = diaSelecionadoOffset === offset
                       const isToday = offset === 0
                       const dayName = isToday ? 'HOJE' : new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase()
-                      const dStr = d.toISOString().slice(0, 10)
-                      const qtdEventos = eventosAgenda.filter((e: any) => e.data === dStr).length
+                      const dStr = formatLocalYMD(d)
+                      const qtdEventos = eventosAgenda.filter((e: any) => String(e.data || '').slice(0, 10) === dStr).length
 
                       return (
                         <button
