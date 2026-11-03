@@ -3,7 +3,8 @@ import { resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/auth
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { notifyOcorrenciaToColaboradores } from '@/lib/server/ocorrenciasPushHelper'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
@@ -155,24 +156,25 @@ export async function POST(request: Request) {
       // Disparar push em background para não bloquear o response (batch)
       after(async () => {
         const allPushPromises: Promise<any>[] = []
-        const masterAdminIds = await getInstitutionalMasterAdminIds()
         const { supabaseServer } = await import('@/lib/supabaseServer')
         for (const row of rows) {
+          let nomeAluno = (row.dados as any)?.alunoNome || ''
+          if (!nomeAluno && row.aluno_id) {
+            const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', row.aluno_id).maybeSingle()
+            nomeAluno = aluno?.nome || ''
+          }
+          if (!nomeAluno) nomeAluno = 'o aluno'
+          const rowDados = (row.dados || {}) as any
+          const rowSenderName =
+            (rowDados.responsavel && rowDados.responsavel !== 'Colaborador')
+              ? rowDados.responsavel
+              : (rowDados.registradoPor || senderName)
+          const rowSenderId = rowDados.usuarioId || effectiveSenderId
+          const turmaLabel = rowDados.turmaNome || rowDados.turma || ''
+
           const parentIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
-          const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
-          if (targetIds.length > 0) {
-            let nomeAluno = (row.dados as any)?.alunoNome || ''
-            if (!nomeAluno && row.aluno_id) {
-              const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', row.aluno_id).maybeSingle()
-              nomeAluno = aluno?.nome || ''
-            }
-            if (!nomeAluno) nomeAluno = 'o aluno'
-            const rowDados = (row.dados || {}) as any
-            const rowSenderName =
-              (rowDados.responsavel && rowDados.responsavel !== 'Colaborador')
-                ? rowDados.responsavel
-                : (rowDados.registradoPor || senderName)
-            const rowSenderId = rowDados.usuarioId || effectiveSenderId
+          const cleanParentIds = Array.from(new Set(parentIds)).filter(Boolean)
+          if (cleanParentIds.length > 0) {
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'ocorrencias',
@@ -180,10 +182,11 @@ export async function POST(request: Request) {
                 senderUserId: user.id,
                 title: '⚠️ Aviso de Ocorrência',
                 message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
-                targetUserIds: targetIds,
+                targetUserIds: cleanParentIds,
                 targetUrl: `/agenda-digital/${row.aluno_id}/ocorrencias?id=${row.id}`,
                 metadata: {
                   aluno_id: String(row.aluno_id),
+                  perfil_destino: 'familiar',
                   item_id: String(row.id),
                   rota: 'ocorrencias',
                   sender_id: rowSenderId,
@@ -193,9 +196,26 @@ export async function POST(request: Request) {
                   sender_cargo: rowDados.autorCargo || senderCargo,
                   sender_foto: rowDados.autorFoto || senderFoto,
                 }
-              }).catch(err => console.error('Ocorrencia Push Error:', err))
+              }).catch(err => console.error('Ocorrencia Parent Push Error:', err))
             )
           }
+
+          // Notificar os colaboradores marcados nas configurações de ocorrências
+          allPushPromises.push(
+            notifyOcorrenciaToColaboradores({
+              action: 'nova_ocorrencia',
+              ocorrenciaId: String(row.id),
+              alunoId: String(row.aluno_id),
+              alunoNome: nomeAluno,
+              turmaNome: turmaLabel,
+              senderUserId: user.id,
+              senderId: rowSenderId,
+              senderName: rowSenderName,
+              senderEmail: dbUser?.email || user.email || null,
+              senderCargo: rowDados.autorCargo || senderCargo,
+              senderFoto: rowDados.autorFoto || senderFoto,
+            }).catch(err => console.error('Ocorrencia Colab Push Error:', err))
+          )
         }
         await Promise.allSettled(allPushPromises)
       })
@@ -203,6 +223,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const isCienciaAction = Boolean(body.ciencia_responsavel || body.dados?.ciencia_responsavel) && Boolean(body.id)
+    const isUndoCiencia = Boolean(body.id) && (body.ciencia_responsavel === false || body.dados?.ciencia_responsavel === false)
     if (!isStaff && !isCienciaAction) {
       return NextResponse.json({ error: 'Acesso negado. Apenas colaboradores podem criar ou editar ocorrências.' }, { status: 403 })
     }
@@ -239,75 +260,88 @@ export async function POST(request: Request) {
     // Disparar push em background para não bloquear o response (single)
     after(async () => {
       const { supabaseServer } = await import('@/lib/supabaseServer')
-      // Se for apenas registro de ciência da família, não assusta os pais com novo aviso
+      const singleDados = (data.dados || {}) as any
+      let nomeAluno = singleDados.alunoNome || ''
+      if (!nomeAluno && data.aluno_id) {
+        const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', data.aluno_id).maybeSingle()
+        nomeAluno = aluno?.nome || ''
+      }
+      if (!nomeAluno) nomeAluno = 'o aluno'
+      const turmaLabel = singleDados.turmaNome || singleDados.turma || ''
+
+      // Se for apenas registro de ciência da família, não assusta os pais com novo aviso — notifica apenas os colaboradores configurados
       if (isCienciaAction) {
-        const masterAdminIds = await getInstitutionalMasterAdminIds()
-        if (masterAdminIds.length > 0) {
-          let nomeAluno = (data.dados as any)?.alunoNome || ''
-          if (!nomeAluno && data.aluno_id) {
-            const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', data.aluno_id).maybeSingle()
-            nomeAluno = aluno?.nome || ''
-          }
-          if (!nomeAluno) nomeAluno = 'o aluno'
-          await sendAgendaPushNotification({
-            type: 'ocorrencias',
-            itemId: `ciencia_${data.id}`,
-            senderUserId: user.id,
-            title: '✍️ Ciência de Ocorrência Confirmada',
-            message: `A família de ${nomeAluno} confirmou ciência da ocorrência.`,
-            targetUserIds: masterAdminIds,
-            targetUrl: `/agenda-digital/admin/ocorrencias?id=${data.id}`,
-            metadata: {
-              aluno_id: String(data.aluno_id),
-              item_id: String(data.id),
-              rota: 'ocorrencias',
-              action: 'ciencia_confirmada',
-              sender_id: user.id,
-              sender_name: (data.dados as any)?.responsavel_ciencia || senderName,
-              sender_type: 'responsavel',
-            }
-          }).catch(err => console.error('Ciencia Push Error:', err))
-        }
+        await notifyOcorrenciaToColaboradores({
+          action: 'ciencia_confirmada',
+          ocorrenciaId: String(data.id),
+          alunoId: String(data.aluno_id),
+          alunoNome: nomeAluno,
+          turmaNome: turmaLabel,
+          senderUserId: user.id,
+          senderId: user.id,
+          senderName: singleDados.responsavel_ciencia || senderName,
+        }).catch(err => console.error('Ciencia Push Error:', err))
         return
       }
 
-      const parentIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
-      const masterAdminIds = await getInstitutionalMasterAdminIds()
-      const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
-      if (targetIds.length > 0) {
-        let nomeAluno = (data.dados as any)?.alunoNome || ''
-        if (!nomeAluno && data.aluno_id) {
-          const { data: aluno } = await supabaseServer.from('alunos').select('nome').eq('id', data.aluno_id).maybeSingle()
-          nomeAluno = aluno?.nome || ''
-        }
-        if (!nomeAluno) nomeAluno = 'o aluno'
-        const singleDados = (data.dados || {}) as any
-        const singleSenderName =
-          (singleDados.responsavel && singleDados.responsavel !== 'Colaborador')
-            ? singleDados.responsavel
-            : (singleDados.registradoPor || senderName)
-        const singleSenderId = singleDados.usuarioId || effectiveSenderId
-        await sendAgendaPushNotification({
-          type: 'ocorrencias',
-          itemId: String(data.id),
-          senderUserId: user.id,
-          title: '⚠️ Aviso de Ocorrência',
-          message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
-          targetUserIds: targetIds,
-          targetUrl: `/agenda-digital/${data.aluno_id}/ocorrencias?id=${data.id}`,
-          metadata: {
-            aluno_id: String(data.aluno_id),
-            item_id: String(data.id),
-            rota: 'ocorrencias',
-            sender_id: singleSenderId,
-            sender_auth_id: user.id,
-            sender_name: singleSenderName,
-            sender_email: dbUser?.email || user.email || null,
-            sender_cargo: singleDados.autorCargo || senderCargo,
-            sender_foto: singleDados.autorFoto || senderFoto,
-          }
-        }).catch(err => console.error('Ocorrencia Push Error:', err))
+      if (isUndoCiencia) {
+        return
       }
+
+      const singleSenderName =
+        (singleDados.responsavel && singleDados.responsavel !== 'Colaborador')
+          ? singleDados.responsavel
+          : (singleDados.registradoPor || senderName)
+      const singleSenderId = singleDados.usuarioId || effectiveSenderId
+
+      const parentIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+      const cleanParentIds = Array.from(new Set(parentIds)).filter(Boolean)
+      const pushTasks: Promise<any>[] = []
+
+      if (cleanParentIds.length > 0) {
+        pushTasks.push(
+          sendAgendaPushNotification({
+            type: 'ocorrencias',
+            itemId: String(data.id),
+            senderUserId: user.id,
+            title: '⚠️ Aviso de Ocorrência',
+            message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
+            targetUserIds: cleanParentIds,
+            targetUrl: `/agenda-digital/${data.aluno_id}/ocorrencias?id=${data.id}`,
+            metadata: {
+              aluno_id: String(data.aluno_id),
+              perfil_destino: 'familiar',
+              item_id: String(data.id),
+              rota: 'ocorrencias',
+              sender_id: singleSenderId,
+              sender_auth_id: user.id,
+              sender_name: singleSenderName,
+              sender_email: dbUser?.email || user.email || null,
+              sender_cargo: singleDados.autorCargo || senderCargo,
+              sender_foto: singleDados.autorFoto || senderFoto,
+            }
+          }).catch(err => console.error('Ocorrencia Parent Push Error:', err))
+        )
+      }
+
+      // Notificar os colaboradores marcados nas configurações de ocorrências
+      pushTasks.push(
+        notifyOcorrenciaToColaboradores({
+          action: 'nova_ocorrencia',
+          ocorrenciaId: String(data.id),
+          alunoId: String(data.aluno_id),
+          alunoNome: nomeAluno,
+          turmaNome: turmaLabel,
+          senderUserId: user.id,
+          senderId: singleSenderId,
+          senderName: singleSenderName,
+          senderEmail: dbUser?.email || user.email || null,
+          senderCargo: singleDados.autorCargo || senderCargo,
+          senderFoto: singleDados.autorFoto || senderFoto,
+        }).catch(err => console.error('Ocorrencia Colab Push Error:', err))
+      )
+
+      await Promise.allSettled(pushTasks)
     })
 
     const resolvedId = String(data.aluno_id || (data.dados as any)?.alunoId || '').replace(/^a_?/, '').trim()

@@ -2201,6 +2201,22 @@ export async function PUT(request: Request) {
                     comunicadoColabId: String(id)
                   }
                 });
+
+              try {
+                const { notifyOcorrenciaToColaboradores } = await import('@/lib/server/ocorrenciasPushHelper');
+                await notifyOcorrenciaToColaboradores({
+                  action: 'nova_ocorrencia',
+                  ocorrenciaId: newOcId,
+                  alunoId: cleanTargetStuId,
+                  alunoNome: String(sanitizedStudentPayload?.studentInfo?.name || 'Aluno').trim(),
+                  turmaNome: rawTurmaStr,
+                  senderUserId: user.id,
+                  senderId: user.id,
+                  senderName: responsavelNome,
+                });
+              } catch (ocPushErr) {
+                console.warn('Aviso ao notificar colaboradores sobre ocorrência do relatório:', ocPushErr);
+              }
             }
           } else if (matchedOc) {
             // O campo de ocorrência foi limpo no relatório: remove a ocorrência vinculada
@@ -2217,13 +2233,33 @@ export async function PUT(request: Request) {
       return NextResponse.json(normalizeRow(updatedPrimaryRow));
     }
 
+    const origAutor = existingCom.autor || existingCom.dados?.autor || incomingDados.autor || '';
+    const origAutorId = existingCom.dados?.autorId || (existingCom as any).autorId || incomingDados.autorId || '';
+    const origAutorCargo = existingCom.dados?.autorCargo || (existingCom as any).autorCargo || incomingDados.autorCargo || '';
+    const origAutorFoto = existingCom.dados?.autorFoto ?? (existingCom as any).autorFoto ?? incomingDados.autorFoto ?? null;
+    const origDataEnvio = existingCom.dados?.dataEnvio || existingCom.data || incomingDados.dataEnvio || incomingDados.data;
+    const isRelColab = String(id).startsWith('AD-COM-REL-COLAB-');
+    const { dados: incomingNestedDados, ...incomingTopLevel } = incomingDados || {};
+
     const mergedPayload = {
       ...(existingCom || {}),
       ...(existingCom?.dados || {}),
-      ...incomingDados,
+      ...(incomingNestedDados || {}),
+      ...incomingTopLevel,
+      dados: undefined,
       id,
-      leituras: incomingDados.leituras ?? existingCom?.dados?.leituras ?? {},
-      ciencias: incomingDados.ciencias ?? existingCom?.dados?.ciencias ?? {},
+      autor: origAutor,
+      autorId: origAutorId,
+      autorCargo: origAutorCargo,
+      autorFoto: origAutorFoto,
+      data: existingCom.data || origDataEnvio,
+      dataEnvio: origDataEnvio,
+      destino: isRelColab ? 'interno' : (incomingTopLevel.destino || existingCom.destino),
+      stuIds: Array.isArray(existingCom?.dados?.stuIds) && existingCom.dados.stuIds.length > 0
+        ? existingCom.dados.stuIds
+        : (incomingTopLevel.stuIds || incomingNestedDados?.stuIds || []),
+      leituras: incomingTopLevel.leituras ?? incomingNestedDados?.leituras ?? existingCom?.dados?.leituras ?? {},
+      ciencias: incomingTopLevel.ciencias ?? incomingNestedDados?.ciencias ?? existingCom?.dados?.ciencias ?? {},
     }
     const built = await enrichGruposRecipients(buildRow(mergedPayload))
     const dados = built.dados

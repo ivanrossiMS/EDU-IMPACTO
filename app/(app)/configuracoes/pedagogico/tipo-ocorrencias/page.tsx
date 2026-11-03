@@ -1,7 +1,8 @@
 'use client'
 import { useData, ConfigTipoOcorrencia, newId, TIPOS_OCORRENCIA_DEFAULT } from '@/lib/dataContext'
 import { useState } from 'react'
-import { Plus, Edit2, Trash2, Check, AlertTriangle, Bell, BellOff } from 'lucide-react'
+import { Plus, Edit2, Trash2, Check, AlertTriangle, Bell, BellOff, BellRing, Layers } from 'lucide-react'
+import OcorrenciasPushConfigSection from '@/components/ocorrencias/OcorrenciasPushConfigSection'
 
 const GRAV_CFG = {
   leve:  { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  label: '🟡 Leve' },
@@ -15,6 +16,7 @@ const BLANK: Omit<ConfigTipoOcorrencia, 'id' | 'createdAt'> = {
 
 export default function TipoOcorrenciasPage() {
   const { cfgTiposOcorrencia, setCfgTiposOcorrencia } = useData()
+  const [abaAtiva, setAbaAtiva] = useState<'push' | 'tipos'>('push')
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -69,35 +71,88 @@ export default function TipoOcorrenciasPage() {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 className="page-title">Tipos de Ocorrências</h1>
-          <p className="page-subtitle">Configure os tipos e gravidades para registro disciplinar</p>
+          <h1 className="page-title">Configurações de Ocorrências</h1>
+          <p className="page-subtitle">Defina os colaboradores que recebem notificações Push e gerencie os tipos disciplinares</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
-            <Trash2 size={13} /> Limpar Tudo
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
-            <AlertTriangle size={13} /> Carregar Padrões
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Tipo</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', background: '#ffffff', padding: 4, borderRadius: 12, border: '1px solid #e2e8f0', gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('push')}
+              style={{
+                height: 36,
+                padding: '0 14px',
+                borderRadius: 9,
+                border: 'none',
+                background: abaAtiva === 'push' ? 'linear-gradient(135deg, #1e40af, #2563eb)' : 'transparent',
+                color: abaAtiva === 'push' ? '#ffffff' : '#64748b',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <BellRing size={14} />
+              <span>Notificações Push — Colaboradores</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('tipos')}
+              style={{
+                height: 36,
+                padding: '0 14px',
+                borderRadius: 9,
+                border: 'none',
+                background: abaAtiva === 'tipos' ? 'linear-gradient(135deg, #1e40af, #2563eb)' : 'transparent',
+                color: abaAtiva === 'tipos' ? '#ffffff' : '#64748b',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Layers size={14} />
+              <span>Tipos de Ocorrências</span>
+            </button>
+          </div>
+
+          {abaAtiva === 'tipos' && (
+            <>
+              <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+                <Trash2 size={13} /> Limpar Tudo
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+                <AlertTriangle size={13} /> Carregar Padrões
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Tipo</button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* KPIs por gravidade */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
-        {(['leve', 'media', 'grave'] as const).map(g => {
-          const cfg = GRAV_CFG[g]
-          const count = cfgTiposOcorrencia.filter(t => t.gravidade === g).length
-          return (
-            <div key={g} className="kpi-card" style={{ borderLeft: `4px solid ${cfg.color}` }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: cfg.color, fontFamily: 'Outfit, sans-serif' }}>{count}</div>
-              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>{cfg.label}</div>
-            </div>
-          )
-        })}
-      </div>
+      {abaAtiva === 'push' ? (
+        <OcorrenciasPushConfigSection />
+      ) : (
+        <>
+          {/* KPIs por gravidade */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+            {(['leve', 'media', 'grave'] as const).map(g => {
+              const cfg = GRAV_CFG[g]
+              const count = cfgTiposOcorrencia.filter(t => t.gravidade === g).length
+              return (
+                <div key={g} className="kpi-card" style={{ borderLeft: `4px solid ${cfg.color}` }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: cfg.color, fontFamily: 'Outfit, sans-serif' }}>{count}</div>
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>{cfg.label}</div>
+                </div>
+              )
+            })}
+          </div>
 
       {/* Form */}
       {showForm && (
@@ -224,6 +279,8 @@ export default function TipoOcorrenciasPage() {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   )

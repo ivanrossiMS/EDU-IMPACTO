@@ -36,6 +36,7 @@ const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'fin_acordos_renegociacao',
   'rh_folha_processada',
   'storage_auto_clean',
+  'ocorrencias_push_config',
 ]);
 
 function isSensitiveConfigKey(k: string): boolean {

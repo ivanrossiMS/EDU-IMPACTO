@@ -875,12 +875,57 @@ export function GlobalNotificationProvider() {
       }
     }
 
+    const handleOcorrenciaPushPayload = (rawPayload: any) => {
+      try {
+        const d = rawPayload?.data || rawPayload?.payload || rawPayload
+        if (!d || !d.title) return
+
+        const user = currentUserRef.current
+        if (!user) return
+
+        const targetUserIds: string[] = Array.isArray(d.targetUserIds)
+          ? d.targetUserIds.map((x: any) => String(x || '').trim())
+          : []
+        const myId = String(user.id || '').trim()
+        const mySystemUserId = String(user.system_user_id || '').trim()
+        const myColabId = String(user.colaborador_id || '').trim()
+
+        const isRecipient =
+          (myId && targetUserIds.includes(myId)) ||
+          (mySystemUserId && targetUserIds.includes(mySystemUserId)) ||
+          (myColabId && targetUserIds.includes(myColabId))
+
+        if (isRecipient) {
+          showForegroundPushBanner({
+            id: d.id || `ocorrencia_banner_${Date.now()}`,
+            title: d.title,
+            body: d.message || '',
+            data: {
+              type: 'ocorrencia',
+              module: 'ocorrencias',
+              eventType: d.eventType,
+              ocorrenciaId: d.ocorrenciaId,
+              alunoId: d.alunoId,
+              targetUrl: d.targetUrl || '/academico/ocorrencias'
+            },
+            time: 'Agora'
+          })
+
+          window.dispatchEvent(new CustomEvent('ocorrencias:push-received', { detail: d }))
+        }
+      } catch (err) {
+        console.warn('[GlobalPush] Erro ao processar OCORRENCIA_PUSH_NOTIFY:', err)
+      }
+    }
+
     // 3b. Listener Supabase Realtime multi-dispositivos (rede de computadores e smartphones)
     let isMounted = true
     let realtimeChannel: any = null
     let credimpactoChannel: any = null
+    let ocorrenciasChannel: any = null
     let saidaRetryTimer: ReturnType<typeof setTimeout> | null = null
     let credRetryTimer: ReturnType<typeof setTimeout> | null = null
+    let ocorrenciasRetryTimer: ReturnType<typeof setTimeout> | null = null
 
     const destroyChannelCleanly = (ch: any) => {
       if (!ch) return
@@ -979,6 +1024,46 @@ export function GlobalNotificationProvider() {
       })
     }
 
+    const setupOcorrenciasGlobalChannel = () => {
+      if (!isMounted) return
+      if (ocorrenciasRetryTimer) {
+        clearTimeout(ocorrenciasRetryTimer)
+        ocorrenciasRetryTimer = null
+      }
+      if (ocorrenciasChannel) {
+        const prev = ocorrenciasChannel
+        ocorrenciasChannel = null
+        destroyChannelCleanly(prev)
+      }
+      try {
+        for (const existing of supabase.getChannels()) {
+          if (existing?.topic === 'realtime:ocorrencias_push_shared_room') {
+            destroyChannelCleanly(existing)
+          }
+        }
+      } catch (_) {}
+
+      const ocCh = supabase.channel('ocorrencias_push_shared_room')
+        .on('broadcast', { event: 'OCORRENCIA_PUSH_NOTIFY' }, (ev: any) => {
+          handleOcorrenciaPushPayload(ev.payload || ev)
+        })
+      ocorrenciasChannel = ocCh
+      ocCh.subscribe((status: string) => {
+        if (!isMounted || ocorrenciasChannel !== ocCh) return
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+          if (!ocorrenciasRetryTimer) {
+            ocorrenciasRetryTimer = setTimeout(() => {
+              ocorrenciasRetryTimer = null
+              if (isMounted && (!ocorrenciasChannel || ocorrenciasChannel.state !== 'joined')) {
+                setupOcorrenciasGlobalChannel()
+              }
+            }, 8000)
+          }
+        }
+      })
+    }
+
     const handleGlobalReconnect = () => {
       if (!isMounted) return
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -988,11 +1073,15 @@ export function GlobalNotificationProvider() {
       if (!credimpactoChannel || (credimpactoChannel.state !== 'joined' && credimpactoChannel.state !== 'joining')) {
         setupCredGlobalChannel()
       }
+      if (!ocorrenciasChannel || (ocorrenciasChannel.state !== 'joined' && ocorrenciasChannel.state !== 'joining')) {
+        setupOcorrenciasGlobalChannel()
+      }
     }
 
     const subTimer = setTimeout(() => {
       setupSaidaGlobalChannel()
       setupCredGlobalChannel()
+      setupOcorrenciasGlobalChannel()
     }, 150)
 
     window.addEventListener('online', handleGlobalReconnect)
@@ -1004,6 +1093,7 @@ export function GlobalNotificationProvider() {
       clearTimeout(subTimer)
       if (saidaRetryTimer) clearTimeout(saidaRetryTimer)
       if (credRetryTimer) clearTimeout(credRetryTimer)
+      if (ocorrenciasRetryTimer) clearTimeout(ocorrenciasRetryTimer)
       window.removeEventListener('online', handleGlobalReconnect)
       window.removeEventListener('edu:network-reconnected', handleGlobalReconnect)
       document.removeEventListener('visibilitychange', handleGlobalReconnect)
@@ -1015,6 +1105,10 @@ export function GlobalNotificationProvider() {
       if (credimpactoChannel) {
         destroyChannelCleanly(credimpactoChannel)
         credimpactoChannel = null
+      }
+      if (ocorrenciasChannel) {
+        destroyChannelCleanly(ocorrenciasChannel)
+        ocorrenciasChannel = null
       }
     }
   }, [onRealtime, showForegroundPushBanner])

@@ -15,8 +15,9 @@ import {
   Trash2, Search, ArrowLeft, Pencil, X, Undo,
   BookOpen, Users, Printer, FileText, Sparkles, ChevronRight, Filter,
   BarChart, Clock, Paperclip, Loader2, ImageIcon, Eye, ExternalLink,
-  ArrowUpDown, ShieldAlert, CheckCircle2, Layers
+  ArrowUpDown, ShieldAlert, CheckCircle2, Layers, Settings, Bell
 } from 'lucide-react'
+import OcorrenciasPushConfigSection from '@/components/ocorrencias/OcorrenciasPushConfigSection'
 
 const cleanAlunoId = (id: any) => String(id || '').replace(/^a_?/, '').trim()
 
@@ -980,9 +981,35 @@ export default function OcorrenciasPage() {
   const alunos = (rawAlunos as any)?.data || rawAlunos || []
 
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
-  const [modoHome, setModoHome] = useState<'turma' | 'registros' | 'aluno'>('turma')
+  const [modoHome, setModoHome] = useState<'turma' | 'registros' | 'aluno' | 'configuracoes'>('turma')
   const [buscaAlunoHome, setBuscaAlunoHome] = useState('')
   const [alunoSel, setAlunoSel] = useState<{ id: string; nome: string; turma: string } | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const aba = (params.get('aba') || params.get('tab') || '').toLowerCase()
+    if (aba === 'configuracoes' || aba === 'notificacoes' || aba === 'push') {
+      setModoHome('configuracoes')
+    } else if (aba === 'registros') {
+      setModoHome('registros')
+    } else if (aba === 'aluno') {
+      setModoHome('aluno')
+    }
+    const ocId = params.get('id')
+    if (ocId) {
+      setQuickDrawer({ type: 'ocorrencia', ocorrenciaId: ocId })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handlePushRefresh = () => {
+      refetchOcorrencias()
+    }
+    window.addEventListener('ocorrencias:push-received', handlePushRefresh)
+    return () => window.removeEventListener('ocorrencias:push-received', handlePushRefresh)
+  }, [refetchOcorrencias])
 
   const [filtroAno, setFiltroAno] = useState('todos')
   const [filtroSeg, setFiltroSeg] = useState('todos')
@@ -2825,6 +2852,30 @@ export default function OcorrenciasPage() {
                 <Search size={15} />
                 <span>Por Aluno</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setModoHome('configuracoes')}
+                style={{
+                  height: '38px',
+                  padding: '0 16px',
+                  background: modoHome === 'configuracoes' ? 'linear-gradient(135deg, #1e40af, #2563eb)' : 'transparent',
+                  color: modoHome === 'configuracoes' ? '#fff' : '#64748b',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s',
+                  boxShadow: modoHome === 'configuracoes' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
+                }}
+              >
+                <Settings size={15} />
+                <span>Configurações</span>
+              </button>
             </div>
 
             {/* Botão Global de Nova Ocorrência */}
@@ -2857,7 +2908,7 @@ export default function OcorrenciasPage() {
         </div>
 
         {/* Banner Interativo de Ocorrências Aguardando Ciência */}
-        {pendentes > 0 && (
+        {modoHome !== 'configuracoes' && pendentes > 0 && (
           <div
             onClick={() => jumpToDirectRecords('pendentes')}
             role="button"
@@ -2955,6 +3006,7 @@ export default function OcorrenciasPage() {
         )}
 
         {/* Painel Executivo em 3 Colunas (100% Clicável) */}
+        {modoHome !== 'configuracoes' && (
         <div
           className="ocorrencias-cards-grid"
           style={{
@@ -3433,6 +3485,7 @@ export default function OcorrenciasPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* ── CONTEÚDO PRINCIPAL CONFORME O MODO SELECIONADO ── */}
         <div ref={registrosSectionRef}>
@@ -4617,6 +4670,9 @@ export default function OcorrenciasPage() {
               })()}
             </div>
           )}
+
+          {/* MODO 4: CONFIGURAÇÕES DE NOTIFICAÇÕES PUSH — COLABORADORES */}
+          {modoHome === 'configuracoes' && <OcorrenciasPushConfigSection />}
         </div>
 
         {/* Slide-over Quick Drawer */}
@@ -4833,6 +4889,29 @@ export default function OcorrenciasPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            type="button"
+            style={{
+              height: '42px',
+              padding: '0 16px',
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              color: '#0f172a',
+              fontSize: '13.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+            onClick={() => {
+              setTurmaSel(null)
+              setModoHome('configuracoes')
+            }}
+          >
+            <Bell size={16} color="#2563eb" /> Config. Notificações Push
+          </button>
           <button
             style={{
               height: '42px',

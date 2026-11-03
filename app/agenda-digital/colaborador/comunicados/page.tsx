@@ -579,7 +579,7 @@ function ColaboradorComunicadosContent() {
       return
     }
     
-    if (selectedDest.length === 0) {
+    if (selectedDest.length === 0 && !String(editComId || '').startsWith('AD-COM-REL-')) {
       adAlert('Por favor, selecione pelo menos um destinatário (Turma/Aluno) para o comunicado.', 'Atenção')
       return
     }
@@ -631,13 +631,21 @@ function ColaboradorComunicadosContent() {
     const allResolvedAlunos = Array.from(new Set([...directAlunos, ...extraAlunosFromGroups]));
 
     if (editComId) {
+      const existingCom = comunicados.find((c: any) => c.id === editComId);
+      const isRelColab = String(editComId).startsWith('AD-COM-REL-COLAB-');
+      const origAutor = existingCom?.autor || existingCom?.dados?.autor || effectiveUser?.nome || 'Usuário ERP';
+      const origAutorCargo = existingCom?.autorCargo || existingCom?.dados?.autorCargo || effectiveUser?.cargo || effectiveUser?.perfil || 'Colaborador';
+      const origAutorId = existingCom?.autorId || existingCom?.dados?.autorId || effectiveUser?.id || '';
+      const origAutorFoto = existingCom?.autorFoto ?? existingCom?.dados?.autorFoto ?? effectiveUser?.foto ?? null;
+      const updatedTurmas = selectedDest.filter(d => d.type === 'turma').map(d => d.name);
+      const updatedGrupos = selectedDest.filter(d => d.type === 'grupo').map(d => d.name);
       const updatedCom = {
         titulo: newTitulo,
         conteudo: newConteudo,
-        autor: effectiveUser?.nome || 'Usuário ERP',
-        autorCargo: effectiveUser?.cargo || effectiveUser?.perfil || 'Colaborador',
-        autorId: effectiveUser?.id || '',
-        autorFoto: effectiveUser?.foto || null,
+        autor: origAutor,
+        autorCargo: origAutorCargo,
+        autorId: origAutorId,
+        autorFoto: origAutorFoto,
         anexos: anexos,
         cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
         cobrancas: cobrancas || (cobranca ? [cobranca] : []),
@@ -645,23 +653,26 @@ function ColaboradorComunicadosContent() {
         autorizacao: autorizacao || null,
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
-        turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: allResolvedAlunos,
-        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        funcionariosIds: allResolvedFuncs,
-        destino: 'selecionados'
+        turmas: isRelColab && updatedTurmas.length === 0 ? (existingCom?.turmas || existingCom?.dados?.turmas || []) : updatedTurmas,
+        alunosIds: isRelColab && allResolvedAlunos.length === 0 ? (existingCom?.alunosIds || existingCom?.dados?.alunosIds || []) : allResolvedAlunos,
+        grupos: isRelColab && updatedGrupos.length === 0 ? (existingCom?.grupos || existingCom?.dados?.grupos || []) : updatedGrupos,
+        funcionariosIds: isRelColab && allResolvedFuncs.length === 0 ? (existingCom?.funcionariosIds || existingCom?.dados?.funcionariosIds || []) : allResolvedFuncs,
+        destino: isRelColab ? 'interno' : 'selecionados'
       };
       
       setComunicadosLocally?.((prev: any) => prev.map((c: any) => c.id === editComId ? { ...c, ...updatedCom } : c));
       
       // Update directly via API to avoid sending the whole array
-      const existingCom = comunicados.find((c: any) => c.id === editComId);
       if (existingCom) {
         apiFetch('/api/comunicados', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: editComId, dados: { ...existingCom, ...updatedCom } })
-        }).catch(err => console.error("Error updating comunicado:", err));
+        })
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' });
+          })
+          .catch(err => console.error("Error updating comunicado:", err));
       }
     } else {
       const newCom: any = {
@@ -810,8 +821,13 @@ function ColaboradorComunicadosContent() {
       dests.push(item)
     }
 
-    if (c.turmas) c.turmas.forEach((t: string) => pushUnique({ type: 'turma', id: `t_${t}`, name: t }))
-    if (c.alunosIds) c.alunosIds.forEach((id: string) => {
+    const turmasList = c.turmas || c.dados?.turmas || []
+    const alunosList = c.alunosIds || c.dados?.alunosIds || []
+    const gruposList = c.grupos || c.dados?.grupos || []
+    const funcsList = c.funcionariosIds || c.dados?.funcionariosIds || []
+
+    turmasList.forEach((t: string) => pushUnique({ type: 'turma', id: `t_${t}`, name: t }))
+    alunosList.forEach((id: string) => {
        const cleanTarget = String(id).replace(/^a_/, '')
        const al = alunosAtivos.find((a: any) => {
          const cleanA = String(a.id).replace(/^a_/, '')
@@ -822,8 +838,8 @@ function ColaboradorComunicadosContent() {
          pushUnique({ type: 'aluno', id: `a_${rawAlId}`, name: al.nome })
        }
     })
-    if (c.grupos) c.grupos.forEach((g: string) => pushUnique({ type: 'grupo', id: `g_${g}`, name: g }))
-    if (c.funcionariosIds) c.funcionariosIds.forEach((id: string) => {
+    gruposList.forEach((g: string) => pushUnique({ type: 'grupo', id: `g_${g}`, name: g }))
+    funcsList.forEach((id: string) => {
        const cleanTarget = String(id).replace(/^f_/, '')
        const col = colaboradores.find((colItem: any) => {
          const cleanCol = String(colItem.id).replace(/^f_/, '')
@@ -2616,7 +2632,7 @@ function ColaboradorComunicadosContent() {
 
           // Os botões de editar e excluir só devem aparecer para quem enviou o comunicado, e para o administrador
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
-          const canEditSelected = Boolean((isUserAdmin || isAuthor) && !selectedComunicado.id?.startsWith('AD-COM-REL-'));
+          const canEditSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
           const canEditReportSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
 
           return (

@@ -578,14 +578,25 @@ export default function ADAdminComunicados() {
     }
     
     if (editComId) {
+      const existingCom = comunicados.find(c => c.id === editComId) as ADComunicado | undefined
+      const isRelColab = String(editComId).startsWith('AD-COM-REL-COLAB-')
+      const origAutor = existingCom?.autor || (existingCom as any)?.dados?.autor || currentUser?.nome || 'Usuário ERP'
+      const origAutorCargo = existingCom?.autorCargo || (existingCom as any)?.dados?.autorCargo || currentUser?.cargo || currentUser?.perfil || 'Administração'
+      const origAutorId = existingCom?.autorId || (existingCom as any)?.dados?.autorId || currentUser?.id || ''
+      const origAutorFoto = existingCom?.autorFoto ?? (existingCom as any)?.dados?.autorFoto ?? currentUser?.foto ?? null
+      const updatedTurmas = Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => d.name)))
+      const updatedTurmasIds = Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_/, ''))))
+      const updatedGrupos = Array.from(new Set(selectedDest.filter(d => d.type === 'grupo').map(d => d.name)))
+      const updatedAlunosIds = Array.from(new Set(selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_/, ''))))
+      const updatedFuncionariosIds = Array.from(new Set(selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_/, ''))))
       const updatedCom = {
-        ...(comunicados.find(c => c.id === editComId) as ADComunicado),
+        ...(existingCom || {} as ADComunicado),
         titulo: newTitulo,
         conteudo: newConteudo,
-        autor: currentUser?.nome || 'Usuário ERP',
-        autorCargo: currentUser?.cargo || currentUser?.perfil || 'Administração',
-        autorId: currentUser?.id || '',
-        autorFoto: currentUser?.foto || null,
+        autor: origAutor,
+        autorCargo: origAutorCargo,
+        autorId: origAutorId,
+        autorFoto: origAutorFoto,
         anexos: anexos,
         cobranca: cobranca || (cobrancas && cobrancas[0]) || null,
         cobrancas: cobrancas || (cobranca ? [cobranca] : []),
@@ -593,12 +604,12 @@ export default function ADAdminComunicados() {
         autorizacao: autorizacao || null,
         dataAgendamento: dataAgendamento || null,
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
-        turmas: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => d.name))),
-        turmasIds: Array.from(new Set(selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_/, '')))),
-        grupos: Array.from(new Set(selectedDest.filter(d => d.type === 'grupo').map(d => d.name))),
-        alunosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_/, '')))),
-        funcionariosIds: Array.from(new Set(selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_/, '')))),
-        destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
+        turmas: isRelColab && updatedTurmas.length === 0 ? (existingCom?.turmas || []) : updatedTurmas,
+        turmasIds: isRelColab && updatedTurmasIds.length === 0 ? ((existingCom as any)?.turmasIds || []) : updatedTurmasIds,
+        grupos: isRelColab && updatedGrupos.length === 0 ? (existingCom?.grupos || []) : updatedGrupos,
+        alunosIds: isRelColab && updatedAlunosIds.length === 0 ? (existingCom?.alunosIds || []) : updatedAlunosIds,
+        funcionariosIds: isRelColab && updatedFuncionariosIds.length === 0 ? ((existingCom as any)?.funcionariosIds || []) : updatedFuncionariosIds,
+        destino: isRelColab ? 'interno' : (selectedDest.length === 0 ? 'todos' : 'selecionados')
       }
 
       apiFetch('/api/comunicados', {

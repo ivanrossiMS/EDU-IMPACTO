@@ -792,11 +792,20 @@ export default function NovoComunicadoModal({
             
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
               <div style={{ border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: '50%', padding: 1.5 }}>
-                <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={28} />
+                <UserAvatar
+                  userId={initialData?.id ? (initialData?.autorId || initialData?.dados?.autorId || currentUser?.id) : currentUser?.id}
+                  name={initialData?.id ? (initialData?.autor || initialData?.dados?.autor || currentUser?.nome || 'Usuário') : (currentUser?.nome || 'Usuário')}
+                  fotoUrl={initialData?.id ? (initialData?.autorFoto || initialData?.dados?.autorFoto) : currentUser?.foto}
+                  size={28}
+                />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{currentUser?.nome || 'Usuário ERP'}</span>
-                <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 2 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                  {initialData?.id ? (initialData?.autor || initialData?.dados?.autor || currentUser?.nome || 'Usuário ERP') : (currentUser?.nome || 'Usuário ERP')}
+                </span>
+                <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 2 }}>
+                  {initialData?.id ? (initialData?.autorCargo || initialData?.dados?.autorCargo || currentUser?.cargo || currentUser?.perfil || 'Administração') : (currentUser?.cargo || currentUser?.perfil || 'Administração')}
+                </span>
               </div>
             </div>
           </div>
