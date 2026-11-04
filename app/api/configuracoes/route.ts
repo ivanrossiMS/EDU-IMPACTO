@@ -154,6 +154,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { clearPerfilAcessoCache } = await import('@/lib/server/perfilAcessoCache')
+    const { invalidateAdConfigCache } = await import('@/lib/server/agendaNotifications')
     
     // Suporte a salvamento em lote de múltiplas configurações de uma só vez
     if (Array.isArray(body?.items) && body.items.length > 0) {
@@ -177,6 +178,7 @@ export async function POST(request: Request) {
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       globalCache.clear()
       clearPerfilAcessoCache()
+      invalidateAdConfigCache()
       return NextResponse.json({ ok: true, count: data?.length || rows.length, data })
     }
 
@@ -192,6 +194,7 @@ export async function POST(request: Request) {
     
     // Invalida o cache em memória do servidor ao atualizar qualquer chave
     globalCache.clear();
+    invalidateAdConfigCache();
     if (chave === 'config_perfis_acesso') {
       clearPerfilAcessoCache()
     }

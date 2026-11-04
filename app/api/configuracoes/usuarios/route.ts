@@ -45,19 +45,8 @@ export async function GET(req: Request) {
       const isDropdownMode = limit >= 500
       const supabaseAdmin = getAdminClient()
 
-      // FIX D: Checar cache em memória (TTL 2min) para evitar N chamadas repetidas
-      const cacheKey = `colaboradores-dropdown`
-      if (isDropdownMode && !search) {
-        const cached = getCachedColaboradores(cacheKey)
-        if (cached) {
-          return NextResponse.json(cached)
-        }
-      }
-
       let query = supabaseAdmin.from('system_users').select(
-        isDropdownMode 
-          ? 'id, auth_id, nome, email, cargo, perfil, status, dados'
-          : '*',
+        '*',
         { count: 'exact' }
       )
       if (search) {
@@ -78,16 +67,18 @@ export async function GET(req: Request) {
           cargo: u.cargo || 'Não definido',
           perfil: u.perfil || 'Colaborador',
           status: u.status || 'ativo',
-          foto: u.dados?.foto || null,
+          twofa: Boolean(u.twofa),
+          hasDualRole: Boolean(u.dados?.responsavel_id),
+          responsavel_id: u.dados?.responsavel_id || null,
+          foto: u.dados?.foto || u.foto || null,
           unidades: u.dados?.unidades || [],
           dados: u.dados || {},
-          ultimoAcesso: 'N/A'
+          ultimoAcesso: u.ultimoacesso || u.ultimoAcesso || 'N/A'
         }))
         const result = { data: mappedDropdown, total: count || 0, page: 1, limit }
-        if (!search) setCachedColaboradores(cacheKey, result)
         return NextResponse.json(result, {
           headers: {
-            'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
           },
         })
       }

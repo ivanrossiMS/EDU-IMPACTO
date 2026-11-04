@@ -31,7 +31,9 @@ import {
   Send,
   Phone,
   BellRing,
-  Receipt
+  Receipt,
+  Layers,
+  MoreHorizontal
 } from 'lucide-react'
 import { CredImpactoEmprestimo, StatusEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS, roundMoney, simulateLoan } from '@/lib/credimpacto/engine'
@@ -43,6 +45,7 @@ import {
 } from '@/lib/credimpacto/whatsappTemplates'
 import { CredImpactoManualPushModal } from './CredImpactoPushCenter'
 import { EmprestimoDetalhesSubTab } from './EmprestimoDetalhesModal'
+import { BaixaParcelasModal, ParcelaComContexto } from './BaixaParcelasModal'
 import { toast } from 'sonner'
 
 interface AdminDashboardProps {
@@ -70,6 +73,70 @@ export function AdminDashboard({
       ? 'aguardando_liberacao'
       : 'todos'
   )
+  const [parcelasHealthFilter, setParcelasHealthFilter] = useState<
+    'todos' | 'em_dia' | 'atraso' | 'com_baixa' | 'quitado'
+  >('todos')
+  const [baixaModalLoan, setBaixaModalLoan] = useState<CredImpactoEmprestimo | null>(null)
+  const [openActionMenu, setOpenActionMenu] = useState<{
+    loanId: string
+    top?: number
+    bottom?: number
+    right: number
+  } | null>(null)
+  const actionMenuRef = React.useRef<HTMLDivElement | null>(null)
+
+  const handleToggleActionMenu = (e: React.MouseEvent<HTMLButtonElement>, loanId: string) => {
+    e.stopPropagation()
+    if (openActionMenu?.loanId === loanId) {
+      setOpenActionMenu(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const flipUp = spaceBelow < 360 && rect.top > spaceBelow
+    const right = Math.max(12, window.innerWidth - rect.right)
+    if (flipUp) {
+      setOpenActionMenu({
+        loanId,
+        bottom: window.innerHeight - rect.top + 6,
+        right
+      })
+    } else {
+      setOpenActionMenu({
+        loanId,
+        top: rect.bottom + 6,
+        right
+      })
+    }
+  }
+
+  React.useEffect(() => {
+    if (!openActionMenu) return
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      if (actionMenuRef.current?.contains(target)) return
+      if (target.closest('[data-action-menu-trigger="true"]')) return
+      setOpenActionMenu(null)
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenActionMenu(null)
+    }
+    const handleScrollOrResize = (e: Event) => {
+      if (e.type === 'scroll' && actionMenuRef.current?.contains(e.target as Node)) return
+      setOpenActionMenu(null)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', handleScrollOrResize)
+    window.addEventListener('scroll', handleScrollOrResize, true)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', handleScrollOrResize)
+      window.removeEventListener('scroll', handleScrollOrResize, true)
+    }
+  }, [openActionMenu])
 
   React.useEffect(() => {
     if (viewModeTab === 'analise') {
@@ -79,6 +146,7 @@ export function AdminDashboard({
     } else {
       setStatusFilter('todos')
     }
+    setParcelasHealthFilter('todos')
   }, [viewModeTab])
 
   // Modais de Ação Administrativa
@@ -433,9 +501,239 @@ export function AdminDashboard({
   const emContraproposta = emprestimos.filter((e) => e.status === 'contraproposta')
   const aguardandoAssinatura = emprestimos.filter((e) => e.status === 'aguardando_assinatura')
 
-  // Competência Atual
+  // Competência e Data Atual (YYYY-MM-DD local)
   const hoje = new Date()
   const compAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+  const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(
+    hoje.getDate()
+  ).padStart(2, '0')}`
+
+  // Helper completo de diagnóstico e cores de Status das Parcelas + Quantidades por contrato
+  const getLoanInstallmentStatusInfo = (loan: CredImpactoEmprestimo) => {
+    const parcelas = loan.parcelas || []
+    const total = parcelas.length > 0 ? parcelas.length : Number(loan.quantidadeParcelas || 0)
+    const pagasList = parcelas.filter(
+      (p) => p.status === 'descontada' || p.status === 'paga_avulso'
+    )
+    const pagas = loan.status === 'quitado' ? total : pagasList.length
+    const pendentesList = parcelas
+      .filter(
+        (p) =>
+          p.status !== 'descontada' &&
+          p.status !== 'paga_avulso' &&
+          p.status !== 'cancelada' &&
+          p.status !== 'renegociada'
+      )
+      .sort((a, b) => (a.numero || 0) - (b.numero || 0))
+
+    const atrasadasList =
+      loan.status === 'ativo'
+        ? pendentesList.filter(
+            (p) => p.status === 'atrasada' || Boolean(p.dataVencimento && p.dataVencimento < hojeIso)
+          )
+        : []
+    const atrasadas = atrasadasList.length
+
+    const venceHojeList =
+      loan.status === 'ativo'
+        ? pendentesList.filter((p) => p.dataVencimento === hojeIso && p.status !== 'atrasada')
+        : []
+    const venceHoje = venceHojeList.length
+
+    const restantes =
+      loan.status === 'quitado'
+        ? 0
+        : parcelas.length > 0
+        ? pendentesList.length
+        : Math.max(0, total - pagas)
+
+    const progressPct =
+      loan.status === 'quitado'
+        ? 100
+        : total > 0
+        ? Math.min(100, Math.round((pagas / total) * 100))
+        : 0
+
+    const proximaParcela = pendentesList[0] || null
+    const proximaDataCurta = proximaParcela?.dataVencimento
+      ? new Date(proximaParcela.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit'
+        })
+      : ''
+
+    if (loan.status === 'recusado' || loan.status === 'cancelado') {
+      return {
+        key: 'inativo' as const,
+        isEmDia: false,
+        isOverdue: false,
+        isQuitado: false,
+        total,
+        pagas: 0,
+        restantes: 0,
+        atrasadas: 0,
+        progressPct: 0,
+        proximaParcela: null,
+        badgeLabel: 'Sem Cobrança',
+        detailLabel: loan.status === 'recusado' ? 'Proposta recusada' : 'Cancelado',
+        tooltip: `Operação ${loan.status} — nenhuma parcela ativa para desconto.`,
+        badgeClass:
+          'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60',
+        cellBoxClass:
+          'bg-rose-50/40 hover:bg-rose-50/80 border-rose-200/70 dark:bg-rose-950/20 dark:border-rose-900/40',
+        qtdBoxClass:
+          'bg-slate-50/70 border-slate-200/70 dark:bg-slate-800/40 dark:border-slate-800',
+        dotClass: 'bg-rose-400',
+        barClass: 'bg-rose-300 dark:bg-rose-800',
+        rowAccentClass:
+          'border-l-4 border-l-rose-400 bg-rose-50/10 hover:bg-rose-50/30 dark:bg-rose-950/10 dark:hover:bg-rose-950/20'
+      }
+    }
+
+    if (loan.status === 'quitado' || (loan.status === 'ativo' && restantes === 0 && total > 0)) {
+      return {
+        key: 'quitado' as const,
+        isEmDia: true,
+        isOverdue: false,
+        isQuitado: true,
+        total,
+        pagas: total,
+        restantes: 0,
+        atrasadas: 0,
+        progressPct: 100,
+        proximaParcela: null,
+        badgeLabel: '100% Quitado',
+        detailLabel: `${total}/${total} liquidadas`,
+        tooltip: `Contrato 100% quitado! Todas as ${total} parcelas foram baixadas.`,
+        badgeClass:
+          'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950/70 dark:text-teal-300 dark:border-teal-700',
+        cellBoxClass:
+          'bg-teal-50/80 hover:bg-teal-100/70 border-teal-200/90 dark:bg-teal-950/30 dark:border-teal-800/60',
+        qtdBoxClass:
+          'bg-teal-50/40 hover:bg-teal-50/80 border-teal-200/70 dark:bg-teal-950/20 dark:border-teal-800/50',
+        dotClass: 'bg-teal-500',
+        barClass: 'bg-gradient-to-r from-teal-500 to-emerald-500',
+        rowAccentClass:
+          'border-l-4 border-l-teal-500 bg-teal-50/15 hover:bg-teal-50/40 dark:bg-teal-950/10 dark:hover:bg-teal-950/25'
+      }
+    }
+
+    if (loan.status !== 'ativo') {
+      return {
+        key: 'aguardando' as const,
+        isEmDia: true,
+        isOverdue: false,
+        isQuitado: false,
+        total,
+        pagas,
+        restantes,
+        atrasadas: 0,
+        progressPct,
+        proximaParcela,
+        badgeLabel: 'A Iniciar',
+        detailLabel:
+          loan.status === 'aguardando_liberacao' ? 'Aguardando TED' : `${total}x previstas`,
+        tooltip: `Aguardando liberação/formalização do contrato para iniciar as ${total} parcelas.`,
+        badgeClass:
+          'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700',
+        cellBoxClass:
+          'bg-amber-50/60 hover:bg-amber-100/60 border-amber-200/80 dark:bg-amber-950/25 dark:border-amber-800/50',
+        qtdBoxClass:
+          'bg-amber-50/30 hover:bg-amber-50/60 border-amber-200/60 dark:bg-amber-950/15 dark:border-amber-800/40',
+        dotClass: 'bg-amber-500',
+        barClass: 'bg-amber-400',
+        rowAccentClass:
+          'border-l-4 border-l-amber-400 hover:bg-amber-50/25 dark:hover:bg-slate-800/40'
+      }
+    }
+
+    if (atrasadas > 0) {
+      return {
+        key: 'atraso' as const,
+        isEmDia: false,
+        isOverdue: true,
+        isQuitado: false,
+        total,
+        pagas,
+        restantes,
+        atrasadas,
+        progressPct,
+        proximaParcela,
+        badgeLabel: atrasadas === 1 ? '1 em Atraso' : `${atrasadas} em Atraso`,
+        detailLabel: proximaDataCurta ? `Venc: ${proximaDataCurta}` : 'Pendência vencida',
+        tooltip: `Atenção: ${atrasadas} parcela(s) vencida(s) pendente(s) de baixa. Clique para ver ou dar baixa.`,
+        badgeClass:
+          'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-700',
+        cellBoxClass:
+          'bg-rose-50/90 hover:bg-rose-100/80 border-rose-300 dark:bg-rose-950/35 dark:border-rose-800/70 shadow-2xs',
+        qtdBoxClass:
+          'bg-rose-50/45 hover:bg-rose-50/80 border-rose-200/80 dark:bg-rose-950/20 dark:border-rose-800/50',
+        dotClass: 'bg-rose-500 animate-pulse',
+        barClass: 'bg-gradient-to-r from-rose-500 to-red-500',
+        rowAccentClass:
+          'border-l-4 border-l-rose-500 bg-rose-50/20 hover:bg-rose-50/45 dark:bg-rose-950/15 dark:hover:bg-rose-950/30'
+      }
+    }
+
+    if (venceHoje > 0) {
+      return {
+        key: 'vence_hoje' as const,
+        isEmDia: true,
+        isOverdue: false,
+        isQuitado: false,
+        total,
+        pagas,
+        restantes,
+        atrasadas: 0,
+        progressPct,
+        proximaParcela,
+        badgeLabel: 'Vence Hoje',
+        detailLabel: proximaParcela ? `Parc. #${proximaParcela.numero} hoje` : 'Vence hoje',
+        tooltip: `Em dia — a parcela #${proximaParcela?.numero || 1} vence hoje (${proximaDataCurta}). Clique para dar baixa.`,
+        badgeClass:
+          'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-700',
+        cellBoxClass:
+          'bg-amber-50/85 hover:bg-amber-100/75 border-amber-300 dark:bg-amber-950/30 dark:border-amber-800/60',
+        qtdBoxClass:
+          'bg-amber-50/40 hover:bg-amber-50/75 border-amber-200/80 dark:bg-amber-950/20 dark:border-amber-800/50',
+        dotClass: 'bg-amber-500 animate-pulse',
+        barClass: 'bg-gradient-to-r from-amber-500 to-emerald-500',
+        rowAccentClass:
+          'border-l-4 border-l-amber-500 bg-amber-50/15 hover:bg-amber-50/35 dark:bg-amber-950/10'
+      }
+    }
+
+    return {
+      key: 'em_dia' as const,
+      isEmDia: true,
+      isOverdue: false,
+      isQuitado: false,
+      total,
+      pagas,
+      restantes,
+      atrasadas: 0,
+      progressPct,
+      proximaParcela,
+      badgeLabel: 'Em Dia',
+      detailLabel: proximaParcela
+        ? `Próx #${proximaParcela.numero}: ${proximaDataCurta}`
+        : 'Cronograma regular',
+      tooltip: `Parcelas 100% em dia (${pagas} de ${total} pagas, faltam ${restantes}).${
+        proximaParcela ? ` Próxima: #${proximaParcela.numero} em ${proximaDataCurta}.` : ''
+      } Clique para gerenciar parcelas.`,
+      badgeClass:
+        'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-700',
+      cellBoxClass:
+        'bg-emerald-50/80 hover:bg-emerald-100/75 border-emerald-200/90 dark:bg-emerald-950/30 dark:border-emerald-800/60',
+      qtdBoxClass:
+        'bg-emerald-50/35 hover:bg-emerald-50/70 border-emerald-200/75 dark:bg-emerald-950/15 dark:border-emerald-800/45',
+      dotClass: 'bg-emerald-500',
+      barClass: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+      rowAccentClass:
+        'border-l-4 border-l-emerald-500 hover:bg-emerald-50/25 dark:hover:bg-slate-800/40'
+    }
+  }
 
   // Parcelas do Mês (apenas de empréstimos ativos)
   let parcelasMesPrevistas = 0
@@ -450,11 +748,34 @@ export function AdminDashboard({
           parcelasMesRecebidas += p.valorPago || p.valorTotal
         }
       }
-      if (p.status === 'atrasada') {
+      const isOverdueParcela =
+        p.status === 'atrasada' ||
+        (p.status !== 'descontada' &&
+          p.status !== 'paga_avulso' &&
+          p.status !== 'cancelada' &&
+          p.status !== 'renegociada' &&
+          Boolean(p.dataVencimento && p.dataVencimento < hojeIso))
+      if (isOverdueParcela) {
         parcelasEmAtraso += 1
       }
     }
   }
+
+  // Contadores rápidos de saúde das parcelas para os filtros
+  const healthCounts = useMemo(() => {
+    let emDia = 0
+    let atraso = 0
+    let comBaixa = 0
+    let quitado = 0
+    for (const l of emprestimos) {
+      const info = getLoanInstallmentStatusInfo(l)
+      if (l.status === 'ativo' && info.isEmDia && !info.isOverdue) emDia++
+      if (info.isOverdue) atraso++
+      if (info.pagas > 0) comBaixa++
+      if (info.isQuitado) quitado++
+    }
+    return { emDia, atraso, comBaixa, quitado }
+  }, [emprestimos, hojeIso])
 
   // Filtragem da Lista
   const filteredEmprestimos = useMemo(() => {
@@ -468,9 +789,20 @@ export function AdminDashboard({
         (loan.colaboradorMatricula ? loan.colaboradorMatricula.toLowerCase().includes(q) : false)
 
       const matchStatus = statusFilter === 'todos' ? true : loan.status === statusFilter
-      return matchSearch && matchStatus
+      if (!matchSearch || !matchStatus) return false
+
+      if (parcelasHealthFilter !== 'todos') {
+        const info = getLoanInstallmentStatusInfo(loan)
+        if (parcelasHealthFilter === 'em_dia' && !(loan.status === 'ativo' && info.isEmDia && !info.isOverdue))
+          return false
+        if (parcelasHealthFilter === 'atraso' && !info.isOverdue) return false
+        if (parcelasHealthFilter === 'com_baixa' && info.pagas <= 0) return false
+        if (parcelasHealthFilter === 'quitado' && !info.isQuitado) return false
+      }
+
+      return true
     })
-  }, [emprestimos, searchTerm, statusFilter])
+  }, [emprestimos, searchTerm, statusFilter, parcelasHealthFilter, hojeIso])
 
   // Abertura do Modal de Análise
   const handleOpenAnalysisModal = (loan: CredImpactoEmprestimo) => {
@@ -1012,86 +1344,177 @@ export function AdminDashboard({
       </div>
 
       {/* FILTROS E BUSCA */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="relative w-full md:w-96">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <div className="relative w-full lg:w-80 shrink-0">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por colaborador, CPF, matrícula ou código..."
+            placeholder="Buscar colaborador, CPF, matrícula ou código..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter size={14} className="text-slate-400" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all"
-          >
-            {viewModeTab === 'liberacoes' ? (
-              <>
-                <option value="aguardando_liberacao">Aguardando Liberação TED (Pendentes)</option>
-                <option value="ativo">Já Liberados (Ativos)</option>
-                <option value="todos">Todos os Status</option>
-              </>
-            ) : viewModeTab === 'analise' ? (
-              <>
-                <option value="solicitado">Aguardando Análise (Novas)</option>
-                <option value="contraproposta">Em Contraproposta</option>
-                <option value="aguardando_assinatura">Aguardando Assinatura</option>
-                <option value="todos">Todos os Status</option>
-              </>
-            ) : (
-              <>
-                <option value="todos">Todos os Status</option>
-                <option value="solicitado">Novas Solicitações</option>
-                <option value="aguardando_assinatura">Aguardando Assinatura</option>
-                <option value="aguardando_liberacao">Aguardando Liberação TED</option>
-                <option value="ativo">Ativos em Folha</option>
-                <option value="quitado">Quitados</option>
-                <option value="contraproposta">Em Contraproposta</option>
-                <option value="recusado">Recusados</option>
-                <option value="cancelado">Cancelados</option>
-              </>
-            )}
-          </select>
+        <div className="flex items-center justify-between lg:justify-end gap-2 flex-wrap">
+          {viewModeTab !== 'liberacoes' && viewModeTab !== 'analise' && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setParcelasHealthFilter('todos')}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                  parcelasHealthFilter === 'todos'
+                    ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700'
+                }`}
+              >
+                Todos ({emprestimos.length})
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setParcelasHealthFilter(parcelasHealthFilter === 'em_dia' ? 'todos' : 'em_dia')
+                }
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all ${
+                  parcelasHealthFilter === 'em_dia'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    parcelasHealthFilter === 'em_dia' ? 'bg-white' : 'bg-emerald-500'
+                  }`}
+                />
+                <span>Em Dia ({healthCounts.emDia})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setParcelasHealthFilter(parcelasHealthFilter === 'atraso' ? 'todos' : 'atraso')
+                }
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all ${
+                  parcelasHealthFilter === 'atraso'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : healthCounts.atraso > 0
+                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    parcelasHealthFilter === 'atraso'
+                      ? 'bg-white'
+                      : healthCounts.atraso > 0
+                      ? 'bg-rose-500 animate-pulse'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <span>Em Atraso ({healthCounts.atraso})</span>
+              </button>
+              {healthCounts.comBaixa > 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setParcelasHealthFilter(
+                      parcelasHealthFilter === 'com_baixa' ? 'todos' : 'com_baixa'
+                    )
+                  }
+                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border inline-flex items-center gap-1.5 transition-all ${
+                    parcelasHealthFilter === 'com_baixa'
+                      ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                      : 'bg-teal-50/80 hover:bg-teal-100/80 text-teal-800 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800/60'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      parcelasHealthFilter === 'com_baixa' ? 'bg-white' : 'bg-teal-500'
+                    }`}
+                  />
+                  <span>Com Baixas ({healthCounts.comBaixa})</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-slate-400 shrink-0" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all"
+            >
+              {viewModeTab === 'liberacoes' ? (
+                <>
+                  <option value="aguardando_liberacao">Aguardando Liberação TED (Pendentes)</option>
+                  <option value="ativo">Já Liberados (Ativos)</option>
+                  <option value="todos">Todos os Status</option>
+                </>
+              ) : viewModeTab === 'analise' ? (
+                <>
+                  <option value="solicitado">Aguardando Análise (Novas)</option>
+                  <option value="contraproposta">Em Contraproposta</option>
+                  <option value="aguardando_assinatura">Aguardando Assinatura</option>
+                  <option value="todos">Todos os Status</option>
+                </>
+              ) : (
+                <>
+                  <option value="todos">Todos os Status</option>
+                  <option value="solicitado">Novas Solicitações</option>
+                  <option value="aguardando_assinatura">Aguardando Assinatura</option>
+                  <option value="aguardando_liberacao">Aguardando Liberação TED</option>
+                  <option value="ativo">Ativos em Folha</option>
+                  <option value="quitado">Quitados</option>
+                  <option value="contraproposta">Em Contraproposta</option>
+                  <option value="recusado">Recusados</option>
+                  <option value="cancelado">Cancelados</option>
+                </>
+              )}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* TABELA DE OPERAÇÕES (DESKTOP: visível apenas a partir de md) */}
       <div className="hidden md:block bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-[0_10px_25px_-5px_rgba(15,23,42,0.06),0_8px_10px_-6px_rgba(15,23,42,0.03),inset_0_1px_1px_rgba(255,255,255,0.9)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-slate-900/5 dark:ring-white/5">
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabela de operações e status de parcelas"
+        >
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               {viewModeTab === 'liberacoes' ? (
                 <tr>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
-                  <th className="py-2.5 px-3 text-left min-w-[170px]">Colaborador</th>
-                  <th className="py-2.5 px-3 text-left min-w-[200px]">Dados Bancários / Chave PIX</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[150px]">Valor a Liberar</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[70px]">Prazo</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Status</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[140px]">Ações</th>
+                  <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Operação</th>
+                  <th className="py-2.5 px-2.5 text-left">Colaborador</th>
+                  <th className="py-2.5 px-2.5 text-left">Dados Bancários / Chave PIX</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Valor a Liberar</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Prazo</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Ações</th>
                 </tr>
               ) : (
                 <tr>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
-                  <th className="py-2.5 px-4 text-left min-w-[200px]">Colaborador</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[160px]">Valor Concedido</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[80px]">Parcelas</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap w-[160px]">Saldo Devedor</th>
-                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Status</th>
-                  <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[170px]">Ações</th>
+                  <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Operação</th>
+                  <th className="py-2.5 px-2.5 text-left">Colaborador</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Valor Concedido</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Parcelas / Qtd</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status Parcelas</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Saldo Devedor</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Ações</th>
                 </tr>
               )}
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredEmprestimos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                  <td
+                    colSpan={viewModeTab === 'liberacoes' ? 7 : 8}
+                    className="py-12 text-center text-slate-400 dark:text-slate-500"
+                  >
                     Nenhuma operação encontrada com os filtros selecionados.
                   </td>
                 </tr>
@@ -1102,18 +1525,19 @@ export function AdminDashboard({
                   const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
                   const isPendingDisbursement = loan.status === 'aguardando_liberacao'
                   const receivableInfo = getLoanReceivableInfo(loan)
+                  const instInfo = getLoanInstallmentStatusInfo(loan)
 
                   if (viewModeTab === 'liberacoes') {
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                           <div className="text-xs">{loan.codigoOperacao}</div>
                           <div className="text-[10px] text-slate-400 font-sans font-normal">
                             {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
                           </div>
                         </td>
 
-                        <td className="py-2.5 px-3 text-left min-w-[170px] max-w-[220px]">
+                        <td className="py-2.5 px-2.5 text-left max-w-[200px]">
                           <div className="flex items-center gap-1.5 group">
                             {onOpenFichaColaborador ? (
                               <button
@@ -1145,7 +1569,7 @@ export function AdminDashboard({
                           </div>
                         </td>
 
-                        <td className="py-2.5 px-3 text-left min-w-[200px]">
+                        <td className="py-2.5 px-2.5 text-left">
                           {loan.dadosBancarios?.chavePix && !loan.dadosBancarios.chavePix.toLowerCase().includes('definir') ? (
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono">
@@ -1197,7 +1621,7 @@ export function AdminDashboard({
                           )}
                         </td>
 
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        <td className="py-2.5 px-2 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           <div className="text-xs">{formatBrl(loan.valorAprovado)}</div>
                           <div className="text-[10px] text-slate-400 font-sans font-normal">
                             TED / Transferência
@@ -1223,87 +1647,41 @@ export function AdminDashboard({
                           </div>
                         </td>
 
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
                             {isPendingDisbursement ? (
                               <button
+                                type="button"
                                 onClick={() => {
                                   setDisbursingLoan(loan)
                                   setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
                                 }}
-                                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all"
+                                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all cursor-pointer"
                                 title="Registrar Liberação Financeira"
                               >
                                 <Banknote size={13} />
                                 <span>Liberar TED</span>
                               </button>
                             ) : (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 mr-1">
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                                 <CheckCircle2 size={12} /> Liberado
                               </span>
                             )}
 
                             <button
                               type="button"
-                              onClick={() => setPushModalLoan(loan)}
-                              className="p-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 border border-cyan-200/60 dark:border-cyan-800/40 transition-all"
-                              title="Enviar Notificação Push no App do Colaborador"
-                            >
-                              <BellRing size={14} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleOpenWhatsAppNotification(
-                                  loan,
-                                  loan.status === 'ativo' || loan.status === 'quitado' ? 'depositado' : 'aprovado',
-                                  false
-                                )
-                              }
-                              className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200/60 dark:border-green-800/40 transition-all"
-                              title="Enviar Mensagem no WhatsApp do Colaborador"
-                            >
-                              <MessageCircle size={14} />
-                            </button>
-
-                            {onOpenFichaColaborador && (
-                              <button
-                                onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
-                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40 transition-all"
-                                title="Ver Ficha do Colaborador"
-                              >
-                                <UserCheck size={14} />
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => onOpenDetails(loan, 'comprovante')}
-                              className={`p-1.5 rounded-lg border transition-all ${
-                                loan.comprovanteLiberacaoUrl
-                                  ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-200/70 dark:border-cyan-800/50'
-                                  : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/50'
+                              data-action-menu-trigger="true"
+                              aria-expanded={openActionMenu?.loanId === loan.id}
+                              aria-label={`Opções da operação ${loan.codigoOperacao}`}
+                              onClick={(e) => handleToggleActionMenu(e, loan.id)}
+                              className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                                openActionMenu?.loanId === loan.id
+                                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-emerald-600 dark:border-emerald-500 ring-2 ring-slate-900/15 dark:ring-emerald-500/25 shadow-sm'
+                                  : 'bg-white hover:bg-slate-100 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 shadow-2xs'
                               }`}
-                              title={loan.comprovanteLiberacaoUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+                              title="Abrir opções da operação"
                             >
-                              <Receipt size={14} />
-                            </button>
-
-                            <button
-                              onClick={() => onOpenDetails(loan)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
-                              title="Ver Detalhes"
-                            >
-                              <Eye size={14} />
-                            </button>
-
-                            <button
-                              onClick={() => setLoanToDelete(loan)}
-                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
-                              title="Excluir"
-                            >
-                              <Trash2 size={14} />
+                              <MoreHorizontal size={16} />
                             </button>
                           </div>
                         </td>
@@ -1312,27 +1690,37 @@ export function AdminDashboard({
                   }
 
                   return (
-                    <tr key={loan.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        <div className="text-xs">{loan.codigoOperacao}</div>
+                    <tr
+                      key={loan.id}
+                      className={`transition-colors ${instInfo.rowAccentClass}`}
+                    >
+                      <td className="py-2.5 px-2.5 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetails(loan)}
+                          className="text-xs hover:text-emerald-600 hover:underline transition"
+                          title="Abrir detalhes do contrato"
+                        >
+                          {loan.codigoOperacao}
+                        </button>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {new Date(loan.createdAt).toLocaleDateString('pt-BR')}
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-4 text-left min-w-[200px] max-w-[260px]">
-                        <div className="flex items-center gap-1.5 group">
+                      <td className="py-2.5 px-2.5 text-left max-w-[205px]">
+                        <div className="flex items-center gap-1 group">
                           {onOpenFichaColaborador ? (
                             <button
                               type="button"
                               onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
-                              className="font-bold text-slate-900 dark:text-white truncate text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                              className="font-bold text-slate-900 dark:text-white truncate text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer text-xs"
                               title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
                             >
                               {loan.colaboradorNome}
                             </button>
                           ) : (
-                            <div className="font-bold text-slate-900 dark:text-white truncate" title={loan.colaboradorNome}>
+                            <div className="font-bold text-slate-900 dark:text-white truncate text-xs" title={loan.colaboradorNome}>
                               {loan.colaboradorNome}
                             </div>
                           )}
@@ -1340,10 +1728,10 @@ export function AdminDashboard({
                             <button
                               type="button"
                               onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
-                              className="text-slate-400 hover:text-emerald-600 p-0.5 rounded transition-colors"
+                              className="text-slate-400 hover:text-emerald-600 p-0.5 rounded transition-colors shrink-0"
                               title={`Ver Ficha Financeira de ${loan.colaboradorNome}`}
                             >
-                              <UserCheck size={13} />
+                              <UserCheck size={12} />
                             </button>
                           )}
                         </div>
@@ -1352,18 +1740,94 @@ export function AdminDashboard({
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         <div>{formatBrl(receivableInfo.valorConcedidoSemJuros)}</div>
                         <div className="text-[10px] text-slate-400 font-sans font-normal">
                           {Number(loan.taxaMensal ?? 0)}% a.m.
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-2 text-center font-mono font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                        {loan.quantidadeParcelas}x
+                      {/* COLUNA PARCELAS / QUANTIDADES */}
+                      <td className="py-2 px-2 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetails(loan, 'parcelas')}
+                          title={instInfo.tooltip}
+                          className={`w-full min-w-[116px] px-2.5 py-1.5 rounded-xl border transition-all text-left flex flex-col gap-1 cursor-pointer ${instInfo.qtdBoxClass}`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5 font-mono">
+                            <span className="text-[11px] font-black text-slate-900 dark:text-white">
+                              {instInfo.pagas}/{instInfo.total}{' '}
+                              <span className="font-sans font-bold text-[10px] text-slate-500 dark:text-slate-400">
+                                pagas
+                              </span>
+                            </span>
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-white/90 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
+                              {instInfo.total}x
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${instInfo.barClass}`}
+                              style={{
+                                width: `${
+                                  instInfo.key === 'inativo'
+                                    ? 0
+                                    : Math.max(instInfo.pagas > 0 ? 10 : 4, instInfo.progressPct)
+                                }%`
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[9px] font-sans font-bold">
+                            <span
+                              className={
+                                instInfo.pagas > 0
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                              }
+                            >
+                              {instInfo.pagas > 0 ? `${instInfo.pagas} baixada(s)` : '0 baixadas'}
+                            </span>
+                            <span
+                              className={
+                                instInfo.isOverdue
+                                  ? 'text-rose-600 dark:text-rose-400 font-extrabold'
+                                  : instInfo.restantes === 0
+                                  ? 'text-teal-700 dark:text-teal-400'
+                                  : 'text-slate-600 dark:text-slate-300'
+                              }
+                            >
+                              {instInfo.key === 'inativo'
+                                ? 'Inativo'
+                                : instInfo.restantes === 0
+                                ? '0 restantes'
+                                : `Faltam ${instInfo.restantes}`}
+                            </span>
+                          </div>
+                        </button>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                      {/* NOVA COLUNA: STATUS DAS PARCELAS (COM COR REFLETINDO O STATUS) */}
+                      <td className="py-2 px-2 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDetails(loan, 'parcelas')}
+                          title={instInfo.tooltip}
+                          className={`w-full min-w-[122px] px-2.5 py-1.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${instInfo.cellBoxClass}`}
+                        >
+                          <span
+                            className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border inline-flex items-center gap-1.5 whitespace-nowrap shadow-2xs ${instInfo.badgeClass}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${instInfo.dotClass}`} />
+                            <span>{instInfo.badgeLabel}</span>
+                          </span>
+                          <span className="text-[9.5px] font-semibold text-slate-600 dark:text-slate-300 font-mono truncate max-w-[130px]">
+                            {instInfo.detailLabel}
+                          </span>
+                        </button>
+                      </td>
+
+                      <td className="py-2.5 px-2 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         <div>{formatBrl(receivableInfo.saldoAReceberComJuros)}</div>
                         {receivableInfo.saldoAReceberComJuros > 0 && (
                           <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
@@ -1387,13 +1851,14 @@ export function AdminDashboard({
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* Ação 1: Analisar quando Solicitado */}
                           {isPendingAnalysis && (
                             <button
+                              type="button"
                               onClick={() => handleOpenAnalysisModal(loan)}
-                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                              className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all cursor-pointer"
                               title="Analisar Proposta"
                             >
                               <span>Analisar</span>
@@ -1403,11 +1868,12 @@ export function AdminDashboard({
                           {/* Ação 2: Liberar Recursos */}
                           {isPendingDisbursement && (
                             <button
+                              type="button"
                               onClick={() => {
                                 setDisbursingLoan(loan)
                                 setComprovanteUrl(loan.comprovanteLiberacaoUrl || '')
                               }}
-                              className="px-2 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all"
+                              className="px-2 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow-sm flex items-center gap-1 transition-all cursor-pointer"
                               title="Registrar Liberação Financeira"
                             >
                               <Banknote size={12} />
@@ -1415,67 +1881,21 @@ export function AdminDashboard({
                             </button>
                           )}
 
-                          {/* Ação: Enviar Notificação Push no App */}
+                          {/* Botão de Três Pontinhos (Menu de Opções da Operação) */}
                           <button
                             type="button"
-                            onClick={() => setPushModalLoan(loan)}
-                            className="p-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400 border border-cyan-200/60 dark:border-cyan-800/40 transition-all"
-                            title="Disparar Notificação Push no App do Colaborador"
-                          >
-                            <BellRing size={14} />
-                          </button>
-
-                          {/* Ação: Enviar Mensagem WhatsApp (Aprovado, Recusado, Depositado) */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenWhatsAppNotification(loan)}
-                            className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-950/40 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 border border-green-200/60 dark:border-green-800/40 transition-all"
-                            title="Notificar Colaborador no WhatsApp (Aprovado / Recusado / Depositado)"
-                          >
-                            <MessageCircle size={14} />
-                          </button>
-
-                          {/* Ação: Ver Ficha do Colaborador */}
-                          {onOpenFichaColaborador && (
-                            <button
-                              onClick={() => onOpenFichaColaborador(loan.colaboradorId || loan.colaboradorCpf || loan.colaboradorNome)}
-                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40 transition-all"
-                              title="Ver Ficha Financeira do Colaborador"
-                            >
-                              <UserCheck size={14} />
-                            </button>
-                          )}
-
-                          {/* Ação: Comprovante de Transferência */}
-                          <button
-                            type="button"
-                            onClick={() => onOpenDetails(loan, 'comprovante')}
-                            className={`p-1.5 rounded-lg border transition-all ${
-                              loan.comprovanteLiberacaoUrl
-                                ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-200/70 dark:border-cyan-800/50'
-                                : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/50'
+                            data-action-menu-trigger="true"
+                            aria-expanded={openActionMenu?.loanId === loan.id}
+                            aria-label={`Opções da operação ${loan.codigoOperacao}`}
+                            onClick={(e) => handleToggleActionMenu(e, loan.id)}
+                            className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                              openActionMenu?.loanId === loan.id
+                                ? 'bg-slate-900 text-white border-slate-900 dark:bg-emerald-600 dark:border-emerald-500 ring-2 ring-slate-900/15 dark:ring-emerald-500/25 shadow-sm'
+                                : 'bg-white hover:bg-slate-100 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/80 shadow-2xs'
                             }`}
-                            title={loan.comprovanteLiberacaoUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
+                            title="Abrir opções da operação"
                           >
-                            <Receipt size={14} />
-                          </button>
-
-                          {/* Ação 3: Ver Detalhes */}
-                          <button
-                            onClick={() => onOpenDetails(loan)}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
-                            title="Ver Detalhes e Parcelas"
-                          >
-                            <Eye size={14} />
-                          </button>
-
-                          {/* Ação 4: Excluir */}
-                          <button
-                            onClick={() => setLoanToDelete(loan)}
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/40 transition-all"
-                            title="Excluir Empréstimo"
-                          >
-                            <Trash2 size={14} />
+                            <MoreHorizontal size={16} />
                           </button>
                         </div>
                       </td>
@@ -1502,6 +1922,7 @@ export function AdminDashboard({
             const isPendingAnalysis = loan.status === 'solicitado' || loan.status === 'em_analise'
             const isPendingDisbursement = loan.status === 'aguardando_liberacao'
             const receivableInfo = getLoanReceivableInfo(loan)
+            const instInfo = getLoanInstallmentStatusInfo(loan)
 
             return (
               <div
@@ -1637,27 +2058,56 @@ export function AdminDashboard({
                     </div>
                   )}
 
-                  {/* SE FOR CONTRATO ATIVO/QUITADO: Grid tradicional com 3 colunas */}
+                  {/* SE FOR CONTRATO ATIVO/QUITADO: Grid + Barra de Status das Parcelas */}
                   {!isPendingAnalysis && !isPendingDisbursement && viewModeTab !== 'liberacoes' && (
-                    <div className="grid grid-cols-3 gap-2 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center font-mono shadow-xs">
-                      <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Concedido</div>
-                        <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(receivableInfo.valorConcedidoSemJuros)}</div>
-                        <div className="text-[9px] font-sans text-slate-400">{Number(loan.taxaMensal ?? 0)}% a.m.</div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Parcelas</div>
-                        <div className="font-bold text-slate-700 dark:text-slate-300 text-xs mt-0.5">{loan.quantidadeParcelas}x</div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Saldo a Receber</div>
-                        <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(receivableInfo.saldoAReceberComJuros)}</div>
-                        {receivableInfo.saldoAReceberComJuros > 0 && (
-                          <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                            Juros: {formatBrl(receivableInfo.jurosAReceber)}
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/80 text-center font-mono shadow-xs">
+                        <div>
+                          <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Concedido</div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">{formatBrl(receivableInfo.valorConcedidoSemJuros)}</div>
+                          <div className="text-[9px] font-sans text-slate-400">{Number(loan.taxaMensal ?? 0)}% a.m.</div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Parcelas</div>
+                          <div className="font-bold text-slate-900 dark:text-white text-xs mt-0.5">
+                            {instInfo.pagas}/{instInfo.total}
                           </div>
-                        )}
+                          <div className="text-[9px] font-sans text-slate-500">
+                            {instInfo.restantes === 0 ? 'Quitado' : `Faltam ${instInfo.restantes}`}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">Saldo a Receber</div>
+                          <div className="font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">{formatBrl(receivableInfo.saldoAReceberComJuros)}</div>
+                          {receivableInfo.saldoAReceberComJuros > 0 && (
+                            <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                              Juros: {formatBrl(receivableInfo.jurosAReceber)}
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* CARD DE STATUS DE PARCELAS MOBILE */}
+                      <button
+                        type="button"
+                        onClick={() => onOpenDetails(loan, 'parcelas')}
+                        className={`w-full p-2.5 rounded-xl border flex items-center justify-between gap-2 text-left transition-all ${instInfo.cellBoxClass}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border inline-flex items-center gap-1.5 shrink-0 ${instInfo.badgeClass}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${instInfo.dotClass}`} />
+                            <span>{instInfo.badgeLabel}</span>
+                          </span>
+                          <span className="text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200 truncate">
+                            {instInfo.detailLabel}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono font-black text-slate-900 dark:text-white shrink-0">
+                          {instInfo.pagas}/{instInfo.total} pagas
+                        </span>
+                      </button>
                     </div>
                   )}
 
@@ -1682,6 +2132,17 @@ export function AdminDashboard({
                       >
                         <Banknote size={15} />
                         <span>Liberar TED & Anexar Comprovante</span>
+                      </button>
+                    )}
+
+                    {loan.status === 'ativo' && instInfo.restantes > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBaixaModalLoan(loan)}
+                        className="w-full py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>Baixar Parcelas ({instInfo.restantes} pendentes)</span>
                       </button>
                     )}
 
@@ -3058,6 +3519,283 @@ export function AdminDashboard({
           </div>
         </div>
       )}
+
+      {/* MENU FLUTUANTE DE OPÇÕES DA COLUNA AÇÕES (BOTÃO DE TRÊS PONTINHOS) */}
+      {openActionMenu && (() => {
+        const activeLoan = emprestimos.find((l) => l.id === openActionMenu.loanId)
+        if (!activeLoan) return null
+        const instInfo = getLoanInstallmentStatusInfo(activeLoan)
+        const sigInfo = getSignatureStatusInfo(activeLoan)
+        const isPendingAnalysis = activeLoan.status === 'solicitado' || activeLoan.status === 'em_analise'
+        const isPendingDisbursement = activeLoan.status === 'aguardando_liberacao'
+
+        return (
+          <div
+            ref={actionMenuRef}
+            style={{
+              top: openActionMenu.top,
+              bottom: openActionMenu.bottom,
+              right: openActionMenu.right
+            }}
+            className="fixed z-50 w-72 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-700/80 rounded-2xl shadow-[0_20px_50px_-12px_rgba(15,23,42,0.28)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.75)] ring-1 ring-slate-900/5 dark:ring-white/10 p-1.5 animate-in fade-in zoom-in-95 duration-150"
+          >
+            {/* Cabeçalho do Menu de Opções */}
+            <div className="px-3 py-2 bg-slate-50/90 dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-800 mb-1 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-mono font-black text-[11px] text-slate-900 dark:text-white truncate">
+                  {activeLoan.codigoOperacao}
+                </div>
+                <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                  {activeLoan.colaboradorNome}
+                </div>
+              </div>
+              <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border shrink-0 ${instInfo.badgeClass}`}>
+                {instInfo.pagas}/{instInfo.total} pagas
+              </span>
+            </div>
+
+            {/* Grupo 1: Parcelas & Fluxo Financeiro */}
+            {activeLoan.status === 'ativo' && instInfo.restantes > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenActionMenu(null)
+                  setBaixaModalLoan(activeLoan)
+                }}
+                className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50/80 hover:bg-emerald-100/90 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 border border-emerald-200/70 dark:border-emerald-800/60 transition-colors cursor-pointer mb-0.5"
+              >
+                <span className="w-5 h-5 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <CheckCircle2 size={13} />
+                </span>
+                <span className="truncate">Baixar Parcelas</span>
+                <span className="ml-auto text-[9px] font-mono font-extrabold px-1.5 py-0.5 rounded bg-emerald-200/70 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 shrink-0">
+                  1, várias ou todas
+                </span>
+              </button>
+            )}
+
+            {isPendingAnalysis && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenActionMenu(null)
+                  handleOpenAnalysisModal(activeLoan)
+                }}
+                className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50/80 hover:bg-amber-100/90 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 border border-amber-200/70 dark:border-amber-800/60 transition-colors cursor-pointer mb-0.5"
+              >
+                <span className="w-5 h-5 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+                  <Sparkles size={13} />
+                </span>
+                <span className="truncate">Analisar Solicitação</span>
+                <span className="ml-auto text-[9px] font-mono font-bold text-amber-700 dark:text-amber-300 shrink-0">
+                  Pendente
+                </span>
+              </button>
+            )}
+
+            {isPendingDisbursement && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenActionMenu(null)
+                  setDisbursingLoan(activeLoan)
+                  setComprovanteUrl(activeLoan.comprovanteLiberacaoUrl || '')
+                }}
+                className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-bold text-cyan-800 dark:text-cyan-300 bg-cyan-50/80 hover:bg-cyan-100/90 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/60 border border-cyan-200/70 dark:border-cyan-800/60 transition-colors cursor-pointer mb-0.5"
+              >
+                <span className="w-5 h-5 rounded-lg bg-cyan-600 text-white flex items-center justify-center shrink-0">
+                  <Banknote size={13} />
+                </span>
+                <span className="truncate">Liberar TED / Recursos</span>
+                <span className="ml-auto text-[9px] font-mono font-bold text-cyan-700 dark:text-cyan-300 shrink-0">
+                  {formatBrl(activeLoan.valorAprovado)}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                onOpenDetails(activeLoan, 'parcelas')
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                <Layers size={15} />
+              </span>
+              <span className="truncate">Cronograma de Parcelas</span>
+              <span className="ml-auto text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                {instInfo.pagas}/{instInfo.total}
+              </span>
+            </button>
+
+            <hr className="my-1 border-slate-200/70 dark:border-slate-800" />
+
+            {/* Grupo 2: Detalhes, Contrato, Comprovante & Ficha */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                onOpenDetails(activeLoan, 'resumo')
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-slate-500 dark:text-slate-400 shrink-0">
+                <Eye size={15} />
+              </span>
+              <span className="truncate">Ver Detalhes & Resumo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                onOpenDetails(activeLoan, 'contrato')
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <FileText size={15} />
+              </span>
+              <span className="truncate">Contrato & Assinatura</span>
+              <span className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${sigInfo.badgeClass}`}>
+                {sigInfo.isSigned ? 'Assinado' : 'Pendente'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                onOpenDetails(activeLoan, 'comprovante')
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+            >
+              <span
+                className={`w-5 h-5 flex items-center justify-center shrink-0 ${
+                  activeLoan.comprovanteLiberacaoUrl
+                    ? 'text-cyan-600 dark:text-cyan-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                <Receipt size={15} />
+              </span>
+              <span className="truncate">Comprovante de Transferência</span>
+              <span
+                className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${
+                  activeLoan.comprovanteLiberacaoUrl
+                    ? 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/60 dark:text-cyan-300 dark:border-cyan-800'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                }`}
+              >
+                {activeLoan.comprovanteLiberacaoUrl ? 'Anexado' : 'Anexar'}
+              </span>
+            </button>
+
+            {onOpenFichaColaborador && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenActionMenu(null)
+                  onOpenFichaColaborador(
+                    activeLoan.colaboradorId || activeLoan.colaboradorCpf || activeLoan.colaboradorNome
+                  )
+                }}
+                className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+              >
+                <span className="w-5 h-5 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <UserCheck size={15} />
+                </span>
+                <span className="truncate">Ficha Financeira do Colaborador</span>
+              </button>
+            )}
+
+            <hr className="my-1 border-slate-200/70 dark:border-slate-800" />
+
+            {/* Grupo 3: Comunicação & Notificações */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                handleOpenWhatsAppNotification(activeLoan)
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-green-50/80 dark:hover:bg-green-950/40 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-green-600 dark:text-green-400 shrink-0">
+                <MessageCircle size={15} />
+              </span>
+              <span className="truncate">Notificar via WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                setPushModalLoan(activeLoan)
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-cyan-50/80 dark:hover:bg-cyan-950/40 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
+                <BellRing size={15} />
+              </span>
+              <span className="truncate">Disparar Push no App</span>
+            </button>
+
+            <hr className="my-1 border-slate-200/70 dark:border-slate-800" />
+
+            {/* Grupo 4: Zona de Exclusão */}
+            <button
+              type="button"
+              onClick={() => {
+                setOpenActionMenu(null)
+                setLoanToDelete(activeLoan)
+              }}
+              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-left text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+            >
+              <span className="w-5 h-5 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+                <Trash2 size={15} />
+              </span>
+              <span className="truncate">Excluir Empréstimo</span>
+            </button>
+          </div>
+        )
+      })()}
+
+      {/* MODAL DE BAIXA RÁPIDA DE PARCELAS DIRETO DA VISÃO GERAL */}
+      {baixaModalLoan && (() => {
+        const pendentes: ParcelaComContexto[] = (baixaModalLoan.parcelas || [])
+          .filter(
+            (p) =>
+              p.status !== 'descontada' &&
+              p.status !== 'paga_avulso' &&
+              p.status !== 'cancelada' &&
+              p.status !== 'renegociada'
+          )
+          .sort((a, b) => (a.numero || 0) - (b.numero || 0))
+          .map((p) => ({
+            ...p,
+            id: p.id || `${baixaModalLoan.id}_parc_${p.numero}`,
+            emprestimoId: p.emprestimoId || baixaModalLoan.id,
+            colaboradorNome: baixaModalLoan.colaboradorNome,
+            colaboradorCpf: baixaModalLoan.colaboradorCpf,
+            codigoOperacao: baixaModalLoan.codigoOperacao,
+            quantidadeParcelas: baixaModalLoan.quantidadeParcelas
+          }))
+        if (pendentes.length === 0) return null
+        return (
+          <BaixaParcelasModal
+            parcelasInicial={[pendentes[0]]}
+            todasParcelasContexto={pendentes}
+            tituloContexto={`Contrato ${baixaModalLoan.codigoOperacao} — ${baixaModalLoan.colaboradorNome}`}
+            onClose={() => setBaixaModalLoan(null)}
+            onSuccess={() => {
+              setBaixaModalLoan(null)
+              onRefresh()
+            }}
+          />
+        )
+      })()}
 
       {/* MODAL DE ENVIO DE NOTIFICAÇÃO PUSH AO COLABORADOR */}
       <CredImpactoManualPushModal

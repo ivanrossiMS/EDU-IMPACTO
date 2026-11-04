@@ -214,7 +214,7 @@ function ColaboradorComunicadosContent() {
   }, [currentUser, espelharColabId, espelharPerfil, searchParams, mirroredColab])
 
   const userSlug = effectiveUser?.id || 'colaborador';
-  const { adAlert, chatGroups } = useAgendaDigital()
+  const { adAlert, chatGroups, adConfig } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
 
   const candidateColabIds = useMemo(() => {
@@ -344,6 +344,29 @@ function ColaboradorComunicadosContent() {
       (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean)))
     );
   }, [candidateColabIds, allUserIds, effectiveUser?.nome, currentUser?.nome]);
+
+  const canManageComunicadoComments = useCallback((comunicadoItem: any) => {
+    if (!comunicadoItem) return false;
+    const isAuthor = checkIsComunicadoAuthor(comunicadoItem);
+    const visibilidade = adConfig?.permissoes?.visibilidadeComentariosComunicados || 'autor';
+    if (visibilidade === 'autor') {
+      return Boolean(isAuthor);
+    }
+    if (visibilidade === 'autor_admin') {
+      return Boolean(isAuthor || (!isMirroring && isUserAdmin));
+    }
+    if (visibilidade === 'todos_marcados') {
+      const markedIds = [
+        ...(Array.isArray(comunicadoItem.colaboradoresIds) ? comunicadoItem.colaboradoresIds : []),
+        ...(Array.isArray(comunicadoItem.funcionariosIds) ? comunicadoItem.funcionariosIds : []),
+        ...(Array.isArray(comunicadoItem.dados?.colaboradoresIds) ? comunicadoItem.dados.colaboradoresIds : []),
+        ...(Array.isArray(comunicadoItem.dados?.funcionariosIds) ? comunicadoItem.dados.funcionariosIds : []),
+      ].map((id: any) => String(id || '').replace(/^f_?/, '').trim().toLowerCase()).filter(Boolean);
+      const isMarked = markedIds.some((mId: string) => candidateColabIds.includes(mId) || allUserIds.includes(mId));
+      return Boolean(isAuthor || (!isMirroring && isUserAdmin) || isMarked);
+    }
+    return Boolean(isAuthor);
+  }, [checkIsComunicadoAuthor, adConfig?.permissoes?.visibilidadeComentariosComunicados, isMirroring, isUserAdmin, candidateColabIds, allUserIds]);
 
   const turmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
@@ -2107,7 +2130,7 @@ function ColaboradorComunicadosContent() {
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
             const isCardAuthor = checkIsComunicadoAuthor(c);
-            const isCardAdminOrAuthor = Boolean(isUserAdmin || isCardAuthor);
+            const isCardAdminOrAuthor = canManageComunicadoComments(c);
 
             const userCleanSlug = String(userSlug || '').trim().toLowerCase();
             const userCandidateIdSet = new Set([userCleanSlug, ...allUserIds]);
@@ -2629,6 +2652,7 @@ function ColaboradorComunicadosContent() {
 
           // Identificar se o usuário atual é quem enviou o comunicado (autor)
           const isAuthor = checkIsComunicadoAuthor(selectedComunicado);
+          const canManageCommentsSelected = canManageComunicadoComments(selectedComunicado);
 
           // Os botões de editar e excluir só devem aparecer para quem enviou o comunicado, e para o administrador
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
@@ -2644,7 +2668,7 @@ function ColaboradorComunicadosContent() {
               currentUserSlug={userSlug}
               currentUserName={effectiveUser?.nome || 'Colaborador'}
               currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
-              isAdminMode={Boolean(isUserAdmin || isAuthor)}
+              isAdminMode={canManageCommentsSelected}
               isStaff={true}
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}

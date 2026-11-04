@@ -924,9 +924,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       }
 
       console.log('⚡ [Realtime] Nova resposta/conversa em comunicado:', payload.eventType, payload.new?.comunicado_id);
-      if (payload.eventType === 'INSERT' && payload.new?.comunicado_id) {
-        addOrUpdateCachedMessage(payload.new.comunicado_id, payload.new as any);
-      } else if (payload.eventType === 'DELETE' && payload.old?.comunicado_id && payload.old?.id) {
+      if (payload.eventType === 'DELETE' && payload.old?.comunicado_id && payload.old?.id) {
         removeCachedMessage(payload.old.comunicado_id, payload.old.id);
       }
       queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'active' });

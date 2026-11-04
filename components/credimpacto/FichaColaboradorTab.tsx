@@ -34,7 +34,9 @@ import {
   ChevronDown,
   Sparkles,
   MessageCircle,
-  Banknote
+  Banknote,
+  RotateCcw,
+  Layers
 } from 'lucide-react'
 import {
   CredImpactoEmprestimo,
@@ -52,6 +54,11 @@ import {
 } from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
 import { EmprestimoDetalhesSubTab } from './EmprestimoDetalhesModal'
+import {
+  BaixaParcelasModal,
+  EstornoParcelasModal,
+  ParcelaComContexto
+} from './BaixaParcelasModal'
 
 interface FichaColaboradorTabProps {
   emprestimos: CredImpactoEmprestimo[]
@@ -210,6 +217,16 @@ export function FichaColaboradorTab({
   const [whatsappPhone, setWhatsappPhone] = useState('')
   const [whatsappMessage, setWhatsappMessage] = useState('')
   const [isSavingWhatsappPhone, setIsSavingWhatsappPhone] = useState(false)
+
+  // Modais de Baixa e Estorno de Parcelas na Ficha do Colaborador
+  const [baixaModalState, setBaixaModalState] = useState<{
+    parcelasInicial: ParcelaComContexto[]
+    todasParcelasContexto?: ParcelaComContexto[]
+    tituloContexto?: string
+  } | null>(null)
+  const [estornoModalParcelas, setEstornoModalParcelas] = useState<ParcelaComContexto[] | null>(
+    null
+  )
 
   useEffect(() => {
     if (initialSelectedColaboradorId) {
@@ -652,13 +669,18 @@ export function FichaColaboradorTab({
   // Todas as parcelas futuras unificadas em ordem cronológica
   const todasParcelasCronologicas = useMemo(() => {
     if (!selectedColaborador) return []
-    const list: (CredImpactoParcela & { codigoOperacao: string; loanStatus: string })[] = []
+    const list: (ParcelaComContexto & { codigoOperacao: string; loanStatus: string })[] = []
 
     for (const emp of selectedColaborador.loans) {
       for (const p of emp.parcelas || []) {
         list.push({
           ...p,
+          id: p.id || `${emp.id}_parc_${p.numero}`,
+          emprestimoId: p.emprestimoId || emp.id,
+          colaboradorNome: emp.colaboradorNome || selectedColaborador.nome,
+          colaboradorCpf: emp.colaboradorCpf || selectedColaborador.cpf,
           codigoOperacao: emp.codigoOperacao,
+          quantidadeParcelas: emp.quantidadeParcelas,
           loanStatus: emp.status
         })
       }
@@ -2064,14 +2086,73 @@ export function FichaColaboradorTab({
                                     )}
                                   </div>
 
-                                  <div className="bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                                    <span className="text-[10px] uppercase font-sans text-slate-400 font-semibold">Parcelas</span>
-                                    <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
-                                      {isPendingAppr
-                                        ? `0 / ${loan.quantidadeParcelas} (Aguardando)`
-                                        : `${parcelasPagasCount} / ${loan.quantidadeParcelas}`}
-                                    </div>
-                                  </div>
+                                  {(() => {
+                                    const hojeIsoFicha = new Date().toISOString().slice(0, 10)
+                                    const totalP = (loan.parcelas && loan.parcelas.length > 0) ? loan.parcelas.length : (loan.quantidadeParcelas || 0)
+                                    const restP = loan.status === 'quitado' ? 0 : Math.max(0, totalP - parcelasPagasCount)
+                                    const atrasadasP = loan.status === 'ativo'
+                                      ? (loan.parcelas || []).filter(
+                                          (p) =>
+                                            p.status === 'atrasada' ||
+                                            (p.status !== 'descontada' &&
+                                              p.status !== 'paga_avulso' &&
+                                              p.status !== 'cancelada' &&
+                                              Boolean(p.dataVencimento && p.dataVencimento < hojeIsoFicha))
+                                        ).length
+                                      : 0
+                                    const isQuitadoP = loan.status === 'quitado' || (loan.status === 'ativo' && restP === 0 && totalP > 0)
+                                    const isAtrasoP = atrasadasP > 0
+                                    const isEmDiaP = loan.status === 'ativo' && !isAtrasoP && !isQuitadoP
+
+                                    return (
+                                      <div
+                                        className={`backdrop-blur-sm p-3 rounded-xl border transition-colors ${
+                                          isAtrasoP
+                                            ? 'bg-rose-50/80 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800/60'
+                                            : isQuitadoP
+                                            ? 'bg-teal-50/80 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800/60'
+                                            : isEmDiaP
+                                            ? 'bg-emerald-50/75 border-emerald-200 dark:bg-emerald-950/25 dark:border-emerald-800/60'
+                                            : 'bg-slate-50/80 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-800'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className="text-[10px] uppercase font-sans text-slate-500 dark:text-slate-400 font-semibold">
+                                            Parcelas & Status
+                                          </span>
+                                          <span
+                                            className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full border font-sans ${
+                                              isAtrasoP
+                                                ? 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-700'
+                                                : isQuitadoP
+                                                ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-700'
+                                                : isEmDiaP
+                                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700'
+                                                : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                                            }`}
+                                          >
+                                            {isAtrasoP
+                                              ? `${atrasadasP} em Atraso`
+                                              : isQuitadoP
+                                              ? '100% Quitado'
+                                              : isEmDiaP
+                                              ? '✓ Em Dia'
+                                              : 'Aguardando'}
+                                          </span>
+                                        </div>
+                                        <div className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                                          {isPendingAppr
+                                            ? `0 / ${totalP} pagas`
+                                            : `${parcelasPagasCount} / ${totalP} pagas`}
+                                        </div>
+                                        <div className="text-[9px] font-sans font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                                          {isQuitadoP
+                                            ? '0 restantes • Contrato liquidado'
+                                            : `${parcelasPagasCount} baixada(s) • Faltam ${restP}`}
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
 
                                   <div className="bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
                                     <span className="text-[10px] uppercase font-sans text-slate-400 font-semibold">
@@ -2122,7 +2203,46 @@ export function FichaColaboradorTab({
                                   <Receipt size={14} className="text-emerald-500" />
                                   <span>Tabela de Parcelas • {loan.codigoOperacao}</span>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {(() => {
+                                    const pendentesDoContrato: ParcelaComContexto[] = (
+                                      loan.parcelas || []
+                                    )
+                                      .filter(
+                                        (p) =>
+                                          p.status !== 'descontada' &&
+                                          p.status !== 'paga_avulso' &&
+                                          p.status !== 'cancelada'
+                                      )
+                                      .map((p) => ({
+                                        ...p,
+                                        id: p.id || `${loan.id}_parc_${p.numero}`,
+                                        emprestimoId: p.emprestimoId || loan.id,
+                                        colaboradorNome: loan.colaboradorNome,
+                                        colaboradorCpf: loan.colaboradorCpf,
+                                        codigoOperacao: loan.codigoOperacao,
+                                        quantidadeParcelas: loan.quantidadeParcelas
+                                      }))
+                                    if (pendentesDoContrato.length === 0) return null
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setBaixaModalState({
+                                            parcelasInicial: pendentesDoContrato,
+                                            todasParcelasContexto: pendentesDoContrato,
+                                            tituloContexto: `Contrato ${loan.codigoOperacao} — ${loan.colaboradorNome}`
+                                          })
+                                        }
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-xs transition-all"
+                                      >
+                                        <Layers size={13} />
+                                        <span>
+                                          Baixar Todas ({pendentesDoContrato.length})
+                                        </span>
+                                      </button>
+                                    )
+                                  })()}
                                   <button
                                     type="button"
                                     onClick={() => handleOpenLoanWhatsApp(loan, 'contrato_cronograma')}
@@ -2144,43 +2264,53 @@ export function FichaColaboradorTab({
                               <table className="w-full text-xs text-left">
                                 <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-y border-slate-200/80 dark:border-slate-800">
                                   <tr>
-                                    <th className="py-2 px-3 text-center w-[50px]">Nº</th>
-                                    <th className="py-2 px-3 text-center">Competência</th>
-                                    <th className="py-2 px-3 text-center">Vencimento</th>
-                                    <th className="py-2 px-3 text-right">Amortização</th>
-                                    <th className="py-2 px-3 text-right">Juros</th>
-                                    <th className="py-2 px-3 text-right">Total Parcela</th>
-                                    <th className="py-2 px-3 text-right">Saldo Devedor</th>
-                                    <th className="py-2 px-3 text-center">Status</th>
+                                    <th className="py-2 px-2 text-center w-9">Nº</th>
+                                    <th className="py-2 px-2 text-center">Competência</th>
+                                    <th className="py-2 px-2 text-center">Vencimento</th>
+                                    <th className="py-2 px-2 text-right">Amortização</th>
+                                    <th className="py-2 px-2 text-right">Juros</th>
+                                    <th className="py-2 px-2 text-right">Total Parcela</th>
+                                    <th className="py-2 px-2 text-right">Saldo Devedor</th>
+                                    <th className="py-2 px-2 text-center">Status</th>
+                                    <th className="py-2 px-2.5 text-right">Ação</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
                                   {(loan.parcelas || []).map((p) => {
                                     const isPaid = p.status === 'descontada' || p.status === 'paga_avulso'
+                                    const pContexto: ParcelaComContexto = {
+                                      ...p,
+                                      id: p.id || `${loan.id}_parc_${p.numero}`,
+                                      emprestimoId: p.emprestimoId || loan.id,
+                                      colaboradorNome: loan.colaboradorNome,
+                                      colaboradorCpf: loan.colaboradorCpf,
+                                      codigoOperacao: loan.codigoOperacao,
+                                      quantidadeParcelas: loan.quantidadeParcelas
+                                    }
                                     return (
-                                      <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                                        <td className="py-2 px-3 text-center font-bold text-slate-600 dark:text-slate-400">
+                                      <tr key={pContexto.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                                        <td className="py-2 px-2 text-center font-bold text-slate-600 dark:text-slate-400">
                                           {String(p.numero).padStart(2, '0')}
                                         </td>
-                                        <td className="py-2 px-3 text-center text-slate-800 dark:text-slate-200">
+                                        <td className="py-2 px-2 text-center text-slate-800 dark:text-slate-200">
                                           {p.competencia}
                                         </td>
-                                        <td className="py-2 px-3 text-center text-slate-600 dark:text-slate-400 font-sans">
+                                        <td className="py-2 px-2 text-center text-slate-600 dark:text-slate-400 font-sans">
                                           {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                                         </td>
-                                        <td className="py-2 px-3 text-right text-slate-700 dark:text-slate-300">
+                                        <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300">
                                           {formatBrl(p.valorAmortizacao)}
                                         </td>
-                                        <td className="py-2 px-3 text-right text-amber-600 dark:text-amber-400">
+                                        <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">
                                           {formatBrl(p.valorJuros)}
                                         </td>
-                                        <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-white">
+                                        <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white">
                                           {formatBrl(p.valorTotal)}
                                         </td>
-                                        <td className="py-2 px-3 text-right text-slate-500">
+                                        <td className="py-2 px-2 text-right text-slate-500">
                                           {formatBrl(p.saldoDevedorApos)}
                                         </td>
-                                        <td className="py-2 px-3 text-center font-sans">
+                                        <td className="py-2 px-2 text-center font-sans">
                                           <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                                             isPaid
                                               ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
@@ -2190,6 +2320,53 @@ export function FichaColaboradorTab({
                                           }`}>
                                             {p.status === 'descontada' ? 'Descontada' : p.status === 'paga_avulso' ? 'Paga Avulso' : p.status === 'exportada_folha' ? 'Em Folha' : 'Prevista'}
                                           </span>
+                                        </td>
+                                        <td className="py-2 px-2.5 text-right font-sans">
+                                          {!isPaid && p.status !== 'cancelada' ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const pendentesDoContrato: ParcelaComContexto[] = (
+                                                  loan.parcelas || []
+                                                )
+                                                  .filter(
+                                                    (item) =>
+                                                      item.status !== 'descontada' &&
+                                                      item.status !== 'paga_avulso' &&
+                                                      item.status !== 'cancelada'
+                                                  )
+                                                  .map((item) => ({
+                                                    ...item,
+                                                    id: item.id || `${loan.id}_parc_${item.numero}`,
+                                                    emprestimoId: item.emprestimoId || loan.id,
+                                                    colaboradorNome: loan.colaboradorNome,
+                                                    colaboradorCpf: loan.colaboradorCpf,
+                                                    codigoOperacao: loan.codigoOperacao,
+                                                    quantidadeParcelas: loan.quantidadeParcelas
+                                                  }))
+                                                setBaixaModalState({
+                                                  parcelasInicial: [pContexto],
+                                                  todasParcelasContexto: pendentesDoContrato,
+                                                  tituloContexto: `Contrato ${loan.codigoOperacao} — ${loan.colaboradorNome}`
+                                                })
+                                              }}
+                                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] inline-flex items-center gap-1 shadow-xs transition"
+                                            >
+                                              <CheckCircle2 size={11} />
+                                              <span>Baixar</span>
+                                            </button>
+                                          ) : isPaid ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setEstornoModalParcelas([pContexto])}
+                                              className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[10px] inline-flex items-center gap-1 transition"
+                                            >
+                                              <RotateCcw size={11} />
+                                              <span>Estornar</span>
+                                            </button>
+                                          ) : (
+                                            <span className="text-slate-400">-</span>
+                                          )}
                                         </td>
                                       </tr>
                                     )
@@ -2209,37 +2386,56 @@ export function FichaColaboradorTab({
             {/* ABA 2: CRONOGRAMA UNIFICADO DE TODAS AS PARCELAS */}
             {activeTabSubView === 'cronograma' && (
               <div className="bg-white/90 dark:bg-slate-900/85 backdrop-blur-xl border border-white/80 dark:border-slate-700/60 rounded-2xl shadow-[0_10px_25px_-5px_rgba(15,23,42,0.08),0_8px_10px_-6px_rgba(15,23,42,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] dark:shadow-[0_12px_28px_-6px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-slate-900/5 dark:ring-white/5 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Calendar size={16} className="text-emerald-500" />
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                       Cronograma Geral de Descontos e Parcelas (Ordem Cronológica)
                     </h4>
                   </div>
-                  <span className="text-xs text-slate-500 font-mono">
-                    Total: {todasParcelasCronologicas.length} parcelas
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {parcelasFuturasList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBaixaModalState({
+                            parcelasInicial: parcelasFuturasList,
+                            todasParcelasContexto: parcelasFuturasList,
+                            tituloContexto: `Todas as parcelas pendentes de ${selectedColaborador.nome}`
+                          })
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs transition"
+                      >
+                        <Layers size={13} />
+                        <span>Baixar Todas Pendentes ({parcelasFuturasList.length})</span>
+                      </button>
+                    )}
+                    <span className="text-xs text-slate-500 font-mono">
+                      Total: {todasParcelasCronologicas.length} parcelas
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                       <tr>
-                        <th className="py-2.5 px-3 text-center">Operação</th>
-                        <th className="py-2.5 px-2 text-center">Parc.</th>
-                        <th className="py-2.5 px-3 text-center">Competência</th>
-                        <th className="py-2.5 px-3 text-center">Vencimento</th>
-                        <th className="py-2.5 px-3 text-right">Amortização</th>
-                        <th className="py-2.5 px-3 text-right">Juros</th>
-                        <th className="py-2.5 px-3 text-right font-black">Valor Parcela</th>
-                        <th className="py-2.5 px-3 text-right">Saldo Restante</th>
-                        <th className="py-2.5 px-3 text-center">Situação</th>
+                        <th className="py-2.5 px-2 text-center">Operação</th>
+                        <th className="py-2.5 px-1.5 text-center">Parc.</th>
+                        <th className="py-2.5 px-2 text-center">Competência</th>
+                        <th className="py-2.5 px-2 text-center">Vencimento</th>
+                        <th className="py-2.5 px-2 text-right">Amortização</th>
+                        <th className="py-2.5 px-2 text-right">Juros</th>
+                        <th className="py-2.5 px-2 text-right font-black">Valor Parcela</th>
+                        <th className="py-2.5 px-2 text-right">Saldo Restante</th>
+                        <th className="py-2.5 px-2 text-center">Situação</th>
+                        <th className="py-2.5 px-2.5 text-right">Ação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
                       {todasParcelasCronologicas.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-8 text-center text-slate-400 font-sans">
+                          <td colSpan={10} className="py-8 text-center text-slate-400 font-sans">
                             Nenhuma parcela registrada para este colaborador.
                           </td>
                         </tr>
@@ -2248,31 +2444,31 @@ export function FichaColaboradorTab({
                           const isPaid = p.status === 'descontada' || p.status === 'paga_avulso'
                           return (
                             <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                              <td className="py-2.5 px-3 text-center font-bold text-slate-900 dark:text-white">
+                              <td className="py-2 px-2 text-center font-bold text-slate-900 dark:text-white">
                                 {p.codigoOperacao}
                               </td>
-                              <td className="py-2.5 px-2 text-center text-slate-500">
+                              <td className="py-2 px-1.5 text-center text-slate-500">
                                 {String(p.numero).padStart(2, '0')}
                               </td>
-                              <td className="py-2.5 px-3 text-center text-slate-800 dark:text-slate-200">
+                              <td className="py-2 px-2 text-center text-slate-800 dark:text-slate-200">
                                 {p.competencia}
                               </td>
-                              <td className="py-2.5 px-3 text-center font-sans text-slate-600 dark:text-slate-400">
+                              <td className="py-2 px-2 text-center font-sans text-slate-600 dark:text-slate-400">
                                 {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                               </td>
-                              <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-300">
+                              <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300">
                                 {formatBrl(p.valorAmortizacao)}
                               </td>
-                              <td className="py-2.5 px-3 text-right text-amber-600 dark:text-amber-400">
+                              <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">
                                 {formatBrl(p.valorJuros)}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-black text-slate-900 dark:text-white">
+                              <td className="py-2 px-2 text-right font-black text-slate-900 dark:text-white">
                                 {formatBrl(p.valorTotal)}
                               </td>
-                              <td className="py-2.5 px-3 text-right text-slate-500">
+                              <td className="py-2 px-2 text-right text-slate-500">
                                 {formatBrl(p.saldoDevedorApos)}
                               </td>
-                              <td className="py-2.5 px-3 text-center font-sans">
+                              <td className="py-2 px-2 text-center font-sans">
                                 <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                                   isPaid
                                     ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
@@ -2282,6 +2478,35 @@ export function FichaColaboradorTab({
                                 }`}>
                                   {p.status === 'descontada' ? 'Descontada' : p.status === 'paga_avulso' ? 'Paga Avulso' : p.status === 'exportada_folha' ? 'Em Folha' : 'Prevista'}
                                 </span>
+                              </td>
+                              <td className="py-2 px-2.5 text-right font-sans">
+                                {!isPaid && p.status !== 'cancelada' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setBaixaModalState({
+                                        parcelasInicial: [p],
+                                        todasParcelasContexto: parcelasFuturasList,
+                                        tituloContexto: `${selectedColaborador.nome} — ${p.codigoOperacao}`
+                                      })
+                                    }
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] inline-flex items-center gap-1 shadow-xs transition"
+                                  >
+                                    <CheckCircle2 size={11} />
+                                    <span>Baixar</span>
+                                  </button>
+                                ) : isPaid ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEstornoModalParcelas([p])}
+                                    className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[10px] inline-flex items-center gap-1 transition"
+                                  >
+                                    <RotateCcw size={11} />
+                                    <span>Estornar</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
                               </td>
                             </tr>
                           )
@@ -2312,51 +2537,62 @@ export function FichaColaboradorTab({
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                       <tr>
-                        <th className="py-2.5 px-3 text-center">Operação</th>
-                        <th className="py-2.5 px-2 text-center">Parc.</th>
-                        <th className="py-2.5 px-3 text-center">Competência</th>
-                        <th className="py-2.5 px-3 text-center">Data do Desconto</th>
-                        <th className="py-2.5 px-3 text-right">Amortização</th>
-                        <th className="py-2.5 px-3 text-right">Juros Pagos</th>
-                        <th className="py-2.5 px-3 text-right font-black">Valor Descontado</th>
-                        <th className="py-2.5 px-3 text-center">Comprovação</th>
+                        <th className="py-2.5 px-2 text-center">Operação</th>
+                        <th className="py-2.5 px-1.5 text-center">Parc.</th>
+                        <th className="py-2.5 px-2 text-center">Competência</th>
+                        <th className="py-2.5 px-2 text-center">Data do Desconto</th>
+                        <th className="py-2.5 px-2 text-right">Amortização</th>
+                        <th className="py-2.5 px-2 text-right">Juros Pagos</th>
+                        <th className="py-2.5 px-2 text-right font-black">Valor Descontado</th>
+                        <th className="py-2.5 px-2 text-center">Comprovação</th>
+                        <th className="py-2.5 px-2.5 text-right">Ação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
                       {parcelasPagasList.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400 font-sans">
+                          <td colSpan={9} className="py-8 text-center text-slate-400 font-sans">
                             Nenhuma parcela com baixa comprovada até o momento.
                           </td>
                         </tr>
                       ) : (
                         parcelasPagasList.map((p, idx) => (
                           <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                            <td className="py-2.5 px-3 text-center font-bold text-slate-900 dark:text-white">
+                            <td className="py-2 px-2 text-center font-bold text-slate-900 dark:text-white">
                               {p.codigoOperacao}
                             </td>
-                            <td className="py-2.5 px-2 text-center text-slate-500">
+                            <td className="py-2 px-1.5 text-center text-slate-500">
                               {String(p.numero).padStart(2, '0')}
                             </td>
-                            <td className="py-2.5 px-3 text-center text-slate-800 dark:text-slate-200">
+                            <td className="py-2 px-2 text-center text-slate-800 dark:text-slate-200">
                               {p.competencia}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-sans text-slate-600 dark:text-slate-400">
+                            <td className="py-2 px-2 text-center font-sans text-slate-600 dark:text-slate-400">
                               {p.dataPagamento ? new Date(p.dataPagamento).toLocaleDateString('pt-BR') : 'Conciliada'}
                             </td>
-                            <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-300">
+                            <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300">
                               {formatBrl(p.valorAmortizacao)}
                             </td>
-                            <td className="py-2.5 px-3 text-right text-amber-600 dark:text-amber-400">
+                            <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">
                               {formatBrl(p.valorJuros)}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-black text-emerald-600 dark:text-emerald-400">
+                            <td className="py-2 px-2 text-right font-black text-emerald-600 dark:text-emerald-400">
                               {formatBrl(p.valorPago || p.valorTotal)}
                             </td>
-                            <td className="py-2.5 px-3 text-center font-sans">
+                            <td className="py-2 px-2 text-center font-sans">
                               <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                                Descontada em Folha
+                                {p.status === 'paga_avulso' ? 'Paga Avulso' : 'Descontada em Folha'}
                               </span>
+                            </td>
+                            <td className="py-2 px-2.5 text-right font-sans">
+                              <button
+                                type="button"
+                                onClick={() => setEstornoModalParcelas([p])}
+                                className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[10px] inline-flex items-center gap-1 transition"
+                              >
+                                <RotateCcw size={11} />
+                                <span>Estornar</span>
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -2368,6 +2604,25 @@ export function FichaColaboradorTab({
             )}
           </div>
         </>
+      )}
+
+      {/* MODAIS DE BAIXA E ESTORNO DE PARCELAS */}
+      {baixaModalState && (
+        <BaixaParcelasModal
+          parcelasInicial={baixaModalState.parcelasInicial}
+          todasParcelasContexto={baixaModalState.todasParcelasContexto}
+          tituloContexto={baixaModalState.tituloContexto}
+          onClose={() => setBaixaModalState(null)}
+          onSuccess={() => onRefresh?.()}
+        />
+      )}
+
+      {estornoModalParcelas && (
+        <EstornoParcelasModal
+          parcelas={estornoModalParcelas}
+          onClose={() => setEstornoModalParcelas(null)}
+          onSuccess={() => onRefresh?.()}
+        />
       )}
 
       {/* MODAL DE ENVIO DE CONTRATO E CRONOGRAMA NO WHATSAPP */}

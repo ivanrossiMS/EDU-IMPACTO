@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
-import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { sendAgendaPushNotification, getComentariosComunicadosConfig } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship, cleanEntityPrefix } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma, getAlunoTodasTurmasEGruposComHistorico, canStudentReceiveTurmaContent } from '@/lib/studentTurmaUtils'
@@ -933,6 +933,79 @@ export async function GET(request: Request) {
   const alunoMetaId = user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : '';
   const colabMetaId = colaboradorId ? String(colaboradorId) : (user.user_metadata?.colaborador_id ? String(user.user_metadata.colaborador_id) : '');
   const userSlugMeta = user.user_metadata?.slug ? String(user.user_metadata.slug) : '';
+  const comentariosCfg = await getComentariosComunicadosConfig();
+  const visibilidadeComentarios = comentariosCfg.visibilidadeComentariosComunicados || 'autor';
+
+  // Resolver registro do colaborador/admin logado (ou espelhado) em cachedSysUsers (0ms em memória)
+  const userEmailLower = String(user.email || user.user_metadata?.email || '').trim().toLowerCase();
+  const matchedSysUsersForViewer = (cachedSysUsers || []).filter((su: any) => {
+    if (!su) return false;
+    if (colaboradorId) {
+      const cleanColab = String(colaboradorId).replace(/^f_?/, '').trim().toLowerCase();
+      return (
+        String(su.id || '').replace(/^f_?/, '').trim().toLowerCase() === cleanColab ||
+        String(su.auth_id || '').trim().toLowerCase() === cleanColab ||
+        String(su.dados?.colaborador_id || '').replace(/^f_?/, '').trim().toLowerCase() === cleanColab
+      );
+    }
+    return (
+      String(su.id || '').toLowerCase() === currentUserId.toLowerCase() ||
+      String(su.auth_id || '').toLowerCase() === currentUserId.toLowerCase() ||
+      (userEmailLower && String(su.email || '').trim().toLowerCase() === userEmailLower)
+    );
+  });
+
+  const masterRolesList = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'direcao', 'diretor(a)', 'master', 'adm'];
+  const effectiveViewerPerfilNorm = normalizeText(matchedSysUsersForViewer[0]?.perfil || perfil);
+  const effectiveViewerCargoNorm = normalizeText(matchedSysUsersForViewer[0]?.cargo || cargo);
+  const isMasterAdminViewer = !colaboradorId && !isFamilyOrStudent && (
+    masterRolesList.includes(effectiveViewerPerfilNorm) ||
+    masterRolesList.includes(effectiveViewerCargoNorm) ||
+    effectiveViewerPerfilNorm.includes('administrador master') ||
+    effectiveViewerCargoNorm.includes('administrador master') ||
+    effectiveViewerPerfilNorm.includes('diretor geral') ||
+    effectiveViewerCargoNorm.includes('diretor geral')
+  );
+
+  const viewerStaffCandidateIds = new Set<string>(
+    (colaboradorId
+      ? [
+          String(colaboradorId),
+          String(colaboradorId).replace(/^f_?/, ''),
+          ...matchedSysUsersForViewer.flatMap((su: any) => [
+            String(su.id || ''),
+            String(su.id || '').replace(/^f_?/, ''),
+            String(su.auth_id || ''),
+            String(su.dados?.colaborador_id || ''),
+            String(su.dados?.colaborador_id || '').replace(/^f_?/, ''),
+            String(su.dados?.uid_legacy || ''),
+          ]),
+        ]
+      : [
+          currentUserId,
+          currentUserId.replace(/^f_?/, ''),
+          colabMetaId,
+          colabMetaId.replace(/^f_?/, ''),
+          userSlugMeta,
+          userSlugMeta.replace(/^f_?/, ''),
+          String(user.user_metadata?.system_user_id || ''),
+          String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
+          String(user.user_metadata?.uid_legacy || ''),
+          String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, ''),
+          ...matchedSysUsersForViewer.flatMap((su: any) => [
+            String(su.id || ''),
+            String(su.id || '').replace(/^f_?/, ''),
+            String(su.auth_id || ''),
+            String(su.dados?.colaborador_id || ''),
+            String(su.dados?.colaborador_id || '').replace(/^f_?/, ''),
+            String(su.dados?.uid_legacy || ''),
+          ]),
+        ]
+    ).filter(Boolean).map(s => s.toLowerCase())
+  );
+  const viewerStaffName = normalizeText(
+    matchedSysUsersForViewer[0]?.nome || user.user_metadata?.nome || user.user_metadata?.name || ''
+  );
   const sysPhotoByKey = new Map<string, string>();
   for (const su of cachedSysUsers) {
     const f = su?.dados?.foto || su?.dados?.fotoUrl || su?.dados?.avatarUrl || su?.dados?.avatar;
@@ -1042,9 +1115,44 @@ export async function GET(request: Request) {
       let totalConversas = 0;
       let ultimaRespostaAt: string | null = null;
 
+      const isThreadOwnedByGuardianViewer = (threadMsgs: any[]): boolean => {
+        const nonAdmin = threadMsgs.filter((m: any) => !m.is_admin);
+        if (nonAdmin.length === 0) return true;
+        const myGuardianIds = new Set<string>([
+          currentUserId.toLowerCase(),
+          userEmailLower,
+          responsavelParamId.toLowerCase(),
+          userSlugMeta.toLowerCase(),
+        ].filter(Boolean));
+        const myGuardianNameNorm = normalizeText(user.user_metadata?.nome || user.user_metadata?.name || '');
+
+        return nonAdmin.some((m: any) => {
+          const anx = Array.isArray(m.anexos) ? m.anexos : [];
+          const authMeta = anx.find((a: any) => typeof a === 'object' && a !== null && a.__author__)?.__author__;
+          if (authMeta) {
+            const mAuthId = String(authMeta.auth_id || '').toLowerCase().trim();
+            const mRespId = String(authMeta.responsavel_id || '').toLowerCase().trim();
+            const mEmail = String(authMeta.email || '').toLowerCase().trim();
+            const mId = String(authMeta.id || '').toLowerCase().trim();
+            if ((mAuthId && myGuardianIds.has(mAuthId)) || (mRespId && myGuardianIds.has(mRespId)) || (mEmail && myGuardianIds.has(mEmail)) || (mId && myGuardianIds.has(mId))) {
+              return true;
+            }
+            if (mAuthId || mRespId || mEmail) {
+              return false;
+            }
+          }
+          const mNomeNorm = normalizeText(m.remetente_nome || '');
+          if (mNomeNorm && myGuardianNameNorm) {
+            return mNomeNorm === myGuardianNameNorm;
+          }
+          return true;
+        });
+      };
+
       if (isFamilyOrStudent) {
         const studentKeys = new Set([studentParamId, alunoMetaId, responsavelParamId, currentUserId, userSlugMeta].filter(Boolean));
-        const myThreadMessages = comRespostas.filter(r => studentKeys.has(String(r.remetente_id)));
+        const candidateThreadMessages = comRespostas.filter(r => studentKeys.has(String(r.remetente_id)));
+        const myThreadMessages = isThreadOwnedByGuardianViewer(candidateThreadMessages) ? candidateThreadMessages : [];
         totalConversas = myThreadMessages.length;
         temConversas = totalConversas > 0;
 
@@ -1096,20 +1204,8 @@ export async function GET(request: Request) {
           }
         }
       } else {
-        const userStaffCandidateIds = new Set<string>([
-          currentUserId,
-          currentUserId.replace(/^f_?/, ''),
-          colabMetaId,
-          colabMetaId.replace(/^f_?/, ''),
-          userSlugMeta,
-          userSlugMeta.replace(/^f_?/, ''),
-          String(user.user_metadata?.system_user_id || ''),
-          String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
-          String(user.user_metadata?.uid_legacy || ''),
-          String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, '')
-        ].filter(Boolean).map(s => s.toLowerCase()));
-
-        const userStaffName = normalizeText(user.user_metadata?.nome || user.user_metadata?.name || '');
+        const userStaffCandidateIds = viewerStaffCandidateIds;
+        const userStaffName = viewerStaffName;
         const rowAutorId = String(row.dados?.autorId || row.autorId || row.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
         const rowAutorNome = normalizeText(row.autor || row.dados?.autor || row.dados?.autorNome || '');
 
@@ -1118,7 +1214,24 @@ export async function GET(request: Request) {
           (rowAutorNome && userStaffName && rowAutorNome === userStaffName)
         );
 
-        const canManageConversas = Boolean(isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true');
+        const rowMarkedColabs = [
+          ...(Array.isArray(row.dados?.colaboradoresIds) ? row.dados.colaboradoresIds : []),
+          ...(Array.isArray(row.dados?.funcionariosIds) ? row.dados.funcionariosIds : []),
+          ...(Array.isArray(row.colaboradoresIds) ? row.colaboradoresIds : []),
+          ...(Array.isArray(row.funcionariosIds) ? row.funcionariosIds : []),
+        ].map((id: any) => String(id || '').replace(/^f_?/, '').trim().toLowerCase()).filter(Boolean);
+        const isMarkedColabOfRow = rowMarkedColabs.some((mId: string) => userStaffCandidateIds.has(mId));
+
+        let canManageConversas = false;
+        if (visibilidadeComentarios === 'autor') {
+          canManageConversas = Boolean(isAuthorOfRow);
+        } else if (visibilidadeComentarios === 'autor_admin') {
+          canManageConversas = Boolean(isAuthorOfRow || isMasterAdminViewer);
+        } else if (visibilidadeComentarios === 'todos_marcados') {
+          canManageConversas = Boolean(isAuthorOfRow || isMasterAdminViewer || isMarkedColabOfRow);
+        } else {
+          canManageConversas = Boolean(isAuthorOfRow);
+        }
 
         if (canManageConversas) {
           totalConversas = comRespostas.length;
@@ -1193,7 +1306,7 @@ export async function GET(request: Request) {
             reacoes = rxItem.__reactions__;
           }
         }
-        const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && a.__reactions__));
+        const cleanAnexos = anexos.filter((a: any) => !(typeof a === 'object' && a !== null && (a.__reactions__ || a.__author__)));
         return {
           ...r,
           anexos: cleanAnexos,
@@ -1203,11 +1316,18 @@ export async function GET(request: Request) {
 
       if (isFamilyOrStudent) {
         const studentKeys = new Set([studentParamId, alunoMetaId, responsavelParamId, currentUserId, userSlugMeta].filter(Boolean));
-        merged.respostas = formattedRespostas.filter((r: any) => 
+        const rawStudentThread = comRespostas.filter((r: any) =>
           studentKeys.has(String(r.remetente_id)) ||
           studentKeys.has(String(r.remetente_id || '').replace(/^f_?/, '')) ||
           Boolean(r.destinatario_id && studentKeys.has(String(r.destinatario_id)))
         );
+        merged.respostas = isThreadOwnedByGuardianViewer(rawStudentThread)
+          ? formattedRespostas.filter((r: any) => 
+              studentKeys.has(String(r.remetente_id)) ||
+              studentKeys.has(String(r.remetente_id || '').replace(/^f_?/, '')) ||
+              Boolean(r.destinatario_id && studentKeys.has(String(r.destinatario_id)))
+            )
+          : [];
         if (merged.autorizacao) {
           merged.autorizacao = sanitizeAutorizacaoForViewer(merged.autorizacao, studentKeys);
           if (merged.dados?.autorizacao) {
@@ -1254,20 +1374,8 @@ export async function GET(request: Request) {
           }
         }
       } else {
-        const userStaffCandidateIds = new Set<string>([
-          currentUserId,
-          currentUserId.replace(/^f_?/, ''),
-          colabMetaId,
-          colabMetaId.replace(/^f_?/, ''),
-          userSlugMeta,
-          userSlugMeta.replace(/^f_?/, ''),
-          String(user.user_metadata?.system_user_id || ''),
-          String(user.user_metadata?.system_user_id || '').replace(/^f_?/, ''),
-          String(user.user_metadata?.uid_legacy || ''),
-          String(user.user_metadata?.uid_legacy || '').replace(/^f_?/, '')
-        ].filter(Boolean).map(s => s.toLowerCase()));
-
-        const userStaffName = normalizeText(user.user_metadata?.nome || user.user_metadata?.name || '');
+        const userStaffCandidateIds = viewerStaffCandidateIds;
+        const userStaffName = viewerStaffName;
         const rowAutorId = String(row.dados?.autorId || row.autorId || row.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
         const rowAutorNome = normalizeText(row.autor || row.dados?.autor || row.dados?.autorNome || '');
 
@@ -1276,10 +1384,29 @@ export async function GET(request: Request) {
           (rowAutorNome && userStaffName && rowAutorNome === userStaffName)
         );
 
-        if (isAdmin || isAuthorOfRow || scopeParam === 'admin' || scopeParam === 'true') {
+        const rowMarkedColabs = [
+          ...(Array.isArray(row.dados?.colaboradoresIds) ? row.dados.colaboradoresIds : []),
+          ...(Array.isArray(row.dados?.funcionariosIds) ? row.dados.funcionariosIds : []),
+          ...(Array.isArray(row.colaboradoresIds) ? row.colaboradoresIds : []),
+          ...(Array.isArray(row.funcionariosIds) ? row.funcionariosIds : []),
+        ].map((id: any) => String(id || '').replace(/^f_?/, '').trim().toLowerCase()).filter(Boolean);
+        const isMarkedColabOfRow = rowMarkedColabs.some((mId: string) => userStaffCandidateIds.has(mId));
+
+        let canManageConversas = false;
+        if (visibilidadeComentarios === 'autor') {
+          canManageConversas = Boolean(isAuthorOfRow);
+        } else if (visibilidadeComentarios === 'autor_admin') {
+          canManageConversas = Boolean(isAuthorOfRow || isMasterAdminViewer);
+        } else if (visibilidadeComentarios === 'todos_marcados') {
+          canManageConversas = Boolean(isAuthorOfRow || isMasterAdminViewer || isMarkedColabOfRow);
+        } else {
+          canManageConversas = Boolean(isAuthorOfRow);
+        }
+
+        if (canManageConversas) {
           merged.respostas = formattedRespostas;
         } else {
-          // Colaborador que NÃO enviou o comunicado: só recebe sua própria conversa se tiver comentado
+          // Colaborador/Admin sem permissão de visualizar comentários alheios neste comunicado: só recebe sua própria conversa se tiver comentado
           merged.respostas = formattedRespostas.filter((r: any) => 
             userStaffCandidateIds.has(String(r.remetente_id).replace(/^f_?/, '').toLowerCase()) ||
             (r.is_admin && userStaffCandidateIds.has(String(r.destinatario_id || '').replace(/^f_?/, '').toLowerCase()))

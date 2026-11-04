@@ -80,7 +80,7 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 export default function ADAdminComunicados() {
   const queryClient = useQueryClient()
   const { currentUser } = useApp()
-  const { setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading: isGlobalDataLoading, chatGroups } = useAgendaDigital()
+  const { setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading: isGlobalDataLoading, chatGroups, adConfig } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [hasSettled, setHasSettled] = useState(false)
   useEffect(() => {
@@ -864,6 +864,28 @@ export default function ADAdminComunicados() {
     });
   };
 
+  const canManageComunicadoComments = useCallback((comunicadoItem: any) => {
+    if (!comunicadoItem) return false;
+    const visibilidade = adConfig?.permissoes?.visibilidadeComentariosComunicados || 'autor';
+    if (visibilidade === 'autor_admin' || visibilidade === 'todos_marcados') {
+      return true;
+    }
+    const myCandidateIds = [
+      currentUser?.id,
+      (currentUser as any)?.auth_id,
+      (currentUser as any)?.uid_legacy,
+      (currentUser as any)?.colaborador_id,
+    ].filter(Boolean).map(v => String(v).replace(/^f_?/, '').trim().toLowerCase());
+    const authorIdClean = String(comunicadoItem.autorId || comunicadoItem.dados?.autorId || comunicadoItem.dados?.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+    const authorNameClean = String(comunicadoItem.autor || comunicadoItem.dados?.autor || comunicadoItem.dados?.autorNome || '').trim().toLowerCase();
+    const curNameClean = String(currentUser?.nome || '').trim().toLowerCase();
+
+    return Boolean(
+      (authorIdClean && myCandidateIds.includes(authorIdClean)) ||
+      (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean)))
+    );
+  }, [adConfig?.permissoes?.visibilidadeComentariosComunicados, currentUser]);
+
   const filtered = useMemo(() => {
     return comunicados.filter((c: any) => {
       // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
@@ -888,6 +910,7 @@ export default function ADAdminComunicados() {
 
       // Filtro: Tem Comentários
       if (filterComentarios) {
+        if (!canManageComunicadoComments(c)) return false;
         const hasServerInfo = c.conversas_info !== undefined && c.conversas_info !== null;
         const cachedMsgs = getGlobalCachedMessages(c.id);
         const hasConversas = hasServerInfo
@@ -928,7 +951,7 @@ export default function ADAdminComunicados() {
       const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
       return timeB - timeA;
     });
-  }, [comunicados, selectedDate, filterComentarios, filterRelatorio, idsWithReplies]);
+  }, [comunicados, selectedDate, filterComentarios, filterRelatorio, idsWithReplies, canManageComunicadoComments]);
 
   const cleanStuId = useCallback((val: any): string => {
     return String(val || '')
@@ -1128,18 +1151,21 @@ export default function ADAdminComunicados() {
         totalReadPct += m.progresso;
         validReadCards++;
       }
+      const canViewCardComments = canManageComunicadoComments(c);
       const hasServerInfo = c.conversas_info !== undefined && c.conversas_info !== null;
       const cachedMsgs = getGlobalCachedMessages(c.id);
-      const hasConv = hasServerInfo
-        ? Boolean(
-            c.conversas_info.tem_conversas ||
-            (c.conversas_info.total && c.conversas_info.total > 0) ||
-            (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-            (cachedMsgs && cachedMsgs.length > 0)
-          )
-        : Boolean(idsWithReplies.has(String(c.id)));
+      const hasConv = canViewCardComments
+        ? (hasServerInfo
+            ? Boolean(
+                c.conversas_info.tem_conversas ||
+                (c.conversas_info.total && c.conversas_info.total > 0) ||
+                (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                (cachedMsgs && cachedMsgs.length > 0)
+              )
+            : Boolean(idsWithReplies.has(String(c.id))))
+        : false;
       if (hasConv) withComments++;
-      if (c.conversas_info?.has_unread || (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) || c._has_unread_reply) {
+      if (canViewCardComments && (c.conversas_info?.has_unread || (c.conversas_info?.nao_lidas && c.conversas_info.nao_lidas > 0) || c._has_unread_reply)) {
         withUnreadComments++;
       }
       if (c.id?.startsWith('AD-COM-REL-') || c.tipo === 'relatorio' || (c as any).dados?.tipo === 'relatorio') {
@@ -1153,7 +1179,7 @@ export default function ADAdminComunicados() {
       withUnreadComments,
       reportsCount
     };
-  }, [filtered, computeComunicadoMetrics, idsWithReplies]);
+  }, [filtered, computeComunicadoMetrics, idsWithReplies, canManageComunicadoComments]);
 
   const handlePageChange = useCallback((nextPage: number) => {
     const clamped = Math.max(1, Math.min(totalPages, nextPage));
@@ -2133,20 +2159,23 @@ export default function ADAdminComunicados() {
               ? new Date(c.dataEnvio || (c as any).data || (c as any).created_at)
               : null;
 
+            const canViewCardComments = canManageComunicadoComments(c);
             const hasServerConversasInfo = c.conversas_info !== undefined && c.conversas_info !== null;
             const cachedMsgs = getGlobalCachedMessages(c.id);
-            const hasConversas = hasServerConversasInfo
-              ? Boolean(
-                  c.conversas_info.tem_conversas ||
-                  (c.conversas_info.total && c.conversas_info.total > 0) ||
-                  (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-                  (cachedMsgs && cachedMsgs.length > 0)
-                )
-              : Boolean(
-                  idsWithReplies.has(String(c.id)) ||
-                  (Array.isArray(c.respostas) && c.respostas.length > 0) ||
-                  (cachedMsgs && cachedMsgs.length > 0)
-                );
+            const hasConversas = canViewCardComments
+              ? (hasServerConversasInfo
+                  ? Boolean(
+                      c.conversas_info.tem_conversas ||
+                      (c.conversas_info.total && c.conversas_info.total > 0) ||
+                      (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                      (cachedMsgs && cachedMsgs.length > 0)
+                    )
+                  : Boolean(
+                      idsWithReplies.has(String(c.id)) ||
+                      (Array.isArray(c.respostas) && c.respostas.length > 0) ||
+                      (cachedMsgs && cachedMsgs.length > 0)
+                    ))
+              : false;
 
             const conversasCount =
               c.conversas_info?.total ||
@@ -2793,7 +2822,7 @@ export default function ADAdminComunicados() {
         <ComunicadoViewModal
           comunicado={viewingCom}
           allComunicados={comunicados}
-          isAdminMode={true}
+          isAdminMode={canManageComunicadoComments(viewingCom)}
           isStaff={true}
           initialFocusComments={viewingComFocusComments}
           alunos={alunos}

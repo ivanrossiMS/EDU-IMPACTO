@@ -851,7 +851,8 @@ function CredImpactoContent() {
                 <ParcelasTab
                   emprestimos={emprestimos}
                   onOpenDetails={handleOpenLoanDetails}
-                  onRefresh={() => loadData()}
+                  onRefresh={() => loadData({ silent: true })}
+                  isAdminOrFinance={isAdminOrFinance}
                 />
               )}
 

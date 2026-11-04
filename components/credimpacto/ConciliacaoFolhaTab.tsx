@@ -14,11 +14,17 @@ import {
   Upload,
   Calendar,
   Layers,
-  Banknote
+  Banknote,
+  CheckSquare
 } from 'lucide-react'
 import { CredImpactoParcela } from '@/types/credimpacto'
 import { formatBrl } from '@/lib/credimpacto/engine'
 import { toast } from 'sonner'
+import {
+  BaixaParcelasModal,
+  EstornoParcelasModal,
+  ParcelaComContexto
+} from './BaixaParcelasModal'
 
 interface ConciliacaoFolhaTabProps {
   onRefresh: () => void
@@ -68,6 +74,15 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
   const [showBatchModal, setShowBatchModal] = useState(false)
   const [loteCodigo, setLoteCodigo] = useState(`FOLHA-${defaultComp}`)
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false)
+
+  // Seleção múltipla de parcelas e modal unificado
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [baixaLoteModalState, setBaixaLoteModalState] = useState<{
+    parcelasInicial: ParcelaComContexto[]
+    todasParcelasContexto?: ParcelaComContexto[]
+    tituloContexto?: string
+  } | null>(null)
+  const [estornoLoteParcelas, setEstornoLoteParcelas] = useState<ParcelaComContexto[] | null>(null)
 
   const fetchFolha = async (silent = false) => {
     if (!silent) setIsLoading(true)
@@ -257,11 +272,31 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
     return matchSearch && matchStatus
   })
 
+  const pendentesFiltradas = parcelasFiltradas.filter(
+    (p) => p.status !== 'descontada' && p.status !== 'paga_avulso' && p.status !== 'cancelada'
+  )
+  const selecionadasPendentes = pendentesFiltradas.filter((p) => selectedIds.includes(p.id))
+  const allPendingSelected =
+    pendentesFiltradas.length > 0 && pendentesFiltradas.every((p) => selectedIds.includes(p.id))
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+  }
+
+  const toggleSelectAllPending = () => {
+    if (allPendingSelected) {
+      const set = new Set(pendentesFiltradas.map((p) => p.id))
+      setSelectedIds((prev) => prev.filter((id) => !set.has(id)))
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...pendentesFiltradas.map((p) => p.id)])))
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* SELETOR DE COMPETÊNCIA E AÇÕES */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
           <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
             <Calendar size={20} />
           </div>
@@ -269,12 +304,25 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
             <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
               Competência da Folha de Pagamento
             </label>
-            <input
-              type="month"
-              value={competencia}
-              onChange={(e) => setCompetencia(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
-            />
+            <div className="flex items-center gap-2 mt-0.5">
+              <input
+                type="month"
+                value={competencia === 'todas' ? '' : competencia}
+                onChange={(e) => setCompetencia(e.target.value || 'todas')}
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={() => setCompetencia(competencia === 'todas' ? defaultComp : 'todas')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                  competencia === 'todas'
+                    ? 'bg-cyan-600 text-white border-cyan-600'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                Todas as Competências
+              </button>
+            </div>
           </div>
         </div>
 
@@ -295,12 +343,43 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
             <span>CSV</span>
           </button>
 
+          {selecionadasPendentes.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                setBaixaLoteModalState({
+                  parcelasInicial: selecionadasPendentes,
+                  todasParcelasContexto: pendentesFiltradas,
+                  tituloContexto: `${selecionadasPendentes.length} parcela(s) selecionada(s) na Conciliação`
+                })
+              }
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-all"
+            >
+              <CheckSquare size={14} />
+              <span>Baixar Selecionadas ({selecionadasPendentes.length})</span>
+            </button>
+          )}
+
           <button
-            onClick={() => setShowBatchModal(true)}
+            type="button"
+            onClick={() => {
+              if (pendentesFiltradas.length === 0) {
+                toast.error('Não há parcelas pendentes para baixar.')
+                return
+              }
+              setBaixaLoteModalState({
+                parcelasInicial: pendentesFiltradas,
+                todasParcelasContexto: pendentesFiltradas,
+                tituloContexto:
+                  competencia === 'todas'
+                    ? `Todas as ${pendentesFiltradas.length} parcelas pendentes`
+                    : `Conciliação em Lote da Folha (${competencia})`
+              })
+            }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-sm shadow-cyan-600/20 transition-all active:scale-95"
           >
             <Layers size={14} />
-            <span>Baixa em Lote da Folha</span>
+            <span>Baixar Todas ({pendentesFiltradas.length})</span>
           </button>
         </div>
       </div>
@@ -405,31 +484,58 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-2.5 px-3 min-w-[150px]">Colaborador</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-[130px]">Operação</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[60px]">Parcela</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Amortização</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Juros</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[120px]">Valor Desconto</th>
-                <th className="py-2.5 px-2 text-center whitespace-nowrap w-[110px]">Status</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-[100px]">Ações</th>
+                <th className="py-2.5 px-2 text-center w-8">
+                  <input
+                    type="checkbox"
+                    checked={allPendingSelected}
+                    onChange={toggleSelectAllPending}
+                    disabled={pendentesFiltradas.length === 0}
+                    title="Selecionar todas as parcelas pendentes visíveis"
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40"
+                  />
+                </th>
+                <th className="py-2.5 px-2">Colaborador</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">Operação</th>
+                <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Parc.</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Juros</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">Valor Desconto</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                <th className="py-2.5 px-2.5 text-center whitespace-nowrap">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
               {parcelasFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 font-sans">
+                  <td colSpan={9} className="py-8 text-center text-slate-400 font-sans">
                     Nenhuma parcela prevista para desconto nesta competência.
                   </td>
                 </tr>
               ) : (
                 parcelasFiltradas.map((p) => {
                   const isPaid = p.status === 'descontada' || p.status === 'paga_avulso'
+                  const isChecked = selectedIds.includes(p.id)
 
                   return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-2.5 px-3 min-w-[150px] max-w-[200px] font-sans">
-                        <div className="font-bold text-slate-900 dark:text-white truncate" title={p.colaboradorNome}>
+                    <tr
+                      key={p.id}
+                      className={`transition-colors ${
+                        isChecked
+                          ? 'bg-emerald-50/60 dark:bg-emerald-950/25'
+                          : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <td className="py-2 px-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSelectOne(p.id)}
+                          disabled={isPaid}
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-30"
+                        />
+                      </td>
+                      <td className="py-2 px-2 max-w-[200px] font-sans">
+                        <div className="font-bold text-slate-900 dark:text-white truncate text-xs" title={p.colaboradorNome}>
                           {p.colaboradorNome}
                         </div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
@@ -437,27 +543,27 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {p.codigoOperacao}
                       </td>
 
-                      <td className="py-2.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                        {p.numero}
+                      <td className="py-2 px-1.5 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        #{p.numero}
                       </td>
 
-                      <td className="py-2.5 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {formatBrl(p.valorAmortizacao)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {formatBrl(p.valorJuros)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-center font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatBrl(p.valorTotal)}
                       </td>
 
-                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                      <td className="py-2 px-2 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center">
                           <span
                             className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full font-sans border whitespace-nowrap ${
@@ -479,7 +585,7 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center font-sans whitespace-nowrap">
+                      <td className="py-2 px-2.5 text-center font-sans whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {!isPaid ? (
                             <button
@@ -832,6 +938,33 @@ export function ConciliacaoFolhaTab({ onRefresh }: ConciliacaoFolhaTabProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL UNIFICADO DE BAIXA EM LOTE OU SELECIONADAS */}
+      {baixaLoteModalState && (
+        <BaixaParcelasModal
+          parcelasInicial={baixaLoteModalState.parcelasInicial}
+          todasParcelasContexto={baixaLoteModalState.todasParcelasContexto}
+          tituloContexto={baixaLoteModalState.tituloContexto}
+          onClose={() => setBaixaLoteModalState(null)}
+          onSuccess={() => {
+            setSelectedIds([])
+            fetchFolha()
+            onRefresh()
+          }}
+        />
+      )}
+
+      {estornoLoteParcelas && (
+        <EstornoParcelasModal
+          parcelas={estornoLoteParcelas}
+          onClose={() => setEstornoLoteParcelas(null)}
+          onSuccess={() => {
+            setSelectedIds([])
+            fetchFolha()
+            onRefresh()
+          }}
+        />
       )}
     </div>
   )

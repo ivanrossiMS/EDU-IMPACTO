@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import {
   dbGetParcelasFolha,
-  dbConciliarParcela,
-  dbEstornarParcela
+  dbConciliarParcelasLote,
+  dbEstornarParcelasLote
 } from '@/lib/credimpacto/db'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { roundMoney } from '@/lib/credimpacto/engine'
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Acesso restrito ao setor financeiro.' }, { status: 403 })
     }
 
-    const parcelas = await dbGetParcelasFolha(competencia)
+    const parcelas = await dbGetParcelasFolha(competencia === 'todas' ? undefined : competencia)
 
     // Agrupamento de totais da competência
     const totalPrevisto = roundMoney(parcelas.reduce((acc, p) => acc + (p.valorTotal || 0), 0))
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   try {
     const resolved = await resolveCredImpactoUser(user)
     if (!resolved.isAdminOrFinance) {
-      return NextResponse.json({ error: 'Apenas usuários do setor financeiro podem conciliar parcelas de folha.' }, { status: 403 })
+      return NextResponse.json({ error: 'Apenas usuários do setor financeiro podem conciliar parcelas.' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       parcelaId,
       parcelaIds,
       valorPago,
+      modoValor = 'integral',
       metodoPagamento = 'folha_pagamento',
       dataPagamento,
       comprovanteUrl,
@@ -69,86 +70,76 @@ export async function POST(request: Request) {
       loteFolhaId
     } = body
 
-    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
+    const targetIds: string[] = Array.isArray(parcelaIds) && parcelaIds.length > 0
+      ? parcelaIds
+      : parcelaId
+        ? [parcelaId]
+        : []
 
-    // 1. Conciliação em Lote (múltiplas parcelas confirmadas pela folha de pagamento)
-    if (Array.isArray(parcelaIds) && parcelaIds.length > 0) {
-      const concilSuccess: string[] = []
-      const concilErrors: Array<{ id: string; error: string }> = []
-
-      for (const id of parcelaIds) {
-        try {
-          const itemRes = await dbConciliarParcela(
-            id,
-            {
-              valorPago: 0, // se 0, usará o valor total da parcela
-              metodoPagamento,
-              dataPagamento,
-              comprovanteUrl,
-              observacao: observacao || `Conciliação em lote da folha (Lote: ${loteFolhaId || 'Automático'})`,
-              loteFolhaId
-            },
-            { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
-          )
-          concilSuccess.push(id)
-
-          await notifyCredImpactoEvent({
-            eventType: 'parcela_conciliada',
-            loan: itemRes.emprestimo,
-            targetRoles: ['colaborador'],
-            sentByNome: resolved.nome,
-            extra: {
-              parcelaNumero: itemRes.parcela.numero,
-              competencia: itemRes.parcela.competencia,
-              valor: itemRes.parcela.valorPago || itemRes.parcela.valorTotal,
-              autorNome: resolved.nome
-            }
-          }).catch((e) => console.warn('[CredImpacto Push Batch Folha Error]', e))
-        } catch (e: any) {
-          concilErrors.push({ id, error: e.message })
-        }
-      }
-
-      return NextResponse.json({
-        success: true,
-        processadas: concilSuccess.length,
-        falhas: concilErrors.length,
-        detalhesFalhas: concilErrors
-      })
+    if (targetIds.length === 0) {
+      return NextResponse.json({ error: 'Informe ao menos uma parcela a ser baixada.' }, { status: 400 })
     }
 
-    // 2. Conciliação Individual
-    if (!parcelaId) {
-      return NextResponse.json({ error: 'Informe a parcela a ser conciliada.' }, { status: 400 })
-    }
-
-    const res = await dbConciliarParcela(
-      parcelaId,
+    const resLote = await dbConciliarParcelasLote(
+      targetIds,
       {
-        valorPago: Number(valorPago),
+        valorPago: valorPago !== undefined && valorPago !== '' ? Number(valorPago) : undefined,
+        modoValor,
         metodoPagamento,
         dataPagamento,
         comprovanteUrl,
-        observacao,
+        observacao:
+          observacao ||
+          (targetIds.length > 1 && loteFolhaId
+            ? `Conciliação em lote (Lote: ${loteFolhaId})`
+            : undefined),
         loteFolhaId
       },
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
     )
 
-    await notifyCredImpactoEvent({
-      eventType: 'parcela_conciliada',
-      loan: res.emprestimo,
-      targetRoles: ['colaborador'],
-      sentByNome: resolved.nome,
-      extra: {
-        parcelaNumero: res.parcela.numero,
-        competencia: res.parcela.competencia,
-        valor: res.parcela.valorPago || res.parcela.valorTotal,
-        autorNome: resolved.nome
-      }
-    }).catch((e) => console.warn('[CredImpacto Push Folha Error]', e))
+    const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
 
-    return NextResponse.json(res)
+    // Agrupa notificações por empréstimo para não disparar múltiplos pushes repetidos ao mesmo colaborador
+    const byLoan = new Map<string, { loan: typeof resLote.emprestimosAtualizados[0]; parcelas: typeof resLote.parcelasBaixadas }>()
+    for (const item of resLote.parcelasBaixadas) {
+      const entry = byLoan.get(item.emprestimo.id) || { loan: item.emprestimo, parcelas: [] }
+      entry.parcelas.push(item)
+      byLoan.set(item.emprestimo.id, entry)
+    }
+
+    for (const { loan, parcelas } of byLoan.values()) {
+      const firstParcela = parcelas[0].parcela
+      const totalValorBaixado = roundMoney(
+        parcelas.reduce((acc, p) => acc + (p.parcela.valorPago || p.parcela.valorTotal || 0), 0)
+      )
+      await notifyCredImpactoEvent({
+        eventType: loan.status === 'quitado' ? 'quitacao_confirmada' : 'parcela_conciliada',
+        loan,
+        targetRoles: ['colaborador'],
+        sentByNome: resolved.nome,
+        extra: {
+          parcelaNumero: firstParcela.numero,
+          competencia:
+            parcelas.length === 1
+              ? firstParcela.competencia
+              : `${parcelas.length} parcelas (${parcelas.map((p) => `#${p.parcela.numero}`).join(', ')})`,
+          valor: totalValorBaixado,
+          autorNome: resolved.nome
+        }
+      }).catch((e) => console.warn('[CredImpacto Push Folha Error]', e))
+    }
+
+    return NextResponse.json({
+      success: true,
+      processadas: resLote.parcelasBaixadas.length,
+      falhas: resLote.erros.length,
+      detalhesFalhas: resLote.erros,
+      emprestimo: resLote.emprestimosAtualizados[0],
+      emprestimosAtualizados: resLote.emprestimosAtualizados,
+      parcela: resLote.parcelasBaixadas[0]?.parcela,
+      parcelasBaixadas: resLote.parcelasBaixadas.map((p) => p.parcela)
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao conciliar parcela' }, { status: 400 })
   }
@@ -165,37 +156,65 @@ export async function DELETE(request: Request) {
     }
 
     const body = await request.json()
-    const { parcelaId, justificativa } = body
+    const { parcelaId, parcelaIds, justificativa } = body
 
-    if (!parcelaId) {
-      return NextResponse.json({ error: 'Identificador da parcela é obrigatório.' }, { status: 400 })
+    const targetIds: string[] = Array.isArray(parcelaIds) && parcelaIds.length > 0
+      ? parcelaIds
+      : parcelaId
+        ? [parcelaId]
+        : []
+
+    if (targetIds.length === 0) {
+      return NextResponse.json({ error: 'Identificador da(s) parcela(s) é obrigatório.' }, { status: 400 })
     }
 
     if (!justificativa || justificativa.trim().length < 5) {
-      return NextResponse.json({ error: 'Justificativa detalhada é obrigatória para estorno financeiro.' }, { status: 400 })
+      return NextResponse.json({ error: 'Justificativa detalhada é obrigatória para estorno financeiro (mín. 5 caracteres).' }, { status: 400 })
     }
 
-    const res = await dbEstornarParcela(
-      parcelaId,
+    const resLote = await dbEstornarParcelasLote(
+      targetIds,
       justificativa,
       { id: resolved.id, nome: resolved.nome, perfil: resolved.perfil }
     )
 
     const { notifyCredImpactoEvent } = await import('@/lib/credimpacto/pushNotifications')
-    await notifyCredImpactoEvent({
-      eventType: 'parcela_estornada',
-      loan: res.emprestimo,
-      targetRoles: ['colaborador'],
-      sentByNome: resolved.nome,
-      extra: {
-        parcelaNumero: res.parcela.numero,
-        competencia: res.parcela.competencia,
-        motivo: justificativa,
-        autorNome: resolved.nome
-      }
-    }).catch((e) => console.warn('[CredImpacto Push Estorno Error]', e))
 
-    return NextResponse.json(res)
+    const byLoan = new Map<string, { loan: typeof resLote.emprestimosAtualizados[0]; parcelas: typeof resLote.parcelasEstornadas }>()
+    for (const item of resLote.parcelasEstornadas) {
+      const entry = byLoan.get(item.emprestimo.id) || { loan: item.emprestimo, parcelas: [] }
+      entry.parcelas.push(item)
+      byLoan.set(item.emprestimo.id, entry)
+    }
+
+    for (const { loan, parcelas } of byLoan.values()) {
+      const firstParcela = parcelas[0].parcela
+      await notifyCredImpactoEvent({
+        eventType: 'parcela_estornada',
+        loan,
+        targetRoles: ['colaborador'],
+        sentByNome: resolved.nome,
+        extra: {
+          parcelaNumero: firstParcela.numero,
+          competencia:
+            parcelas.length === 1
+              ? firstParcela.competencia
+              : `${parcelas.length} parcelas (${parcelas.map((p) => `#${p.parcela.numero}`).join(', ')})`,
+          motivo: justificativa,
+          autorNome: resolved.nome
+        }
+      }).catch((e) => console.warn('[CredImpacto Push Estorno Error]', e))
+    }
+
+    return NextResponse.json({
+      success: true,
+      processadas: resLote.parcelasEstornadas.length,
+      falhas: resLote.erros.length,
+      detalhesFalhas: resLote.erros,
+      emprestimo: resLote.emprestimosAtualizados[0],
+      emprestimosAtualizados: resLote.emprestimosAtualizados,
+      parcela: resLote.parcelasEstornadas[0]?.parcela
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Erro ao estornar baixa da parcela' }, { status: 400 })
   }

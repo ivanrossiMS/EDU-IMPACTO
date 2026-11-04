@@ -104,6 +104,8 @@ export const DEFAULT_CHAT_AUTO_CONFIG: ADChatAutoConfig = {
   }
 }
 
+export type ComentariosComunicadosEscopo = 'autor' | 'autor_admin' | 'todos_marcados'
+
 export interface ADConfig {
   permissoes: { 
     chat: boolean
@@ -118,10 +120,13 @@ export interface ADConfig {
     visualizarProvasOnline?: boolean
     chamadaAlunoPortaria?: boolean
     ambienteSeguroMomentos?: boolean
+    visibilidadeComentariosComunicados?: ComentariosComunicadosEscopo
   }
   horarios: { inicio: string; fim: string; msgAusencia: string }
   notificacoes: { 
     pushComunicados: boolean
+    pushComentariosComunicados?: boolean
+    escopoPushComentariosComunicados?: ComentariosComunicadosEscopo
     pushMomentos: boolean
     pushFinanceiro: boolean
     pushCalendario: boolean
@@ -215,9 +220,9 @@ const AgendaDigitalContext = createContext<ADContextState>({
   bannerUrl: null,
   setBannerUrl: () => {},
   adConfig: {
-    permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true },
+    permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true, visibilidadeComentariosComunicados: 'autor' },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: false, pushRelatorios: false, pushAlteracaoCalendario: true },
+    notificacoes: { pushComunicados: true, pushComentariosComunicados: true, escopoPushComentariosComunicados: 'autor', pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: false, pushRelatorios: false, pushAlteracaoCalendario: true },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' },
     chatAuto: DEFAULT_CHAT_AUTO_CONFIG
   },
@@ -428,9 +433,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const defaultInitialConfig: ADConfig = {
-    permissoes: { chat: true, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true },
+    permissoes: { chat: true, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true, ambienteSeguroMomentos: true, visibilidadeComentariosComunicados: 'autor' },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: true, pushRelatorios: false },
+    notificacoes: { pushComunicados: true, pushComentariosComunicados: true, escopoPushComentariosComunicados: 'autor', pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: true, pushRelatorios: false },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   }
 
@@ -535,6 +540,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 chat: true,
                 visualizarRelatorios: false,
                 confirmarPresencaEventos: false,
+                visibilidadeComentariosComunicados: 'autor',
                 ...(db.ad_config.permissoes || {}),
               },
               notificacoes: {
@@ -549,6 +555,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
                 pushSaidaPortaria: true,
                 pushMensagemChat: true,
                 pushRelatorios: false,
+                pushComentariosComunicados: true,
+                escopoPushComentariosComunicados: 'autor',
                 ...(db.ad_config.notificacoes || {}),
               }
             }

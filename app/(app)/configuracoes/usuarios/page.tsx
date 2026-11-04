@@ -227,7 +227,8 @@ export default function UsuariosPage() {
   const { data: colabData, isLoading: isUsersLoading } = useApiQuery<any>(
     ['usuarios', 'colaboradores', String(colabPage), String(colabLimit), debouncedColabSearch],
     '/api/configuracoes/usuarios',
-    { type: 'colaboradores', page: colabPage, limit: colabLimit, search: debouncedColabSearch }
+    { type: 'colaboradores', page: colabPage, limit: colabLimit, search: debouncedColabSearch },
+    { noCache: true, staleTime: 0 }
   )
   const users: SysUser[] = colabData?.data || []
   const colabTotal = colabData?.total || 0;
@@ -235,9 +236,23 @@ export default function UsuariosPage() {
   const { data: allColabData } = useApiQuery<any>(
     ['usuarios', 'all-colaboradores'],
     '/api/configuracoes/usuarios',
-    { type: 'colaboradores', limit: 1000 }
+    { type: 'colaboradores', limit: 1000 },
+    { noCache: true, staleTime: 0 }
   )
-  const allUsers: SysUser[] = allColabData?.data || []
+  const allUsers: SysUser[] = useMemo(() => {
+    const rawAll: SysUser[] = allColabData?.data || []
+    const byId = new Map<string, SysUser>()
+    for (const u of rawAll) {
+      if (u?.id) byId.set(u.id, u)
+    }
+    for (const u of users) {
+      if (u?.id) {
+        const prev = byId.get(u.id)
+        byId.set(u.id, prev ? { ...prev, ...u } : u)
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'))
+  }, [allColabData?.data, users])
 
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
@@ -312,6 +327,18 @@ export default function UsuariosPage() {
   const [selectedUserIdToLink, setSelectedUserIdToLink] = useState('')
   const [isLinkingUser, setIsLinkingUser] = useState(false)
 
+  const updateCachedUserList = (updater: (list: SysUser[]) => SysUser[]) => {
+    queryClient.setQueriesData({ queryKey: ['usuarios'] }, (old: any) => {
+      if (!old || !Array.isArray(old.data)) return old
+      const nextData = updater(old.data)
+      return {
+        ...old,
+        data: nextData,
+        total: typeof old.total === 'number' ? Math.max(0, old.total + (nextData.length - old.data.length)) : nextData.length,
+      }
+    })
+  }
+
   /* ── User actions ── */
   const openAddUser = () => { setUserForm(BLANK_USER); setUserModal('add') }
   const openEditUser = (u: SysUser) => { setUserForm({ nome: u.nome, email: u.email, cargo: u.cargo, perfil: u.perfil, status: u.status, twofa: u.twofa }); setEditingUserId(u.id); setUserModal('edit') }
@@ -333,7 +360,18 @@ export default function UsuariosPage() {
         if (createdData?.id) createdUserId = String(createdData.id)
       } catch(e) { alert('Erro critico ao salvar usuario'); setIsSavingUser(false); return; }
       
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      const newUserObj: SysUser = {
+        ...userForm,
+        id: createdUserId,
+        nome: userForm.nome.trim(),
+        email: userForm.email.trim().toLowerCase(),
+        ultimoAcesso: 'Nunca acessou',
+      }
+      updateCachedUserList(list => {
+        const filtered = list.filter(u => u.id !== createdUserId && u.email.trim().toLowerCase() !== newUserObj.email)
+        return [...filtered, newUserObj].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'))
+      })
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: createdUserId, detalhesDepois: userForm })
       setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
       openFirstAccessGenerator({
@@ -345,20 +383,23 @@ export default function UsuariosPage() {
       })
       return
     } else if (editingUserId) {
-      const uAntigo = users.find(u => u.id === editingUserId)
+      const uAntigo = users.find(u => u.id === editingUserId) || allUsers.find(u => u.id === editingUserId)
       try {
         const res = await fetch(`/api/configuracoes/usuarios/${editingUserId}`, { method: 'PUT', body: JSON.stringify(userForm) })
         if (!res.ok) { const err = await res.json(); alert('Erro na nuvem (Netlify/Local): ' + err.error); setIsSavingUser(false); return; }
       } catch(e) { alert('Erro critico ao atualizar'); setIsSavingUser(false); return; }
 
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      updateCachedUserList(list =>
+        list.map(u => u.id === editingUserId ? { ...u, ...userForm, nome: userForm.nome.trim(), email: userForm.email.trim().toLowerCase() } : u)
+      )
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, nomeRelacionado: userForm.nome, detalhesAntes: uAntigo, detalhesDepois: userForm })
     }
     setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
   }
   const deleteUser = async () => {
     if (deleteUserId) {
-      const uDel = users.find(u => u.id === deleteUserId)
+      const uDel = users.find(u => u.id === deleteUserId) || allUsers.find(u => u.id === deleteUserId)
       try {
         const res = await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' })
         if (!res.ok) {
@@ -367,8 +408,8 @@ export default function UsuariosPage() {
         }
       } catch(e: any) { alert(e.message || 'Falha ao excluir online'); return; }
 
-
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      updateCachedUserList(list => list.filter(u => u.id !== deleteUserId))
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, nomeRelacionado: uDel?.nome, detalhesAntes: uDel })
       setDeleteUserId(null)
     }
@@ -406,6 +447,7 @@ export default function UsuariosPage() {
     setPerfilModal('add')
   }
   const openEditPerfil = (p: any, defaultTab: 'permissoes' | 'usuarios' = 'permissoes') => {
+    queryClient.invalidateQueries({ queryKey: ['usuarios'] })
     setPerfilForm({
       nome: p.nome,
       cor: p.cor,
@@ -529,7 +571,10 @@ export default function UsuariosPage() {
         setIsLinkingUser(false)
         return
       }
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      updateCachedUserList(list =>
+        list.map(u => u.id === selectedUserIdToLink ? { ...u, perfil: targetPerfilNome } : u)
+      )
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Edição', `Usuário ${targetUser.nome} vinculado ao perfil ${targetPerfilNome}`, {
         registroId: selectedUserIdToLink,
         nomeRelacionado: targetUser.nome,
@@ -557,7 +602,10 @@ export default function UsuariosPage() {
         alert('Erro ao desvincular: ' + (err.error || 'Falha na resposta do servidor'))
         return
       }
-      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      updateCachedUserList(list =>
+        list.map(item => item.id === u.id ? { ...item, perfil: 'Colaborador' } : item)
+      )
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Edição', `Usuário ${u.nome} desvinculado do perfil ${targetPerfilNome}`, {
         registroId: u.id,
         nomeRelacionado: u.nome,

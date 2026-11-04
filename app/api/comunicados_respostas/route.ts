@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { sendAgendaPushNotification, getComentariosComunicadosConfig } from '@/lib/server/agendaNotifications'
 import { getColaboradorIds, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
@@ -56,17 +56,23 @@ async function checkIsStaffOrAuthor({
 
   let dbUserPerfil = '';
   let dbUserCargo = '';
+  let dbUserId = '';
+  let dbUserNome = '';
+  let dbColabId = '';
   if (!isFamilyOrStudent) {
     try {
       const { data: dbUser } = await supabase
         .from('system_users')
-        .select('id, perfil, cargo, status')
+        .select('id, nome, perfil, cargo, status, dados')
         .or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.ilike."${user.email || ''}"`)
         .eq('status', 'ativo')
         .maybeSingle();
 
       if (dbUser) {
         isStaff = true;
+        dbUserId = String(dbUser.id || '');
+        dbUserNome = String(dbUser.nome || '');
+        dbColabId = String(dbUser.dados?.colaborador_id || dbUser.dados?.uid_legacy || '');
         dbUserPerfil = normalizeRole(dbUser.perfil);
         dbUserCargo = normalizeRole(dbUser.cargo);
       }
@@ -75,8 +81,8 @@ async function checkIsStaffOrAuthor({
     }
   }
 
-  const perfisAdmin = ['diretor geral', 'administrador', 'admin', 'master'];
-  const cargosAdmin = ['administrador master', 'diretor geral'];
+  const perfisAdmin = ['diretor geral', 'diretora geral', 'administrador', 'admin', 'master', 'direcao', 'diretor(a)', 'adm'];
+  const cargosAdmin = ['administrador master', 'diretor geral', 'diretora geral', 'direcao', 'diretor(a)', 'administrador', 'admin', 'master', 'adm'];
   const isAdmin = isStaff && (
     perfisAdmin.includes(pNorm) ||
     cargosAdmin.includes(cNorm) ||
@@ -89,11 +95,16 @@ async function checkIsStaffOrAuthor({
   );
 
   let isAuthor = false;
+  let isMarkedColab = false;
   if (isStaff) {
     const effectiveEspelhar = isAdmin ? espelharColabId : null;
     const userCandidateIds = new Set<string>([
       String(user.id),
       String(user.id).replace(/^f_?/, ''),
+      dbUserId,
+      dbUserId.replace(/^f_?/, ''),
+      dbColabId,
+      dbColabId.replace(/^f_?/, ''),
       String(user.user_metadata?.colaborador_id || ''),
       String(user.user_metadata?.colaborador_id || '').replace(/^f_?/, ''),
       String(user.user_metadata?.system_user_id || ''),
@@ -111,11 +122,11 @@ async function checkIsStaffOrAuthor({
       }
     }
 
-    if (comunicadoId && !isAuthor) {
+    if (comunicadoId) {
       try {
         const { data: comData } = await supabase
           .from('comunicados')
-          .select('autor, dados')
+          .select('autor, destino, dados')
           .eq('id', comunicadoId)
           .maybeSingle();
 
@@ -125,9 +136,18 @@ async function checkIsStaffOrAuthor({
             isAuthor = true;
           }
           const comAutorNome = normalizeRole(comData.autor || comData.dados?.autor || comData.dados?.autorNome);
-          const userNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
+          const userNome = normalizeRole(dbUserNome || user.user_metadata?.nome || user.user_metadata?.name);
           if (comAutorNome && userNome && comAutorNome === userNome) {
             isAuthor = true;
+          }
+
+          const markedIds = [
+            ...(Array.isArray(comData.dados?.colaboradoresIds) ? comData.dados.colaboradoresIds : []),
+            ...(Array.isArray(comData.dados?.funcionariosIds) ? comData.dados.funcionariosIds : []),
+          ].map((id: any) => String(id || '').replace(/^f_?/, '').trim().toLowerCase()).filter(Boolean);
+
+          if (markedIds.some((mId: string) => userCandidateIds.has(mId))) {
+            isMarkedColab = true;
           }
         }
       } catch (e) {
@@ -136,7 +156,19 @@ async function checkIsStaffOrAuthor({
     }
   }
 
-  const canViewAllThreads = Boolean(isAdmin || isAuthor);
+  const comentariosCfg = await getComentariosComunicadosConfig();
+  const visibilidade = comentariosCfg.visibilidadeComentariosComunicados;
+
+  let canViewAllThreads = false;
+  if (visibilidade === 'autor') {
+    canViewAllThreads = Boolean(isAuthor);
+  } else if (visibilidade === 'autor_admin') {
+    canViewAllThreads = Boolean(isAuthor || isAdmin);
+  } else if (visibilidade === 'todos_marcados') {
+    canViewAllThreads = Boolean(isAuthor || isAdmin || isMarkedColab);
+  } else {
+    canViewAllThreads = Boolean(isAuthor);
+  }
 
   return { isStaff, isAuthor, canViewAllThreads };
 }
@@ -288,10 +320,68 @@ export async function GET(request: Request) {
     query = query.or(`remetente_id.eq."${cleanRemetente}",remetente_id.eq."f_${cleanRemetente}"`);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
   
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Isolamento estrito entre múltiplos responsáveis do mesmo aluno:
+  // Somente o responsável que enviou o comentário (e o autor/equipe autorizada) vê a conversa.
+  if (!canViewAllThreads && !isStaff && Array.isArray(data) && data.length > 0) {
+    const nonAdminMsgs = data.filter((r: any) => !r.is_admin);
+    if (nonAdminMsgs.length > 0) {
+      const authRespIds = await getAuthorizedResponsavelIdsForUser(user);
+      const myIds = new Set<string>([
+        String(user.id || '').toLowerCase().trim(),
+        String(user.email || '').toLowerCase().trim(),
+        String(user.user_metadata?.responsavel_id || '').toLowerCase().trim(),
+        ...Array.from(authRespIds).map(s => String(s).toLowerCase().trim()),
+      ].filter(Boolean));
+
+      let myNamesNorm = new Set<string>();
+      const metaNome = normalizeRole(user.user_metadata?.nome || user.user_metadata?.name);
+      if (metaNome) myNamesNorm.add(metaNome);
+
+      if (myNamesNorm.size === 0 && authRespIds.size > 0) {
+        try {
+          const { data: myResps } = await supabase
+            .from('responsaveis')
+            .select('nome')
+            .in('id', Array.from(authRespIds));
+          (myResps || []).forEach((mr: any) => {
+            const n = normalizeRole(mr?.nome);
+            if (n) myNamesNorm.add(n);
+          });
+        } catch {}
+      }
+
+      const isMyThread = nonAdminMsgs.some((m: any) => {
+        const anx = Array.isArray(m.anexos) ? m.anexos : [];
+        const authMeta = anx.find((a: any) => typeof a === 'object' && a !== null && a.__author__)?.__author__;
+        if (authMeta) {
+          const mAuthId = String(authMeta.auth_id || '').toLowerCase().trim();
+          const mRespId = String(authMeta.responsavel_id || '').toLowerCase().trim();
+          const mEmail = String(authMeta.email || '').toLowerCase().trim();
+          const mId = String(authMeta.id || '').toLowerCase().trim();
+          if ((mAuthId && myIds.has(mAuthId)) || (mRespId && myIds.has(mRespId)) || (mEmail && myIds.has(mEmail)) || (mId && myIds.has(mId))) {
+            return true;
+          }
+          if (mAuthId || mRespId || mEmail) {
+            return false;
+          }
+        }
+        const mNomeNorm = normalizeRole(m.remetente_nome);
+        if (mNomeNorm && myNamesNorm.size > 0) {
+          return myNamesNorm.has(mNomeNorm);
+        }
+        return true;
+      });
+
+      if (!isMyThread) {
+        data = [];
+      }
+    }
   }
 
   // Coleta nomes de administradores/colaboradores para buscar as fotos reais deles na tabela system_users
@@ -498,15 +588,16 @@ export async function POST(request: Request) {
     }
 
     const rawAnexos = Array.isArray(body.anexos) ? [...body.anexos] : [];
-    if (serverIsAdmin) {
-      rawAnexos.push({
-        __author__: {
-          id: authorId,
-          nome: body.remetente_nome || user.user_metadata?.nome || 'Administrador',
-          foto: authorFoto
-        }
-      });
-    }
+    rawAnexos.push({
+      __author__: {
+        id: authorId,
+        auth_id: user.id,
+        responsavel_id: user.user_metadata?.responsavel_id || null,
+        email: user.email ? String(user.email).toLowerCase().trim() : null,
+        nome: body.remetente_nome || user.user_metadata?.nome || user.user_metadata?.name || (serverIsAdmin ? 'Administrador' : 'Responsável'),
+        foto: authorFoto
+      }
+    });
 
     const row = {
       comunicado_id: finalComunicadoId,
@@ -527,13 +618,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    const comentariosCfg = await getComentariosComunicadosConfig();
+
     // ── Notificações Push e In-App bidirecionais ──
     try {
       const msgTexto = body.conteudo.length > 50 ? body.conteudo.substring(0, 50) + '...' : body.conteudo;
       const remetenteNome = body.remetente_nome || user.user_metadata?.nome || user.user_metadata?.name || (serverIsAdmin ? 'A Escola' : 'Usuário');
 
-      if (!serverIsAdmin) {
-        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado + Colaboradores marcados)
+      if (!comentariosCfg.pushComentariosComunicados) {
+        console.log(`[comunicados_respostas] Push de comentários desativado em ad_config. Ignorando disparo para resposta ${data.id}.`);
+      } else if (!serverIsAdmin) {
+        // Responsável/Aluno respondeu -> Notifica conforme escopo configurado ('autor' | 'autor_admin' | 'todos_marcados')
         const { data: comData } = await supabase
           .from('comunicados')
           .select('titulo, autor, dados')
@@ -541,6 +636,7 @@ export async function POST(request: Request) {
           .single();
         
         if (comData) {
+          const escopoPush = comentariosCfg.escopoPushComentariosComunicados || 'autor';
           const rawAutorId = comData.dados?.autorId || comData.dados?.autor_id || comData.dados?.authorId || comData.dados?.colaborador_id;
           const rawAutorName = String(comData.autor || comData.dados?.autor || '').trim();
           const markedColabs = [
@@ -554,11 +650,12 @@ export async function POST(request: Request) {
             String(body.remetente_id || '')
           ].filter(Boolean));
 
-          const candidateColabTokens = new Set<string>(
-            [rawAutorId, ...markedColabs].filter(Boolean).map(String)
-          );
+          const candidateColabTokens = new Set<string>();
+          if (rawAutorId) {
+            candidateColabTokens.add(String(rawAutorId));
+          }
 
-          // Se o comunicado antigo só tiver o nome do autor, resolve o ID pelo nome
+          // Se o comunicado só tiver o nome do autor (ou para garantir resolução completa do autor), resolve o ID pelo nome quando rawAutorId estiver ausente
           if (candidateColabTokens.size === 0 && rawAutorName) {
             const [{ data: byNameColab }, { data: byNameSys }] = await Promise.all([
               supabase.from('funcionarios').select('id, email, dados').ilike('nome', rawAutorName).limit(5),
@@ -575,6 +672,15 @@ export async function POST(request: Request) {
               if (u.dados?.colaborador_id) candidateColabTokens.add(String(u.dados.colaborador_id));
               if (u.email) candidateColabTokens.add(String(u.email).toLowerCase());
             });
+          }
+
+          if (escopoPush === 'todos_marcados') {
+            markedColabs.filter(Boolean).forEach((mId: any) => candidateColabTokens.add(String(mId)));
+          }
+
+          if (escopoPush === 'autor_admin' || escopoPush === 'todos_marcados') {
+            const masterAdminIds = await getInstitutionalMasterAdminIds();
+            masterAdminIds.forEach(aId => candidateColabTokens.add(String(aId)));
           }
 
           const allRelevantColabs = Array.from(candidateColabTokens)
@@ -599,6 +705,8 @@ export async function POST(request: Request) {
                 targetUserIds,
                 targetUrl: colabTargetUrl,
                 metadata: {
+                  is_comment: true,
+                  escopo_push: escopoPush,
                   perfil_destino: 'colaborador',
                   item_id: String(finalComunicadoId),
                   rota: 'comunicados',
@@ -616,22 +724,49 @@ export async function POST(request: Request) {
           }
         }
       } else {
-        // Escola respondeu -> Notifica o Pai/Aluno dono da thread (remetente_id da thread)
+        // Escola respondeu -> Notifica estritamente o Responsável/Aluno que enviou o comentário na thread
         const targetUserId = String(body.remetente_id || '').trim(); 
         if (targetUserId) {
-          const { data: comData } = await supabase
-            .from('comunicados')
-            .select('titulo, dados')
-            .eq('id', finalComunicadoId)
-            .single();
+          const [{ data: comData }, { data: threadMsgs }] = await Promise.all([
+            supabase
+              .from('comunicados')
+              .select('titulo, dados')
+              .eq('id', finalComunicadoId)
+              .single(),
+            supabase
+              .from('comunicados_respostas')
+              .select('remetente_id, remetente_nome, anexos, is_admin')
+              .eq('comunicado_id', finalComunicadoId)
+              .eq('remetente_id', targetUserId)
+              .eq('is_admin', false)
+          ]);
             
           const tituloCom = comData ? comData.titulo : 'Comunicado';
           let targetAlunoId = body.aluno_id || comData?.dados?.aluno_id || (Array.isArray(comData?.dados?.targetStudents) && comData.dados.targetStudents.length === 1 ? comData.dados.targetStudents[0] : null);
-
-          // Expandir todos os identificadores do responsável/aluno destinatário para garantir entrega 100% no OneSignal
-          const expandedFamilyTargets = new Set<string>([targetUserId]);
           const cleanTargetId = targetUserId.replace(/^(?:a_|r_|resp_)/i, '').trim();
-          if (cleanTargetId) expandedFamilyTargets.add(cleanTargetId);
+          if (!targetAlunoId && /^\d+$/.test(cleanTargetId)) {
+            targetAlunoId = cleanTargetId;
+          }
+
+          // Identificar estritamente os responsáveis que enviaram comentário nesta thread
+          const threadAuthorIds = new Set<string>();
+          const threadAuthorNamesNorm = new Set<string>();
+          (threadMsgs || []).forEach((m: any) => {
+            if (m.remetente_nome) {
+              threadAuthorNamesNorm.add(normalizeRole(m.remetente_nome));
+            }
+            const anx = Array.isArray(m.anexos) ? m.anexos : [];
+            const authObj = anx.find((a: any) => typeof a === 'object' && a !== null && a.__author__)?.__author__;
+            if (authObj) {
+              if (authObj.auth_id) threadAuthorIds.add(String(authObj.auth_id).trim());
+              if (authObj.responsavel_id) threadAuthorIds.add(String(authObj.responsavel_id).trim());
+              if (authObj.id && String(authObj.id) !== String(targetUserId)) threadAuthorIds.add(String(authObj.id).trim());
+              if (authObj.email) threadAuthorIds.add(String(authObj.email).toLowerCase().trim());
+              if (authObj.nome) threadAuthorNamesNorm.add(normalizeRole(authObj.nome));
+            }
+          });
+
+          const expandedFamilyTargets = new Set<string>();
 
           try {
             const isNumericId = /^\d+$/.test(cleanTargetId);
@@ -641,23 +776,19 @@ export async function POST(request: Request) {
               : `id.eq.${cleanTargetId}`;
             const { data: respRows } = await supabase
               .from('responsaveis')
-              .select('id, auth_id, email')
+              .select('id, nome, auth_id, email')
               .or(respOrFilter)
               .limit(5);
 
             const numericRespIds: string[] = [];
             respRows?.forEach((r: any) => {
-              if (r.id) {
-                expandedFamilyTargets.add(String(r.id));
-                numericRespIds.push(String(r.id));
-              }
-              if (r.auth_id) expandedFamilyTargets.add(String(r.auth_id));
-              if (r.email) expandedFamilyTargets.add(String(r.email).trim().toLowerCase());
+              if (r.id) numericRespIds.push(String(r.id));
             });
             if (isNumericId && !numericRespIds.includes(cleanTargetId)) {
               numericRespIds.push(cleanTargetId);
             }
 
+            let allCandidateResps: any[] = [...(respRows || [])];
             if (numericRespIds.length > 0) {
               const vincOrFilter = isNumericId
                 ? `responsavel_id.in.(${numericRespIds.join(',')}),aluno_id.eq.${cleanTargetId}`
@@ -667,21 +798,14 @@ export async function POST(request: Request) {
                 .select('aluno_id, responsavel_id')
                 .or(vincOrFilter);
               if (vincs && vincs.length > 0) {
-                if (!targetAlunoId && vincs.length === 1 && vincs[0].aluno_id) {
+                if (!targetAlunoId && vincs[0]?.aluno_id) {
                   targetAlunoId = String(vincs[0].aluno_id);
                 }
                 const extraRespIdsToFetch: string[] = [];
                 vincs.forEach((v: any) => {
-                  if (v.aluno_id) {
-                    expandedFamilyTargets.add(String(v.aluno_id));
-                    if (!targetAlunoId && String(v.aluno_id) === cleanTargetId) {
-                      targetAlunoId = cleanTargetId;
-                    }
-                  }
                   if (v.responsavel_id) {
                     const rIdStr = String(v.responsavel_id);
-                    expandedFamilyTargets.add(rIdStr);
-                    if (!respRows?.some((r: any) => String(r.id) === rIdStr)) {
+                    if (!allCandidateResps.some((r: any) => String(r.id) === rIdStr)) {
                       extraRespIdsToFetch.push(rIdStr);
                     }
                   }
@@ -689,18 +813,52 @@ export async function POST(request: Request) {
                 if (extraRespIdsToFetch.length > 0) {
                   const { data: extraResps } = await supabase
                     .from('responsaveis')
-                    .select('id, auth_id, email')
+                    .select('id, nome, auth_id, email')
                     .in('id', Array.from(new Set(extraRespIdsToFetch)));
-                  extraResps?.forEach((er: any) => {
-                    if (er.id) expandedFamilyTargets.add(String(er.id));
-                    if (er.auth_id) expandedFamilyTargets.add(String(er.auth_id));
-                    if (er.email) expandedFamilyTargets.add(String(er.email).trim().toLowerCase());
-                  });
+                  if (extraResps) {
+                    allCandidateResps = [...allCandidateResps, ...extraResps];
+                  }
                 }
               }
             }
+
+            // Filtrar estritamente pelo(s) responsável(is) que enviaram comentário na thread
+            const matchedAuthorResps = allCandidateResps.filter((r: any) => {
+              const rId = String(r.id || '').trim();
+              const rAuthId = String(r.auth_id || '').trim();
+              const rEmail = String(r.email || '').toLowerCase().trim();
+              const rNomeNorm = normalizeRole(r.nome);
+              return (
+                (rId && threadAuthorIds.has(rId)) ||
+                (rAuthId && threadAuthorIds.has(rAuthId)) ||
+                (rEmail && threadAuthorIds.has(rEmail)) ||
+                (rNomeNorm && threadAuthorNamesNorm.has(rNomeNorm))
+              );
+            });
+
+            if (matchedAuthorResps.length > 0) {
+              // Notificar ESTRITAMENTE o responsável autor do comentário
+              matchedAuthorResps.forEach((r: any) => {
+                if (r.id) expandedFamilyTargets.add(String(r.id));
+                if (r.auth_id) expandedFamilyTargets.add(String(r.auth_id));
+                if (r.email) expandedFamilyTargets.add(String(r.email).trim().toLowerCase());
+              });
+              threadAuthorIds.forEach(id => expandedFamilyTargets.add(id));
+            } else {
+              // Fallback caso o próprio aluno tenha comentado ou não haja metadados de responsável específico
+              expandedFamilyTargets.add(targetUserId);
+              if (cleanTargetId) expandedFamilyTargets.add(cleanTargetId);
+              threadAuthorIds.forEach(id => expandedFamilyTargets.add(id));
+              allCandidateResps.forEach((r: any) => {
+                if (r.id) expandedFamilyTargets.add(String(r.id));
+                if (r.auth_id) expandedFamilyTargets.add(String(r.auth_id));
+                if (r.email) expandedFamilyTargets.add(String(r.email).trim().toLowerCase());
+              });
+            }
           } catch (expandErr) {
             console.warn('[comunicados_respostas] Aviso ao expandir IDs da família:', expandErr);
+            expandedFamilyTargets.add(targetUserId);
+            if (cleanTargetId) expandedFamilyTargets.add(cleanTargetId);
           }
 
           const studentUrl = targetAlunoId 
@@ -716,7 +874,8 @@ export async function POST(request: Request) {
               message: `Sobre "${tituloCom}": ${msgTexto}`,
               targetUserIds: Array.from(expandedFamilyTargets),
               targetUrl: studentUrl,
-              metadata: { 
+              metadata: {
+                is_comment: true,
                 perfil_destino: 'familia', 
                 item_id: String(finalComunicadoId), 
                 rota: 'comunicados', 
@@ -748,13 +907,17 @@ export async function POST(request: Request) {
         let usersToReset: string[] = [];
 
         if (!serverIsAdmin) {
-           // Família respondeu. O autor e a equipe escolar devem ver como NÃO LIDO.
+           // Família respondeu: reseta leitura de acordo com a visibilidade configurada
+           const visEscopo = comentariosCfg.visibilidadeComentariosComunicados || 'autor';
            const autorId = comDados.autorId;
            if (autorId) usersToReset.push(String(autorId));
            if (autorId && leituras[autorId]) delete leituras[autorId];
-           // Remove todas as leituras da equipe/autor para garantir status Não Lido
            Object.keys(leituras).forEach(k => {
-             if (k === autorId || k.startsWith('colab_') || k.startsWith('admin_')) {
+             if (k === autorId || (autorId && k === `colab_${autorId}`) || (autorId && k === `admin_${autorId}`)) {
+               delete leituras[k];
+             } else if (visEscopo === 'autor_admin' && k.startsWith('admin_')) {
+               delete leituras[k];
+             } else if (visEscopo === 'todos_marcados' && (k.startsWith('colab_') || k.startsWith('admin_'))) {
                delete leituras[k];
              }
            });

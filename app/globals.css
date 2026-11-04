@@ -715,47 +715,49 @@ button.no-click-anim:hover {
 .btn-icon { padding: 8px; }
 
 /* --- Tables --- */
-.table-container {
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-  border: 1px solid hsl(var(--border-subtle));
-}
+@layer base {
+  .table-container {
+    overflow-x: auto;
+    border-radius: var(--radius-lg);
+    border: 1px solid hsl(var(--border-subtle));
+  }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
 
-th {
-  background: hsl(var(--bg-elevated));
-  padding: 11px 16px;
-  text-align: left;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: hsl(var(--text-muted));
-  white-space: nowrap;
-  font-family: 'Inter', sans-serif;
-}
+  th {
+    background: hsl(var(--bg-elevated));
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--text-muted));
+    white-space: nowrap;
+    font-family: 'Inter', sans-serif;
+  }
 
-td {
-  padding: 13px 16px;
-  font-size: 13.5px;
-  color: hsl(var(--text-secondary));
-  border-top: 1px solid hsl(var(--border-subtle));
-  white-space: nowrap;
-}
+  td {
+    padding: 13px 16px;
+    font-size: 13.5px;
+    color: hsl(var(--text-secondary));
+    border-top: 1px solid hsl(var(--border-subtle));
+    white-space: nowrap;
+  }
 
-/* Numeric/monospace cells in tables */
-td.num {
-  font-family: 'JetBrains Mono', 'Fira Mono', ui-monospace, monospace;
-  font-size: 13px;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
+  /* Numeric/monospace cells in tables */
+  td.num {
+    font-family: 'JetBrains Mono', 'Fira Mono', ui-monospace, monospace;
+    font-size: 13px;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
 
-tr:hover td { background: hsl(var(--bg-elevated)); }
+  tr:hover td { background: hsl(var(--bg-elevated)); }
+}
 
 /* --- Forms --- */
 @layer base {

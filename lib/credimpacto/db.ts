@@ -405,9 +405,15 @@ export async function dbGetEmprestimos(filtros?: {
           const id = row.id.replace('credimpacto:emp:', '')
           const existing = loansMap.get(id)
           if (!existing || (!existing.parcelas?.length && row.dados?.parcelas?.length)) {
+            const rawParcelas = Array.isArray(row.dados?.parcelas) ? row.dados.parcelas : []
             loansMap.set(id, {
               ...row.dados,
               id,
+              parcelas: rawParcelas.map((p: any, idx: number) => ({
+                ...p,
+                id: p.id || `${id}_parc_${p.numero ?? idx + 1}`,
+                emprestimoId: p.emprestimoId || p.emprestimo_id || id
+              })),
               createdAt: row.created_at || row.dados?.createdAt,
               updatedAt: row.dados?.updatedAt || row.created_at
             })
@@ -515,9 +521,15 @@ export async function dbGetEmprestimoById(id: string): Promise<CredImpactoEmpres
       .maybeSingle()
 
     if (data && data.dados) {
+      const rawParcelas = Array.isArray(data.dados.parcelas) ? data.dados.parcelas : []
       return {
         ...data.dados,
         id,
+        parcelas: rawParcelas.map((p: any, idx: number) => ({
+          ...p,
+          id: p.id || `${id}_parc_${p.numero ?? idx + 1}`,
+          emprestimoId: p.emprestimoId || p.emprestimo_id || id
+        })),
         createdAt: data.created_at,
         updatedAt: data.dados.updatedAt || data.created_at
       }
@@ -552,7 +564,8 @@ export async function dbSaveEmprestimo(
       Math.max(0, updatedLoan.valorAprovado - updatedLoan.saldoDevedorAtual)
     )
   } else if (updatedLoan.parcelas && updatedLoan.parcelas.length > 0) {
-    const parcelasPagas = updatedLoan.parcelas.filter(
+    const parcelasValidas = updatedLoan.parcelas.filter((p) => p.status !== 'cancelada')
+    const parcelasPagas = parcelasValidas.filter(
       (p) => p.status === 'descontada' || p.status === 'paga_avulso'
     )
     const totalAmortizado = roundMoney(
@@ -563,12 +576,16 @@ export async function dbSaveEmprestimo(
       Math.max(0, updatedLoan.valorAprovado - totalAmortizado)
     )
 
-    // Se quitou todas as parcelas
+    // Se quitou todas as parcelas válidas
+    const todasPagas =
+      parcelasValidas.length > 0 &&
+      parcelasPagas.length === parcelasValidas.length
     if (
-      updatedLoan.saldoDevedorAtual === 0 &&
-      parcelasPagas.length === updatedLoan.quantidadeParcelas &&
+      (todasPagas || (updatedLoan.saldoDevedorAtual <= 0.05 && parcelasPagas.length >= updatedLoan.quantidadeParcelas)) &&
       updatedLoan.status === 'ativo'
     ) {
+      updatedLoan.totalAmortizado = roundMoney(updatedLoan.valorAprovado)
+      updatedLoan.saldoDevedorAtual = 0
       updatedLoan.status = 'quitado'
       updatedLoan.quitadoEm = nowIso
     }
@@ -832,64 +849,289 @@ export async function dbGetParcelasFolha(competencia?: string): Promise<
   return result.sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
 }
 
-export async function dbConciliarParcela(
-  parcelaId: string,
-  dadosBaixa: {
-    valorPago: number
-    metodoPagamento: CredImpactoParcela['metodoPagamento']
-    dataPagamento?: string
-    comprovanteUrl?: string
-    observacao?: string
-    loteFolhaId?: string
-  },
+export interface DadosBaixaParcelaInput {
+  valorPago?: number
+  modoValor?: 'integral' | 'sem_juros' | 'personalizado'
+  metodoPagamento: CredImpactoParcela['metodoPagamento']
+  dataPagamento?: string
+  comprovanteUrl?: string
+  observacao?: string
+  loteFolhaId?: string
+}
+
+export async function dbConciliarParcelasLote(
+  parcelaIds: string[],
+  dadosBaixa: DadosBaixaParcelaInput,
   autor: { id: string; nome: string; perfil?: string }
-): Promise<{ success: boolean; emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }> {
+): Promise<{
+  success: boolean
+  emprestimosAtualizados: CredImpactoEmprestimo[]
+  parcelasBaixadas: Array<{ emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }>
+  erros: Array<{ parcelaId: string; erro: string }>
+}> {
+  const uniqueIds = Array.from(
+    new Set((parcelaIds || []).map((id) => String(id || '').trim()).filter(Boolean))
+  )
+
+  if (uniqueIds.length === 0) {
+    throw new Error('Nenhuma parcela selecionada para baixa.')
+  }
+
   const emprestimos = await dbGetEmprestimos()
-  let targetLoan: CredImpactoEmprestimo | null = null
-  let targetParcela: CredImpactoParcela | null = null
-
-  for (const emp of emprestimos) {
-    const found = (emp.parcelas || []).find((p) => p.id === parcelaId)
-    if (found) {
-      targetLoan = emp
-      targetParcela = found
-      break
-    }
-  }
-
-  if (!targetLoan || !targetParcela) {
-    throw new Error('Parcela não encontrada.')
-  }
-
-  if (targetParcela.status === 'descontada' || targetParcela.status === 'paga_avulso') {
-    throw new Error('Esta parcela já foi baixada anteriormente.')
-  }
-
   const nowIso = new Date().toISOString()
   const todayDate = nowIso.split('T')[0]
 
-  targetParcela.status =
-    dadosBaixa.metodoPagamento === 'folha_pagamento' ? 'descontada' : 'paga_avulso'
-  const valorEfetivo = dadosBaixa.valorPago && dadosBaixa.valorPago > 0 ? dadosBaixa.valorPago : targetParcela.valorTotal
-  targetParcela.valorPago = roundMoney(valorEfetivo)
-  targetParcela.dataPagamento = dadosBaixa.dataPagamento || todayDate
-  targetParcela.metodoPagamento = dadosBaixa.metodoPagamento
-  targetParcela.comprovanteUrl = dadosBaixa.comprovanteUrl
-  targetParcela.observacao = dadosBaixa.observacao
-  targetParcela.loteFolhaId = dadosBaixa.loteFolhaId
-  targetParcela.responsavelBaixaId = autor.id
-  targetParcela.responsavelBaixaNome = autor.nome
-  targetParcela.baixadoEm = nowIso
+  const matchedTargets: Array<{ loan: CredImpactoEmprestimo; parcela: CredImpactoParcela }> = []
+  const erros: Array<{ parcelaId: string; erro: string }> = []
 
-  // Salva o empréstimo atualizado com recalculo de saldo devedor
-  const updatedLoan = await dbSaveEmprestimo(
-    targetLoan,
-    autor,
-    'CONCILIACAO_FOLHA',
-    `Baixa da parcela ${targetParcela.numero}/${targetLoan.quantidadeParcelas} via ${targetParcela.metodoPagamento}`
+  for (const pid of uniqueIds) {
+    let foundLoan: CredImpactoEmprestimo | null = null
+    let foundParcela: CredImpactoParcela | null = null
+
+    for (const emp of emprestimos) {
+      const found = (emp.parcelas || []).find(
+        (p) =>
+          p.id === pid ||
+          `${emp.id}_parc_${p.numero}` === pid ||
+          `${emp.id}:${p.numero}` === pid
+      )
+      if (found) {
+        foundLoan = emp
+        foundParcela = found
+        break
+      }
+    }
+
+    if (!foundLoan || !foundParcela) {
+      if (uniqueIds.length === 1) {
+        throw new Error('Parcela não encontrada.')
+      }
+      erros.push({ parcelaId: pid, erro: 'Parcela não encontrada.' })
+      continue
+    }
+
+    if (foundParcela.status === 'descontada' || foundParcela.status === 'paga_avulso') {
+      if (uniqueIds.length === 1) {
+        throw new Error('Esta parcela já foi baixada anteriormente.')
+      }
+      erros.push({ parcelaId: pid, erro: 'Esta parcela já foi baixada anteriormente.' })
+      continue
+    }
+
+    matchedTargets.push({ loan: foundLoan, parcela: foundParcela })
+  }
+
+  if (matchedTargets.length === 0) {
+    throw new Error(
+      erros[0]?.erro || 'Nenhuma parcela válida ou pendente encontrada para realizar a baixa.'
+    )
+  }
+
+  // Soma total nominal das parcelas selecionadas (para rateio quando modoValor === 'personalizado' em lote)
+  const somaNominalTotal = matchedTargets.reduce((acc, t) => acc + (t.parcela.valorTotal || 0), 0)
+  const loansToSaveMap = new Map<string, { loan: CredImpactoEmprestimo; parcelas: CredImpactoParcela[] }>()
+
+  let acumuladoRateio = 0
+  matchedTargets.forEach(({ loan, parcela }, idx) => {
+    let valorEfetivo = parcela.valorTotal
+    if (dadosBaixa.modoValor === 'sem_juros') {
+      valorEfetivo = roundMoney(parcela.valorAmortizacao)
+    } else if (
+      dadosBaixa.modoValor === 'personalizado' &&
+      dadosBaixa.valorPago !== undefined &&
+      dadosBaixa.valorPago > 0
+    ) {
+      if (matchedTargets.length === 1) {
+        valorEfetivo = roundMoney(dadosBaixa.valorPago)
+      } else if (idx === matchedTargets.length - 1) {
+        valorEfetivo = roundMoney(Math.max(0.01, dadosBaixa.valorPago - acumuladoRateio))
+      } else {
+        const peso = somaNominalTotal > 0 ? (parcela.valorTotal || 0) / somaNominalTotal : 1 / matchedTargets.length
+        valorEfetivo = roundMoney(dadosBaixa.valorPago * peso)
+        acumuladoRateio = roundMoney(acumuladoRateio + valorEfetivo)
+      }
+    } else if (
+      matchedTargets.length === 1 &&
+      dadosBaixa.valorPago !== undefined &&
+      dadosBaixa.valorPago > 0
+    ) {
+      valorEfetivo = roundMoney(dadosBaixa.valorPago)
+    } else {
+      valorEfetivo = roundMoney(parcela.valorTotal)
+    }
+
+    parcela.status =
+      dadosBaixa.metodoPagamento === 'folha_pagamento' ? 'descontada' : 'paga_avulso'
+    parcela.valorPago = roundMoney(valorEfetivo)
+    parcela.dataPagamento = dadosBaixa.dataPagamento || todayDate
+    parcela.metodoPagamento = dadosBaixa.metodoPagamento
+    if (dadosBaixa.comprovanteUrl !== undefined && dadosBaixa.comprovanteUrl !== '') {
+      parcela.comprovanteUrl = dadosBaixa.comprovanteUrl
+    }
+    if (dadosBaixa.observacao !== undefined && dadosBaixa.observacao !== '') {
+      parcela.observacao = dadosBaixa.observacao
+    } else if (dadosBaixa.modoValor === 'sem_juros' && !parcela.observacao) {
+      parcela.observacao = 'Baixa com isenção/dispensa de juros'
+    }
+    if (dadosBaixa.loteFolhaId !== undefined) {
+      parcela.loteFolhaId = dadosBaixa.loteFolhaId
+    }
+    parcela.responsavelBaixaId = autor.id
+    parcela.responsavelBaixaNome = autor.nome
+    parcela.baixadoEm = nowIso
+
+    const group = loansToSaveMap.get(loan.id) || { loan, parcelas: [] }
+    group.parcelas.push(parcela)
+    loansToSaveMap.set(loan.id, group)
+  })
+
+  const emprestimosAtualizados: CredImpactoEmprestimo[] = []
+  const parcelasBaixadas: Array<{ emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }> = []
+
+  for (const { loan, parcelas } of loansToSaveMap.values()) {
+    const nums = parcelas.map((p) => `#${p.numero}`).join(', ')
+    const descAudit =
+      parcelas.length === 1
+        ? `Baixa da parcela ${parcelas[0].numero}/${loan.quantidadeParcelas} via ${dadosBaixa.metodoPagamento}`
+        : `Baixa em lote de ${parcelas.length} parcelas (${nums} de ${loan.quantidadeParcelas}) via ${dadosBaixa.metodoPagamento}`
+
+    const updatedLoan = await dbSaveEmprestimo(loan, autor, 'CONCILIACAO_FOLHA', descAudit)
+    emprestimosAtualizados.push(updatedLoan)
+    for (const p of parcelas) {
+      parcelasBaixadas.push({ emprestimo: updatedLoan, parcela: p })
+    }
+  }
+
+  return {
+    success: true,
+    emprestimosAtualizados,
+    parcelasBaixadas,
+    erros
+  }
+}
+
+export async function dbConciliarParcela(
+  parcelaId: string,
+  dadosBaixa: DadosBaixaParcelaInput,
+  autor: { id: string; nome: string; perfil?: string }
+): Promise<{ success: boolean; emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }> {
+  const res = await dbConciliarParcelasLote([parcelaId], dadosBaixa, autor)
+  const item = res.parcelasBaixadas[0]
+  if (!item) {
+    throw new Error(res.erros[0]?.erro || 'Não foi possível conciliar a parcela.')
+  }
+  return { success: true, emprestimo: item.emprestimo, parcela: item.parcela }
+}
+
+export async function dbEstornarParcelasLote(
+  parcelaIds: string[],
+  justificativa: string,
+  autor: { id: string; nome: string; perfil?: string }
+): Promise<{
+  success: boolean
+  emprestimosAtualizados: CredImpactoEmprestimo[]
+  parcelasEstornadas: Array<{ emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }>
+  erros: Array<{ parcelaId: string; erro: string }>
+}> {
+  if (!justificativa || justificativa.trim().length < 5) {
+    throw new Error('Justificativa obrigatória para estorno de baixa (mínimo 5 caracteres).')
+  }
+
+  const uniqueIds = Array.from(
+    new Set((parcelaIds || []).map((id) => String(id || '').trim()).filter(Boolean))
   )
 
-  return { success: true, emprestimo: updatedLoan, parcela: targetParcela }
+  if (uniqueIds.length === 0) {
+    throw new Error('Nenhuma parcela selecionada para estorno.')
+  }
+
+  const emprestimos = await dbGetEmprestimos()
+  const loansToSaveMap = new Map<string, { loan: CredImpactoEmprestimo; parcelas: CredImpactoParcela[] }>()
+  const erros: Array<{ parcelaId: string; erro: string }> = []
+
+  for (const pid of uniqueIds) {
+    let foundLoan: CredImpactoEmprestimo | null = null
+    let foundParcela: CredImpactoParcela | null = null
+
+    for (const emp of emprestimos) {
+      const found = (emp.parcelas || []).find(
+        (p) =>
+          p.id === pid ||
+          `${emp.id}_parc_${p.numero}` === pid ||
+          `${emp.id}:${p.numero}` === pid
+      )
+      if (found) {
+        foundLoan = emp
+        foundParcela = found
+        break
+      }
+    }
+
+    if (!foundLoan || !foundParcela) {
+      if (uniqueIds.length === 1) {
+        throw new Error('Parcela não encontrada.')
+      }
+      erros.push({ parcelaId: pid, erro: 'Parcela não encontrada.' })
+      continue
+    }
+
+    if (foundParcela.status !== 'descontada' && foundParcela.status !== 'paga_avulso') {
+      if (uniqueIds.length === 1) {
+        throw new Error('Apenas parcelas já quitadas ou descontadas podem ser estornadas.')
+      }
+      erros.push({ parcelaId: pid, erro: 'Parcela não está baixada.' })
+      continue
+    }
+
+    foundParcela.status = 'prevista'
+    foundParcela.valorPago = undefined
+    foundParcela.dataPagamento = undefined
+    foundParcela.metodoPagamento = undefined
+    foundParcela.comprovanteUrl = undefined
+    foundParcela.responsavelBaixaId = undefined
+    foundParcela.responsavelBaixaNome = undefined
+    foundParcela.baixadoEm = undefined
+    foundParcela.observacao = `Estornado em ${new Date().toLocaleDateString('pt-BR')}: ${justificativa.trim()}`
+
+    if (foundLoan.status === 'quitado') {
+      foundLoan.status = 'ativo'
+      foundLoan.quitadoEm = undefined
+    }
+
+    const group = loansToSaveMap.get(foundLoan.id) || { loan: foundLoan, parcelas: [] }
+    group.parcelas.push(foundParcela)
+    loansToSaveMap.set(foundLoan.id, group)
+  }
+
+  if (loansToSaveMap.size === 0) {
+    throw new Error(
+      erros[0]?.erro || 'Nenhuma parcela baixada válida encontrada para estorno.'
+    )
+  }
+
+  const emprestimosAtualizados: CredImpactoEmprestimo[] = []
+  const parcelasEstornadas: Array<{ emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }> = []
+
+  for (const { loan, parcelas } of loansToSaveMap.values()) {
+    const nums = parcelas.map((p) => `#${p.numero}`).join(', ')
+    const descAudit =
+      parcelas.length === 1
+        ? `Estorno da parcela ${parcelas[0].numero}: ${justificativa.trim()}`
+        : `Estorno em lote de ${parcelas.length} parcelas (${nums}): ${justificativa.trim()}`
+
+    const updatedLoan = await dbSaveEmprestimo(loan, autor, 'ESTORNO_BAIXA', descAudit)
+    emprestimosAtualizados.push(updatedLoan)
+    for (const p of parcelas) {
+      parcelasEstornadas.push({ emprestimo: updatedLoan, parcela: p })
+    }
+  }
+
+  return {
+    success: true,
+    emprestimosAtualizados,
+    parcelasEstornadas,
+    erros
+  }
 }
 
 export async function dbEstornarParcela(
@@ -897,57 +1139,12 @@ export async function dbEstornarParcela(
   justificativa: string,
   autor: { id: string; nome: string; perfil?: string }
 ): Promise<{ success: boolean; emprestimo: CredImpactoEmprestimo; parcela: CredImpactoParcela }> {
-  if (!justificativa || justificativa.trim().length < 5) {
-    throw new Error('Justificativa obrigatória para estorno de baixa.')
+  const res = await dbEstornarParcelasLote([parcelaId], justificativa, autor)
+  const item = res.parcelasEstornadas[0]
+  if (!item) {
+    throw new Error(res.erros[0]?.erro || 'Não foi possível estornar a parcela.')
   }
-
-  const emprestimos = await dbGetEmprestimos()
-  let targetLoan: CredImpactoEmprestimo | null = null
-  let targetParcela: CredImpactoParcela | null = null
-
-  for (const emp of emprestimos) {
-    const found = (emp.parcelas || []).find((p) => p.id === parcelaId)
-    if (found) {
-      targetLoan = emp
-      targetParcela = found
-      break
-    }
-  }
-
-  if (!targetLoan || !targetParcela) {
-    throw new Error('Parcela não encontrada.')
-  }
-
-  if (targetParcela.status !== 'descontada' && targetParcela.status !== 'paga_avulso') {
-    throw new Error('Apenas parcelas já quitadas ou descontadas podem ser estornadas.')
-  }
-
-  const dadosAnteriores = { ...targetParcela }
-
-  targetParcela.status = 'prevista'
-  targetParcela.valorPago = undefined
-  targetParcela.dataPagamento = undefined
-  targetParcela.metodoPagamento = undefined
-  targetParcela.comprovanteUrl = undefined
-  targetParcela.responsavelBaixaId = undefined
-  targetParcela.responsavelBaixaNome = undefined
-  targetParcela.baixadoEm = undefined
-  targetParcela.observacao = `Estornado em ${new Date().toLocaleDateString('pt-BR')}: ${justificativa}`
-
-  // Se o empréstimo estava quitado, reabre para ativo
-  if (targetLoan.status === 'quitado') {
-    targetLoan.status = 'ativo'
-    targetLoan.quitadoEm = undefined
-  }
-
-  const updatedLoan = await dbSaveEmprestimo(
-    targetLoan,
-    autor,
-    'ESTORNO_BAIXA',
-    `Estorno da parcela ${targetParcela.numero}: ${justificativa}`
-  )
-
-  return { success: true, emprestimo: updatedLoan, parcela: targetParcela }
+  return { success: true, emprestimo: item.emprestimo, parcela: item.parcela }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1155,7 +1352,11 @@ function mapDbRowToEmprestimo(e: any, parcelas: CredImpactoParcela[]): CredImpac
     criadoPorId: e.criado_por_id || e.criadoPorId,
     criadoPorNome: e.criado_por_nome || e.criadoPorNome,
     memoriaCalculo: e.memoria_calculo || e.memoriaCalculo,
-    parcelas: parcelas.length > 0 ? parcelas : e.parcelas || [],
+    parcelas: (parcelas.length > 0 ? parcelas : e.parcelas || []).map((p: any, idx: number) => ({
+      ...p,
+      id: p.id || `${e.id}_parc_${p.numero ?? idx + 1}`,
+      emprestimoId: p.emprestimoId || p.emprestimo_id || e.id
+    })),
     createdAt: e.created_at || e.createdAt,
     updatedAt: e.updated_at || e.updatedAt
   }

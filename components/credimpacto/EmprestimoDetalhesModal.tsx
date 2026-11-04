@@ -19,7 +19,11 @@ import {
   Copy,
   MessageCircle,
   Receipt,
-  Upload
+  Upload,
+  RotateCcw,
+  Layers,
+  CheckSquare,
+  Sparkles
 } from 'lucide-react'
 import { CredImpactoEmprestimo } from '@/types/credimpacto'
 import { formatBrl, METODOS_LABELS } from '@/lib/credimpacto/engine'
@@ -29,6 +33,11 @@ import {
   resolveColaboradorPhone
 } from '@/lib/credimpacto/whatsappTemplates'
 import { toast } from 'sonner'
+import {
+  BaixaParcelasModal,
+  EstornoParcelasModal,
+  ParcelaComContexto
+} from './BaixaParcelasModal'
 
 export type EmprestimoDetalhesSubTab = 'resumo' | 'parcelas' | 'contrato' | 'comprovante' | 'memoria'
 
@@ -45,7 +54,7 @@ interface EmprestimoDetalhesModalProps {
 }
 
 export function EmprestimoDetalhesModal({
-  loan,
+  loan: loanProp,
   initialSubTab = 'resumo',
   onClose,
   onOpenSignModal,
@@ -55,19 +64,90 @@ export function EmprestimoDetalhesModal({
   onRefresh,
   isAdminOrFinance
 }: EmprestimoDetalhesModalProps) {
+  const [currentLoan, setCurrentLoan] = useState<CredImpactoEmprestimo | null>(loanProp)
   const [activeSubTab, setActiveSubTab] = useState<EmprestimoDetalhesSubTab>(initialSubTab)
-  const [localComprovanteUrl, setLocalComprovanteUrl] = useState<string | undefined>(loan?.comprovanteLiberacaoUrl)
+  const [localComprovanteUrl, setLocalComprovanteUrl] = useState<string | undefined>(
+    loanProp?.comprovanteLiberacaoUrl
+  )
   const [isUploadingComprovante, setIsUploadingComprovante] = useState(false)
+  const [selectedParcelaIds, setSelectedParcelaIds] = useState<string[]>([])
+  const [baixaModalState, setBaixaModalState] = useState<{
+    parcelasInicial: ParcelaComContexto[]
+    todasParcelasContexto?: ParcelaComContexto[]
+  } | null>(null)
+  const [estornoModalParcelas, setEstornoModalParcelas] = useState<ParcelaComContexto[] | null>(
+    null
+  )
+
+  useEffect(() => {
+    setCurrentLoan(loanProp)
+  }, [loanProp])
 
   useEffect(() => {
     setActiveSubTab(initialSubTab || 'resumo')
-  }, [loan?.id, initialSubTab])
+    setSelectedParcelaIds([])
+  }, [loanProp?.id, initialSubTab])
 
   useEffect(() => {
-    setLocalComprovanteUrl(loan?.comprovanteLiberacaoUrl)
-  }, [loan?.id, loan?.comprovanteLiberacaoUrl])
+    setLocalComprovanteUrl(loanProp?.comprovanteLiberacaoUrl)
+  }, [loanProp?.id, loanProp?.comprovanteLiberacaoUrl])
 
-  if (!loan) return null
+  if (!currentLoan) return null
+  const loan = currentLoan
+
+  const parcelasDoContrato: ParcelaComContexto[] = (loan.parcelas || []).map((p, idx) => ({
+    ...p,
+    id: p.id || `${loan.id}_parc_${p.numero ?? idx + 1}`,
+    emprestimoId: p.emprestimoId || loan.id,
+    colaboradorNome: loan.colaboradorNome,
+    colaboradorCpf: loan.colaboradorCpf,
+    codigoOperacao: loan.codigoOperacao,
+    quantidadeParcelas: loan.quantidadeParcelas
+  }))
+
+  const parcelasPendentesContrato = parcelasDoContrato.filter(
+    (p) =>
+      p.status !== 'descontada' &&
+      p.status !== 'paga_avulso' &&
+      p.status !== 'cancelada'
+  )
+
+  const parcelasPagasContrato = parcelasDoContrato.filter(
+    (p) => p.status === 'descontada' || p.status === 'paga_avulso'
+  )
+
+  const selecionadasObjetos = parcelasDoContrato.filter((p) =>
+    selectedParcelaIds.includes(p.id)
+  )
+  const selecionadasPendentes = selecionadasObjetos.filter(
+    (p) =>
+      p.status !== 'descontada' &&
+      p.status !== 'paga_avulso' &&
+      p.status !== 'cancelada'
+  )
+  const selecionadasPagas = selecionadasObjetos.filter(
+    (p) => p.status === 'descontada' || p.status === 'paga_avulso'
+  )
+  const allPendingSelected =
+    parcelasPendentesContrato.length > 0 &&
+    parcelasPendentesContrato.every((p) => selectedParcelaIds.includes(p.id))
+
+  const toggleSelectParcela = (id: string) => {
+    setSelectedParcelaIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  const toggleSelectAllPending = () => {
+    if (allPendingSelected) {
+      const pendingSet = new Set(parcelasPendentesContrato.map((p) => p.id))
+      setSelectedParcelaIds((prev) => prev.filter((id) => !pendingSet.has(id)))
+    } else {
+      setSelectedParcelaIds((prev) =>
+        Array.from(new Set([...prev, ...parcelasPendentesContrato.map((p) => p.id)]))
+      )
+    }
+  }
 
   const effectiveComprovanteUrl = localComprovanteUrl || loan.comprovanteLiberacaoUrl
   const isImageReceipt = Boolean(
@@ -196,82 +276,112 @@ export function EmprestimoDetalhesModal({
     : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl w-[96vw] max-w-[1080px] h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* HEADER DO MODAL */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/60 dark:bg-slate-950/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-mono font-bold text-xs">
+        <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 bg-slate-50/60 dark:bg-slate-950/60">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-mono font-bold text-xs shrink-0">
               {loan.codigoOperacao.split('-')[2] || 'CRED'}
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white font-mono">{loan.codigoOperacao}</h3>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white font-mono">{loan.codigoOperacao}</h3>
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   {loan.status}
                 </span>
-                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${sigBadgeClass}`}>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center gap-1 ${sigBadgeClass}`}>
                   {isSignedByColaborador ? <CheckCircle2 size={11} /> : <Clock size={11} />}
                   <span>{sigBadgeLabel}</span>
                 </span>
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                 Colaborador: <strong className="text-slate-800 dark:text-slate-200">{loan.colaboradorNome}</strong> • CPF: {loan.colaboradorCpf}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+            {isAdminOrFinance && parcelasPendentesContrato.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeSubTab !== 'parcelas') {
+                    setActiveSubTab('parcelas')
+                  } else {
+                    setBaixaModalState({
+                      parcelasInicial:
+                        selecionadasPendentes.length > 0
+                          ? selecionadasPendentes
+                          : parcelasPendentesContrato,
+                      todasParcelasContexto: parcelasPendentesContrato
+                    })
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold shadow-xs transition-all whitespace-nowrap"
+                title="Dar baixa em 1, várias ou todas as parcelas deste contrato"
+              >
+                <CheckCircle2 size={13} />
+                <span>
+                  {activeSubTab === 'parcelas'
+                    ? selecionadasPendentes.length > 0
+                      ? `Baixar (${selecionadasPendentes.length})`
+                      : `Baixar Todas (${parcelasPendentesContrato.length})`
+                    : `Baixar Parcelas (${parcelasPendentesContrato.length})`}
+                </span>
+              </button>
+            )}
             {(effectiveComprovanteUrl || isAdminOrFinance) && (
               <button
                 type="button"
                 onClick={() => setActiveSubTab('comprovante')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition-all whitespace-nowrap ${
                   effectiveComprovanteUrl
                     ? 'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/50 border-cyan-200 dark:border-cyan-800/60 text-cyan-700 dark:text-cyan-300'
                     : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/50 border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300'
                 }`}
                 title={effectiveComprovanteUrl ? 'Ver Comprovante de Transferência' : 'Anexar Comprovante de Transferência'}
               >
-                <Receipt size={14} />
+                <Receipt size={13} />
                 <span>{effectiveComprovanteUrl ? 'Ver Comprovante' : 'Anexar Comprovante'}</span>
               </button>
             )}
             <button
               type="button"
               onClick={handleSendWhatsAppSchedule}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-all whitespace-nowrap"
               title="Enviar Detalhes do Contrato e Cronograma de Parcelas pelo WhatsApp"
             >
-              <MessageCircle size={14} />
-              <span>Enviar WhatsApp</span>
+              <MessageCircle size={13} />
+              <span>WhatsApp</span>
             </button>
             <button
               type="button"
               onClick={handleCopyWhatsAppSchedule}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-all whitespace-nowrap"
               title="Copiar Extrato e Cronograma em Texto"
             >
-              <Copy size={14} />
-              <span className="hidden sm:inline">Copiar Extrato</span>
+              <Copy size={13} />
+              <span className="hidden sm:inline">Extrato</span>
+            </button>
+            <button
+              onClick={handlePrintContract}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-all whitespace-nowrap"
+              title="Imprimir Contrato"
+            >
+              <Printer size={13} />
+              <span className="hidden sm:inline">Imprimir</span>
             </button>
             {isAdminOrFinance && onDelete && (
               <button
                 onClick={() => onDelete(loan)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 text-xs font-semibold transition-all"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 border border-rose-200/80 dark:border-rose-800/40 text-rose-600 dark:text-rose-400 text-[11px] font-semibold transition-all whitespace-nowrap"
                 title="Excluir Empréstimo"
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} />
                 <span className="hidden sm:inline">Excluir</span>
               </button>
             )}
-            <button
-              onClick={handlePrintContract}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition-all"
-            >
-              <Printer size={14} />
-              <span className="hidden sm:inline">Imprimir Contrato</span>
-            </button>
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm transition-colors"
@@ -555,20 +665,121 @@ export function EmprestimoDetalhesModal({
           {/* ABA 2: CRONOGRAMA DE PARCELAS */}
           {activeSubTab === 'parcelas' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span>
-                  Parcelas vinculadas ao desconto em folha de pagamento no quinto dia útil:
-                </span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">
-                  {(loan.parcelas || []).filter((p) => p.status === 'descontada' || p.status === 'paga_avulso').length} de {loan.quantidadeParcelas} pagas
-                </span>
+              {/* BARRA DE PROGRESSO E AÇÕES DE BAIXA (1, VÁRIAS OU TODAS) */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300 font-medium">
+                      Parcelas vinculadas ao desconto em folha de pagamento no quinto dia útil:
+                    </span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      {parcelasPagasContrato.length} de {loan.quantidadeParcelas} pagas
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round(
+                            (parcelasPagasContrato.length /
+                              Math.max(1, loan.quantidadeParcelas)) *
+                              100
+                          )
+                        )}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {isAdminOrFinance && (
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    {selecionadasPendentes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBaixaModalState({
+                            parcelasInicial: selecionadasPendentes,
+                            todasParcelasContexto: parcelasPendentesContrato
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-sm transition"
+                      >
+                        <CheckSquare size={14} />
+                        <span>
+                          Baixar Selecionadas ({selecionadasPendentes.length})
+                        </span>
+                      </button>
+                    )}
+
+                    {parcelasPendentesContrato.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBaixaModalState({
+                            parcelasInicial: parcelasPendentesContrato,
+                            todasParcelasContexto: parcelasPendentesContrato
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-extrabold text-xs inline-flex items-center gap-1.5 transition"
+                        title="Dar baixa em todas as parcelas pendentes deste contrato"
+                      >
+                        <Layers size={14} />
+                        <span>
+                          Baixar Todas ({parcelasPendentesContrato.length})
+                        </span>
+                      </button>
+                    )}
+
+                    {selecionadasPagas.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setEstornoModalParcelas(selecionadasPagas)}
+                        className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-xs inline-flex items-center gap-1.5 transition"
+                      >
+                        <RotateCcw size={13} />
+                        <span>Estornar ({selecionadasPagas.length})</span>
+                      </button>
+                    )}
+
+                    {onOpenPayoffModal && loan.status === 'ativo' && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPayoffModal(loan)}
+                        className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs inline-flex items-center gap-1.5 transition"
+                        title="Abrir calculadora de quitação antecipada com recálculo de saldo"
+                      >
+                        <Sparkles size={13} className="text-amber-500" />
+                        <span>Quitação Antecipada</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 overflow-x-auto">
+              <div
+                className="rounded-xl border border-slate-200/80 dark:border-slate-800 overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label={`Cronograma de parcelas do contrato ${loan.codigoOperacao}`}
+              >
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200/80 dark:border-slate-800">
                     <tr>
-                      <th className="py-2.5 px-2 text-center w-9 whitespace-nowrap">Nº</th>
+                      {isAdminOrFinance && (
+                        <th className="py-2.5 px-2 text-center w-8">
+                          <input
+                            type="checkbox"
+                            checked={allPendingSelected}
+                            onChange={toggleSelectAllPending}
+                            disabled={parcelasPendentesContrato.length === 0}
+                            title="Selecionar todas as parcelas pendentes"
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40"
+                          />
+                        </th>
+                      )}
+                      <th className="py-2.5 px-1.5 text-center w-9 whitespace-nowrap">Nº</th>
                       <th className="py-2.5 px-2 text-center whitespace-nowrap">Competência</th>
                       <th className="py-2.5 px-2 text-center whitespace-nowrap">Vencimento</th>
                       <th className="py-2.5 px-2 text-right whitespace-nowrap">Amortização</th>
@@ -576,50 +787,142 @@ export function EmprestimoDetalhesModal({
                       <th className="py-2.5 px-2 text-right whitespace-nowrap">Total Parcela</th>
                       <th className="py-2.5 px-2 text-right whitespace-nowrap">Saldo Devedor</th>
                       <th className="py-2.5 px-2 text-center whitespace-nowrap">Situação</th>
-                      <th className="py-2.5 px-2 text-center whitespace-nowrap w-24">Comprovante</th>
+                      <th className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                        {isAdminOrFinance ? 'Ação' : 'Comprovante'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-mono text-[11px]">
-                    {(loan.parcelas || []).map((p) => {
+                    {parcelasDoContrato.map((p) => {
                       const isPaid = p.status === 'descontada' || p.status === 'paga_avulso'
+                      const isChecked = selectedParcelaIds.includes(p.id)
 
                       return (
-                        <tr key={p.numero} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors">
-                          <td className="py-2 px-2 text-center font-bold text-slate-700 dark:text-slate-300 w-9">{p.numero}</td>
-                          <td className="py-2 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">{p.competencia}</td>
+                        <tr
+                          key={p.id}
+                          className={`transition-colors ${
+                            isChecked
+                              ? 'bg-emerald-50/60 dark:bg-emerald-950/30'
+                              : isPaid
+                                ? 'bg-slate-50/40 dark:bg-slate-900/40 hover:bg-slate-50/80'
+                                : 'hover:bg-slate-50/70 dark:hover:bg-white/5'
+                          }`}
+                        >
+                          {isAdminOrFinance && (
+                            <td className="py-2 px-2 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleSelectParcela(p.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                aria-label={`Selecionar parcela #${p.numero}`}
+                              />
+                            </td>
+                          )}
+                          <td className="py-2 px-1.5 text-center font-bold text-slate-700 dark:text-slate-300 w-9">
+                            {p.numero}
+                          </td>
+                          <td className="py-2 px-2 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            {p.competencia}
+                          </td>
                           <td className="py-2 px-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {new Date(p.dataVencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">{formatBrl(p.valorAmortizacao)}</td>
-                          <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">{formatBrl(p.valorJuros)}</td>
-                          <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">{formatBrl(p.valorTotal)}</td>
-                          <td className="py-2 px-2 text-right font-bold text-cyan-700 dark:text-cyan-400 whitespace-nowrap">{formatBrl(p.saldoDevedorApos)}</td>
-                          <td className="py-2 px-2 text-center whitespace-nowrap">
-                            <span
-                              className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${
-                                isPaid
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
-                                  : p.status === 'atrasada'
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40'
-                                  : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                              }`}
-                            >
-                              {p.status === 'descontada' ? 'Descontada' : p.status === 'paga_avulso' ? 'Paga Avulso' : p.status === 'atrasada' ? 'Em Atraso' : 'A Vencer'}
-                            </span>
+                          <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            {formatBrl(p.valorAmortizacao)}
                           </td>
-                          <td className="py-2 px-2 text-center font-sans whitespace-nowrap">
-                            {p.comprovanteUrl ? (
-                              <a
-                                href={p.comprovanteUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-cyan-700 dark:text-cyan-400 font-semibold hover:underline text-xs"
-                              >
-                                Ver
-                              </a>
-                            ) : (
-                              <span className="text-slate-400 text-xs">-</span>
+                          <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            {formatBrl(p.valorJuros)}
+                          </td>
+                          <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                            <div>{formatBrl(p.valorTotal)}</div>
+                            {isPaid && p.valorPago !== undefined && p.valorPago !== p.valorTotal && (
+                              <div className="text-[9px] text-emerald-600 font-sans font-bold">
+                                Pago: {formatBrl(p.valorPago)}
+                              </div>
                             )}
+                          </td>
+                          <td className="py-2 px-2 text-right font-bold text-cyan-700 dark:text-cyan-400 whitespace-nowrap">
+                            {formatBrl(p.saldoDevedorApos)}
+                          </td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap font-sans">
+                            <div className="flex flex-col items-center justify-center gap-0.5">
+                              <span
+                                className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${
+                                  isPaid
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40'
+                                    : p.status === 'atrasada'
+                                      ? 'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40'
+                                      : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                {p.status === 'descontada'
+                                  ? 'Descontada'
+                                  : p.status === 'paga_avulso'
+                                    ? 'Paga Avulso'
+                                    : p.status === 'atrasada'
+                                      ? 'Em Atraso'
+                                      : 'A Vencer'}
+                              </span>
+                              {isPaid && p.dataPagamento && (
+                                <span className="text-[9px] text-slate-400">
+                                  {new Date(
+                                    p.dataPagamento.includes('T')
+                                      ? p.dataPagamento
+                                      : p.dataPagamento + 'T12:00:00'
+                                  ).toLocaleDateString('pt-BR')}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-2.5 text-right font-sans whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1">
+                              {p.comprovanteUrl && (
+                                <a
+                                  href={p.comprovanteUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200 font-bold text-[10px] inline-flex items-center gap-1"
+                                  title="Ver comprovante da parcela"
+                                >
+                                  <ExternalLink size={11} />
+                                  <span>Recibo</span>
+                                </a>
+                              )}
+
+                              {isAdminOrFinance && !isPaid && p.status !== 'cancelada' && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setBaixaModalState({
+                                      parcelasInicial: [p],
+                                      todasParcelasContexto: parcelasPendentesContrato
+                                    })
+                                  }
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] inline-flex items-center gap-1 shadow-xs transition"
+                                  title="Dar baixa nesta parcela (ou selecionar várias)"
+                                >
+                                  <CheckCircle2 size={12} />
+                                  <span>Baixar</span>
+                                </button>
+                              )}
+
+                              {isAdminOrFinance && isPaid && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEstornoModalParcelas([p])}
+                                  className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold text-[10px] inline-flex items-center gap-1 transition"
+                                  title="Estornar baixa desta parcela"
+                                >
+                                  <RotateCcw size={11} />
+                                  <span>Estornar</span>
+                                </button>
+                              )}
+
+                              {!isAdminOrFinance && !p.comprovanteUrl && (
+                                <span className="text-slate-400 text-xs">-</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -833,6 +1136,40 @@ export function EmprestimoDetalhesModal({
           )}
         </div>
       </div>
+
+      {/* MODAL DE BAIXA DE PARCELAS DO CONTRATO */}
+      {baixaModalState && (
+        <BaixaParcelasModal
+          parcelasInicial={baixaModalState.parcelasInicial}
+          todasParcelasContexto={baixaModalState.todasParcelasContexto}
+          tituloContexto={`Contrato ${loan.codigoOperacao} — ${loan.colaboradorNome}`}
+          onClose={() => setBaixaModalState(null)}
+          onSuccess={(updatedLoans) => {
+            setSelectedParcelaIds([])
+            const updatedThisLoan = updatedLoans?.find((u) => u.id === loan.id)
+            if (updatedThisLoan) {
+              setCurrentLoan(updatedThisLoan)
+            }
+            onRefresh?.()
+          }}
+        />
+      )}
+
+      {/* MODAL DE ESTORNO DE PARCELAS DO CONTRATO */}
+      {estornoModalParcelas && (
+        <EstornoParcelasModal
+          parcelas={estornoModalParcelas}
+          onClose={() => setEstornoModalParcelas(null)}
+          onSuccess={(updatedLoans) => {
+            setSelectedParcelaIds([])
+            const updatedThisLoan = updatedLoans?.find((u) => u.id === loan.id)
+            if (updatedThisLoan) {
+              setCurrentLoan(updatedThisLoan)
+            }
+            onRefresh?.()
+          }}
+        />
+      )}
     </div>
   )
 }

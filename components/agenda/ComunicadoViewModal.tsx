@@ -324,7 +324,12 @@ export function ComunicadoViewModal({
   }, [comunicado.id, isAdminMode, isStaff, currentUserSlug, filterAuthorizedMessages])
 
   const isGroupedReport = comunicado.id?.startsWith('AD-COM-REL-COLAB');
-  const canReply = Boolean(isAdminMode || comunicado.permiteResposta || isGroupedReport || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação');
+  const isInternalStaffComunicado = comunicado.destino === 'interno' || comunicado.destino === 'funcionarios' || comunicado.dados?.destino === 'interno' || comunicado.dados?.destino === 'funcionarios';
+  const canParticipantReply = !isStaff || isInternalStaffComunicado;
+  const canReply = Boolean(
+    isAdminMode ||
+    (canParticipantReply && (comunicado.permiteResposta || isGroupedReport || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'))
+  );
 
   const initialMessages = useMemo(() => {
     let raw: any[] = [];
@@ -1839,7 +1844,7 @@ export function ComunicadoViewModal({
 
 
             {/* Ciência */}
-            {comunicado.exigeCiencia && !isAdminMode && (
+            {comunicado.exigeCiencia && !isAdminMode && (!isStaff || isInternalStaffComunicado) && (
               <div style={{ 
                 background: !!(comunicado.ciencias || {})[currentUserSlug] ? '#f0fdf4' : '#eff6ff', 
                 padding: '24px', 

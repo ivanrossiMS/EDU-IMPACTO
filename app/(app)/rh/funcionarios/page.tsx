@@ -4,6 +4,7 @@ import { apiFetch } from '@/lib/api/apiClient';
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 
 import { useState, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useData, Funcionario, newId } from '@/lib/dataContext'
 import { formatCurrency, getInitials } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
@@ -48,6 +49,7 @@ const BLANK_FORM = {
 type FormData = typeof BLANK_FORM
 
 export default function FuncionariosPage() {
+  const queryClient = useQueryClient();
   const { mantenedores = [], logSystemAction, perfis } = useData();
   const [funcionariosRaw, setFuncionarios, { loading: isLoading, setLocal: setLocalFuncionarios }] = useSupabaseArray<any>('rh/funcionarios');
   const funcionarios = funcionariosRaw || [];
@@ -261,6 +263,8 @@ export default function FuncionariosPage() {
         logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
       }
 
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+
       // --- Auto-create / update system user if perfilSistema is selected ---
       const pSistema = (payload as any).perfilSistema
       if (pSistema && form.email.trim()) {
@@ -308,6 +312,7 @@ export default function FuncionariosPage() {
         const errData = await res.json().catch(() => null)
         throw new Error(errData?.error || `Erro ${res.status} ao excluir funcionário`)
       }
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('RH (Funcionários)', 'Exclusão', `Exclusão permanente do funcionário`, { registroId: (funcAntigo as any)?.codigo, nomeRelacionado: funcAntigo?.nome, detalhesAntes: funcAntigo })
     } catch (err: any) {
       console.error(err)

@@ -12,7 +12,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   const { errorResponse: adminErr } = await requireAdminOrDirecao(req)
   if (adminErr) return adminErr
 
-  const supabase = await createProtectedClient()
+  const supabaseAdmin = getAdminClient()
   const body = await req.json()
   const { id } = await context.params
   
@@ -23,31 +23,34 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   }
   
   const fixedBody = prepare(body)
-  const { data: oldUser } = await supabase.from('system_users').select('id, auth_id, email, nome').eq('id', id).maybeSingle()
+  const { data: oldUser } = await supabaseAdmin.from('system_users').select('id, auth_id, email, nome, cargo, perfil').eq('id', id).maybeSingle()
 
-  const { data, error } = await supabase.from('system_users').update(fixedBody).eq('id', id).select().single()
+  const { data, error } = await supabaseAdmin.from('system_users').update(fixedBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   invalidateColaboradoresCache()
   clearAuthGuardCache()
   invalidateAuthUsersCache()
 
-  const supabaseAdmin = getAdminClient()
   const oldEmail = (oldUser?.email || '').trim().toLowerCase()
   const newEmail = (data?.email || fixedBody.email || '').trim().toLowerCase()
   const emailChanged = Boolean(oldEmail && newEmail && oldEmail !== newEmail)
+  const authId = oldUser?.auth_id || oldUser?.id || id
+  const isAuthUuid = Boolean(authId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authId))
 
   if (emailChanged) {
     // 1. Atualizar e-mail no Supabase Auth mantendo a mesma conta
-    const authId = oldUser?.auth_id || oldUser?.id || id
-    if (authId && authId.length > 10) {
+    if (isAuthUuid) {
+      const { data: authRes } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }))
+      const existingMeta = authRes?.user?.user_metadata || {}
       await supabaseAdmin.auth.admin.updateUserById(authId, {
         email: newEmail,
         email_confirm: true,
         user_metadata: {
-          nome: fixedBody.nome || oldUser?.nome,
-          cargo: fixedBody.cargo,
-          perfil: fixedBody.perfil
+          ...existingMeta,
+          nome: fixedBody.nome ?? oldUser?.nome ?? existingMeta.nome,
+          cargo: fixedBody.cargo ?? oldUser?.cargo ?? existingMeta.cargo,
+          perfil: fixedBody.perfil ?? oldUser?.perfil ?? existingMeta.perfil
         }
       }).catch((err: any) => console.error('[PUT usuario] Erro ao atualizar Auth email:', err?.message))
     }
@@ -62,11 +65,28 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         ...(fixedBody.perfil ? { perfil_sistema: fixedBody.perfil } : {})
       }).ilike('email', oldEmail)
     }
-  } else if (data?.email && fixedBody.status !== undefined) {
-    await supabaseAdmin.from('funcionarios').update({
-      status: fixedBody.status,
-      ...(fixedBody.perfil ? { perfil_sistema: fixedBody.perfil } : {})
-    }).ilike('email', data.email)
+  } else {
+    if (isAuthUuid && (fixedBody.nome !== undefined || fixedBody.cargo !== undefined || fixedBody.perfil !== undefined)) {
+      const { data: authRes } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }))
+      const existingMeta = authRes?.user?.user_metadata || {}
+      await supabaseAdmin.auth.admin.updateUserById(authId, {
+        user_metadata: {
+          ...existingMeta,
+          ...(fixedBody.nome !== undefined ? { nome: fixedBody.nome } : {}),
+          ...(fixedBody.cargo !== undefined ? { cargo: fixedBody.cargo } : {}),
+          ...(fixedBody.perfil !== undefined ? { perfil: fixedBody.perfil } : {})
+        }
+      }).catch((err: any) => console.error('[PUT usuario] Erro ao atualizar Auth metadata:', err?.message))
+    }
+
+    if (data?.email && (fixedBody.status !== undefined || fixedBody.perfil !== undefined || fixedBody.nome !== undefined || fixedBody.cargo !== undefined)) {
+      await supabaseAdmin.from('funcionarios').update({
+        ...(fixedBody.status !== undefined ? { status: fixedBody.status } : {}),
+        ...(fixedBody.nome ? { nome: fixedBody.nome } : {}),
+        ...(fixedBody.cargo ? { cargo: fixedBody.cargo } : {}),
+        ...(fixedBody.perfil !== undefined ? { perfil_sistema: fixedBody.perfil } : {})
+      }).ilike('email', data.email)
+    }
   }
 
   return NextResponse.json(data)

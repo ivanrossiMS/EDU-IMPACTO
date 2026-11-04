@@ -66,8 +66,71 @@ const _globalSentKeys: Map<string, number> = (global as any).__agendaPushSentKey
 const IN_PROCESS_TTL_MS = 5 * 60 * 1000 // 5 minutos
 
 // Cache curto em memória (15s) para ad_config evitando leituras repetidas em envios de turma
-let _adConfigCache: { value: Record<string, any> | null; expiresAt: number } | null = null
+let _adConfigCache: { value: Record<string, any> | null; fullConfig?: Record<string, any> | null; expiresAt: number } | null = null
 const AD_CONFIG_CACHE_TTL_MS = 15 * 1000
+
+export type ComentariosComunicadosEscopoServer = 'autor' | 'autor_admin' | 'todos_marcados'
+
+export interface ComentariosComunicadosServerConfig {
+  pushComentariosComunicados: boolean
+  escopoPushComentariosComunicados: ComentariosComunicadosEscopoServer
+  visibilidadeComentariosComunicados: ComentariosComunicadosEscopoServer
+}
+
+export function invalidateAdConfigCache(): void {
+  _adConfigCache = null
+}
+
+function _normalizeEscopo(val: any): ComentariosComunicadosEscopoServer {
+  if (val === 'autor_admin' || val === 'todos_marcados' || val === 'autor') {
+    return val
+  }
+  return 'autor'
+}
+
+export async function getComentariosComunicadosConfig(): Promise<ComentariosComunicadosServerConfig> {
+  try {
+    let fullCfg: Record<string, any> | null = null
+    if (_adConfigCache && Date.now() < _adConfigCache.expiresAt && _adConfigCache.fullConfig !== undefined) {
+      fullCfg = _adConfigCache.fullConfig
+    } else {
+      const supabaseService = _createSupabaseService()
+      const { data: configRow } = await supabaseService
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', 'ad_config')
+        .maybeSingle()
+      fullCfg = configRow?.valor || null
+      _adConfigCache = {
+        value: fullCfg?.notificacoes || null,
+        fullConfig: fullCfg,
+        expiresAt: Date.now() + AD_CONFIG_CACHE_TTL_MS,
+      }
+    }
+
+    const notifs = fullCfg?.notificacoes || {}
+    const perms = fullCfg?.permissoes || {}
+    const visibilidade = _normalizeEscopo(
+      perms.visibilidadeComentariosComunicados || notifs.visibilidadeComentariosComunicados || 'autor'
+    )
+    const escopoPush = _normalizeEscopo(
+      notifs.escopoPushComentariosComunicados || perms.visibilidadeComentariosComunicados || 'autor'
+    )
+    const pushAtivo = notifs.pushComentariosComunicados !== false
+
+    return {
+      pushComentariosComunicados: pushAtivo,
+      escopoPushComentariosComunicados: escopoPush,
+      visibilidadeComentariosComunicados: visibilidade,
+    }
+  } catch (err) {
+    return {
+      pushComentariosComunicados: true,
+      escopoPushComentariosComunicados: 'autor',
+      visibilidadeComentariosComunicados: 'autor',
+    }
+  }
+}
 
 /**
  * Limpa entradas expiradas do cache em memória.
@@ -317,13 +380,15 @@ export async function sendAgendaPushNotification({
           .select('valor')
           .eq('chave', 'ad_config')
           .maybeSingle()
-        notifs = configRow?.valor?.notificacoes || null
-        _adConfigCache = { value: notifs, expiresAt: Date.now() + AD_CONFIG_CACHE_TTL_MS }
+        const fullVal = configRow?.valor || null
+        notifs = fullVal?.notificacoes || null
+        _adConfigCache = { value: notifs, fullConfig: fullVal, expiresAt: Date.now() + AD_CONFIG_CACHE_TTL_MS }
       }
 
       if (notifs) {
+        const isCommentPush = Boolean(metadata?.is_comment || String(itemId || '').startsWith('resp-'))
         const configMap: Record<string, boolean | undefined> = {
-          comunicados: notifs.pushComunicados,
+          comunicados: isCommentPush ? (notifs.pushComentariosComunicados !== false) : notifs.pushComunicados,
           momentos:    notifs.pushMomentos,
           calendario:  notifs.pushCalendario,
           frequencia:  notifs.pushFrequencia,

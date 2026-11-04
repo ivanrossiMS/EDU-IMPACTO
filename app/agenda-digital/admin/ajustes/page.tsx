@@ -38,7 +38,10 @@ import {
   Sliders
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAgendaDigital, ComentariosComunicadosEscopo } from '@/lib/agendaDigitalContext'
+import { clearComunicadosRespostasCache } from '@/lib/comunicadosRespostasCache'
+import { Users, UserCheck } from 'lucide-react'
 import { AdminWhatsAppContactsManager } from '@/components/AdminWhatsAppContactsManager'
 import { AdminChatSettingsManager } from '@/components/AdminChatSettingsManager'
 
@@ -118,6 +121,7 @@ const GREETING_TEMPLATES = [
 ]
 
 export default function ADAdminAjustes() {
+  const queryClient = useQueryClient()
   const { bannerUrl, setBannerUrl, adConfig, setAdConfig, adAlert } = useAgendaDigital()
   const [activeTab, setActiveTab] = useState('permissoes')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -260,6 +264,8 @@ export default function ADAdminAjustes() {
           throw new Error(errJson.error || 'Erro ao salvar banner')
         }
       }
+      clearComunicadosRespostasCache()
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
       toast.success('Ajustes e personalização publicados para todos os usuários!')
       adAlert('Configurações e banner salvos com sucesso no sistema global para todos os usuários!', 'Sucesso')
     } catch (e: any) {
@@ -277,12 +283,47 @@ export default function ADAdminAjustes() {
     toast.info('Alterações descartadas.')
   }
 
-  const updatePerm = (key: keyof typeof localConfig.permissoes, val: boolean) => {
+  const updatePerm = (key: keyof typeof localConfig.permissoes, val: any) => {
     setLocalConfig(p => ({ ...p, permissoes: { ...p.permissoes, [key]: val } }))
   }
 
-  const updateNotif = (key: keyof typeof localConfig.notificacoes, val: boolean) => {
+  const updateNotif = (key: keyof typeof localConfig.notificacoes, val: any) => {
     setLocalConfig(p => ({ ...p, notificacoes: { ...p.notificacoes, [key]: val } }))
+  }
+
+  const visibilidadeComentarios: ComentariosComunicadosEscopo =
+    localConfig.permissoes?.visibilidadeComentariosComunicados || 'autor'
+  const escopoPushComentarios: ComentariosComunicadosEscopo =
+    localConfig.notificacoes?.escopoPushComentariosComunicados || visibilidadeComentarios || 'autor'
+  const pushComentariosAtivo = localConfig.notificacoes?.pushComentariosComunicados !== false
+
+  const handleSelectVisibilidadeComentarios = (escopo: ComentariosComunicadosEscopo) => {
+    setLocalConfig(p => {
+      const currentVis = p.permissoes?.visibilidadeComentariosComunicados || 'autor'
+      const currentPushEscopo = p.notificacoes?.escopoPushComentariosComunicados || currentVis
+      const shouldSyncPush = currentPushEscopo === currentVis
+      return {
+        ...p,
+        permissoes: {
+          ...p.permissoes,
+          visibilidadeComentariosComunicados: escopo,
+        },
+        notificacoes: {
+          ...p.notificacoes,
+          ...(shouldSyncPush ? { escopoPushComentariosComunicados: escopo } : {}),
+        },
+      }
+    })
+  }
+
+  const handleSelectEscopoPushComentarios = (escopo: ComentariosComunicadosEscopo) => {
+    setLocalConfig(p => ({
+      ...p,
+      notificacoes: {
+        ...p.notificacoes,
+        escopoPushComentariosComunicados: escopo,
+      },
+    }))
   }
 
   const updatePersonalizacao = (patch: Partial<NonNullable<typeof localConfig.personalizacao>>) => {
@@ -355,6 +396,7 @@ export default function ADAdminAjustes() {
     const n = localConfig.notificacoes || ({} as any)
     return [
       !!n.pushComunicados,
+      n.pushComentariosComunicados !== false,
       !!n.pushMomentos,
       !!n.pushFinanceiro,
       !!n.pushCalendario,
@@ -1421,6 +1463,14 @@ export default function ADAdminAjustes() {
                       bg: '#eef2ff'
                     },
                     {
+                      key: 'pushComentariosComunicados' as const,
+                      title: 'Comentários em Comunicados',
+                      desc: 'Envia alerta push quando um responsável enviar um comentário no comunicado ou quando o autor responder.',
+                      icon: MessageSquare,
+                      color: '#6366f1',
+                      bg: '#eef2ff'
+                    },
+                    {
                       key: 'pushMomentos' as const,
                       title: 'Novas Fotos nos Momentos',
                       desc: 'Aumenta o engajamento avisando quando uma foto ou vídeo da turma é publicado.',
@@ -1486,7 +1536,10 @@ export default function ADAdminAjustes() {
                     }
                   ].map(item => {
                     const Icon = item.icon
-                    const checked = Boolean(localConfig.notificacoes[item.key])
+                    const checked =
+                      item.key === 'pushComentariosComunicados'
+                        ? localConfig.notificacoes.pushComentariosComunicados !== false
+                        : Boolean(localConfig.notificacoes[item.key])
                     return (
                       <div
                         key={item.key}
@@ -1570,6 +1623,279 @@ export default function ADAdminAjustes() {
                       </div>
                     )
                   })}
+                </div>
+
+                {/* ── Governança de Comentários em Comunicados: Quem pode ver & Quem recebe Push ── */}
+                <div
+                  style={{
+                    borderRadius: 18,
+                    padding: 22,
+                    border: '1.5px solid #c7d2fe',
+                    background: 'linear-gradient(135deg, rgba(238, 242, 255, 0.65) 0%, rgba(255, 255, 255, 1) 100%)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 18,
+                    boxShadow: '0 4px 16px rgba(79, 70, 229, 0.06)'
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      flexWrap: 'wrap',
+                      gap: 14
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13, minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 12,
+                          background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)'
+                        }}
+                      >
+                        <MessageSquare size={20} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 800, fontSize: 15.5, color: '#0f172a' }}>
+                            Privacidade & Notificações Push de Comentários em Comunicados
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '2px 10px',
+                              borderRadius: 12,
+                              background:
+                                visibilidadeComentarios === 'autor'
+                                  ? '#dcfce7'
+                                  : visibilidadeComentarios === 'autor_admin'
+                                  ? '#e0e7ff'
+                                  : '#fef3c7',
+                              color:
+                                visibilidadeComentarios === 'autor'
+                                  ? '#15803d'
+                                  : visibilidadeComentarios === 'autor_admin'
+                                  ? '#3730a3'
+                                  : '#b45309'
+                            }}
+                          >
+                            {visibilidadeComentarios === 'autor'
+                              ? '🔒 Estrito: Apenas o Autor'
+                              : visibilidadeComentarios === 'autor_admin'
+                              ? '🛡️ Autor + Administrador'
+                              : '👥 Todos os Marcados'}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 12.8, color: '#475569', margin: '4px 0 0 0', lineHeight: 1.48 }}>
+                          Defina quem na escola visualiza os comentários enviados pelos responsáveis nos comunicados e quem recebe o alerta push no celular. O responsável que enviou o comentário sempre vê a própria conversa e recebe a resposta.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1. Quem pode VER os comentários */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
+                      <Eye size={15} color="#4f46e5" />
+                      <span>Quem pode VER os comentários dos comunicados:</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+                        gap: 12
+                      }}
+                    >
+                      {[
+                        {
+                          id: 'autor' as ComentariosComunicadosEscopo,
+                          title: 'Apenas o Autor',
+                          badge: 'Recomendado',
+                          desc: 'Estritamente o autor que publicou o comunicado e o responsável que enviou o comentário visualizam a conversa. Outras pessoas marcadas não veem.',
+                          icon: Lock
+                        },
+                        {
+                          id: 'autor_admin' as ComentariosComunicadosEscopo,
+                          title: 'Autor + Administrador',
+                          badge: 'Supervisão',
+                          desc: 'O autor do comunicado e os Administradores Master / Direção visualizam os comentários (além do responsável que comentou).',
+                          icon: UserCheck
+                        },
+                        {
+                          id: 'todos_marcados' as ComentariosComunicadosEscopo,
+                          title: 'Todos os Marcados',
+                          badge: 'Equipe Marcada',
+                          desc: 'O autor, Administradores e todos os colaboradores marcados no comunicado visualizam os comentários recebidos.',
+                          icon: Users
+                        }
+                      ].map(opt => {
+                        const OptIcon = opt.icon
+                        const isSelected = visibilidadeComentarios === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() => handleSelectVisibilidadeComentarios(opt.id)}
+                            style={{
+                              textAlign: 'left',
+                              padding: 15,
+                              borderRadius: 14,
+                              border: isSelected ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
+                              background: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.7)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 8,
+                              boxShadow: isSelected ? '0 6px 16px rgba(79, 70, 229, 0.12)' : 'none',
+                              transition: 'all 0.18s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div
+                                  style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 8,
+                                    background: isSelected ? '#4f46e5' : '#f1f5f9',
+                                    color: isSelected ? '#ffffff' : '#64748b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <OptIcon size={15} />
+                                </div>
+                                <span style={{ fontWeight: 800, fontSize: 13.8, color: isSelected ? '#1e1b4b' : '#0f172a' }}>
+                                  {opt.title}
+                                </span>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 800,
+                                  padding: '2px 7px',
+                                  borderRadius: 99,
+                                  background: isSelected ? '#eef2ff' : '#f1f5f9',
+                                  color: isSelected ? '#4f46e5' : '#64748b'
+                                }}
+                              >
+                                {isSelected ? '✓ Ativo' : opt.badge}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: 12, color: '#64748b', lineHeight: 1.45 }}>
+                              {opt.desc}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. Quem recebe NOTIFICAÇÃO PUSH de novos comentários */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      paddingTop: 14,
+                      borderTop: '1px dashed #cbd5e1',
+                      opacity: pushComentariosAtivo ? 1 : 0.55
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
+                        <Bell size={15} color="#7c3aed" />
+                        <span>Quem recebe a NOTIFICAÇÃO PUSH de comentários:</span>
+                      </div>
+                      {!pushComentariosAtivo && (
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#dc2626' }}>
+                          (Ative o gatilho &quot;Comentários em Comunicados&quot; acima para disparar pushes)
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+                        gap: 12
+                      }}
+                    >
+                      {[
+                        {
+                          id: 'autor' as ComentariosComunicadosEscopo,
+                          title: 'Apenas o Autor',
+                          desc: 'Push enviado estritamente ao autor do comunicado e ao responsável que enviou o comentário (ao receber resposta).'
+                        },
+                        {
+                          id: 'autor_admin' as ComentariosComunicadosEscopo,
+                          title: 'Autor + Administrador',
+                          desc: 'Push enviado ao autor do comunicado e aos Administradores Master / Direção (além do responsável ao receber resposta).'
+                        },
+                        {
+                          id: 'todos_marcados' as ComentariosComunicadosEscopo,
+                          title: 'Todos os Marcados',
+                          desc: 'Push enviado ao autor e a todos os colaboradores marcados no comunicado (além do responsável ao receber resposta).'
+                        }
+                      ].map(opt => {
+                        const isSelected = escopoPushComentarios === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            aria-pressed={isSelected}
+                            disabled={!pushComentariosAtivo}
+                            onClick={() => handleSelectEscopoPushComentarios(opt.id)}
+                            style={{
+                              textAlign: 'left',
+                              padding: '12px 14px',
+                              borderRadius: 12,
+                              border: isSelected ? '2px solid #7c3aed' : '1.5px solid #e2e8f0',
+                              background: isSelected ? '#f5f3ff' : '#ffffff',
+                              cursor: pushComentariosAtivo ? 'pointer' : 'not-allowed',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 5,
+                              transition: 'all 0.18s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <span style={{ fontWeight: 800, fontSize: 13.2, color: isSelected ? '#5b21b6' : '#0f172a' }}>
+                                {opt.title}
+                              </span>
+                              <span
+                                style={{
+                                  width: 18,
+                                  height: 18,
+                                  borderRadius: '50%',
+                                  border: isSelected ? '5px solid #7c3aed' : '2px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  flexShrink: 0
+                                }}
+                              />
+                            </div>
+                            <span style={{ fontSize: 11.8, color: '#64748b', lineHeight: 1.4 }}>
+                              {opt.desc}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
