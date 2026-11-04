@@ -71,19 +71,25 @@ function isSamePerson(r1: any, r2: any): boolean {
   
   const id1 = String(r1.id || r1.codigo || '').trim()
   const id2 = String(r2.id || r2.codigo || '').trim()
-  if (id1 && id2 && id1 === id2) return true
-
-  const e1 = (r1.email || '').trim().toLowerCase()
-  const e2 = (r2.email || '').trim().toLowerCase()
-  if (e1 && e2 && e1.includes('@') && e1 === e2) return true
-
-  const t1 = (r1.telefone || r1.celular || '').replace(/\D/g, '')
-  const t2 = (r2.telefone || r2.celular || '').replace(/\D/g, '')
-  if (t1 && t2 && t1.length >= 8 && t1 === t2) return true
+  const validId1 = id1 && !id1.startsWith('TEMP-') ? id1 : ''
+  const validId2 = id2 && !id2.startsWith('TEMP-') ? id2 : ''
 
   const n1 = cleanNameString(r1)
   const n2 = cleanNameString(r2)
 
+  if (validId1 && validId2) {
+    if (validId1 === validId2) {
+      if (!n1 || !n2 || n1 === n2) return true
+    }
+    // Se têm IDs distintos no banco, só são a mesma pessoa se tiverem o mesmo CPF ou mesmo nome
+  }
+
+  const cpf1 = String(r1.cpf || r1.dados?.cpf || '').replace(/\D/g, '')
+  const cpf2 = String(r2.cpf || r2.dados?.cpf || '').replace(/\D/g, '')
+  if (cpf1 && cpf2 && cpf1.length >= 11 && cpf1 === cpf2) return true
+
+  // Nota: NÃO comparamos por e-mail ou telefone isoladamente, pois pais/mães
+  // frequentemente compartilham o mesmo e-mail ou telefone familiar no cadastro escolar.
   if (!n1 || !n2) return false
   if (n1 === n2) return true
 
@@ -276,7 +282,7 @@ export async function GET(request: Request) {
     } else if (status === 'com_responsaveis' || status === 'sem_responsaveis') {
       // Como os responsáveis estão em uma tabela de relacionamento (aluno_responsavel) e também em campos de texto,
       // buscamos os alunos que possuem vínculo ativo na tabela para cruzar com a query principal.
-      const { data: ar } = await supabase.from('aluno_responsavel').select('aluno_id');
+      const { data: ar } = await supabase.from('aluno_responsavel').select('aluno_id').limit(10000);
       const alunosComResponsaveisIds = ar ? [...new Set(ar.map((x: any) => x.aluno_id))] : [];
       
       if (status === 'com_responsaveis') {
@@ -652,7 +658,13 @@ export async function GET(request: Request) {
             if (r.email && !existing.email) existing.email = r.email
             if (r.telefone && !existing.telefone) existing.telefone = r.telefone
             if (r.rfid && !existing.rfid) existing.rfid = r.rfid
-            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+            if (
+              (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+              r.parentesco &&
+              ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+            ) {
+              existing.parentesco = r.parentesco
+            } else if (!existing.parentesco && r.parentesco) {
               existing.parentesco = r.parentesco
             }
             if (r.nome && r.nome.length > existing.nome.length) {
@@ -681,7 +693,7 @@ export async function GET(request: Request) {
             if (jObj.isFinanceiro || jObj.respFinanceiro) existing.isFinanceiro = true
             if (jObj.isOutro || jObj.respOutro) existing.isOutro = true
             if (jObj.nome && jObj.nome.length > existing.nome.length) existing.nome = jObj.nome
-          } else {
+          } else if (rawLinked.length === 0) {
             mergedResponsaveis.push({ ...jObj })
           }
         })
@@ -739,7 +751,13 @@ export async function GET(request: Request) {
             if (r.email && !existing.email) existing.email = r.email
             if (r.telefone && !existing.telefone) existing.telefone = r.telefone
             if (r.rfid && !existing.rfid) existing.rfid = r.rfid
-            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+            if (
+              (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+              r.parentesco &&
+              ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+            ) {
+              existing.parentesco = r.parentesco
+            } else if (!existing.parentesco && r.parentesco) {
               existing.parentesco = r.parentesco
             }
             if (r.nome && r.nome.length > existing.nome.length) {
@@ -998,11 +1016,38 @@ export async function GET(request: Request) {
         ...(Array.isArray(student.dados?.responsaveisOutros) ? student.dados.responsaveisOutros : []),
       ]
 
-      let finalResponsaveis = [...linkedResponsaveis]
+      let finalResponsaveis: any[] = []
+      linkedResponsaveis.forEach((r: any) => {
+        const existing = finalResponsaveis.find(m => isSamePerson(m, r))
+        if (existing) {
+          if (!existing.id && r.id) existing.id = r.id
+          if (r.isFinanceiro) existing.isFinanceiro = true
+          if (r.isPedagogico) existing.isPedagogico = true
+          if (r.isOutro) existing.isOutro = true
+          if (r.email && !existing.email) existing.email = r.email
+          if (r.telefone && !existing.telefone) existing.telefone = r.telefone
+          if (
+            (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+            r.parentesco &&
+            ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+          ) {
+            existing.parentesco = r.parentesco
+          }
+        } else {
+          finalResponsaveis.push({ ...r })
+        }
+      })
+
       jsonResps.forEach((j: any) => {
-        const jName = (typeof j === 'string' ? j : (j.nome || j.name || j.nomeCompleto || '')).trim()
-        if (jName && !finalResponsaveis.some(m => m.nome && m.nome.toLowerCase() === jName.toLowerCase())) {
-          finalResponsaveis.push(typeof j === 'string' ? { nome: jName, parentesco: 'Responsável' } : j)
+        const jObj = typeof j === 'string' ? { nome: j.trim(), parentesco: 'Responsável' } : j
+        if (!jObj || !jObj.nome) return
+        const existing = finalResponsaveis.find(m => isSamePerson(m, jObj))
+        if (existing) {
+          if (jObj.isPedagogico || jObj.respPedagogico) existing.isPedagogico = true
+          if (jObj.isFinanceiro || jObj.respFinanceiro) existing.isFinanceiro = true
+          if (jObj.isOutro || jObj.respOutro) existing.isOutro = true
+        } else if (linkedResponsaveis.length === 0) {
+          finalResponsaveis.push(jObj)
         }
       })
 
@@ -1017,7 +1062,13 @@ export async function GET(request: Request) {
         const lower = name.toLowerCase()
         if (['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(lower)) return
         
-        if (!finalResponsaveis.some(m => m.nome && m.nome.toLowerCase() === lower)) {
+        const tempObj = typeof val === 'object' ? val : { nome: name }
+        const existing = finalResponsaveis.find(m => isSamePerson(m, tempObj))
+        if (existing) {
+          if (isPed) existing.isPedagogico = true
+          if (isFin) existing.isFinanceiro = true
+          if (isOut) existing.isOutro = true
+        } else if (linkedResponsaveis.length === 0) {
           finalResponsaveis.push({
             id: '',
             nome: name,
@@ -1284,32 +1335,30 @@ export async function POST(request: Request) {
         }
       }
       
-      // Verifica duplicidade de E-mail do Responsável
-      if (respDataToSave.email && respDataToSave.email.trim()) {
-        const emailLower = respDataToSave.email.trim().toLowerCase()
-        let query = supabase.from('responsaveis').select('id, nome, email, auth_id, dados').eq('email', emailLower)
-        if (!isNewResp && respDataToSave.id) {
-          query = query.neq('id', respDataToSave.id)
-        }
-        const { data: existingRespEmail } = await query.maybeSingle()
-        if (existingRespEmail) {
-          // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
-          respDataToSave.id = existingRespEmail.id
-          prevRespRecord = existingRespEmail
-        }
-      }
-
-      // Verifica duplicidade por Nome se o ID ainda não tiver sido localizado
-      if (!respDataToSave.id && respDataToSave.nome && respDataToSave.nome.trim()) {
+      // Se ainda não possui ID no banco (novo responsável), tenta localizar registro já existente DA MESMA PESSOA
+      // Importante: NUNCA sobrescrever um responsável existente por outro apenas porque compartilham o mesmo e-mail familiar!
+      if ((isNewResp || !prevRespRecord?.id) && respDataToSave.nome && respDataToSave.nome.trim()) {
         const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
         const { data: existingRespName } = await supabase
           .from('responsaveis')
           .select('id, nome, email, auth_id, dados')
           .ilike('nome', nameClean)
+          .limit(1)
           .maybeSingle()
         if (existingRespName) {
           respDataToSave.id = existingRespName.id
           prevRespRecord = existingRespName
+        } else if (respDataToSave.email && respDataToSave.email.trim()) {
+          const emailLower = respDataToSave.email.trim().toLowerCase()
+          const { data: existingRespEmails } = await supabase
+            .from('responsaveis')
+            .select('id, nome, email, auth_id, dados')
+            .eq('email', emailLower)
+          const samePersonMatch = (existingRespEmails || []).find((er: any) => isSamePerson(er, respDataToSave))
+          if (samePersonMatch) {
+            respDataToSave.id = samePersonMatch.id
+            prevRespRecord = samePersonMatch
+          }
         }
       }
       
@@ -1868,32 +1917,30 @@ export async function PUT(request: Request) {
         }
       }
       
-      // Verifica duplicidade de E-mail do Responsável
-      if (respDataToSave.email && respDataToSave.email.trim()) {
-        const emailLower = respDataToSave.email.trim().toLowerCase()
-        let query = supabase.from('responsaveis').select('id, nome, email, auth_id, dados').eq('email', emailLower)
-        if (!isNewResp && respDataToSave.id) {
-          query = query.neq('id', respDataToSave.id)
-        }
-        const { data: existingRespEmail } = await query.maybeSingle()
-        if (existingRespEmail) {
-          // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
-          respDataToSave.id = existingRespEmail.id
-          prevRespRecord = existingRespEmail
-        }
-      }
-
-      // Verifica duplicidade por Nome se o ID ainda não tiver sido localizado
-      if (!respDataToSave.id && respDataToSave.nome && respDataToSave.nome.trim()) {
+      // Se ainda não possui ID no banco (novo responsável), tenta localizar registro já existente DA MESMA PESSOA
+      // Importante: NUNCA sobrescrever um responsável existente por outro apenas porque compartilham o mesmo e-mail familiar!
+      if ((isNewResp || !prevRespRecord?.id) && respDataToSave.nome && respDataToSave.nome.trim()) {
         const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
         const { data: existingRespName } = await supabase
           .from('responsaveis')
           .select('id, nome, email, auth_id, dados')
           .ilike('nome', nameClean)
+          .limit(1)
           .maybeSingle()
         if (existingRespName) {
           respDataToSave.id = existingRespName.id
           prevRespRecord = existingRespName
+        } else if (respDataToSave.email && respDataToSave.email.trim()) {
+          const emailLower = respDataToSave.email.trim().toLowerCase()
+          const { data: existingRespEmails } = await supabase
+            .from('responsaveis')
+            .select('id, nome, email, auth_id, dados')
+            .eq('email', emailLower)
+          const samePersonMatch = (existingRespEmails || []).find((er: any) => isSamePerson(er, respDataToSave))
+          if (samePersonMatch) {
+            respDataToSave.id = samePersonMatch.id
+            prevRespRecord = samePersonMatch
+          }
         }
       }
       

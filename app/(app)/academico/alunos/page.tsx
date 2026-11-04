@@ -38,19 +38,25 @@ function isSamePerson(r1: any, r2: any): boolean {
   
   const id1 = String(r1.id || r1.codigo || '').trim()
   const id2 = String(r2.id || r2.codigo || '').trim()
-  if (id1 && id2 && id1 === id2) return true
-
-  const e1 = (r1.email || '').trim().toLowerCase()
-  const e2 = (r2.email || '').trim().toLowerCase()
-  if (e1 && e2 && e1.includes('@') && e1 === e2) return true
-
-  const t1 = (r1.telefone || r1.celular || '').replace(/\D/g, '')
-  const t2 = (r2.telefone || r2.celular || '').replace(/\D/g, '')
-  if (t1 && t2 && t1.length >= 8 && t1 === t2) return true
+  const validId1 = id1 && !id1.startsWith('TEMP-') ? id1 : ''
+  const validId2 = id2 && !id2.startsWith('TEMP-') ? id2 : ''
 
   const n1 = cleanName(r1)
   const n2 = cleanName(r2)
 
+  if (validId1 && validId2) {
+    if (validId1 === validId2) {
+      if (!n1 || !n2 || n1 === n2) return true
+    }
+    // Se têm IDs distintos no banco, só são a mesma pessoa se tiverem o mesmo CPF ou mesmo nome
+  }
+
+  const cpf1 = String(r1.cpf || r1.dados?.cpf || '').replace(/\D/g, '')
+  const cpf2 = String(r2.cpf || r2.dados?.cpf || '').replace(/\D/g, '')
+  if (cpf1 && cpf2 && cpf1.length >= 11 && cpf1 === cpf2) return true
+
+  // Nota: NÃO comparamos por e-mail ou telefone isoladamente, pois pais/mães
+  // frequentemente compartilham o mesmo e-mail ou telefone familiar no cadastro escolar.
   if (!n1 || !n2) return false
   if (n1 === n2) return true
 
@@ -1995,7 +2001,13 @@ export default function AlunosPage() {
             if (r.isFinanceiro || r.resp_financeiro) existing.isFinanceiro = true;
             if (r.isPedagogico || r.resp_pedagogico) existing.isPedagogico = true;
             if (r.isOutro || r.resp_outro) existing.isOutro = true;
-            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+            if (
+              (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+              r.parentesco &&
+              ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+            ) {
+              existing.parentesco = r.parentesco;
+            } else if (!existing.parentesco && r.parentesco) {
               existing.parentesco = r.parentesco;
             }
             if (r.email && !existing.email) existing.email = r.email;
@@ -3261,7 +3273,13 @@ export default function AlunosPage() {
                                 if (r.isFinanceiro) existing.isFinanceiro = true;
                                 if (r.isPedagogico) existing.isPedagogico = true;
                                 if (r.isOutro) existing.isOutro = true;
-                                if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+                                if (
+                                  (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+                                  r.parentesco &&
+                                  ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+                                ) {
+                                  existing.parentesco = r.parentesco;
+                                } else if (!existing.parentesco && r.parentesco) {
                                   existing.parentesco = r.parentesco;
                                 }
                                 if (r.nome && r.nome.length > existing.nome.length) {

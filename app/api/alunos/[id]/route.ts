@@ -116,7 +116,36 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     const fallbackResponsaveis = student.dados?.responsaveis || []
 
-    let finalResponsaveis = linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+    const rawResponsaveis = linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+    let finalResponsaveis: any[] = []
+    rawResponsaveis.forEach((r: any) => {
+      const rId = String(r.id || r.codigo || '').trim()
+      const rName = String(r.nome || '').trim().toLowerCase().replace(/\s+/g, ' ')
+      const existing = finalResponsaveis.find((u: any) => {
+        const uId = String(u.id || u.codigo || '').trim()
+        const uName = String(u.nome || '').trim().toLowerCase().replace(/\s+/g, ' ')
+        if (uId && rId && uId === rId && (!uName || !rName || uName === rName)) return true
+        if (uName && rName && uName === rName) return true
+        return false
+      })
+      if (existing) {
+        if (!existing.id && r.id) existing.id = r.id
+        if (r.isFinanceiro) { existing.isFinanceiro = true; existing.respFinanceiro = true }
+        if (r.isPedagogico) { existing.isPedagogico = true; existing.respPedagogico = true }
+        if (r.isOutro) { existing.isOutro = true; existing.respOutro = true }
+        if (r.email && !existing.email) existing.email = r.email
+        if (r.telefone && !existing.telefone) existing.telefone = r.telefone
+        if (
+          (!existing.parentesco || !['pai', 'mae', 'Pai', 'Mãe'].includes(existing.parentesco)) &&
+          r.parentesco &&
+          ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)
+        ) {
+          existing.parentesco = r.parentesco
+        }
+      } else {
+        finalResponsaveis.push({ ...r })
+      }
+    })
     if (finalResponsaveis.length === 0) {
       const candidateText = (student.responsavel || student.responsavel_financeiro || student.responsavel_pedagogico || '').trim()
       if (candidateText && candidateText.toLowerCase() !== 'none' && candidateText.toLowerCase() !== 'nenhum') {
