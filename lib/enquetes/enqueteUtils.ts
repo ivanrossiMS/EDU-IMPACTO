@@ -62,13 +62,17 @@ export function calculateEnqueteStats(enquete?: EnqueteData | null): EnqueteStat
   }
 }
 
+function cleanStudentId(id?: string | null): string {
+  return String(id || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
+}
+
 export function getVoterKey(usuarioId: string, alunoId?: string | null): string {
   const cleanUser = String(usuarioId || '').trim()
-  const cleanAluno = String(alunoId || '').trim()
-  if (cleanAluno && cleanAluno !== cleanUser) {
+  const cleanAluno = cleanStudentId(alunoId)
+  if (cleanAluno && cleanAluno !== cleanStudentId(cleanUser)) {
     return `${cleanUser}_${cleanAluno}`
   }
-  return cleanUser
+  return cleanAluno || cleanUser
 }
 
 export function getUserVote(
@@ -77,12 +81,60 @@ export function getUserVote(
   alunoId?: string | null
 ): EnqueteVoto | null {
   if (!enquete || !enquete.votos) return null
-  const key = getVoterKey(usuarioId, alunoId)
-  if (enquete.votos[key]) return enquete.votos[key]
+  const votos = enquete.votos
+  const cleanUser = String(usuarioId || '').trim()
+  const cleanAluno = cleanStudentId(alunoId)
 
-  // Fallback: check by usuarioId alone or by alunoId
-  if (usuarioId && enquete.votos[usuarioId]) return enquete.votos[usuarioId]
-  if (alunoId && enquete.votos[alunoId]) return enquete.votos[alunoId]
+  if (cleanAluno) {
+    const exactKey = getVoterKey(cleanUser, cleanAluno)
+    if (votos[exactKey] && !exactKey.startsWith('anon_')) {
+      const vAluno = cleanStudentId(votos[exactKey].alunoId)
+      if (!vAluno || vAluno === cleanAluno) {
+        return votos[exactKey]
+      }
+    }
+
+    if (votos[cleanAluno] && !cleanAluno.startsWith('anon_')) {
+      const vAluno = cleanStudentId(votos[cleanAluno].alunoId)
+      if (!vAluno || vAluno === cleanAluno) {
+        return votos[cleanAluno]
+      }
+    }
+
+    for (const [k, voto] of Object.entries(votos)) {
+      if (!voto || k.startsWith('anon_') || String(voto.usuarioId || '').startsWith('anon_')) continue
+      const vAluno = cleanStudentId(voto.alunoId)
+      if (vAluno && vAluno === cleanAluno) {
+        return voto
+      }
+      if (!vAluno && (k === cleanAluno || k.endsWith(`_${cleanAluno}`))) {
+        return voto
+      }
+    }
+
+    for (const [k, voto] of Object.entries(votos)) {
+      if (!voto || k.startsWith('anon_') || String(voto.usuarioId || '').startsWith('anon_')) continue
+      const vUser = cleanStudentId(voto.usuarioId)
+      const vAluno = cleanStudentId(voto.alunoId)
+      if (!vAluno && vUser === cleanAluno) {
+        return voto
+      }
+    }
+
+    return null
+  }
+
+  if (cleanUser) {
+    if (votos[cleanUser] && !cleanUser.startsWith('anon_')) {
+      return votos[cleanUser]
+    }
+    for (const [k, voto] of Object.entries(votos)) {
+      if (!voto || k.startsWith('anon_') || String(voto.usuarioId || '').startsWith('anon_')) continue
+      if (String(voto.usuarioId || '').trim() === cleanUser) {
+        return voto
+      }
+    }
+  }
 
   return null
 }
@@ -120,11 +172,19 @@ export function sanitizeEnqueteForViewer(
   allowedIds: Iterable<string>
 ): EnqueteData | null {
   if (!enquete) return null
-  const allowedSet = new Set(
-    Array.from(allowedIds || [])
-      .map(id => String(id || '').trim())
-      .filter(Boolean)
-  )
+  const rawAllowed = Array.from(allowedIds || [])
+    .map(id => String(id || '').trim())
+    .filter(Boolean)
+  const allowedSet = new Set<string>()
+  for (const id of rawAllowed) {
+    allowedSet.add(id)
+    const cleaned = cleanStudentId(id)
+    if (cleaned) {
+      allowedSet.add(cleaned)
+      allowedSet.add(`a_${cleaned}`)
+      allowedSet.add(`_ALU${cleaned}`)
+    }
+  }
   const rawVotos = enquete.votos || {}
   const sanitizedVotos: Record<string, EnqueteVoto> = {}
   const hideOtherVotes = enquete.visibilidadeResultados === 'somente_admin'
@@ -133,11 +193,18 @@ export function sanitizeEnqueteForViewer(
   for (const [key, voto] of Object.entries(rawVotos)) {
     if (!voto) continue
     const vUser = String(voto.usuarioId || '').trim()
+    const vUserClean = cleanStudentId(vUser)
     const vAluno = String(voto.alunoId || '').trim()
+    const vAlunoClean = cleanStudentId(vAluno)
+    const keyParts = key.split('_')
+    const keySuffixClean = keyParts.length > 1 ? cleanStudentId(keyParts[keyParts.length - 1]) : ''
     const isOwn =
       allowedSet.has(key) ||
       (vUser && allowedSet.has(vUser)) ||
+      (vUserClean && allowedSet.has(vUserClean)) ||
       (vAluno && allowedSet.has(vAluno)) ||
+      (vAlunoClean && allowedSet.has(vAlunoClean)) ||
+      (keySuffixClean && allowedSet.has(keySuffixClean)) ||
       (vUser && vAluno && allowedSet.has(`${vUser}_${vAluno}`))
 
     if (isOwn) {

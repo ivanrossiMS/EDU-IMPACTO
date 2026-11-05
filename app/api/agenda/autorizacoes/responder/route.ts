@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { resolveUserRole } from '@/lib/server/authGuard'
+import { resolveUserRole, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { AutorizacaoData, AutorizacaoResposta } from '@/lib/autorizacoes/types'
 import { 
   getAutorizacaoVoterKey, 
+  getUserAutorizacaoResposta,
   isAutorizacaoClosed, 
   generateDigitalSignatureHash,
   formatDateTimeBR,
@@ -75,37 +76,75 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nenhuma opção de autorização foi selecionada' }, { status: 400 })
     }
 
-    if (requestedUserId && !isStaff) {
-      const allowedIds = new Set<string>(
-        [
-          String(user.id),
-          dbUser?.id ? String(dbUser.id) : null,
-          dbUser?.auth_id ? String(dbUser.auth_id) : null,
-          user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
-          user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
-        ].filter(Boolean) as string[]
-      )
+    const cleanAlunoIdFromBody = alunoId ? String(alunoId).trim().replace(/^(a_|_ALU|_)/i, '').trim() : ''
+    const cleanReqUserId = requestedUserId ? String(requestedUserId).trim().replace(/^(a_|_ALU|f_|_)/i, '').trim() : ''
 
-      if (!allowedIds.has(String(requestedUserId))) {
-        const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase()
-        const orFilters = [
-          `id.eq.${user.id}`,
-          `dados->>auth_id.eq.${user.id}`,
-          `dados->>user_id.eq.${user.id}`,
-        ]
-        if (userEmail) orFilters.push(`email.ilike.${userEmail}`)
-        const { data: respRows } = await adminClient
-          .from('responsaveis')
-          .select('id, dados')
-          .or(orFilters.join(','))
-        for (const r of respRows || []) {
-          if (r.id) allowedIds.add(String(r.id))
-          if (r.dados?.auth_id) allowedIds.add(String(r.dados.auth_id))
-          if (r.dados?.user_id) allowedIds.add(String(r.dados.user_id))
+    const [authorizedAlunoIds, authorizedRespIds] = !isStaff
+      ? await Promise.all([
+          getAuthorizedAlunoIdsForUser(user),
+          getAuthorizedResponsavelIdsForUser(user)
+        ])
+      : [new Set<string>(), new Set<string>()]
+
+    const allowedIds = new Set<string>(
+      [
+        String(user.id),
+        dbUser?.id ? String(dbUser.id) : null,
+        dbUser?.auth_id ? String(dbUser.auth_id) : null,
+        user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id) : null,
+        user.user_metadata?.aluno_id ? String(user.user_metadata.aluno_id) : null,
+        user.user_metadata?.uid_legacy ? String(user.user_metadata.uid_legacy) : null,
+        user.user_metadata?.slug ? String(user.user_metadata.slug) : null,
+        ...Array.from(authorizedAlunoIds),
+        ...Array.from(authorizedRespIds),
+      ]
+        .filter(Boolean)
+        .map(id => String(id).trim())
+    )
+
+    let matchedRespName: string | null = null
+    if (!isStaff && (!allowedIds.has(String(requestedUserId || '').trim()) || !usuarioNome || usuarioNome === 'Responsável' || usuarioNome === 'Familiar / Aluno')) {
+      const safeUid = String(user.id).replace(/"/g, '')
+      const userEmail = (user.email || dbUser?.email || '').trim().toLowerCase().replace(/"/g, '')
+      const orFilters = [
+        `id.eq."${safeUid}"`,
+        `auth_id.eq."${safeUid}"`,
+        `dados->>auth_id.eq."${safeUid}"`,
+        `dados->>user_id.eq."${safeUid}"`,
+      ]
+      if (user.user_metadata?.responsavel_id) {
+        orFilters.push(`id.eq."${String(user.user_metadata.responsavel_id).replace(/"/g, '')}"`)
+      }
+      if (userEmail) orFilters.push(`email.ilike."${userEmail}"`)
+      const { data: respRows } = await adminClient
+        .from('responsaveis')
+        .select('id, auth_id, nome, dados')
+        .or(orFilters.join(','))
+      for (const r of respRows || []) {
+        if (r.id) {
+          allowedIds.add(String(r.id).trim())
+          authorizedRespIds.add(String(r.id).trim())
+        }
+        if (r.auth_id) allowedIds.add(String(r.auth_id).trim())
+        if (r.dados?.auth_id) allowedIds.add(String(r.dados.auth_id).trim())
+        if (r.dados?.user_id) allowedIds.add(String(r.dados.user_id).trim())
+        if (!matchedRespName && r.nome) matchedRespName = String(r.nome).trim()
+        const vincs = r.dados?.alunosVinculados || r.dados?.alunos_vinculados
+        if (Array.isArray(vincs)) {
+          vincs.forEach((aid: any) => {
+            const cleanAid = String(typeof aid === 'object' ? aid?.id || aid?.aluno_id : aid || '').trim()
+            if (cleanAid) {
+              allowedIds.add(cleanAid)
+              authorizedAlunoIds.add(cleanAid)
+            }
+          })
         }
       }
+    }
 
-      if (!allowedIds.has(String(requestedUserId))) {
+    if (requestedUserId && !isStaff) {
+      const reqTrimmed = String(requestedUserId).trim()
+      if (!allowedIds.has(reqTrimmed) && (!cleanReqUserId || !allowedIds.has(cleanReqUserId))) {
         return NextResponse.json(
           { error: 'Acesso negado: usuarioId não pertence ao responsável autenticado.' },
           { status: 403 }
@@ -113,8 +152,76 @@ export async function POST(request: Request) {
       }
     }
 
-    const effectiveUserId = requestedUserId || user.id
-    const effectiveUserName = usuarioNome || dbUser?.nome || user.user_metadata?.nome || user.email || 'Responsável'
+    if (cleanAlunoIdFromBody && !isStaff) {
+      if (!allowedIds.has(cleanAlunoIdFromBody) && !allowedIds.has(String(alunoId).trim())) {
+        return NextResponse.json(
+          { error: 'Acesso negado: alunoId não pertence ao responsável autenticado.' },
+          { status: 403 }
+        )
+      }
+    }
+
+    let cleanAlunoId = cleanAlunoIdFromBody
+    if (!cleanAlunoId && cleanReqUserId && authorizedAlunoIds.has(cleanReqUserId) && !authorizedRespIds.has(cleanReqUserId)) {
+      cleanAlunoId = cleanReqUserId
+    }
+    if (!cleanAlunoId && !isStaff && authorizedAlunoIds.size === 1) {
+      cleanAlunoId = Array.from(authorizedAlunoIds)[0]
+    }
+
+    const primaryGuardianId =
+      (user.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id).trim() : '') ||
+      Array.from(authorizedRespIds)[0] ||
+      String(user.id)
+
+    const effectiveUserId =
+      requestedUserId && (!cleanAlunoId || cleanReqUserId !== cleanAlunoId) && !authorizedAlunoIds.has(cleanReqUserId)
+        ? String(requestedUserId).trim()
+        : primaryGuardianId
+
+    let resolvedAlunoNome = alunoNome ? String(alunoNome).trim() : ''
+    let resolvedAlunoTurma = alunoTurma ? String(alunoTurma).trim() : ''
+    if (cleanAlunoId && (!resolvedAlunoNome || !resolvedAlunoTurma || resolvedAlunoNome === 'Aluno')) {
+      try {
+        const { data: stRow } = await adminClient
+          .from('alunos')
+          .select('id, nome, turma, dados')
+          .eq('id', cleanAlunoId)
+          .maybeSingle()
+        if (stRow) {
+          if (!resolvedAlunoNome || resolvedAlunoNome === 'Aluno') {
+            resolvedAlunoNome = String(stRow.nome || stRow.dados?.nome || '').trim()
+          }
+          if (!resolvedAlunoTurma) {
+            const rawTurma = String(stRow.dados?.turma_nome || stRow.turma || stRow.dados?.turma || '').trim()
+            if (rawTurma) {
+              const { data: tRow } = await adminClient
+                .from('turmas')
+                .select('nome')
+                .or(`id.eq."${rawTurma.replace(/"/g, '')}",codigo.eq."${rawTurma.replace(/"/g, '')}"`)
+                .limit(1)
+                .maybeSingle()
+              resolvedAlunoTurma = tRow?.nome ? String(tRow.nome).trim() : rawTurma
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    const isGenericUserName =
+      !usuarioNome ||
+      usuarioNome === 'Responsável' ||
+      usuarioNome === 'Familiar / Aluno' ||
+      (resolvedAlunoNome && String(usuarioNome).trim().toLowerCase() === resolvedAlunoNome.toLowerCase())
+
+    const effectiveUserName =
+      (!isGenericUserName ? String(usuarioNome).trim() : '') ||
+      matchedRespName ||
+      dbUser?.nome ||
+      user.user_metadata?.nome ||
+      String(usuarioNome || '').trim() ||
+      user.email ||
+      'Responsável'
     const effectiveUserFoto = usuarioFoto || user.user_metadata?.foto || null
     const effectiveUserTipo = usuarioTipo || (user.user_metadata?.perfil === 'Família' ? 'responsavel' : 'responsavel')
 
@@ -159,8 +266,8 @@ export async function POST(request: Request) {
 
     const formattedCpf = rawCpf && String(rawCpf).trim() ? formatarCPF(String(rawCpf)) : undefined
 
-    const voterKey = getAutorizacaoVoterKey(effectiveUserId, alunoId)
-    const existingResposta = autorizacao.respostas?.[voterKey]
+    const voterKey = getAutorizacaoVoterKey(effectiveUserId, cleanAlunoId || alunoId)
+    const existingResposta = getUserAutorizacaoResposta(autorizacao, effectiveUserId, cleanAlunoId || alunoId)
 
     if (existingResposta && autorizacao.permitirAlterarResposta === false) {
       return NextResponse.json({
@@ -172,7 +279,7 @@ export async function POST(request: Request) {
     const signatureToken = generateDigitalSignatureHash({
       autorizacaoId: autorizacao.id,
       usuarioId: effectiveUserId,
-      alunoId: alunoId || undefined,
+      alunoId: cleanAlunoId || alunoId || undefined,
       opcaoId: matchedOpcao.id,
       timestamp: nowIso
     })
@@ -182,9 +289,9 @@ export async function POST(request: Request) {
       usuarioNome: effectiveUserName,
       usuarioFoto: effectiveUserFoto,
       usuarioTipo: effectiveUserTipo,
-      alunoId: alunoId || undefined,
-      alunoNome: alunoNome || undefined,
-      alunoTurma: alunoTurma || undefined,
+      alunoId: cleanAlunoId || alunoId || undefined,
+      alunoNome: resolvedAlunoNome || alunoNome || undefined,
+      alunoTurma: resolvedAlunoTurma || alunoTurma || undefined,
       opcaoId: matchedOpcao.id,
       opcaoTexto: matchedOpcao.texto,
       tipoDecisao: matchedOpcao.tipo,
@@ -198,12 +305,26 @@ export async function POST(request: Request) {
         responsavelNome: effectiveUserName,
         responsavelCpf: formattedCpf,
         responsavelDoc: formattedCpf,
-        alunoNome: alunoNome || undefined
+        alunoNome: resolvedAlunoNome || alunoNome || undefined
+      }
+    }
+
+    const baseRespostas = { ...(autorizacao.respostas || {}) }
+    if (cleanAlunoId) {
+      for (const [k, r] of Object.entries(baseRespostas)) {
+        if (!r) continue
+        const rAlunoClean = String(r.alunoId || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
+        if (
+          (rAlunoClean && rAlunoClean === cleanAlunoId) ||
+          (!rAlunoClean && (k === cleanAlunoId || k.endsWith(`_${cleanAlunoId}`)))
+        ) {
+          delete baseRespostas[k]
+        }
       }
     }
 
     const updatedRespostas = {
-      ...(autorizacao.respostas || {}),
+      ...baseRespostas,
       [voterKey]: newResposta
     }
 
@@ -248,9 +369,18 @@ export async function POST(request: Request) {
       })
     } catch (_) {}
 
+    const viewerAllowedIds = [
+      effectiveUserId,
+      String(user.id),
+      String(requestedUserId || ''),
+      String(cleanAlunoId || alunoId || ''),
+      voterKey,
+      ...Array.from(allowedIds)
+    ].filter(Boolean)
+
     const responseAutorizacao = isStaff
       ? updatedAutorizacao
-      : (sanitizeAutorizacaoForViewer(updatedAutorizacao, [effectiveUserId, String(user.id), String(alunoId || ''), voterKey]) || updatedAutorizacao)
+      : (sanitizeAutorizacaoForViewer(updatedAutorizacao, viewerAllowedIds) || updatedAutorizacao)
 
     return NextResponse.json({
       ok: true,

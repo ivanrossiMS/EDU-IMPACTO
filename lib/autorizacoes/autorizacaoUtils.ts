@@ -83,13 +83,17 @@ export function calculateAutorizacaoStats(autorizacao?: AutorizacaoData | null):
   }
 }
 
+function cleanStudentId(id?: string | null): string {
+  return String(id || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
+}
+
 export function getAutorizacaoVoterKey(usuarioId: string, alunoId?: string | null): string {
   const cleanUser = String(usuarioId || '').trim()
-  const cleanAluno = String(alunoId || '').trim()
-  if (cleanAluno && cleanAluno !== cleanUser) {
+  const cleanAluno = cleanStudentId(alunoId)
+  if (cleanAluno && cleanAluno !== cleanStudentId(cleanUser)) {
     return `${cleanUser}_${cleanAluno}`
   }
-  return cleanUser
+  return cleanAluno || cleanUser
 }
 
 export function getUserAutorizacaoResposta(
@@ -98,12 +102,62 @@ export function getUserAutorizacaoResposta(
   alunoId?: string | null
 ): AutorizacaoResposta | null {
   if (!autorizacao || !autorizacao.respostas) return null
-  const key = getAutorizacaoVoterKey(usuarioId, alunoId)
-  if (autorizacao.respostas[key]) return autorizacao.respostas[key]
+  const respostas = autorizacao.respostas
+  const cleanUser = String(usuarioId || '').trim()
+  const cleanAluno = cleanStudentId(alunoId)
 
-  // Fallbacks: check by key alone or by alunoId
-  if (usuarioId && autorizacao.respostas[usuarioId]) return autorizacao.respostas[usuarioId]
-  if (alunoId && autorizacao.respostas[alunoId]) return autorizacao.respostas[alunoId]
+  if (cleanAluno) {
+    const exactKey = getAutorizacaoVoterKey(cleanUser, cleanAluno)
+    if (respostas[exactKey] && !exactKey.startsWith('anon_')) {
+      const rAluno = cleanStudentId(respostas[exactKey].alunoId)
+      if (!rAluno || rAluno === cleanAluno) {
+        return respostas[exactKey]
+      }
+    }
+
+    if (respostas[cleanAluno] && !cleanAluno.startsWith('anon_')) {
+      const rAluno = cleanStudentId(respostas[cleanAluno].alunoId)
+      if (!rAluno || rAluno === cleanAluno) {
+        return respostas[cleanAluno]
+      }
+    }
+
+    // Procura qualquer resposta (não anônima) vinculada a este aluno (assinada pelo pai, mãe ou responsável)
+    for (const [k, resp] of Object.entries(respostas)) {
+      if (!resp || k.startsWith('anon_') || String(resp.usuarioId || '').startsWith('anon_')) continue
+      const rAluno = cleanStudentId(resp.alunoId)
+      if (rAluno && rAluno === cleanAluno) {
+        return resp
+      }
+      if (!rAluno && (k === cleanAluno || k.endsWith(`_${cleanAluno}`))) {
+        return resp
+      }
+    }
+
+    // Fallback caso a resposta tenha sido gravada com usuarioId igual ao ID do aluno sem campo alunoId
+    for (const [k, resp] of Object.entries(respostas)) {
+      if (!resp || k.startsWith('anon_') || String(resp.usuarioId || '').startsWith('anon_')) continue
+      const rUser = cleanStudentId(resp.usuarioId)
+      const rAluno = cleanStudentId(resp.alunoId)
+      if (!rAluno && rUser === cleanAluno) {
+        return resp
+      }
+    }
+
+    return null
+  }
+
+  if (cleanUser) {
+    if (respostas[cleanUser] && !cleanUser.startsWith('anon_')) {
+      return respostas[cleanUser]
+    }
+    for (const [k, resp] of Object.entries(respostas)) {
+      if (!resp || k.startsWith('anon_') || String(resp.usuarioId || '').startsWith('anon_')) continue
+      if (String(resp.usuarioId || '').trim() === cleanUser) {
+        return resp
+      }
+    }
+  }
 
   return null
 }
@@ -264,11 +318,19 @@ export function sanitizeAutorizacaoForViewer(
   allowedIds: Iterable<string>
 ): AutorizacaoData | null {
   if (!autorizacao) return null
-  const allowedSet = new Set(
-    Array.from(allowedIds || [])
-      .map(id => String(id || '').trim())
-      .filter(Boolean)
-  )
+  const rawAllowed = Array.from(allowedIds || [])
+    .map(id => String(id || '').trim())
+    .filter(Boolean)
+  const allowedSet = new Set<string>()
+  for (const id of rawAllowed) {
+    allowedSet.add(id)
+    const cleaned = cleanStudentId(id)
+    if (cleaned) {
+      allowedSet.add(cleaned)
+      allowedSet.add(`a_${cleaned}`)
+      allowedSet.add(`_ALU${cleaned}`)
+    }
+  }
   const rawRespostas = autorizacao.respostas || {}
   const sanitizedRespostas: Record<string, AutorizacaoResposta> = {}
 
@@ -276,11 +338,18 @@ export function sanitizeAutorizacaoForViewer(
   for (const [key, resp] of Object.entries(rawRespostas)) {
     if (!resp) continue
     const rUser = String(resp.usuarioId || '').trim()
+    const rUserClean = cleanStudentId(rUser)
     const rAluno = String(resp.alunoId || '').trim()
+    const rAlunoClean = cleanStudentId(rAluno)
+    const keyParts = key.split('_')
+    const keySuffixClean = keyParts.length > 1 ? cleanStudentId(keyParts[keyParts.length - 1]) : ''
     const isOwn =
       allowedSet.has(key) ||
       (rUser && allowedSet.has(rUser)) ||
+      (rUserClean && allowedSet.has(rUserClean)) ||
       (rAluno && allowedSet.has(rAluno)) ||
+      (rAlunoClean && allowedSet.has(rAlunoClean)) ||
+      (keySuffixClean && allowedSet.has(keySuffixClean)) ||
       (rUser && rAluno && allowedSet.has(`${rUser}_${rAluno}`))
 
     if (isOwn) {

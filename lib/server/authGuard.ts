@@ -585,7 +585,13 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
 
     try {
       // 1. Preparar busca de responsaveis e alunos diretos + aluno_responsavel inicial (para metaRespId) em PARALELO
-      const respOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`, `auth_id.eq."${String(user.id).replace(/"/g, '')}"`]
+      const safeUid = String(user.id).replace(/"/g, '')
+      const respOrParts: string[] = [
+        `id.eq."${safeUid}"`,
+        `auth_id.eq."${safeUid}"`,
+        `dados->>auth_id.eq."${safeUid}"`,
+        `dados->>user_id.eq."${safeUid}"`,
+      ]
       if (metaRespId) {
         respOrParts.push(`id.eq."${metaRespId.replace(/"/g, '')}"`)
       }
@@ -593,7 +599,11 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
         respOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
       }
 
-      const alunoOrParts: string[] = [`id.eq."${String(user.id).replace(/"/g, '')}"`]
+      const alunoOrParts: string[] = [
+        `id.eq."${safeUid}"`,
+        `dados->>auth_id.eq."${safeUid}"`,
+        `dados->>user_id.eq."${safeUid}"`,
+      ]
       if (metaAlunoId) {
         alunoOrParts.push(`id.eq."${metaAlunoId.replace(/"/g, '')}"`)
       }
@@ -610,7 +620,7 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
       const [respRes, directAlunosRes, initialLinksRes] = await Promise.all([
         supabaseAdmin
           .from('responsaveis')
-          .select('id, email, proibido, dados')
+          .select('id, auth_id, email, proibido, dados')
           .or(respOrParts.join(','))
           .limit(20),
         supabaseAdmin
@@ -630,8 +640,20 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
       const respRows = respRes.data
       if (Array.isArray(respRows)) {
         for (const r of respRows) {
-          const rEmail = String(r?.email || r?.dados?.email || '').trim().toLowerCase()
-          if (!isVirtualStudentEmail && rEmail && rawEmail && rEmail !== rawEmail) {
+          const isDirectAuthMatch =
+            String(r?.id || '') === String(user.id) ||
+            String(r?.auth_id || '') === String(user.id) ||
+            String(r?.dados?.auth_id || '') === String(user.id) ||
+            String(r?.dados?.user_id || '') === String(user.id)
+          const rEmailTop = String(r?.email || '').trim().toLowerCase()
+          const rEmailDados = String(r?.dados?.email || '').trim().toLowerCase()
+          const emailMatches =
+            !rawEmail ||
+            isVirtualStudentEmail ||
+            (!rEmailTop && !rEmailDados) ||
+            rEmailTop === rawEmail ||
+            rEmailDados === rawEmail
+          if (!isDirectAuthMatch && !emailMatches) {
             continue
           }
           if (isResponsavelAccessBlocked(r)) {
@@ -657,6 +679,7 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
         for (const l of initialLinksRes.data) {
           const rid = String(l?.responsavel_id || '').trim()
           if (blockedRespIds.has(rid)) continue
+          if (rid) responsavelIds.add(rid)
           if (l?.aluno_id) candidateAlunoIds.add(String(l.aluno_id).trim())
         }
       }

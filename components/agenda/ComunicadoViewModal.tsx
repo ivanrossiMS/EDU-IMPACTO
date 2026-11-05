@@ -162,6 +162,8 @@ interface ComunicadoViewModalProps {
   onDelete?: (id: string) => void
   onForward?: (comunicado: any) => void
   initialFocusComments?: boolean
+  isAlunoView?: boolean
+  currentUserObj?: any
 }
 
 export function ComunicadoViewModal({
@@ -187,11 +189,33 @@ export function ComunicadoViewModal({
   onEdit,
   onDelete,
   onForward,
-  initialFocusComments = false
+  initialFocusComments = false,
+  isAlunoView = false,
+  currentUserObj
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
   const [internalMaximizedImage, setInternalMaximizedImage] = useState<string | null>(null)
+
+  const effectiveIsAlunoView = useMemo(() => {
+    if (isAdminMode || isStaff) return false
+    if (isAlunoView) return true
+    if (typeof window !== 'undefined') {
+      try {
+        const sp = new URLSearchParams(window.location.search)
+        if (sp.get('espelhar_aluno') === 'true') return true
+      } catch (_) {}
+    }
+    if (
+      currentUserObj?.cargo === 'Aluno' ||
+      currentUserObj?.perfil === 'Aluno' ||
+      currentUserObj?.userType === 'aluno' ||
+      (currentUserObj?.aluno_id && currentUserObj?.cargo !== 'Responsável' && currentUserObj?.perfil !== 'Responsável' && currentUserObj?.perfil !== 'Família' && !currentUserObj?.responsavel_id)
+    ) {
+      return true
+    }
+    return false
+  }, [isAdminMode, isStaff, isAlunoView, currentUserObj])
   
   useEffect(() => {
     if (initialComunicado) {
@@ -1649,18 +1673,31 @@ export function ComunicadoViewModal({
                 <EnqueteWidget
                   enquete={comunicado.enquete || comunicado.dados?.enquete}
                   comunicadoId={String(comunicado.id)}
-                  currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
-                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
+                  currentUser={{
+                    ...(currentUserObj || {}),
+                    id: currentUserObj?.responsavel_id || currentUserObj?.user_metadata?.responsavel_id || currentUserObj?.id || currentUserSlug,
+                    nome: currentUserName,
+                    foto: currentUserAvatar
+                  }}
+                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : (!isAdminMode && !isStaff && currentUserSlug ? { id: currentUserSlug } : null)}
                   isAdminMode={isAdminMode || isStaff}
                   onVoteSuccess={(updatedEnquete) => {
-                    setComunicado((prev: any) => ({
-                      ...prev,
-                      enquete: updatedEnquete,
-                      dados: {
-                        ...(prev?.dados || {}),
-                        enquete: updatedEnquete
+                    setComunicado((prev: any) => {
+                      const updatedCom = {
+                        ...prev,
+                        enquete: updatedEnquete,
+                        dados: {
+                          ...(prev?.dados || {}),
+                          enquete: updatedEnquete
+                        }
                       }
-                    }))
+                      if (typeof window !== 'undefined') {
+                        try {
+                          window.dispatchEvent(new CustomEvent('ad:comunicados-update', { detail: { item: updatedCom } }))
+                        } catch (_) {}
+                      }
+                      return updatedCom
+                    })
                   }}
                 />
               </div>
@@ -1672,18 +1709,32 @@ export function ComunicadoViewModal({
                 <AutorizacaoWidget
                   autorizacao={comunicado.autorizacao || comunicado.dados?.autorizacao}
                   comunicadoId={String(comunicado.id)}
-                  currentUser={{ id: currentUserSlug, nome: currentUserName, foto: currentUserAvatar }}
-                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : null}
+                  currentUser={{
+                    ...(currentUserObj || {}),
+                    id: currentUserObj?.responsavel_id || currentUserObj?.user_metadata?.responsavel_id || currentUserObj?.id || currentUserSlug,
+                    nome: currentUserName,
+                    foto: currentUserAvatar
+                  }}
+                  currentAluno={alunos && alunos.length === 1 ? alunos[0] : (!isAdminMode && !isStaff && currentUserSlug ? { id: currentUserSlug } : null)}
                   isAdminMode={isAdminMode || isStaff}
+                  isAlunoView={effectiveIsAlunoView}
                   onUpdateSuccess={(updatedAut) => {
-                    setComunicado((prev: any) => ({
-                      ...prev,
-                      autorizacao: updatedAut,
-                      dados: {
-                        ...(prev?.dados || {}),
-                        autorizacao: updatedAut
+                    setComunicado((prev: any) => {
+                      const updatedCom = {
+                        ...prev,
+                        autorizacao: updatedAut,
+                        dados: {
+                          ...(prev?.dados || {}),
+                          autorizacao: updatedAut
+                        }
                       }
-                    }))
+                      if (typeof window !== 'undefined') {
+                        try {
+                          window.dispatchEvent(new CustomEvent('ad:comunicados-update', { detail: { item: updatedCom } }))
+                        } catch (_) {}
+                      }
+                      return updatedCom
+                    })
                   }}
                 />
               </div>
@@ -1882,7 +1933,7 @@ export function ComunicadoViewModal({
                     <div style={{ fontSize: 13, color: !!(comunicado.ciencias || {})[currentUserSlug] ? '#15803d' : '#1e3a8a', marginTop: 4 }}>{!!(comunicado.ciencias || {})[currentUserSlug] ? 'Você confirmou leitura neste comunicado.' : 'A escola exige sua confirmação de leitura.'}</div>
                   </div>
                 </div>
-                {!((comunicado.ciencias || {})[currentUserSlug]) && (
+                {!((comunicado.ciencias || {})[currentUserSlug]) && !effectiveIsAlunoView && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onCiencia(comunicado.id); }} 
                     style={{ background: '#3b82f6', color: '#fff', padding: '12px 24px', fontSize: 14, fontWeight: 700, border: 'none', borderRadius: 12, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}

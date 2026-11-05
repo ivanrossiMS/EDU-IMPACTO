@@ -30,6 +30,7 @@ interface AutorizacaoWidgetProps {
   currentUser?: any
   currentAluno?: any
   isAdminMode?: boolean
+  isAlunoView?: boolean
   onUpdateSuccess?: (updatedAutorizacao: AutorizacaoData) => void
 }
 
@@ -39,6 +40,7 @@ export function AutorizacaoWidget({
   currentUser,
   currentAluno,
   isAdminMode = false,
+  isAlunoView = false,
   onUpdateSuccess
 }: AutorizacaoWidgetProps) {
   const [autorizacao, setAutorizacao] = useState<AutorizacaoData>(initialAutorizacao)
@@ -67,7 +69,27 @@ export function AutorizacaoWidget({
   const currentUserId = currentUser?.id || currentUser?.uid || ''
   const currentAlunoId = currentAluno?.id || null
   const currentAlunoNome = currentAluno?.nome || null
-  const currentAlunoTurma = currentAluno?.turma || currentAluno?.turma_nome || null
+  const currentAlunoTurma = currentAluno?.turma_nome || currentAluno?.turmaNome || currentAluno?.turma || null
+
+  const isStudentViewer = useMemo(() => {
+    if (isAdminMode) return false
+    if (isAlunoView) return true
+    if (typeof window !== 'undefined') {
+      try {
+        const sp = new URLSearchParams(window.location.search)
+        if (sp.get('espelhar_aluno') === 'true') return true
+      } catch (_) {}
+    }
+    if (
+      currentUser?.cargo === 'Aluno' ||
+      currentUser?.perfil === 'Aluno' ||
+      currentUser?.userType === 'aluno' ||
+      (currentUser?.aluno_id && currentUser?.cargo !== 'Responsável' && currentUser?.perfil !== 'Responsável' && currentUser?.perfil !== 'Família' && !currentUser?.responsavel_id)
+    ) {
+      return true
+    }
+    return false
+  }, [isAdminMode, isAlunoView, currentUser])
 
   const userResposta: AutorizacaoResposta | null = useMemo(() => {
     return getUserAutorizacaoResposta(autorizacao, currentUserId, currentAlunoId)
@@ -77,7 +99,7 @@ export function AutorizacaoWidget({
 
   const isCpfRequired = !!(autorizacao.exigirCpfResponsavel ?? autorizacao.exigirDocumentoResponsavel)
   const isCpfValid = useMemo(() => validarCPF(cpfResponsavel), [cpfResponsavel])
-  const canSubmit = !isClosed && !!selectedOpcaoId && (!isCpfRequired || isCpfValid)
+  const canSubmit = !isStudentViewer && !isClosed && !!selectedOpcaoId && (!isCpfRequired || isCpfValid)
 
   // Sync user's previous answer into input fields
   useEffect(() => {
@@ -106,8 +128,9 @@ export function AutorizacaoWidget({
       setAutorizacao(prev => {
         const ownKey = getAutorizacaoVoterKey(currentUserId, currentAlunoId)
         const ownResp = getUserAutorizacaoResposta(prev, currentUserId, currentAlunoId)
+        const incomingHasResp = !!getUserAutorizacaoResposta(incoming, currentUserId, currentAlunoId)
         const mergedRespostas = { ...(incoming.respostas || {}) }
-        if (ownResp && ownKey && !mergedRespostas[ownKey]) {
+        if (ownResp && ownKey && !mergedRespostas[ownKey] && !incomingHasResp) {
           mergedRespostas[ownKey] = ownResp
         }
         const merged = { ...incoming, respostas: mergedRespostas }
@@ -160,6 +183,7 @@ export function AutorizacaoWidget({
 
   // Handle Response Submission (Sign)
   const handleSubmitResposta = async () => {
+    if (isStudentViewer) return
     if (!selectedOpcaoId) {
       setFeedbackMessage({ type: 'error', text: 'Por favor, selecione uma opção de autorização.' })
       return
@@ -412,11 +436,15 @@ export function AutorizacaoWidget({
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                   background: hasResponded 
-                    ? userResposta?.tipoDecisao === 'aprova' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'
-                    : 'rgba(16, 185, 129, 0.12)',
+                    ? userResposta?.tipoDecisao === 'aprova' ? 'rgba(16, 185, 129, 0.15)' : userResposta?.tipoDecisao === 'recusa' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(99, 102, 241, 0.15)'
+                    : isStudentViewer
+                      ? isClosed ? 'rgba(100, 116, 139, 0.15)' : 'rgba(245, 158, 11, 0.15)'
+                      : 'rgba(16, 185, 129, 0.12)',
                   color: hasResponded 
-                    ? userResposta?.tipoDecisao === 'aprova' ? '#047857' : '#B91C1C'
-                    : '#047857',
+                    ? userResposta?.tipoDecisao === 'aprova' ? '#047857' : userResposta?.tipoDecisao === 'recusa' ? '#B91C1C' : '#4338CA'
+                    : isStudentViewer
+                      ? isClosed ? '#475569' : '#B45309'
+                      : '#047857',
                   padding: '2px 8px',
                   borderRadius: 999,
                   display: 'inline-flex',
@@ -425,8 +453,10 @@ export function AutorizacaoWidget({
                 }}>
                   <ShieldCheck size={11} />
                   {hasResponded 
-                    ? userResposta?.tipoDecisao === 'aprova' ? 'Autorizado' : 'Não Autorizado'
-                    : 'Autorização Requerida'}
+                    ? userResposta?.tipoDecisao === 'aprova' ? 'Autorizado' : userResposta?.tipoDecisao === 'recusa' ? 'Não Autorizado' : 'Respondido'
+                    : isStudentViewer
+                      ? isClosed ? 'Sem Resposta' : 'Aguardando Responsável'
+                      : 'Autorização Requerida'}
                 </span>
 
                 {isClosed && (
@@ -624,8 +654,8 @@ export function AutorizacaoWidget({
         {/* VISÃO DO RESPONSÁVEL / ALUNO */}
         {(!isAdminMode || isChangingResposta) ? (
           <div>
-            {/* SE JÁ RESPONDEU E NÃO ESTÁ EM MODO DE EDIÇÃO */}
-            {hasResponded && !isChangingResposta ? (
+            {/* SE JÁ RESPONDEU E NÃO ESTÁ EM MODO DE EDIÇÃO (OU SE FOR ALUNO VISUALIZANDO RESULTADO) */}
+            {hasResponded && (!isChangingResposta || isStudentViewer) ? (
               <div style={{
                 background: userResposta?.tipoDecisao === 'aprova' ? '#F0FDF4' : '#FEF2F2',
                 border: `1.5px solid ${userResposta?.tipoDecisao === 'aprova' ? '#86EFAC' : '#FCA5A5'}`,
@@ -643,14 +673,15 @@ export function AutorizacaoWidget({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#FFFFFF'
+                      color: '#FFFFFF',
+                      flexShrink: 0
                     }}>
                       {userResposta?.tipoDecisao === 'aprova' ? <CheckCircle2 size={24} /> : <XCircle size={24} />}
                     </div>
 
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: userResposta?.tipoDecisao === 'aprova' ? '#166534' : '#991B1B', textTransform: 'uppercase' }}>
-                        {userResposta?.tipoDecisao === 'aprova' ? 'Participação Autorizada' : 'Participação Não Autorizada'}
+                        Resultado da Autorização — {userResposta?.tipoDecisao === 'aprova' ? 'Participação Autorizada' : userResposta?.tipoDecisao === 'recusa' ? 'Participação Não Autorizada' : 'Resposta Registrada'}
                       </div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: userResposta?.tipoDecisao === 'aprova' ? '#065F46' : '#991B1B' }}>
                         {userResposta?.opcaoTexto}
@@ -661,7 +692,7 @@ export function AutorizacaoWidget({
                     </div>
                   </div>
 
-                  {autorizacao.permitirAlterarResposta && !isClosed && (
+                  {!isStudentViewer && autorizacao.permitirAlterarResposta && !isClosed && (
                     <button
                       type="button"
                       onClick={() => setIsChangingResposta(true)}
@@ -723,8 +754,61 @@ export function AutorizacaoWidget({
                   )}
                 </div>
               </div>
+            ) : isStudentViewer ? (
+              /* VISÃO DO ALUNO QUANDO AINDA NÃO HÁ RESPOSTA DO RESPONSÁVEL (SOMENTE RESULTADO, SEM OPÇÃO DE RESPONDER) */
+              <div style={{
+                background: isClosed ? '#F8FAFC' : '#FFFBEB',
+                border: `1.5px solid ${isClosed ? '#E2E8F0' : '#FDE68A'}`,
+                borderRadius: 16,
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12
+              }}>
+                <div style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  background: isClosed ? '#E2E8F0' : 'rgba(245, 158, 11, 0.16)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: isClosed ? '#64748B' : '#D97706',
+                  flexShrink: 0
+                }}>
+                  {isClosed ? <Lock size={20} /> : <Clock size={20} />}
+                </div>
+                <div>
+                  <div style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: isClosed ? '#475569' : '#B45309',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em'
+                  }}>
+                    Resultado da Autorização
+                  </div>
+                  <div style={{
+                    fontSize: 15,
+                    fontWeight: 800,
+                    color: isClosed ? '#1E293B' : '#92400E',
+                    marginTop: 2
+                  }}>
+                    {isClosed ? 'Autorização encerrada sem resposta registrada' : 'Aguardando resposta do responsável'}
+                  </div>
+                  <div style={{
+                    fontSize: 12,
+                    color: isClosed ? '#64748B' : '#B45309',
+                    marginTop: 2
+                  }}>
+                    {isClosed
+                      ? 'O prazo desta autorização foi encerrado sem assinatura do responsável.'
+                      : 'Apenas os responsáveis podem responder e assinar digitalmente esta autorização.'}
+                  </div>
+                </div>
+              </div>
             ) : (
-              /* FORMULÁRIO DE SELEÇÃO E ASSINATURA */
+              /* FORMULÁRIO DE SELEÇÃO E ASSINATURA (EXCLUSIVO PARA RESPONSÁVEIS) */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
                   Selecione sua resposta:

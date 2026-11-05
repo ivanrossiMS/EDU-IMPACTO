@@ -424,6 +424,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             pages: old.pages.map((p: any[]) => p.map((c: any) => String(c.id) === cId ? { ...c, ...rawItem } : c))
           }
         })
+        setSelectedComunicado((curr: any) => (curr && String(curr.id) === cId ? { ...curr, ...rawItem } : curr))
       }
       triggerDebouncedRefetch()
     }
@@ -1702,7 +1703,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               currentUserName={currentUser?.nome || aluno?.nome || 'Familiar / Aluno'}
               currentUserAvatar={currentUser?.foto || aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
               isAdminMode={false}
-              alunos={aluno ? [aluno] : []}
+              isAlunoView={isAlunoLogado}
+              currentUserObj={currentUser}
+              alunos={aluno ? [{ ...aluno, turma_nome: turmaNome || aluno.turma_nome || aluno.turma }] : (resolvedParams?.slug ? [{ id: resolvedParams.slug, turma_nome: turmaNome || undefined }] : [])}
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}
               setMaximizedVideoStr={setMaximizedVideoStr}
