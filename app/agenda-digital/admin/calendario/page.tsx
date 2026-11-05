@@ -7,7 +7,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin, Eye, EyeOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin, Eye, EyeOff, Info } from 'lucide-react'
 import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
@@ -45,40 +45,44 @@ function VisibilidadeSelector({
   turmasSel,
   usuarioSel,
   tipo,
+  anoTodos,
+  anosLetivos,
+  onChangeAnoTodos,
   onOpenModal,
   onChangeTipo
 }: {
   turmasSel: string[]
   usuarioSel: string
   tipo: '' | 'todos' | 'turmas' | 'usuario'
+  anoTodos?: string
+  anosLetivos?: string[]
+  onChangeAnoTodos?: (ano: string) => void
   onOpenModal: (type: 'turmas' | 'usuario') => void
   onChangeTipo: (tipo: 'todos' | 'turmas' | 'usuario') => void
 }) {
-  const options = [
-    { v: 'todos', label: 'Toda a instituição', shortLabel: 'Instituição', icon: Globe },
-    { v: 'turmas', label: 'Grupos específicos', shortLabel: 'Grupos / Turmas', icon: Users },
-    { v: 'usuario', label: 'Usuário do sistema', shortLabel: 'Usuário', icon: UserCheck },
-  ] as const
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Abas de Tipo */}
       <div className="ad-vis-tabs">
-        {options.map(opt => {
+        {[
+          { v: 'todos', label: 'Toda a instituição', shortLabel: 'Instituição', icon: Globe },
+          { v: 'turmas', label: 'Grupos específicos', shortLabel: 'Grupos / Turmas', icon: Users },
+          { v: 'usuario', label: 'Usuário do sistema', shortLabel: 'Usuário', icon: UserCheck },
+        ].map(opt => {
           const isActive = tipo === opt.v
           const IconComp = opt.icon
           return (
             <button
               key={opt.v}
               type="button"
-              onClick={() => onChangeTipo(opt.v)}
+              onClick={() => onChangeTipo(opt.v as any)}
               className={`ad-vis-tab-btn ${isActive ? 'active' : ''}`}
             >
-              <span className="ad-vis-tab-icon">
+              <div className="ad-vis-tab-icon">
                 <IconComp size={15} strokeWidth={isActive ? 2.4 : 2} />
-              </span>
-              <span className="ad-vis-tab-label-desktop">{opt.label}</span>
-              <span className="ad-vis-tab-label-mobile">{opt.shortLabel}</span>
+              </div>
+              <span className="ad-vis-label-full">{opt.label}</span>
+              <span className="ad-vis-label-short">{opt.shortLabel}</span>
             </button>
           )
         })}
@@ -88,34 +92,46 @@ function VisibilidadeSelector({
       {!tipo && (
         <div style={{
           padding: '12px 14px',
-          textAlign: 'center',
           background: 'rgba(245, 158, 11, 0.06)',
-          borderRadius: 14,
+          borderRadius: 13,
           border: '1.5px dashed rgba(245, 158, 11, 0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          textAlign: 'left',
           width: '100%',
-          minWidth: 0,
           boxSizing: 'border-box'
         }}>
-          <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600, lineHeight: 1.4 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(245, 158, 11, 0.14)', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Info size={16} strokeWidth={2.2} />
+          </div>
+          <span style={{ fontSize: 12, color: '#b45309', fontWeight: 600, lineHeight: 1.35 }}>
             Selecione uma opção de público-alvo acima (Obrigatório).
           </span>
         </div>
       )}
 
       {tipo === 'todos' && (
-        <div style={{
-          padding: '14px 16px',
-          textAlign: 'center',
-          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(5, 150, 105, 0.03) 100%)',
-          borderRadius: 14,
-          border: '1.5px dashed rgba(16, 185, 129, 0.3)',
-          width: '100%',
-          minWidth: 0,
-          boxSizing: 'border-box'
-        }}>
-          <span style={{ fontSize: 12, color: '#059669', fontWeight: 600, lineHeight: 1.4 }}>
-            🌐 Evento visível para todos os usuários do sistema e aplicativo.
-          </span>
+        <div className="ad-vis-panel-all">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', width: '100%' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(16, 185, 129, 0.14)', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Globe size={16} strokeWidth={2.2} />
+            </div>
+            <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600, lineHeight: 1.35 }}>
+              Visível para todos os usuários ativos no ano letivo selecionado.
+            </span>
+          </div>
+          {anosLetivos && anosLetivos.length > 0 && onChangeAnoTodos && (
+            <select 
+              className="form-select ad-ev-input" 
+              style={{ width: '100%', padding: '0 32px 0 12px', borderRadius: 11, fontSize: 13, fontWeight: 700, border: '1.5px solid rgba(16, 185, 129, 0.35)', background: '#fff', color: '#047857', cursor: 'pointer' }}
+              value={anoTodos || ''}
+              onChange={(e) => onChangeAnoTodos(e.target.value)}
+            >
+              <option value="">Selecione o Ano Letivo (Obrigatório)</option>
+              {anosLetivos.map(a => <option key={a} value={a}>Ano Letivo {a}</option>)}
+            </select>
+          )}
         </div>
       )}
 
@@ -125,27 +141,22 @@ function VisibilidadeSelector({
           onClick={() => onOpenModal('turmas')}
           className="ad-vis-picker-card"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: turmasSel.length > 0 ? '#eef2ff' : '#f1f5f9',
-              color: turmasSel.length > 0 ? '#4f46e5' : '#64748b',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-            }}>
-              <Users size={16} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: turmasSel.length > 0 ? 'rgba(99, 102, 241, 0.12)' : '#f1f5f9', color: turmasSel.length > 0 ? '#4f46e5' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Users size={17} strokeWidth={2.2} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, textAlign: 'left' }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {turmasSel.length === 0 ? 'Nenhum grupo selecionado' : `${turmasSel.length} grupo(s) selecionado(s)`}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.25 }}>
+                {turmasSel.length === 0 ? 'Nenhum grupo selecionado' : `${turmasSel.length} grupo${turmasSel.length > 1 ? 's' : ''} selecionado${turmasSel.length > 1 ? 's' : ''}`}
               </span>
-              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {turmasSel.length === 0 ? 'Toque para buscar e selecionar turmas ou equipes' : turmasSel.join(', ')}
+              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2 }}>
+                {turmasSel.length === 0 ? 'Toque para buscar equipes ou turmas' : turmasSel.join(', ')}
               </span>
             </div>
           </div>
-          <div className="ad-vis-picker-action">
-            <Search size={14} />
-            <span>Selecionar</span>
+          <div style={{ padding: '6px 10px', borderRadius: 8, background: '#eef2ff', color: '#4f46e5', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <Search size={13} strokeWidth={2.5} />
+            <span>Buscar</span>
           </div>
         </button>
       )}
@@ -156,26 +167,21 @@ function VisibilidadeSelector({
           onClick={() => onOpenModal('usuario')}
           className="ad-vis-picker-card"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: usuarioSel && usuarioSel !== 'Todos' ? '#eef2ff' : '#f1f5f9',
-              color: usuarioSel && usuarioSel !== 'Todos' ? '#4f46e5' : '#64748b',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-            }}>
-              <UserCheck size={16} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: (usuarioSel && usuarioSel !== 'Todos') ? 'rgba(99, 102, 241, 0.12)' : '#f1f5f9', color: (usuarioSel && usuarioSel !== 'Todos') ? '#4f46e5' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <UserCheck size={17} strokeWidth={2.2} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, textAlign: 'left' }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {usuarioSel === 'Todos' || !usuarioSel ? 'Selecionar Usuário' : usuarioSel}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+                {usuarioSel === 'Todos' || !usuarioSel ? 'Selecionar usuário' : usuarioSel}
               </span>
-              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {usuarioSel === 'Todos' || !usuarioSel ? 'Toque para buscar um colaborador específico' : 'Usuário destinatário deste evento'}
+              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500, marginTop: 2 }}>
+                {usuarioSel === 'Todos' || !usuarioSel ? 'Toque para escolher um colaborador' : 'Destinatário exclusivo do evento'}
               </span>
             </div>
           </div>
-          <div className="ad-vis-picker-action">
-            <Search size={14} />
+          <div style={{ padding: '6px 10px', borderRadius: 8, background: '#eef2ff', color: '#4f46e5', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <Search size={13} strokeWidth={2.5} />
             <span>Buscar</span>
           </div>
         </button>
@@ -184,11 +190,85 @@ function VisibilidadeSelector({
   )
 }
 
-const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
+const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string } = {
   titulo: '', descricao: '', tipo: 'evento', data: '', horaInicio: '', horaFim: '',
   turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: '',
   confirmacaoNecessaria: false, confirmados: [], unidade: '',
-  diaTodo: false,
+  diaTodo: false, dataFim: ''
+}
+
+function computeEventDateRange(start?: string, end?: string) {
+  if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [] as string[],
+      weekdayDates: [] as string[],
+      weekendDates: [] as string[],
+    }
+  }
+  const [sy, sm, sd] = start.split('-').map(Number)
+  if (!sy || sy < 1900 || sy > 2100) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [start],
+      weekdayDates: [start],
+      weekendDates: [] as string[],
+    }
+  }
+  if (!end || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end <= start) {
+    const dow = new Date(sy, sm - 1, sd, 12, 0, 0).getDay()
+    const isWknd = dow === 0 || dow === 6
+    return {
+      isMultiDay: false,
+      hasWeekend: isWknd,
+      allDates: [start],
+      weekdayDates: isWknd ? ([] as string[]) : [start],
+      weekendDates: isWknd ? [start] : ([] as string[]),
+    }
+  }
+  const [ey, em, ed] = end.split('-').map(Number)
+  if (!ey || ey < 1900 || ey > 2100) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [start],
+      weekdayDates: [start],
+      weekendDates: [] as string[],
+    }
+  }
+
+  const allDates: string[] = []
+  const weekdayDates: string[] = []
+  const weekendDates: string[] = []
+  const curr = new Date(sy, sm - 1, sd, 12, 0, 0)
+  const last = new Date(ey, em - 1, ed, 12, 0, 0)
+  let steps = 0
+
+  while (curr <= last && steps < 400) {
+    const yyyy = curr.getFullYear()
+    const mm = String(curr.getMonth() + 1).padStart(2, '0')
+    const dd = String(curr.getDate()).padStart(2, '0')
+    const dStr = `${yyyy}-${mm}-${dd}`
+    const dow = curr.getDay()
+    allDates.push(dStr)
+    if (dow === 0 || dow === 6) {
+      weekendDates.push(dStr)
+    } else {
+      weekdayDates.push(dStr)
+    }
+    curr.setDate(curr.getDate() + 1)
+    steps++
+  }
+
+  return {
+    isMultiDay: allDates.length > 1,
+    hasWeekend: weekendDates.length > 0,
+    allDates,
+    weekdayDates,
+    weekendDates,
+  }
 }
 
 // Caches removidos: utilizando API otimizada de aniversariantes
@@ -237,8 +317,8 @@ export default function CalendarioPage() {
   }, [turmas, cfgCalendarioLetivo])
 
   const turmasNomes = gruposManuais.map((t: any) => t.nome)
-  const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
-  const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
+  const usuariosAtivos = sysUsers || []
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
@@ -247,19 +327,30 @@ export default function CalendarioPage() {
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
   const [searchTermSelection, setSearchTermSelection] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'>>(BLANK_EVENTO)
+  const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
+  const [ignorarFimDeSemana, setIgnorarFimDeSemana] = useState(false)
 
-  const [visibilidade, setVisibilidade] = useState<{ tipo: '' | 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
-    tipo: '', turmasSel: [], usuario: 'Todos',
+  const dateRangeInfo = useMemo(() => computeEventDateRange(form.data, form.dataFim), [form.data, form.dataFim])
+
+  const [visibilidade, setVisibilidade] = useState<{ tipo: '' | 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
+    tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: ''
   })
 
   const isPublicoAlvoValido = useMemo(() => {
     if (!visibilidade.tipo) return false
-    if (visibilidade.tipo === 'todos') return true
+    if (visibilidade.tipo === 'todos') return anosLetivos.length === 0 || Boolean(visibilidade.anoTodos)
     if (visibilidade.tipo === 'turmas') return visibilidade.turmasSel.length > 0
     if (visibilidade.tipo === 'usuario') return Boolean(visibilidade.usuario && visibilidade.usuario !== 'Todos')
     return false
-  }, [visibilidade])
+  }, [visibilidade, anosLetivos])
+
+  const isSaveEnabled = useMemo(() => {
+    if (!isPublicoAlvoValido) return false
+    if (!editingId && ignorarFimDeSemana && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend && dateRangeInfo.weekdayDates.length === 0) {
+      return false
+    }
+    return true
+  }, [isPublicoAlvoValido, editingId, ignorarFimDeSemana, dateRangeInfo])
 
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
@@ -290,6 +381,10 @@ export default function CalendarioPage() {
       alert('Selecione o público-alvo do evento.')
       return
     }
+    if (visibilidade.tipo === 'todos' && anosLetivos.length > 0 && !visibilidade.anoTodos) {
+      alert('Selecione um Ano Letivo para Toda a instituição.')
+      return
+    }
     if (visibilidade.tipo === 'turmas' && visibilidade.turmasSel.length === 0) {
       alert('Selecione pelo menos um grupo ou turma para o público-alvo.')
       return
@@ -299,7 +394,7 @@ export default function CalendarioPage() {
       return
     }
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
-      : visibilidade.tipo === 'todos' ? ['TODOS']
+      : visibilidade.tipo === 'todos' ? (visibilidade.anoTodos ? [`TODOS:${visibilidade.anoTodos}`] : ['TODOS'])
       : []
     
     if (editingId) {
@@ -308,10 +403,11 @@ export default function CalendarioPage() {
         ...(existingEv || ({} as any)),
         ...form,
         id: editingId,
+        dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : { visibilidadeUsuario: undefined }),
-      }
+      } as any
       if (setLocalEventosAgenda) {
         setLocalEventosAgenda(prev => prev.map(e => e.id === editingId ? updatedEvento : e))
       } else {
@@ -323,35 +419,44 @@ export default function CalendarioPage() {
         body: JSON.stringify(updatedEvento),
       }).catch(err => console.error('[Calendario Admin] Erro ao atualizar evento:', err))
     } else {
+      const shouldSkipWeekends = ignorarFimDeSemana && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend
+      const datesToCreate = shouldSkipWeekends ? dateRangeInfo.weekdayDates : dateRangeInfo.allDates
+      if (datesToCreate.length === 0) {
+        alert('O período selecionado possui apenas finais de semana. Desmarque a opção "Não inserir nos finais de semana" ou amplie o período para incluir dias úteis.')
+        return
+      }
       const creatorName =
         form.criadoPor && form.criadoPor !== 'Usuário'
           ? form.criadoPor
           : (currentUser?.nome || '')
-      const novoEvento: EventoAgenda = {
+      const novosEventos = datesToCreate.map(d => ({
         ...form,
         criadoPor: creatorName,
         usuarioId: currentUser?.id || undefined,
         usuarioNome: creatorName || undefined,
         usuarioCargo: currentUser?.cargo || currentUser?.perfil || undefined,
+        data: d,
+        dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         id: newId('EV'),
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
-      } as any
+      }))
       if (setLocalEventosAgenda) {
-        setLocalEventosAgenda(prev => [...prev, novoEvento])
+        setLocalEventosAgenda(prev => [...prev, ...novosEventos])
       } else {
-        setEventosAgenda(prev => [...prev, novoEvento])
+        setEventosAgenda(prev => [...prev, ...novosEventos])
       }
       fetch('/api/agenda/eventos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([novoEvento]),
-      }).catch(err => console.error('[Calendario Admin] Erro ao salvar novo evento:', err))
+        body: JSON.stringify(novosEventos),
+      }).catch(err => console.error('[Calendario Admin] Erro ao salvar novos eventos:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
-    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' })
+    setIgnorarFimDeSemana(false)
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(false)
   }
@@ -395,6 +500,7 @@ export default function CalendarioPage() {
     let t: '' | 'todos' | 'turmas' | 'usuario' = '';
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
+    let anoTodosStr = '';
 
     let rawTurmas: any = ev.turmas || []
     if (typeof rawTurmas === 'string') {
@@ -403,8 +509,13 @@ export default function CalendarioPage() {
     if (!Array.isArray(rawTurmas)) rawTurmas = []
 
     if (rawTurmas && rawTurmas.length > 0) {
-      if (String(rawTurmas[0]).toUpperCase().startsWith('TODOS') || String(rawTurmas[0]).toUpperCase() === 'TODA A ESCOLA' || String(rawTurmas[0]).toUpperCase() === 'TODAS') {
+      const firstT = String(rawTurmas[0])
+      if (firstT.toUpperCase().startsWith('TODOS:')) {
         t = 'todos';
+        anoTodosStr = firstT.split(':')[1] || '';
+      } else if (firstT.toUpperCase() === 'TODOS' || firstT.toUpperCase() === 'TODA A ESCOLA' || firstT.toUpperCase() === 'TODAS') {
+        t = 'todos';
+        anoTodosStr = anosLetivos[0] || '';
       } else {
         t = 'turmas';
         turmasSel = rawTurmas;
@@ -414,14 +525,16 @@ export default function CalendarioPage() {
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
-    setVisibilidade({ tipo: t, turmasSel, usuario: usuarioStr })
+    setIgnorarFimDeSemana(false)
+    setVisibilidade({ tipo: t, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
     setEditingId(ev.id)
     setShowModal(true)
   }
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
-    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' })
+    setIgnorarFimDeSemana(false)
+    setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(true)
   }
@@ -696,33 +809,34 @@ export default function CalendarioPage() {
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
-          padding: 20px !important;
+          padding: 16px !important;
           overflow: hidden !important;
           overscroll-behavior: contain !important;
           box-sizing: border-box !important;
         }
         .ad-ev-modal-card {
-          background: #ffffff !important;
-          border-radius: 24px !important;
           width: 100% !important;
           max-width: 560px !important;
-          max-height: min(88dvh, 760px) !important;
+          max-height: 90dvh !important;
+          background: #ffffff !important;
+          border-radius: 26px !important;
+          box-shadow: 0 28px 64px -12px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(226, 232, 240, 0.8) !important;
           display: flex !important;
           flex-direction: column !important;
           overflow: hidden !important;
-          box-shadow: 0 28px 64px -12px rgba(15, 23, 42, 0.38), 0 0 0 1px rgba(226, 232, 240, 0.85) !important;
+          margin: auto !important;
           box-sizing: border-box !important;
           min-width: 0 !important;
           font-family: 'Outfit', sans-serif !important;
         }
         .ad-ev-modal-header {
-          padding: 18px 22px !important;
-          background: #ffffff !important;
-          border-bottom: 1px solid #f1f5f9 !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           gap: 12px !important;
+          padding: 20px 24px 16px !important;
+          border-bottom: 1px solid #f1f5f9 !important;
+          background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%) !important;
           flex-shrink: 0 !important;
           box-sizing: border-box !important;
         }
@@ -741,7 +855,7 @@ export default function CalendarioPage() {
           justify-content: center !important;
           cursor: pointer !important;
           flex-shrink: 0 !important;
-          transition: all 0.18s ease !important;
+          transition: all 0.16s ease !important;
         }
         .ad-ev-modal-close:hover:not(:disabled) {
           background: #f1f5f9 !important;
@@ -749,26 +863,26 @@ export default function CalendarioPage() {
           border-color: #cbd5e1 !important;
         }
         .ad-ev-modal-body {
-          padding: 20px 22px !important;
+          padding: 20px 24px !important;
           overflow-y: auto !important;
           overflow-x: hidden !important;
           overscroll-behavior: contain !important;
           display: flex !important;
           flex-direction: column !important;
-          gap: 16px !important;
+          gap: 14px !important;
           flex: 1 1 auto !important;
           min-width: 0 !important;
           width: 100% !important;
           box-sizing: border-box !important;
         }
         .ad-ev-modal-footer {
-          padding: 14px 22px !important;
-          background: #f8fafc !important;
-          border-top: 1px solid #e2e8f0 !important;
           display: flex !important;
           align-items: center !important;
           justify-content: flex-end !important;
           gap: 10px !important;
+          padding: 14px 24px 18px !important;
+          border-top: 1px solid #f1f5f9 !important;
+          background: #fafbff !important;
           flex-shrink: 0 !important;
           width: 100% !important;
           box-sizing: border-box !important;
@@ -781,46 +895,37 @@ export default function CalendarioPage() {
           box-sizing: border-box !important;
         }
         .ad-ev-label {
-          display: flex !important;
-          align-items: center !important;
-          gap: 5px !important;
-          font-family: 'Outfit', sans-serif !important;
           font-size: 11px !important;
           font-weight: 800 !important;
           color: #475569 !important;
           text-transform: uppercase !important;
-          letter-spacing: 0.05em !important;
+          letter-spacing: 0.04em !important;
           margin: 0 0 6px 0 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 5px !important;
           line-height: 1.2 !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
+          font-family: 'Outfit', sans-serif !important;
         }
         .ad-ev-input,
         .ad-ev-select {
           width: 100% !important;
           min-width: 0 !important;
           max-width: 100% !important;
-          box-sizing: border-box !important;
           height: 44px !important;
           min-height: 44px !important;
-          padding: 0 12px !important;
           border-radius: 12px !important;
-          border: 1.5px solid #e2e8f0 !important;
-          background: #f8fafc !important;
-          color: #0f172a !important;
-          font-family: 'Outfit', 'Inter', sans-serif !important;
           font-size: 13.5px !important;
           font-weight: 600 !important;
-          transition: all 0.18s ease !important;
+          color: #0f172a !important;
+          background: #f8fafc !important;
+          border: 1.5px solid #e2e8f0 !important;
+          padding: 0 12px !important;
+          box-sizing: border-box !important;
+          transition: all 0.16s ease !important;
+          font-family: 'Outfit', 'Inter', sans-serif !important;
           outline: none !important;
           margin: 0 !important;
-        }
-        .ad-ev-select.ad-ev-select-dot {
-          padding-left: 32px !important;
-        }
-        .ad-ev-input.ad-ev-input-icon {
-          padding-left: 34px !important;
         }
         .ad-ev-input::placeholder {
           color: #94a3b8 !important;
@@ -830,13 +935,22 @@ export default function CalendarioPage() {
         .ad-ev-select:focus {
           background: #ffffff !important;
           border-color: #6366f1 !important;
-          box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.14) !important;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12) !important;
+          outline: none !important;
         }
         .ad-ev-input:disabled,
         .ad-ev-select:disabled {
           opacity: 0.55 !important;
           cursor: not-allowed !important;
           background: #f1f5f9 !important;
+        }
+        .ad-ev-select-dot {
+          padding-left: 30px !important;
+          padding-right: 32px !important;
+          cursor: pointer !important;
+        }
+        .ad-ev-input-icon {
+          padding-left: 38px !important;
         }
         .ad-ev-grid-2 {
           display: grid !important;
@@ -856,8 +970,8 @@ export default function CalendarioPage() {
           border-radius: 14px !important;
           border: 1.5px solid #e2e8f0 !important;
           cursor: pointer !important;
-          transition: all 0.2s ease !important;
           user-select: none !important;
+          transition: all 0.16s ease !important;
           width: 100% !important;
           box-sizing: border-box !important;
         }
@@ -866,9 +980,8 @@ export default function CalendarioPage() {
           background: #f1f5f9 !important;
         }
         .ad-ev-allday-card:has(input:checked) {
-          background: #eef2ff !important;
-          border-color: #818cf8 !important;
-          box-shadow: 0 2px 10px rgba(99, 102, 241, 0.08) !important;
+          background: rgba(99, 102, 241, 0.06) !important;
+          border-color: rgba(99, 102, 241, 0.35) !important;
         }
         .ad-ev-switch-track {
           width: 40px !important;
@@ -879,6 +992,9 @@ export default function CalendarioPage() {
           transition: background 0.2s ease !important;
           flex-shrink: 0 !important;
         }
+        .ad-ev-allday-card:has(input:checked) .ad-ev-switch-track {
+          background: #6366f1 !important;
+        }
         .ad-ev-switch-thumb {
           width: 18px !important;
           height: 18px !important;
@@ -887,14 +1003,20 @@ export default function CalendarioPage() {
           position: absolute !important;
           top: 2px !important;
           left: 2px !important;
-          transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
-        }
-        .ad-ev-allday-card:has(input:checked) .ad-ev-switch-track {
-          background: #6366f1 !important;
+          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1) !important;
         }
         .ad-ev-allday-card:has(input:checked) .ad-ev-switch-thumb {
           transform: translateX(18px) !important;
+        }
+        .ad-ev-vis-box {
+          padding: 14px !important;
+          background: #f8fafc !important;
+          border-radius: 18px !important;
+          border: 1.5px solid #e2e8f0 !important;
+          width: 100% !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
         }
 
         /* ── Visibilidade Selector Tabs & Picker Cards ── */
@@ -903,174 +1025,150 @@ export default function CalendarioPage() {
           grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           gap: 6px !important;
           background: #eef2f6 !important;
-          padding: 5px !important;
-          border-radius: 14px !important;
-          border: 1px solid #e2e8f0 !important;
+          padding: 4px !important;
+          border-radius: 13px !important;
           width: 100% !important;
           min-width: 0 !important;
           box-sizing: border-box !important;
         }
         .ad-vis-tab-btn {
-          display: flex !important;
-          flex-direction: column !important;
-          align-items: center !important;
-          justify-content: center !important;
-          gap: 5px !important;
-          padding: 9px 6px !important;
-          border-radius: 10px !important;
-          border: 1px solid transparent !important;
-          background: transparent !important;
-          color: #64748b !important;
-          cursor: pointer !important;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
           min-width: 0 !important;
-          width: 100% !important;
-          min-height: 56px !important;
-          box-sizing: border-box !important;
-          text-align: center !important;
-          font-family: 'Outfit', sans-serif !important;
+          padding: 8px 6px !important;
+          border-radius: 10px !important;
           font-size: 11.5px !important;
           font-weight: 700 !important;
-          line-height: 1.15 !important;
+          background: transparent !important;
+          border: 1px solid transparent !important;
+          color: #64748b !important;
+          cursor: pointer !important;
+          transition: all 0.18s ease !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          line-height: 1.2 !important;
+          text-align: center !important;
+          font-family: 'Outfit', sans-serif !important;
         }
-        .ad-vis-tab-btn:hover:not(.active) {
-          background: rgba(255, 255, 255, 0.5) !important;
+        .ad-vis-tab-btn:hover {
           color: #334155 !important;
         }
         .ad-vis-tab-btn.active {
           background: #ffffff !important;
           color: #4f46e5 !important;
-          border-color: rgba(99, 102, 241, 0.24) !important;
+          border-color: rgba(99, 102, 241, 0.16) !important;
           box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+          font-weight: 800 !important;
         }
         .ad-vis-tab-icon {
-          width: 26px !important;
-          height: 26px !important;
-          border-radius: 8px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
-          background: rgba(100, 116, 139, 0.1) !important;
-          color: #64748b !important;
-          transition: all 0.2s ease !important;
           flex-shrink: 0 !important;
         }
-        .ad-vis-tab-btn.active .ad-vis-tab-icon {
-          background: #eef2ff !important;
-          color: #4f46e5 !important;
-        }
-        .ad-vis-tab-label-desktop {
-          display: block !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          max-width: 100% !important;
-        }
-        .ad-vis-tab-label-mobile {
+        .ad-vis-label-short {
           display: none !important;
+        }
+        .ad-vis-panel-all {
+          padding: 12px 14px !important;
+          background: rgba(16, 185, 129, 0.06) !important;
+          border-radius: 13px !important;
+          border: 1.5px dashed rgba(16, 185, 129, 0.3) !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 10px !important;
         }
         .ad-vis-picker-card {
           width: 100% !important;
-          min-width: 0 !important;
-          box-sizing: border-box !important;
-          padding: 10px 12px !important;
+          padding: 11px 13px !important;
           background: #ffffff !important;
-          border-radius: 12px !important;
+          border-radius: 13px !important;
           border: 1.5px solid #e2e8f0 !important;
           cursor: pointer !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           gap: 10px !important;
-          transition: all 0.18s ease !important;
-          font-family: 'Outfit', sans-serif !important;
+          transition: all 0.16s ease !important;
+          text-align: left !important;
+          box-sizing: border-box !important;
         }
         .ad-vis-picker-card:hover {
-          border-color: #818cf8 !important;
+          border-color: #6366f1 !important;
           box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08) !important;
-        }
-        .ad-vis-picker-action {
-          display: inline-flex !important;
-          align-items: center !important;
-          gap: 5px !important;
-          padding: 6px 10px !important;
-          border-radius: 9px !important;
-          background: #eef2ff !important;
-          color: #4f46e5 !important;
-          font-size: 11.5px !important;
-          font-weight: 800 !important;
-          flex-shrink: 0 !important;
         }
         .ad-ev-btn-cancel {
           height: 44px !important;
           min-height: 44px !important;
-          padding: 0 20px !important;
+          padding: 0 18px !important;
           border-radius: 12px !important;
           font-family: 'Outfit', sans-serif !important;
           font-size: 13.5px !important;
           font-weight: 700 !important;
-          background: #ffffff !important;
           color: #475569 !important;
+          background: #ffffff !important;
           border: 1.5px solid #e2e8f0 !important;
           cursor: pointer !important;
+          transition: all 0.15s ease !important;
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
-          transition: all 0.18s ease !important;
         }
         .ad-ev-btn-cancel:hover {
           background: #f1f5f9 !important;
           color: #0f172a !important;
-          border-color: #cbd5e1 !important;
         }
+        .ad-ev-btn-save,
         .ad-ev-btn-submit {
           height: 44px !important;
           min-height: 44px !important;
-          padding: 0 24px !important;
+          padding: 0 22px !important;
           border-radius: 12px !important;
           font-family: 'Outfit', sans-serif !important;
           font-size: 13.5px !important;
           font-weight: 800 !important;
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
           color: #ffffff !important;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
           border: none !important;
-          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.28) !important;
+          box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.45) !important;
           cursor: pointer !important;
           display: inline-flex !important;
           align-items: center !important;
           justify-content: center !important;
-          gap: 7px !important;
+          gap: 8px !important;
           transition: all 0.18s ease !important;
         }
 
         @media (max-width: 640px) {
           .ad-ev-modal-overlay {
             padding: 10px !important;
+            align-items: center !important;
           }
           .ad-ev-modal-card {
+            max-height: 92dvh !important;
             border-radius: 22px !important;
-            max-height: 90dvh !important;
           }
           .ad-ev-modal-header {
-            padding: 14px 16px !important;
+            padding: 15px 16px 13px !important;
           }
           .ad-ev-modal-body {
-            padding: 16px !important;
-            gap: 14px !important;
+            padding: 14px 16px !important;
+            gap: 12px !important;
           }
           .ad-ev-modal-footer {
-            padding: 12px 16px !important;
+            padding: 12px 16px 14px !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1.35fr !important;
+            gap: 8px !important;
           }
-          .ad-ev-btn-cancel {
-            flex: 1 1 0% !important;
-            padding: 0 12px !important;
-          }
+          .ad-ev-btn-cancel,
+          .ad-ev-btn-save,
           .ad-ev-btn-submit {
-            flex: 1.4 1 0% !important;
-            padding: 0 14px !important;
-          }
-          .ad-ev-grid-2 {
-            gap: 10px !important;
+            width: 100% !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            padding: 0 12px !important;
+            font-size: 13px !important;
           }
           .ad-ev-input,
           .ad-ev-select {
@@ -1080,37 +1178,36 @@ export default function CalendarioPage() {
             padding: 0 10px !important;
             border-radius: 11px !important;
           }
-          .ad-ev-select.ad-ev-select-dot {
-            padding-left: 30px !important;
-          }
-          .ad-ev-input.ad-ev-input-icon {
-            padding-left: 34px !important;
+          .ad-ev-grid-2 {
+            gap: 8px !important;
           }
           .ad-ev-label {
             font-size: 10.5px !important;
-            letter-spacing: 0.04em !important;
             margin-bottom: 5px !important;
           }
-          .ad-vis-tab-btn {
-            padding: 8px 4px !important;
-            min-height: 52px !important;
-            font-size: 11px !important;
+          .ad-ev-vis-box {
+            padding: 12px !important;
+            border-radius: 15px !important;
           }
-          .ad-vis-tab-label-desktop {
+          .ad-vis-tabs {
+            gap: 4px !important;
+            padding: 3.5px !important;
+          }
+          .ad-vis-tab-btn {
+            flex-direction: column !important;
+            gap: 3px !important;
+            padding: 7px 4px !important;
+            font-size: 10.5px !important;
+          }
+          .ad-vis-label-full {
             display: none !important;
           }
-          .ad-vis-tab-label-mobile {
-            display: block !important;
+          .ad-vis-label-short {
+            display: inline !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
             max-width: 100% !important;
-          }
-          .ad-vis-picker-action span {
-            display: none !important;
-          }
-          .ad-vis-picker-action {
-            padding: 7px !important;
           }
         }
         @media (max-width: 345px) {
@@ -1165,7 +1262,7 @@ export default function CalendarioPage() {
             </button>
 
             <button
-              onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}
+              onClick={() => { setForm(BLANK_EVENTO); setIgnorarFimDeSemana(false); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
               style={{
                 height: 44,
                 padding: '0 18px',
@@ -1887,70 +1984,54 @@ export default function CalendarioPage() {
               }}
             >
               <motion.div
-                initial={{ scale: 0.96, opacity: 0, y: 12 }}
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.96, opacity: 0, y: 12 }}
-                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
                 className="ad-ev-modal-card"
               >
-                {/* ── Sticky Header ── */}
+                {/* Header */}
                 <div className="ad-ev-modal-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-                    <div style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 12,
-                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
-                      border: '1px solid #c7d2fe',
-                      color: '#4f46e5',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.14)'
-                    }}>
-                      {editingId ? <Edit2 size={17} strokeWidth={2.3} /> : <Sparkles size={18} strokeWidth={2.3} />}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        background: editingId
+                          ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.08) 100%)'
+                          : 'linear-gradient(135deg, rgba(99, 102, 241, 0.16) 0%, rgba(79, 70, 229, 0.08) 100%)',
+                        color: editingId ? '#d97706' : '#4f46e5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        border: editingId ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(99, 102, 241, 0.22)'
+                      }}
+                    >
+                      {editingId ? <Edit2 size={18} strokeWidth={2.4} /> : <CalendarIcon size={19} strokeWidth={2.4} />}
                     </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <h2 style={{
-                        fontWeight: 800,
-                        fontSize: 'clamp(17px, 2.5vw, 19px)',
-                        fontFamily: 'Outfit, sans-serif',
-                        color: '#0f172a',
-                        margin: 0,
-                        lineHeight: 1.2,
-                        letterSpacing: '-0.02em',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 900, fontSize: 18, fontFamily: 'Outfit, sans-serif', color: '#0f172a', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
                         {editingId ? 'Editar Evento' : 'Novo Evento'}
-                      </h2>
-                      <p style={{
-                        fontSize: 11.5,
-                        fontWeight: 500,
-                        color: '#64748b',
-                        margin: '2px 0 0 0',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
-                        Preencha os detalhes para agendar no calendário
-                      </p>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#64748b', marginTop: 2 }}>
+                        Preencha as informações e defina o público-alvo
+                      </div>
                     </div>
                   </div>
                   <button
                     type="button"
                     aria-label="Fechar modal"
                     className="ad-ev-modal-close"
-                    onClick={() => { setShowModal(false); setEditingId(null); }}
+                    onClick={() => { setShowModal(false); setEditingId(null) }}
                   >
-                    <X size={18} strokeWidth={2.2} />
+                    <X size={18} strokeWidth={2.4} />
                   </button>
                 </div>
 
-                {/* ── Scrollable Body ── */}
-                <div className="ad-ev-modal-body">
+                {/* Body */}
+                <div className="ad-ev-modal-body custom-scrollbar">
                   <div className="ad-ev-field">
                     <label htmlFor="admin-ev-titulo" className="ad-ev-label">
                       Título do Evento
@@ -1959,7 +2040,7 @@ export default function CalendarioPage() {
                       id="admin-ev-titulo"
                       name="titulo"
                       type="text"
-                      className="ad-ev-input"
+                      className="form-input ad-ev-input"
                       value={form.titulo}
                       onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))}
                       placeholder="Ex: Reunião Pedagógica"
@@ -1969,77 +2050,145 @@ export default function CalendarioPage() {
                   <div className="ad-ev-grid-2">
                     <div className="ad-ev-field">
                       <label htmlFor="admin-ev-data" className="ad-ev-label">
-                        Data
+                        Data Início
                       </label>
                       <input
                         id="admin-ev-data"
                         name="data"
-                        className="ad-ev-input"
+                        className="form-input ad-ev-input"
                         type="date"
                         value={form.data}
-                        onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
+                        onChange={e => {
+                          const val = e.target.value
+                          setForm(p => ({
+                            ...p,
+                            data: val,
+                            dataFim: p.dataFim && val && p.dataFim < val ? val : p.dataFim
+                          }))
+                        }}
                       />
                     </div>
                     <div className="ad-ev-field">
-                      <label htmlFor="admin-ev-tipo" className="ad-ev-label">
-                        Tipo
+                      <label htmlFor="admin-ev-data-fim" className="ad-ev-label">
+                        Data Final (Opc.)
                       </label>
-                      <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            position: 'absolute',
-                            left: 13,
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            background: TIPO_CORES[form.tipo] ?? '#f59e0b',
-                            boxShadow: `0 0 8px ${(TIPO_CORES[form.tipo] ?? '#f59e0b')}80`,
-                            pointerEvents: 'none',
-                            zIndex: 2
-                          }}
-                        />
-                        <select
-                          id="admin-ev-tipo"
-                          name="tipo"
-                          className="ad-ev-select ad-ev-select-dot"
-                          style={{ cursor: 'pointer' }}
-                          value={form.tipo}
-                          onChange={e => setForm(p => ({ ...p, tipo: e.target.value as any }))}
-                        >
-                          {Object.entries(TIPO_LABELS).map(([k, v]) => (
-                            <option key={k} value={k}>{v}</option>
-                          ))}
-                        </select>
+                      <input
+                        id="admin-ev-data-fim"
+                        name="dataFim"
+                        className="form-input ad-ev-input"
+                        type="date"
+                        value={form.dataFim || ''}
+                        min={form.data}
+                        disabled={!!editingId}
+                        onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  {!editingId && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend && (
+                    <label htmlFor="ignorarFimDeSemanaAdmin" className="ad-ev-allday-card">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9,
+                          background: ignorarFimDeSemana ? 'rgba(99, 102, 241, 0.14)' : 'rgba(245, 158, 11, 0.14)',
+                          color: ignorarFimDeSemana ? '#4f46e5' : '#d97706',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          transition: 'all 0.16s ease'
+                        }}>
+                          <CalendarIcon size={15} strokeWidth={2.3} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                            Não inserir nos finais de semana
+                          </div>
+                          <div style={{
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: ignorarFimDeSemana && dateRangeInfo.weekdayDates.length === 0 ? '#dc2626' : '#64748b',
+                            marginTop: 1
+                          }}>
+                            {ignorarFimDeSemana
+                              ? dateRangeInfo.weekdayDates.length === 0
+                                ? 'Atenção: O período possui apenas sábado/domingo (0 dias úteis)'
+                                : `Sábado e domingo ignorados • Serão criados ${dateRangeInfo.weekdayDates.length} ${dateRangeInfo.weekdayDates.length === 1 ? 'evento em dia útil' : 'eventos em dias úteis'}`
+                              : `Período passa por ${dateRangeInfo.weekendDates.length} ${dateRangeInfo.weekendDates.length === 1 ? 'dia' : 'dias'} de fim de semana • Ative para pular sáb. e dom.`}
+                          </div>
+                        </div>
                       </div>
+                      <input
+                        type="checkbox"
+                        id="ignorarFimDeSemanaAdmin"
+                        checked={Boolean(ignorarFimDeSemana)}
+                        onChange={e => setIgnorarFimDeSemana(e.target.checked)}
+                        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+                      />
+                      <div className="ad-ev-switch-track">
+                        <div className="ad-ev-switch-thumb" />
+                      </div>
+                    </label>
+                  )}
+
+                  <div className="ad-ev-field">
+                    <label htmlFor="admin-ev-tipo" className="ad-ev-label">
+                      Tipo de Evento
+                    </label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: 12,
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: TIPO_CORES[form.tipo] || '#6366f1',
+                          boxShadow: `0 0 0 3px ${(TIPO_CORES[form.tipo] || '#6366f1')}22`,
+                          pointerEvents: 'none',
+                          zIndex: 1
+                        }}
+                      />
+                      <select
+                        id="admin-ev-tipo"
+                        name="tipo"
+                        className="form-select ad-ev-input ad-ev-select-dot"
+                        value={form.tipo}
+                        onChange={e => setForm(p => ({ ...p, tipo: e.target.value as any }))}
+                      >
+                        {Object.entries(TIPO_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
                   <label htmlFor="diaTodo" className="ad-ev-allday-card">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                       <div style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
-                        background: form.diaTodo ? '#e0e7ff' : '#e2e8f0',
+                        width: 32,
+                        height: 32,
+                        borderRadius: 9,
+                        background: form.diaTodo ? 'rgba(99, 102, 241, 0.14)' : '#e2e8f0',
                         color: form.diaTodo ? '#4f46e5' : '#64748b',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.16s ease'
                       }}>
-                        <Clock size={16} strokeWidth={2.2} />
+                        <Clock size={15} strokeWidth={2.3} />
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
                           Evento de Dia Inteiro
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 500, color: '#64748b', marginTop: 1 }}>
-                          {form.diaTodo ? 'Marcado como duração de dia todo' : 'Definir horário de início e término'}
-                        </span>
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: '#64748b', marginTop: 1 }}>
+                          {form.diaTodo ? 'Sem horário de início ou término específico' : 'Definir horário de início e término'}
+                        </div>
                       </div>
                     </div>
                     <input
@@ -2047,7 +2196,7 @@ export default function CalendarioPage() {
                       id="diaTodo"
                       checked={Boolean(form.diaTodo)}
                       onChange={e => setForm(p => ({ ...p, diaTodo: e.target.checked as any }))}
-                      style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                      style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
                     />
                     <div className="ad-ev-switch-track" aria-hidden="true">
                       <div className="ad-ev-switch-thumb" />
@@ -2063,7 +2212,7 @@ export default function CalendarioPage() {
                         <input
                           id="admin-ev-hora-inicio"
                           name="horaInicio"
-                          className="ad-ev-input"
+                          className="form-input ad-ev-input"
                           type="time"
                           value={form.horaInicio}
                           onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))}
@@ -2076,7 +2225,7 @@ export default function CalendarioPage() {
                         <input
                           id="admin-ev-hora-fim"
                           name="horaFim"
-                          className="ad-ev-input"
+                          className="form-input ad-ev-input"
                           type="time"
                           value={form.horaFim}
                           onChange={e => setForm(p => ({ ...p, horaFim: e.target.value }))}
@@ -2089,54 +2238,20 @@ export default function CalendarioPage() {
                     <label htmlFor="admin-ev-local" className="ad-ev-label">
                       Localização / Link
                     </label>
-                    <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
-                      <MapPin
-                        size={15}
-                        style={{
-                          position: 'absolute',
-                          left: 12,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          color: '#94a3b8',
-                          pointerEvents: 'none',
-                          zIndex: 2
-                        }}
-                      />
-                      <input
-                        id="admin-ev-local"
-                        name="local"
-                        type="text"
-                        className="ad-ev-input ad-ev-input-icon"
-                        value={form.local}
-                        onChange={e => setForm(p => ({ ...p, local: e.target.value }))}
-                        placeholder="Ex: Auditório, Sala 02 ou Google Meet"
-                      />
-                    </div>
+                    <input
+                      id="admin-ev-local"
+                      name="local"
+                      type="text"
+                      className="form-input ad-ev-input"
+                      value={form.local}
+                      onChange={e => setForm(p => ({ ...p, local: e.target.value }))}
+                      placeholder="Ex: Auditório, Sala 02 ou Google Meet"
+                    />
                   </div>
 
-                  <div style={{
-                    padding: '14px',
-                    background: '#f8fafc',
-                    borderRadius: 18,
-                    border: '1.5px solid #e2e8f0',
-                    width: '100%',
-                    minWidth: 0,
-                    boxSizing: 'border-box'
-                  }}>
+                  <div className="ad-ev-vis-box">
                     <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <div style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 7,
-                        background: '#eef2ff',
-                        color: '#4f46e5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
-                        <Globe size={13} strokeWidth={2.4} />
-                      </div>
+                      <Globe size={15} style={{ color: '#6366f1', flexShrink: 0 }} strokeWidth={2.4} />
                       <span style={{ fontWeight: 800, fontSize: 12.5, color: '#0f172a', letterSpacing: '-0.01em' }}>
                         Público-alvo e Visibilidade
                       </span>
@@ -2145,31 +2260,34 @@ export default function CalendarioPage() {
                       tipo={visibilidade.tipo}
                       turmasSel={visibilidade.turmasSel}
                       usuarioSel={visibilidade.usuario}
+                      anoTodos={visibilidade.anoTodos}
+                      anosLetivos={anosLetivos}
                       onChangeTipo={(t) => setVisibilidade(prev => ({ ...prev, tipo: t }))}
+                      onChangeAnoTodos={(ano) => setVisibilidade(prev => ({ ...prev, anoTodos: ano }))}
                       onOpenModal={(type) => setShowSelectionModal({ open: true, type })}
                     />
                   </div>
                 </div>
 
-                {/* ── Sticky Footer ── */}
+                {/* Footer */}
                 <div className="ad-ev-modal-footer">
                   <button
                     type="button"
                     className="ad-ev-btn-cancel"
-                    onClick={() => { setShowModal(false); setEditingId(null); }}
+                    onClick={() => { setShowModal(false); setEditingId(null) }}
                   >
                     Descartar
                   </button>
                   <motion.button
                     type="button"
-                    whileHover={isPublicoAlvoValido ? { scale: 1.01 } : undefined}
-                    whileTap={isPublicoAlvoValido ? { scale: 0.98 } : undefined}
-                    className="ad-ev-btn-submit"
-                    disabled={!isPublicoAlvoValido}
-                    style={!isPublicoAlvoValido ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
+                    whileHover={isSaveEnabled ? { scale: 1.01 } : undefined}
+                    whileTap={isSaveEnabled ? { scale: 0.98 } : undefined}
+                    className="ad-ev-btn-save"
+                    disabled={!isSaveEnabled}
+                    style={!isSaveEnabled ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
                     onClick={handleAdd}
                   >
-                    <Check size={16} strokeWidth={2.6} />
+                    <Check size={16} strokeWidth={2.8} />
                     <span>Confirmar e Salvar</span>
                   </motion.button>
                 </div>
@@ -2210,18 +2328,18 @@ export default function CalendarioPage() {
               }}
             >
               <motion.div
-                initial={{ scale: 0.95, y: 20 }}
+                initial={{ scale: 0.95, y: 16 }}
                 animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
+                exit={{ scale: 0.95, y: 16 }}
                 className="ad-ev-modal-card"
                 style={{ maxWidth: 460 }}
               >
                 <div className="ad-ev-modal-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 10, background: '#eef2ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <UserCheck size={17} />
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <UserCheck size={18} strokeWidth={2.3} />
                     </div>
-                    <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Selecionar Usuário</h3>
+                    <h3 style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', margin: 0 }}>Selecionar Usuário</h3>
                   </div>
                   <button
                     type="button"
@@ -2229,25 +2347,29 @@ export default function CalendarioPage() {
                     className="ad-ev-modal-close"
                     onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}
                   >
-                    <X size={18} />
+                    <X size={18} strokeWidth={2.4} />
                   </button>
                 </div>
 
-                <div className="ad-ev-modal-body" style={{ gap: 12 }}>
+                <div className="ad-ev-modal-body custom-scrollbar" style={{ gap: 12 }}>
                   <div style={{ position: 'relative', width: '100%' }}>
-                    <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 2 }} />
+                    <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none', zIndex: 2 }} />
                     <input
                       autoFocus
                       type="text"
-                      className="ad-ev-input ad-ev-input-icon"
-                      placeholder="Buscar usuário pelo nome..."
+                      className="form-input ad-ev-input ad-ev-input-icon"
+                      placeholder="Buscar por nome, cargo ou e-mail..."
                       value={searchTermSelection}
                       onChange={e => setSearchTermSelection(e.target.value)}
                     />
                   </div>
 
                   <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 2 }}>
-                    {usuariosAtivos.filter(u => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map(u => {
+                    {usuariosAtivos.filter((u: any) =>
+                      (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase()) ||
+                      (u.cargo || '').toLowerCase().includes(searchTermSelection.toLowerCase()) ||
+                      (u.email || '').toLowerCase().includes(searchTermSelection.toLowerCase())
+                    ).map((u: any) => {
                       const isSelected = visibilidade.usuario === u.nome
                       return (
                         <motion.button
@@ -2259,28 +2381,28 @@ export default function CalendarioPage() {
                             width: '100%',
                             padding: '10px 12px',
                             textAlign: 'left',
-                            background: isSelected ? '#eef2ff' : '#f8fafc',
-                            border: `1.5px solid ${isSelected ? '#6366f1' : '#f1f5f9'}`,
-                            borderRadius: 12,
+                            background: isSelected ? '#eff6ff' : '#f8fafc',
+                            border: isSelected ? '1.5px solid #93c5fd' : '1.5px solid #f1f5f9',
+                            borderRadius: 14,
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 10,
+                            gap: 12,
                             cursor: 'pointer',
                             boxSizing: 'border-box'
                           }}
                         >
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: isSelected ? '#4f46e5' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: isSelected ? '#fff' : '#475569', flexShrink: 0 }}>
-                            {u.nome.slice(0, 2).toUpperCase()}
+                          <div style={{ width: 38, height: 38, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#475569', flexShrink: 0 }}>
+                            {(u.nome || 'U').slice(0, 2).toUpperCase()}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13.5, fontWeight: 800, color: isSelected ? '#312e81' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 800, color: isSelected ? '#1e40af' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {u.nome}
                             </div>
                             <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {u.cargo}
                             </div>
                           </div>
-                          {isSelected && <Check size={17} color="#4f46e5" strokeWidth={2.8} />}
+                          {isSelected && <Check size={17} color="#3b82f6" strokeWidth={3} />}
                         </motion.button>
                       )
                     })}
@@ -2290,11 +2412,11 @@ export default function CalendarioPage() {
                 <div className="ad-ev-modal-footer">
                   <button
                     type="button"
-                    className="ad-ev-btn-submit"
+                    className="ad-ev-btn-save"
                     style={{ width: '100%', flex: '1 1 100%' }}
                     onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}
                   >
-                    <Check size={16} strokeWidth={2.6} />
+                    <Check size={16} strokeWidth={2.8} />
                     <span>Finalizar Seleção</span>
                   </button>
                 </div>

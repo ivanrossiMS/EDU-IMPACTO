@@ -189,6 +189,80 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
   diaTodo: false, dataFim: ''
 }
 
+function computeEventDateRange(start?: string, end?: string) {
+  if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [] as string[],
+      weekdayDates: [] as string[],
+      weekendDates: [] as string[],
+    }
+  }
+  const [sy, sm, sd] = start.split('-').map(Number)
+  if (!sy || sy < 1900 || sy > 2100) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [start],
+      weekdayDates: [start],
+      weekendDates: [] as string[],
+    }
+  }
+  if (!end || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end <= start) {
+    const dow = new Date(sy, sm - 1, sd, 12, 0, 0).getDay()
+    const isWknd = dow === 0 || dow === 6
+    return {
+      isMultiDay: false,
+      hasWeekend: isWknd,
+      allDates: [start],
+      weekdayDates: isWknd ? ([] as string[]) : [start],
+      weekendDates: isWknd ? [start] : ([] as string[]),
+    }
+  }
+  const [ey, em, ed] = end.split('-').map(Number)
+  if (!ey || ey < 1900 || ey > 2100) {
+    return {
+      isMultiDay: false,
+      hasWeekend: false,
+      allDates: [start],
+      weekdayDates: [start],
+      weekendDates: [] as string[],
+    }
+  }
+
+  const allDates: string[] = []
+  const weekdayDates: string[] = []
+  const weekendDates: string[] = []
+  const curr = new Date(sy, sm - 1, sd, 12, 0, 0)
+  const last = new Date(ey, em - 1, ed, 12, 0, 0)
+  let steps = 0
+
+  while (curr <= last && steps < 400) {
+    const yyyy = curr.getFullYear()
+    const mm = String(curr.getMonth() + 1).padStart(2, '0')
+    const dd = String(curr.getDate()).padStart(2, '0')
+    const dStr = `${yyyy}-${mm}-${dd}`
+    const dow = curr.getDay()
+    allDates.push(dStr)
+    if (dow === 0 || dow === 6) {
+      weekendDates.push(dStr)
+    } else {
+      weekdayDates.push(dStr)
+    }
+    curr.setDate(curr.getDate() + 1)
+    steps++
+  }
+
+  return {
+    isMultiDay: allDates.length > 1,
+    hasWeekend: weekendDates.length > 0,
+    allDates,
+    weekdayDates,
+    weekendDates,
+  }
+}
+
 export default function CalendarioPage() {
   const { currentUser } = useApp()
   const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda, cfgCalendarioLetivo = [] } = useData()
@@ -228,6 +302,9 @@ export default function CalendarioPage() {
   const [searchTermSelection, setSearchTermSelection] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
+  const [ignorarFimDeSemana, setIgnorarFimDeSemana] = useState(false)
+
+  const dateRangeInfo = useMemo(() => computeEventDateRange(form.data, form.dataFim), [form.data, form.dataFim])
 
   const [visibilidade, setVisibilidade] = useState<{ tipo: '' | 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
     tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: ''
@@ -240,6 +317,14 @@ export default function CalendarioPage() {
     if (visibilidade.tipo === 'usuario') return Boolean(visibilidade.usuario && visibilidade.usuario !== 'Todos')
     return false
   }, [visibilidade, anosLetivos])
+
+  const isSaveEnabled = useMemo(() => {
+    if (!isPublicoAlvoValido) return false
+    if (!editingId && ignorarFimDeSemana && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend && dateRangeInfo.weekdayDates.length === 0) {
+      return false
+    }
+    return true
+  }, [isPublicoAlvoValido, editingId, ignorarFimDeSemana, dateRangeInfo])
 
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
@@ -387,19 +472,12 @@ export default function CalendarioPage() {
         body: JSON.stringify(updatedEvento),
       }).catch(err => console.error('[Calendario] Erro ao atualizar evento:', err))
     } else {
-      const getDates = (start: string, end?: string) => {
-        if (!end || end < start) return [start]
-        const dates = []
-        let curr = new Date(start + 'T12:00:00')
-        const last = new Date(end + 'T12:00:00')
-        while (curr <= last) {
-          dates.push(curr.toISOString().split('T')[0])
-          curr.setDate(curr.getDate() + 1)
-        }
-        return dates
+      const shouldSkipWeekends = ignorarFimDeSemana && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend
+      const datesToCreate = shouldSkipWeekends ? dateRangeInfo.weekdayDates : dateRangeInfo.allDates
+      if (datesToCreate.length === 0) {
+        alert('O período selecionado possui apenas finais de semana. Desmarque a opção "Não inserir nos finais de semana" ou amplie o período para incluir dias úteis.')
+        return
       }
-
-      const datesToCreate = getDates(form.data, form.dataFim)
       const creatorName =
         form.criadoPor && form.criadoPor !== 'Usuário'
           ? form.criadoPor
@@ -430,6 +508,7 @@ export default function CalendarioPage() {
       }).catch(err => console.error('[Calendario] Erro ao salvar novos eventos:', err))
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
+    setIgnorarFimDeSemana(false)
     setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(false)
@@ -469,6 +548,7 @@ export default function CalendarioPage() {
         anoTodosStr = ev.turmas[0].split(':')[1] || '';
       } else if (ev.turmas[0] === 'TODOS' || ev.turmas[0] === 'TODA A ESCOLA' || ev.turmas[0] === 'TODAS') {
         t = 'todos';
+        anoTodosStr = anosLetivos[0] || '';
       } else {
         t = 'turmas';
         turmasSel = ev.turmas;
@@ -478,6 +558,7 @@ export default function CalendarioPage() {
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
+    setIgnorarFimDeSemana(false)
     setVisibilidade({ tipo: t, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
     setEditingId(ev.id)
     setShowModal(true)
@@ -485,6 +566,7 @@ export default function CalendarioPage() {
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
+    setIgnorarFimDeSemana(false)
     setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(true)
@@ -1423,7 +1505,7 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         </div>
         <button 
           className="btn btn-primary" 
-          onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
+          onClick={() => { setForm(BLANK_EVENTO); setIgnorarFimDeSemana(false); setVisibilidade({ tipo: '', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
           style={{ background: '#4f46e5', border: 'none', borderRadius: 12, padding: '0 24px', height: 44, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)' }}
         >
           <Plus size={16} /> Novo Evento
@@ -2079,7 +2161,14 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
                         className="form-input ad-ev-input"
                         type="date"
                         value={form.data}
-                        onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
+                        onChange={e => {
+                          const val = e.target.value
+                          setForm(p => ({
+                            ...p,
+                            data: val,
+                            dataFim: p.dataFim && val && p.dataFim < val ? val : p.dataFim
+                          }))
+                        }}
                       />
                     </div>
                     <div className="ad-ev-field">
@@ -2094,6 +2183,54 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
                       />
                     </div>
                   </div>
+
+                  {!editingId && dateRangeInfo.isMultiDay && dateRangeInfo.hasWeekend && (
+                    <label htmlFor="ignorarFimDeSemanaApp" className="ad-ev-allday-card">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9,
+                          background: ignorarFimDeSemana ? 'rgba(99, 102, 241, 0.14)' : 'rgba(245, 158, 11, 0.14)',
+                          color: ignorarFimDeSemana ? '#4f46e5' : '#d97706',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          transition: 'all 0.16s ease'
+                        }}>
+                          <Calendar size={15} strokeWidth={2.3} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                            Não inserir nos finais de semana
+                          </div>
+                          <div style={{
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: ignorarFimDeSemana && dateRangeInfo.weekdayDates.length === 0 ? '#dc2626' : '#64748b',
+                            marginTop: 1
+                          }}>
+                            {ignorarFimDeSemana
+                              ? dateRangeInfo.weekdayDates.length === 0
+                                ? 'Atenção: O período possui apenas sábado/domingo (0 dias úteis)'
+                                : `Sábado e domingo ignorados • Serão criados ${dateRangeInfo.weekdayDates.length} ${dateRangeInfo.weekdayDates.length === 1 ? 'evento em dia útil' : 'eventos em dias úteis'}`
+                              : `Período passa por ${dateRangeInfo.weekendDates.length} ${dateRangeInfo.weekendDates.length === 1 ? 'dia' : 'dias'} de fim de semana • Ative para pular sáb. e dom.`}
+                          </div>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="ignorarFimDeSemanaApp"
+                        checked={Boolean(ignorarFimDeSemana)}
+                        onChange={e => setIgnorarFimDeSemana(e.target.checked)}
+                        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+                      />
+                      <div className="ad-ev-switch-track">
+                        <div className="ad-ev-switch-thumb" />
+                      </div>
+                    </label>
+                  )}
 
                   <div className="ad-ev-field">
                     <label className="ad-ev-label">Tipo de Evento</label>
@@ -2211,11 +2348,11 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
                   </button>
                   <motion.button
                     type="button"
-                    whileHover={isPublicoAlvoValido ? { scale: 1.01 } : undefined}
-                    whileTap={isPublicoAlvoValido ? { scale: 0.98 } : undefined}
+                    whileHover={isSaveEnabled ? { scale: 1.01 } : undefined}
+                    whileTap={isSaveEnabled ? { scale: 0.98 } : undefined}
                     className="ad-ev-btn-save"
-                    disabled={!isPublicoAlvoValido}
-                    style={!isPublicoAlvoValido ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
+                    disabled={!isSaveEnabled}
+                    style={!isSaveEnabled ? { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' } : undefined}
                     onClick={handleAdd}
                   >
                     <Check size={16} strokeWidth={2.8} />
