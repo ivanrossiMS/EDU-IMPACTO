@@ -1645,7 +1645,7 @@ export function ComunicadoViewModal({
 
             {/* ENQUETE INTERATIVA */}
             {(comunicado.enquete || comunicado.dados?.enquete) && (
-              <div style={{ marginTop: 24, width: '100%', maxWidth: 800 }}>
+              <div style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 <EnqueteWidget
                   enquete={comunicado.enquete || comunicado.dados?.enquete}
                   comunicadoId={String(comunicado.id)}
@@ -1668,7 +1668,7 @@ export function ComunicadoViewModal({
 
             {/* AUTORIZAÇÃO DIGITAL */}
             {(comunicado.autorizacao || comunicado.dados?.autorizacao) && (
-              <div style={{ marginTop: 24, width: '100%', maxWidth: 800 }}>
+              <div style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 <AutorizacaoWidget
                   autorizacao={comunicado.autorizacao || comunicado.dados?.autorizacao}
                   comunicadoId={String(comunicado.id)}

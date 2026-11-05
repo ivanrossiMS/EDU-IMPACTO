@@ -207,6 +207,58 @@ export function formatarCPF(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
 }
 
+/**
+ * Formata o texto do termo de consentimento para exibição em HTML,
+ * preservando quebras de linha (\n) de textos simples e mantendo formatações
+ * ricas (negrito, itálico, sublinhado, listas, alinhamento, cores).
+ */
+export function formatAutorizacaoTermoHtml(rawText?: string | null): string {
+  if (!rawText) return ''
+  const trimmed = String(rawText).trim()
+  if (!trimmed) return ''
+
+  const hasHtmlTags = /<[a-z][\s\S]*>/i.test(trimmed)
+
+  if (!hasHtmlTags) {
+    return trimmed
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\r\n|\r|\n/g, '<br/>')
+  }
+
+  let safeHtml = trimmed
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"][^'"]*['"]|[^\s>]+)/gi, '')
+    .replace(/javascript:/gi, '')
+
+  const hasBlockOrBreakTags = /<(br|div|p|ul|ol|li|h[1-6]|blockquote)\b/i.test(safeHtml)
+  if (!hasBlockOrBreakTags && /\r|\n/.test(safeHtml)) {
+    safeHtml = safeHtml.replace(/\r\n|\r|\n/g, '<br/>')
+  }
+
+  return safeHtml
+}
+
+/**
+ * Extrai o texto puro (sem tags HTML) do termo de consentimento para validação.
+ */
+export function getAutorizacaoTermoPlainText(rawText?: string | null): string {
+  if (!rawText) return ''
+  return String(rawText)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(div|p|li)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .trim()
+}
+
 export function sanitizeAutorizacaoForViewer(
   autorizacao: AutorizacaoData | null | undefined,
   allowedIds: Iterable<string>

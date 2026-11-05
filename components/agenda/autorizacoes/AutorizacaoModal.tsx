@@ -1,15 +1,21 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   X, FileCheck2, Plus, Trash2, Check, Sparkles, HelpCircle, 
   Calendar, Eye, Lock, ShieldCheck, MapPin, DollarSign,
   HeartPulse, Shield, FileText, CheckCircle2, XCircle, AlertCircle,
-  Clock, ArrowRight
+  Clock, ArrowRight, Bold, Italic, Underline, List, ListOrdered,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify, Type, Palette, RemoveFormatting
 } from 'lucide-react'
 import { AutorizacaoData, AutorizacaoOpcao } from '@/lib/autorizacoes/types'
-import { validarCPF, formatarCPF } from '@/lib/autorizacoes/autorizacaoUtils'
+import { 
+  validarCPF, 
+  formatarCPF, 
+  formatAutorizacaoTermoHtml, 
+  getAutorizacaoTermoPlainText 
+} from '@/lib/autorizacoes/autorizacaoUtils'
 
 interface AutorizacaoModalProps {
   isOpen: boolean
@@ -51,16 +57,96 @@ export function AutorizacaoModal({
   const [previewCpf, setPreviewCpf] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Rich Text Editor state for Termo de Consentimento
+  const termoEditorRef = useRef<HTMLDivElement>(null)
+  const [isEditorFocused, setIsEditorFocused] = useState(false)
+  const [isBold, setIsBold] = useState(false)
+  const [isItalic, setIsItalic] = useState(false)
+  const [isUnderline, setIsUnderline] = useState(false)
+  const [isUnorderedList, setIsUnorderedList] = useState(false)
+  const [isOrderedList, setIsOrderedList] = useState(false)
+  const [currentAlign, setCurrentAlign] = useState<'left' | 'center' | 'right' | 'justify'>('left')
+  const [selectedFontSize, setSelectedFontSize] = useState('13px')
+  const [showFontSizePicker, setShowFontSizePicker] = useState(false)
+
   const isPreviewCpfValid = useMemo(() => validarCPF(previewCpf), [previewCpf])
   const canPreviewSign = !exigirCpfResponsavel || isPreviewCpfValid
+  const termoPlainText = useMemo(() => getAutorizacaoTermoPlainText(termoTexto), [termoTexto])
+
+  const checkEditorState = () => {
+    if (typeof document === 'undefined') return
+    try {
+      setIsBold(document.queryCommandState('bold'))
+      setIsItalic(document.queryCommandState('italic'))
+      setIsUnderline(document.queryCommandState('underline'))
+      setIsUnorderedList(document.queryCommandState('insertUnorderedList'))
+      setIsOrderedList(document.queryCommandState('insertOrderedList'))
+      if (document.queryCommandState('justifyCenter')) setCurrentAlign('center')
+      else if (document.queryCommandState('justifyRight')) setCurrentAlign('right')
+      else if (document.queryCommandState('justifyFull')) setCurrentAlign('justify')
+      else setCurrentAlign('left')
+    } catch (_) {}
+  }
+
+  const execCmd = (cmd: string, val?: string) => {
+    if (!termoEditorRef.current) return
+    termoEditorRef.current.focus()
+    try {
+      document.execCommand(cmd, false, val)
+    } catch (_) {}
+    setTermoTexto(termoEditorRef.current.innerHTML)
+    checkEditorState()
+  }
+
+  const applyAlignment = (align: 'left' | 'center' | 'right' | 'justify') => {
+    setCurrentAlign(align)
+    const cmdMap = {
+      left: 'justifyLeft',
+      center: 'justifyCenter',
+      right: 'justifyRight',
+      justify: 'justifyFull'
+    }
+    execCmd(cmdMap[align])
+  }
+
+  const applyFontSize = (sizePx: string) => {
+    setSelectedFontSize(sizePx)
+    if (!termoEditorRef.current) return
+    termoEditorRef.current.focus()
+
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      const range = document.createRange()
+      range.selectNodeContents(termoEditorRef.current)
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    }
+
+    try {
+      document.execCommand('fontSize', false, '7')
+      const fontTags = termoEditorRef.current.getElementsByTagName('font')
+      for (let i = 0; i < fontTags.length; i++) {
+        if (fontTags[i].getAttribute('size') === '7') {
+          fontTags[i].removeAttribute('size')
+          fontTags[i].style.fontSize = sizePx
+          fontTags[i].style.lineHeight = '1.6'
+        }
+      }
+      setTermoTexto(termoEditorRef.current.innerHTML)
+    } catch (_) {}
+  }
 
   // Initialize or reset
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
+        const formattedInitialTermo = formatAutorizacaoTermoHtml(initialData.termoTexto || '')
         setTitulo(initialData.titulo || '')
         setDescricao(initialData.descricao || '')
-        setTermoTexto(initialData.termoTexto || '')
+        setTermoTexto(formattedInitialTermo)
+        if (termoEditorRef.current) {
+          termoEditorRef.current.innerHTML = formattedInitialTermo
+        }
         setDataEvento(initialData.dataEvento || '')
         setLocalEvento(initialData.localEvento || '')
         setValor(initialData.valor || '')
@@ -83,6 +169,9 @@ export function AutorizacaoModal({
         setTitulo('')
         setDescricao('')
         setTermoTexto('')
+        if (termoEditorRef.current) {
+          termoEditorRef.current.innerHTML = ''
+        }
         setDataEvento('')
         setLocalEvento('')
         setValor('')
@@ -99,8 +188,19 @@ export function AutorizacaoModal({
       setActiveTab('config')
       setPreviewCpf('')
       setErrorMessage('')
+      setShowFontSizePicker(false)
     }
   }, [isOpen, initialData])
+
+  // Sync contentEditable innerHTML when switching back to 'config' tab
+  useEffect(() => {
+    if (isOpen && activeTab === 'config' && termoEditorRef.current) {
+      const formatted = formatAutorizacaoTermoHtml(termoTexto)
+      if (termoEditorRef.current.innerHTML !== termoTexto && termoEditorRef.current.innerHTML !== formatted) {
+        termoEditorRef.current.innerHTML = formatted
+      }
+    }
+  }, [activeTab, isOpen])
 
   if (!isOpen) return null
 
@@ -135,7 +235,7 @@ export function AutorizacaoModal({
       return
     }
 
-    if (!termoTexto.trim() || termoTexto.trim().length < 10) {
+    if (!termoPlainText || termoPlainText.length < 10) {
       setErrorMessage('Por favor, preencha o termo de consentimento com o texto da autorização (mínimo 10 caracteres).')
       setActiveTab('config')
       return
@@ -153,7 +253,7 @@ export function AutorizacaoModal({
       titulo: titulo.trim(),
       tipoAutorizacao: 'personalizado',
       descricao: descricao.trim() || undefined,
-      termoTexto: termoTexto.trim(),
+      termoTexto: formatAutorizacaoTermoHtml(termoTexto),
       dataEvento: dataEvento || null,
       localEvento: localEvento.trim() || undefined,
       valor: valor.trim() || undefined,
@@ -348,6 +448,117 @@ export function AutorizacaoModal({
 
         {/* BODY */}
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+          <style>{`
+            .autorizacao-termo-editor {
+              min-height: 115px;
+              max-height: 280px;
+              overflow-y: auto;
+              padding: 12px 14px;
+              font-size: 13px;
+              line-height: 1.6;
+              color: #0F172A;
+              outline: none;
+              white-space: pre-wrap;
+              word-break: break-word;
+              font-family: inherit;
+            }
+            .autorizacao-termo-editor:empty::before {
+              content: attr(data-placeholder);
+              color: #94A3B8;
+              pointer-events: none;
+              display: block;
+            }
+            .autorizacao-termo-content {
+              white-space: pre-wrap;
+              word-break: break-word;
+              font-size: 13px;
+              line-height: 1.6;
+              color: #334155;
+            }
+            .autorizacao-termo-editor div:empty::before,
+            .autorizacao-termo-content div:empty::before {
+              content: '\\200b';
+            }
+            .autorizacao-termo-editor b, .autorizacao-termo-editor strong,
+            .autorizacao-termo-content b, .autorizacao-termo-content strong {
+              font-weight: 700;
+            }
+            .autorizacao-termo-editor i, .autorizacao-termo-editor em,
+            .autorizacao-termo-content i, .autorizacao-termo-content em {
+              font-style: italic;
+            }
+            .autorizacao-termo-editor u,
+            .autorizacao-termo-content u {
+              text-decoration: underline;
+            }
+            .autorizacao-termo-editor ul,
+            .autorizacao-termo-content ul {
+              list-style-type: disc;
+              padding-left: 20px;
+              margin: 6px 0;
+            }
+            .autorizacao-termo-editor ol,
+            .autorizacao-termo-content ol {
+              list-style-type: decimal;
+              padding-left: 20px;
+              margin: 6px 0;
+            }
+            .autorizacao-termo-editor li,
+            .autorizacao-termo-content li {
+              margin: 2px 0;
+            }
+            .autorizacao-termo-editor p,
+            .autorizacao-termo-content p {
+              margin: 0 0 8px 0;
+            }
+            .autorizacao-termo-editor p:last-child,
+            .autorizacao-termo-content p:last-child {
+              margin-bottom: 0;
+            }
+            .autorizacao-termo-editor [align="left"], .autorizacao-termo-editor [style*="text-align: left"],
+            .autorizacao-termo-content [align="left"], .autorizacao-termo-content [style*="text-align: left"] {
+              text-align: left;
+            }
+            .autorizacao-termo-editor [align="center"], .autorizacao-termo-editor [style*="text-align: center"],
+            .autorizacao-termo-content [align="center"], .autorizacao-termo-content [style*="text-align: center"] {
+              text-align: center;
+            }
+            .autorizacao-termo-editor [align="right"], .autorizacao-termo-editor [style*="text-align: right"],
+            .autorizacao-termo-content [align="right"], .autorizacao-termo-content [style*="text-align: right"] {
+              text-align: right;
+            }
+            .autorizacao-termo-editor [align="justify"], .autorizacao-termo-editor [style*="text-align: justify"],
+            .autorizacao-termo-content [align="justify"], .autorizacao-termo-content [style*="text-align: justify"] {
+              text-align: justify;
+              text-justify: inter-word;
+            }
+            .autorizacao-tool-btn {
+              min-width: 30px;
+              height: 30px;
+              padding: 0 6px;
+              border-radius: 8px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              background: transparent;
+              border: none;
+              color: #475569;
+              cursor: pointer;
+              transition: all 0.15s ease;
+            }
+            .autorizacao-tool-btn:hover {
+              background: #E2E8F0;
+              color: #0F172A;
+            }
+            .autorizacao-tool-btn:focus-visible {
+              outline: 2px solid #10B981;
+              outline-offset: 2px;
+            }
+            .autorizacao-tool-btn.active {
+              background: #DCFCE7;
+              color: #047857;
+            }
+          `}</style>
           {errorMessage && (
             <div style={{
               background: '#FEF2F2',
@@ -470,32 +681,282 @@ export function AutorizacaoModal({
                 </div>
               </div>
 
-              {/* TERMO DE CONSENTIMENTO */}
+              {/* TERMO DE CONSENTIMENTO COM BARRA DE EDIÇÃO */}
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'block', marginBottom: 6 }}>
                   Texto do Termo de Consentimento <span style={{ color: '#EF4444' }}>*</span>
                 </label>
-                <textarea
-                  rows={4}
-                  placeholder="Ex: Eu, na qualidade de responsável legal pelo(a) aluno(a), autorizo a sua participação na saída de passeio escolar promovida pelo colégio..."
-                  value={termoTexto}
-                  onChange={e => setTermoTexto(e.target.value)}
+
+                <div
                   style={{
-                    width: '100%',
-                    padding: '12px 14px',
                     borderRadius: 14,
-                    border: '1.5px solid #E2E8F0',
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    color: '#0F172A',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    resize: 'vertical',
-                    fontFamily: 'inherit'
+                    border: `1.5px solid ${isEditorFocused ? '#10B981' : '#E2E8F0'}`,
+                    background: '#FFFFFF',
+                    transition: 'border-color 0.2s',
+                    overflow: 'visible'
                   }}
-                  onFocus={e => (e.target.style.borderColor = '#10B981')}
-                  onBlur={e => (e.target.style.borderColor = '#E2E8F0')}
-                />
+                >
+                  {/* BARRA DE EDIÇÃO (FORMATTING TOOLBAR) */}
+                  <div
+                    role="toolbar"
+                    aria-label="Formatação do termo de consentimento"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 3,
+                      padding: '6px 10px',
+                      background: '#F8FAFC',
+                      borderBottom: '1px solid #E2E8F0',
+                      borderTopLeftRadius: 12,
+                      borderTopRightRadius: 12
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${isBold ? 'active' : ''}`}
+                      aria-label="Negrito"
+                      aria-pressed={isBold}
+                      title="Negrito (Ctrl+B)"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('bold')}
+                    >
+                      <Bold size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${isItalic ? 'active' : ''}`}
+                      aria-label="Itálico"
+                      aria-pressed={isItalic}
+                      title="Itálico (Ctrl+I)"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('italic')}
+                    >
+                      <Italic size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${isUnderline ? 'active' : ''}`}
+                      aria-label="Sublinhado"
+                      aria-pressed={isUnderline}
+                      title="Sublinhado (Ctrl+U)"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('underline')}
+                    >
+                      <Underline size={15} aria-hidden="true" />
+                    </button>
+
+                    <div style={{ width: 1, height: 18, background: '#CBD5E1', margin: '0 3px' }} />
+
+                    {/* Seletor de Tamanho de Fonte */}
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        className={`autorizacao-tool-btn ${showFontSizePicker ? 'active' : ''}`}
+                        aria-label="Tamanho da fonte"
+                        aria-expanded={showFontSizePicker}
+                        title="Tamanho da fonte"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => setShowFontSizePicker(prev => !prev)}
+                        style={{ gap: 3, fontSize: 11, fontWeight: 700 }}
+                      >
+                        <Type size={14} aria-hidden="true" />
+                        <span>{selectedFontSize}</span>
+                      </button>
+
+                      {showFontSizePicker && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 34,
+                            left: 0,
+                            background: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: 12,
+                            padding: 5,
+                            boxShadow: '0 12px 28px -6px rgba(15, 23, 42, 0.18)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 2,
+                            zIndex: 50,
+                            minWidth: 145
+                          }}
+                        >
+                          {[
+                            { label: 'Pequeno', size: '12px' },
+                            { label: 'Normal (Padrão)', size: '13px' },
+                            { label: 'Médio', size: '15px' },
+                            { label: 'Grande', size: '17px' },
+                            { label: 'Destaque', size: '20px' }
+                          ].map(item => (
+                            <button
+                              key={item.size}
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => {
+                                applyFontSize(item.size)
+                                setShowFontSizePicker(false)
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                border: 'none',
+                                background: selectedFontSize === item.size ? '#DCFCE7' : 'transparent',
+                                color: selectedFontSize === item.size ? '#047857' : '#1E293B',
+                                cursor: 'pointer',
+                                fontWeight: selectedFontSize === item.size ? 700 : 500,
+                                textAlign: 'left',
+                                fontSize: 12
+                              }}
+                            >
+                              <span>{item.label}</span>
+                              <span style={{ fontSize: 11, color: '#64748B' }}>{item.size}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ width: 1, height: 18, background: '#CBD5E1', margin: '0 3px' }} />
+
+                    {/* Alinhamento */}
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${currentAlign === 'left' ? 'active' : ''}`}
+                      aria-label="Alinhar à esquerda"
+                      aria-pressed={currentAlign === 'left'}
+                      title="Alinhar à esquerda"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => applyAlignment('left')}
+                    >
+                      <AlignLeft size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${currentAlign === 'center' ? 'active' : ''}`}
+                      aria-label="Centralizar"
+                      aria-pressed={currentAlign === 'center'}
+                      title="Centralizar"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => applyAlignment('center')}
+                    >
+                      <AlignCenter size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${currentAlign === 'right' ? 'active' : ''}`}
+                      aria-label="Alinhar à direita"
+                      aria-pressed={currentAlign === 'right'}
+                      title="Alinhar à direita"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => applyAlignment('right')}
+                    >
+                      <AlignRight size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${currentAlign === 'justify' ? 'active' : ''}`}
+                      aria-label="Justificar"
+                      aria-pressed={currentAlign === 'justify'}
+                      title="Justificar"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => applyAlignment('justify')}
+                    >
+                      <AlignJustify size={15} aria-hidden="true" />
+                    </button>
+
+                    <div style={{ width: 1, height: 18, background: '#CBD5E1', margin: '0 3px' }} />
+
+                    {/* Listas */}
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${isUnorderedList ? 'active' : ''}`}
+                      aria-label="Lista com marcadores"
+                      aria-pressed={isUnorderedList}
+                      title="Lista com marcadores"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('insertUnorderedList')}
+                    >
+                      <List size={15} aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`autorizacao-tool-btn ${isOrderedList ? 'active' : ''}`}
+                      aria-label="Lista numerada"
+                      aria-pressed={isOrderedList}
+                      title="Lista numerada"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('insertOrderedList')}
+                    >
+                      <ListOrdered size={15} aria-hidden="true" />
+                    </button>
+
+                    <div style={{ width: 1, height: 18, background: '#CBD5E1', margin: '0 3px' }} />
+
+                    {/* Cor do Texto */}
+                    <label
+                      className="autorizacao-tool-btn"
+                      style={{ position: 'relative', overflow: 'hidden' }}
+                      title="Cor do texto"
+                    >
+                      <Palette size={15} aria-hidden="true" />
+                      <input
+                        type="color"
+                        aria-label="Selecionar cor do texto"
+                        onChange={e => execCmd('foreColor', e.target.value)}
+                        style={{
+                          position: 'absolute',
+                          opacity: 0,
+                          width: '100%',
+                          height: '100%',
+                          cursor: 'pointer'
+                        }}
+                      />
+                    </label>
+
+                    {/* Limpar Formatação */}
+                    <button
+                      type="button"
+                      className="autorizacao-tool-btn"
+                      aria-label="Limpar formatação"
+                      title="Limpar formatação"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => execCmd('removeFormat')}
+                    >
+                      <RemoveFormatting size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  {/* ÁREA DE EDIÇÃO RICA */}
+                  <div
+                    ref={termoEditorRef}
+                    contentEditable
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-label="Texto do Termo de Consentimento"
+                    className="autorizacao-termo-editor"
+                    data-placeholder="Ex: Eu, na qualidade de responsável legal pelo(a) aluno(a), autorizo a sua participação na saída de passeio escolar promovida pelo colégio..."
+                    onInput={e => setTermoTexto(e.currentTarget.innerHTML)}
+                    onKeyUp={checkEditorState}
+                    onMouseUp={checkEditorState}
+                    onFocus={() => {
+                      setIsEditorFocused(true)
+                      setShowFontSizePicker(false)
+                      checkEditorState()
+                    }}
+                    onBlur={() => setIsEditorFocused(false)}
+                  />
+                </div>
+
                 <span style={{ fontSize: 11, color: '#94A3B8', marginTop: 4, display: 'block' }}>
                   Este texto declara a concordância dos pais e será registrado junto à data, hora e assinatura digital.
                 </span>
@@ -908,7 +1369,7 @@ export function AutorizacaoModal({
                   </div>
                 )}
 
-                {/* Termo Jurídico */}
+                {/* Termo Jurídico Formatado */}
                 <div style={{
                   background: '#F8FAFC',
                   border: '1px solid #E2E8F0',
@@ -917,10 +1378,21 @@ export function AutorizacaoModal({
                   fontSize: 13,
                   lineHeight: 1.6,
                   color: '#334155',
-                  marginBottom: 16,
-                  fontStyle: 'italic'
+                  marginBottom: 16
                 }}>
-                  &ldquo;{termoTexto || 'O termo de autorização aparecerá aqui para ser lido e aceito pelo responsável legal...'}&rdquo;
+                  <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B', marginBottom: 6 }}>
+                    Termo de Consentimento
+                  </div>
+                  {termoPlainText ? (
+                    <div
+                      className="autorizacao-termo-content"
+                      dangerouslySetInnerHTML={{ __html: formatAutorizacaoTermoHtml(termoTexto) }}
+                    />
+                  ) : (
+                    <div style={{ color: '#94A3B8', fontStyle: 'italic' }}>
+                      O termo de autorização aparecerá aqui para ser lido e aceito pelo responsável legal...
+                    </div>
+                  )}
                 </div>
 
                 {/* Opções de Seleção */}

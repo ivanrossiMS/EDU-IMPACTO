@@ -18,6 +18,7 @@ import {
   formatDateTimeBR,
   validarCPF,
   formatarCPF,
+  formatAutorizacaoTermoHtml,
   sanitizeAutorizacaoForViewer
 } from '@/lib/autorizacoes/autorizacaoUtils'
 import { supabase } from '@/lib/supabase'
@@ -362,6 +363,7 @@ export function AutorizacaoWidget({
   return (
     <div style={{
       width: '100%',
+      boxSizing: 'border-box',
       background: '#FFFFFF',
       borderRadius: '20px',
       border: '1.5px solid rgba(16, 185, 129, 0.3)',
@@ -525,6 +527,59 @@ export function AutorizacaoWidget({
 
       {/* BODY DO WIDGET */}
       <div style={{ padding: '18px 20px' }}>
+        <style>{`
+          .autorizacao-termo-content {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #334155;
+          }
+          .autorizacao-termo-content div:empty::before {
+            content: '\\200b';
+          }
+          .autorizacao-termo-content b, .autorizacao-termo-content strong {
+            font-weight: 700;
+          }
+          .autorizacao-termo-content i, .autorizacao-termo-content em {
+            font-style: italic;
+          }
+          .autorizacao-termo-content u {
+            text-decoration: underline;
+          }
+          .autorizacao-termo-content ul {
+            list-style-type: disc;
+            padding-left: 20px;
+            margin: 6px 0;
+          }
+          .autorizacao-termo-content ol {
+            list-style-type: decimal;
+            padding-left: 20px;
+            margin: 6px 0;
+          }
+          .autorizacao-termo-content li {
+            margin: 2px 0;
+          }
+          .autorizacao-termo-content p {
+            margin: 0 0 8px 0;
+          }
+          .autorizacao-termo-content p:last-child {
+            margin-bottom: 0;
+          }
+          .autorizacao-termo-content [align="left"], .autorizacao-termo-content [style*="text-align: left"] {
+            text-align: left;
+          }
+          .autorizacao-termo-content [align="center"], .autorizacao-termo-content [style*="text-align: center"] {
+            text-align: center;
+          }
+          .autorizacao-termo-content [align="right"], .autorizacao-termo-content [style*="text-align: right"] {
+            text-align: right;
+          }
+          .autorizacao-termo-content [align="justify"], .autorizacao-termo-content [style*="text-align: justify"] {
+            text-align: justify;
+            text-justify: inter-word;
+          }
+        `}</style>
         {/* TERMO JURÍDICO FORMATADO */}
         <div style={{
           background: '#F8FAFC',
@@ -537,10 +592,13 @@ export function AutorizacaoWidget({
           marginBottom: 16,
           position: 'relative'
         }}>
-          <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B', marginBottom: 4 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#64748B', marginBottom: 6 }}>
             Termo de Consentimento
           </div>
-          &ldquo;{autorizacao.termoTexto}&rdquo;
+          <div
+            className="autorizacao-termo-content"
+            dangerouslySetInnerHTML={{ __html: formatAutorizacaoTermoHtml(autorizacao.termoTexto) }}
+          />
         </div>
 
         {/* FEEDBACK MSG */}
