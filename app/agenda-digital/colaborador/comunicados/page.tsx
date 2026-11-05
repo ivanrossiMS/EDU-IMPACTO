@@ -595,10 +595,10 @@ function ColaboradorComunicadosContent() {
 
   const handleEnviar = (data: any, asRascunho = false) => {
     const { titulo, conteudo, anexos, dataAgendamento, cobranca, cobrancas, enquete, autorizacao } = data;
-    const newTitulo = titulo;
-    const newConteudo = conteudo;
-    if (!newTitulo.trim() || !newConteudo.trim()) {
-      adAlert('Por favor, preencha o título e o conteúdo.', 'Atenção')
+    const newTitulo = titulo || '';
+    const newConteudo = conteudo || '';
+    if (!newTitulo.trim()) {
+      adAlert('Por favor, preencha o título do comunicado.', 'Atenção')
       return
     }
     

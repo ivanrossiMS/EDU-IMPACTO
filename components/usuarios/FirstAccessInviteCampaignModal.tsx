@@ -838,94 +838,68 @@ export function FirstAccessInviteCampaignModal({
             color: '#0f172a',
           }}
         >
-          {/* ── TOP GRADIENT HEADER ── */}
+          {/* ── TOP GRADIENT HEADER (COMPACTO & LEVE) ── */}
           <div
             style={{
-              background: 'linear-gradient(135deg, #07122b 0%, #0f2557 50%, #1d4ed8 100%)',
-              padding: '22px 28px',
+              background: 'linear-gradient(135deg, #07122b 0%, #0f2557 55%, #1d4ed8 100%)',
+              padding: '15px 24px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 16,
               color: '#ffffff',
               position: 'relative',
-              overflow: 'hidden',
+              overflow: 'clip',
             }}
           >
-            <div
-              style={{
-                position: 'absolute',
-                top: -40,
-                right: -40,
-                width: 180,
-                height: 180,
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, transparent 70%)',
-                pointerEvents: 'none',
-              }}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
               <div
                 style={{
-                  width: 50,
-                  height: 50,
-                  borderRadius: 16,
-                  background: 'rgba(255, 255, 255, 0.14)',
-                  border: '1px solid rgba(255, 255, 255, 0.28)',
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: 'rgba(255, 255, 255, 0.12)',
+                  border: '1px solid rgba(255, 255, 255, 0.22)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 8px 20px rgba(0, 0, 0, 0.2)',
                   flexShrink: 0,
                 }}
               >
-                <Mail size={24} color="#60a5fa" />
+                <Mail size={20} color="#60a5fa" />
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize: 17.5,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      letterSpacing: '-0.02em',
+                      fontFamily: 'Outfit, sans-serif',
+                    }}
+                  >
+                    Central de Convite para 1º Acesso
+                  </h2>
                   <span
                     style={{
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: 800,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                      padding: '3px 10px',
+                      letterSpacing: '0.06em',
+                      padding: '2px 8px',
                       borderRadius: 999,
-                      background: 'rgba(16, 185, 129, 0.22)',
-                      border: '1px solid rgba(52, 211, 153, 0.4)',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid rgba(52, 211, 153, 0.35)',
                       color: '#6ee7b7',
                     }}
                   >
-                    🔒 Filtro Estrito: Apenas Sem 1º Acesso
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      padding: '3px 10px',
-                      borderRadius: 999,
-                      background: 'rgba(255, 255, 255, 0.12)',
-                      color: '#bfdbfe',
-                    }}
-                  >
-                    iOS App Store &amp; Google Play Inclusos
+                    🔒 Apenas Sem 1º Acesso
                   </span>
                 </div>
-                <h2
-                  style={{
-                    margin: '6px 0 2px 0',
-                    fontSize: 20,
-                    fontWeight: 900,
-                    color: '#ffffff',
-                    letterSpacing: '-0.02em',
-                    fontFamily: 'Outfit, sans-serif',
-                  }}
-                >
-                  Central de Convite para 1º Acesso • App &amp; Agenda Digital
-                </h2>
-                <p style={{ margin: 0, fontSize: 12.5, color: '#cbd5e1', fontWeight: 500 }}>
-                  Dispare o convite oficial apresentando todas as funções da Agenda Digital exclusivamente para quem nunca acessou.
+                <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#cbd5e1', fontWeight: 500 }}>
+                  Envie o convite oficial do App e Agenda Digital para quem ainda não acessou.
                 </p>
               </div>
             </div>
@@ -942,11 +916,11 @@ export function FirstAccessInviteCampaignModal({
                 onClose()
               }}
               style={{
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.14)',
-                border: '1px solid rgba(255, 255, 255, 0.25)',
+                background: 'rgba(255, 255, 255, 0.12)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
@@ -957,40 +931,49 @@ export function FirstAccessInviteCampaignModal({
                 zIndex: 1,
               }}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
-          {/* ── NAVIGATION TABS ── */}
+          {/* ── NAVIGATION TABS & PRIMARY ACTIONS (LINHA ÚNICA ORGANIZADA) ── */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: '12px 28px',
+              padding: '10px 24px',
               background: '#f8fafc',
               borderBottom: '1px solid #e2e8f0',
               gap: 12,
               flexWrap: 'wrap',
             }}
           >
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: 4,
+                borderRadius: 12,
+                background: '#e2e8f0',
+              }}
+            >
               {[
                 {
                   id: 'publico' as const,
-                  label: '1. Público Sem 1º Acesso',
-                  icon: <Users size={15} />,
+                  label: '1. Público Pendente',
+                  icon: <Users size={14} />,
                   badge: selectedRecipientObjects.length,
                 },
                 {
                   id: 'preview' as const,
-                  label: '2. Preview Ultra-Moderno & Lojas',
-                  icon: <Eye size={15} />,
+                  label: '2. Preview & Lojas',
+                  icon: <Eye size={14} />,
                 },
                 {
                   id: 'disparo' as const,
-                  label: '3. Disparo Inteligente em Lotes',
-                  icon: <Send size={15} />,
+                  label: '3. Disparo em Lotes',
+                  icon: <Send size={14} />,
                   badge:
                     dispatchStatus === 'running'
                       ? `${pctProgress}%`
@@ -1004,21 +987,25 @@ export function FirstAccessInviteCampaignModal({
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setActiveTab(t.id)}
+                    onClick={() => {
+                      setShowMissingEmailsModal(false)
+                      setActiveTab(t.id)
+                    }}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 8,
-                      padding: '9px 16px',
-                      borderRadius: 12,
-                      fontSize: 13,
+                      gap: 6,
+                      padding: '7px 13px',
+                      borderRadius: 9,
+                      fontSize: 12.5,
                       fontWeight: active ? 800 : 600,
-                      border: active ? '1px solid #2563eb' : '1px solid #cbd5e1',
-                      background: active ? '#2563eb' : '#ffffff',
-                      color: active ? '#ffffff' : '#334155',
+                      border: 'none',
+                      background: active ? '#ffffff' : 'transparent',
+                      color: active ? '#1d4ed8' : '#475569',
                       cursor: 'pointer',
                       transition: 'all 0.15s',
-                      boxShadow: active ? '0 4px 12px rgba(37, 99, 235, 0.25)' : 'none',
+                      boxShadow: active ? '0 1px 3px rgba(15, 23, 42, 0.1)' : 'none',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {t.icon}
@@ -1026,12 +1013,12 @@ export function FirstAccessInviteCampaignModal({
                     {t.badge !== undefined && (
                       <span
                         style={{
-                          padding: '2px 8px',
+                          padding: '1px 7px',
                           borderRadius: 999,
                           fontSize: 11,
                           fontWeight: 800,
-                          background: active ? 'rgba(255,255,255,0.22)' : '#e2e8f0',
-                          color: active ? '#ffffff' : '#0f172a',
+                          background: active ? '#dbeafe' : 'rgba(15, 23, 42, 0.08)',
+                          color: active ? '#1d4ed8' : '#334155',
                         }}
                       >
                         {t.badge}
@@ -1042,7 +1029,7 @@ export function FirstAccessInviteCampaignModal({
               })}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginInlineStart: 'auto' }}>
               {missingEmailUsers.length > 0 && (
                 <button
                   type="button"
@@ -1050,24 +1037,25 @@ export function FirstAccessInviteCampaignModal({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6,
-                    padding: '7px 12px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(245, 158, 11, 0.4)',
-                    background: 'rgba(245, 158, 11, 0.08)',
+                    gap: 5,
+                    padding: '7px 11px',
+                    borderRadius: 9,
+                    border: '1px solid #fcd34d',
+                    background: showMissingEmailsModal ? '#fef3c7' : '#fffbeb',
                     color: '#b45309',
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   <AlertTriangle size={13} />
                   <span>
                     {showMissingEmailsModal
-                      ? 'Voltar para Lista de Envio'
+                      ? 'Voltar à Lista'
                       : `${
                           (summary?.responsaveis.semEmail || 0) + (summary?.alunos.semEmail || 0)
-                        } pendentes sem e-mail`}
+                        } sem e-mail`}
                   </span>
                 </button>
               )}
@@ -1079,19 +1067,20 @@ export function FirstAccessInviteCampaignModal({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '9px 18px',
-                    borderRadius: 12,
+                    gap: 7,
+                    padding: '8px 16px',
+                    borderRadius: 10,
                     border: 'none',
                     background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
                     color: '#ffffff',
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: 800,
                     cursor: 'pointer',
-                    boxShadow: '0 6px 16px rgba(16, 185, 129, 0.3)',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  <Send size={14} />
+                  <Send size={13} />
                   <span>Disparar para {selectedRecipientObjects.length} Selecionado(s)</span>
                 </button>
               )}
@@ -1103,7 +1092,7 @@ export function FirstAccessInviteCampaignModal({
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '22px 28px',
+              padding: '16px 24px 20px',
               overscrollBehavior: 'contain',
               background: '#ffffff',
             }}
@@ -1234,21 +1223,21 @@ export function FirstAccessInviteCampaignModal({
               /* ════════════════════════════════════════════════════════════════
                  ABA 1: PÚBLICO SEM PRIMEIRO ACESSO & FILTROS
                  ════════════════════════════════════════════════════════════════ */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {/* Cards de Resumo de Telemetria por Perfil */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Cards de Resumo de Telemetria por Perfil (Mais Leves e Compactos) */}
                 {summary && (
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-                      gap: 12,
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                      gap: 10,
                     }}
                   >
                     {[
                       {
                         key: 'responsavel' as const,
                         title: 'Responsáveis (Pais)',
-                        icon: <Users size={16} />,
+                        icon: <Users size={15} />,
                         color: '#059669',
                         bg: '#ecfdf5',
                         border: '#a7f3d0',
@@ -1256,8 +1245,8 @@ export function FirstAccessInviteCampaignModal({
                       },
                       {
                         key: 'aluno' as const,
-                        title: 'Alunos (Corpo Discente)',
-                        icon: <GraduationCap size={16} />,
+                        title: 'Alunos (Discente)',
+                        icon: <GraduationCap size={15} />,
                         color: '#2563eb',
                         bg: '#eff6ff',
                         border: '#bfdbfe',
@@ -1266,7 +1255,7 @@ export function FirstAccessInviteCampaignModal({
                       {
                         key: 'colaborador' as const,
                         title: 'Colaboradores & Equipe',
-                        icon: <ShieldCheck size={16} />,
+                        icon: <ShieldCheck size={15} />,
                         color: '#7c3aed',
                         bg: '#f5f3ff',
                         border: '#ddd6fe',
@@ -1282,21 +1271,22 @@ export function FirstAccessInviteCampaignModal({
                           key={card.key}
                           onClick={() => handleCategoryChange(card.key)}
                           style={{
-                            padding: '14px 16px',
-                            borderRadius: 16,
-                            background: isSelectedCat ? card.bg : '#f8fafc',
-                            border: isSelectedCat ? `2px solid ${card.color}` : '1px solid #e2e8f0',
+                            padding: '11px 14px',
+                            borderRadius: 12,
+                            background: isSelectedCat ? card.bg : '#ffffff',
+                            border: isSelectedCat ? `1.5px solid ${card.color}` : '1px solid #e2e8f0',
+                            boxShadow: isSelectedCat ? `0 2px 10px ${card.color}18` : 'none',
                             cursor: 'pointer',
-                            transition: 'all 0.18s',
+                            transition: 'all 0.15s',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                             <span
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 6,
-                                fontSize: 13,
+                                gap: 5,
+                                fontSize: 12.5,
                                 fontWeight: 800,
                                 color: card.color,
                               }}
@@ -1306,13 +1296,13 @@ export function FirstAccessInviteCampaignModal({
                             </span>
                             <span
                               style={{
-                                fontSize: 11,
-                                fontWeight: 800,
-                                padding: '2px 8px',
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                padding: '1px 7px',
                                 borderRadius: 999,
-                                background: '#ffffff',
-                                color: card.color,
-                                border: `1px solid ${card.border}`,
+                                background: isSelectedCat ? '#ffffff' : '#f1f5f9',
+                                color: isSelectedCat ? card.color : '#64748b',
+                                border: isSelectedCat ? `1px solid ${card.border}` : '1px solid #e2e8f0',
                               }}
                             >
                               {card.data.pendentesTotal} s/ acesso
@@ -1323,15 +1313,27 @@ export function FirstAccessInviteCampaignModal({
                             style={{
                               display: 'flex',
                               alignItems: 'baseline',
+                              justifyContent: 'space-between',
                               gap: 6,
-                              marginTop: 10,
+                              marginTop: 6,
                             }}
                           >
-                            <span style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
-                              {catList.length || card.data.elegiveisComEmail}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
-                              com e-mail ({liveUnsentCount} faltam enviar)
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                              <span style={{ fontSize: 21, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
+                                {catList.length || card.data.elegiveisComEmail}
+                              </span>
+                              <span style={{ fontSize: 11.5, fontWeight: 600, color: '#475569' }}>
+                                com e-mail
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: liveUnsentCount > 0 ? '#b45309' : '#059669',
+                              }}
+                            >
+                              {liveUnsentCount > 0 ? `${liveUnsentCount} faltam enviar` : 'Todos enviados'}
                             </span>
                           </div>
 
@@ -1340,30 +1342,19 @@ export function FirstAccessInviteCampaignModal({
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              flexWrap: 'wrap',
                               gap: 4,
-                              marginTop: 8,
+                              marginTop: 6,
+                              paddingTop: 6,
+                              borderTop: isSelectedCat ? `1px solid ${card.border}` : '1px solid #f1f5f9',
                               fontSize: 11,
                               color: '#64748b',
                               fontWeight: 600,
                             }}
                           >
                             <span>✓ {card.data.ativos} já acessaram</span>
-                            {liveSentCount > 0 ? (
-                              <span
-                                style={{
-                                  padding: '2px 7px',
-                                  borderRadius: 999,
-                                  background: '#dcfce7',
-                                  color: '#15803d',
-                                  fontWeight: 800,
-                                }}
-                              >
-                                📨 {liveSentCount} já enviados (s/ acesso)
-                              </span>
-                            ) : (
-                              <span style={{ color: '#94a3b8' }}>0 enviados</span>
-                            )}
+                            <span style={{ color: liveSentCount > 0 ? '#15803d' : '#94a3b8', fontWeight: 700 }}>
+                              {liveSentCount > 0 ? `📨 ${liveSentCount} enviados` : '0 enviados'}
+                            </span>
                           </div>
                         </div>
                       )
@@ -1371,118 +1362,37 @@ export function FirstAccessInviteCampaignModal({
                   </div>
                 )}
 
-                {/* Abas Rápidas de Filtro por Status do Envio (Visão Clara de Quem Já Recebeu vs Quem Falta) */}
+                {/* Barra Unificada de Busca, Filtros e Seleção Rápida */}
                 <div
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                    flexDirection: 'column',
                     gap: 10,
-                    flexWrap: 'wrap',
-                    padding: '10px 14px',
-                    borderRadius: 14,
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => setInviteStatusFilter('todos')}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: 10,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        border: inviteStatusFilter === 'todos' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-                        background: inviteStatusFilter === 'todos' ? '#1d4ed8' : '#ffffff',
-                        color: inviteStatusFilter === 'todos' ? '#ffffff' : '#334155',
-                      }}
-                    >
-                      📋 Todos Sem 1º Acesso ({liveCounts.total})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setInviteStatusFilter('nao_enviados')}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: 10,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        border: inviteStatusFilter === 'nao_enviados' ? '1px solid #d97706' : '1px solid #fde68a',
-                        background: inviteStatusFilter === 'nao_enviados' ? '#d97706' : '#fffbeb',
-                        color: inviteStatusFilter === 'nao_enviados' ? '#ffffff' : '#b45309',
-                      }}
-                    >
-                      ⏳ Ainda Não Enviados ({liveCounts.faltaEnviar})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setInviteStatusFilter('ja_enviados')}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: 10,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        border: inviteStatusFilter === 'ja_enviados' ? '1px solid #059669' : '1px solid #a7f3d0',
-                        background: inviteStatusFilter === 'ja_enviados' ? '#059669' : '#ecfdf5',
-                        color: inviteStatusFilter === 'ja_enviados' ? '#ffffff' : '#047857',
-                      }}
-                    >
-                      📨 Convite Já Enviado • Aguardando Acesso ({liveCounts.jaEnviados})
-                    </button>
-                  </div>
-
-                  {liveCounts.faltaEnviar > 0 && (
-                    <button
-                      type="button"
-                      onClick={selectOnlyUninvitedInCategory}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '7px 14px',
-                        borderRadius: 10,
-                        border: '1px solid #059669',
-                        background: '#ffffff',
-                        color: '#047857',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      🎯 Selecionar Apenas os {liveCounts.faltaEnviar} Não Enviados
-                    </button>
-                  )}
-                </div>
-
-                {/* Barra de Filtros e Busca */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    flexWrap: 'wrap',
-                    padding: '14px 16px',
+                    padding: '12px 14px',
                     background: '#f8fafc',
                     borderRadius: 14,
                     border: '1px solid #e2e8f0',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1 }}>
-                    <div style={{ position: 'relative', minWidth: 250, flex: 1 }}>
+                  {/* Linha 1: Busca + Seletores Compactos na Mesma Linha */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
                       <Search
-                        size={15}
+                        size={14}
                         style={{
                           position: 'absolute',
-                          left: 12,
+                          left: 11,
                           top: '50%',
                           transform: 'translateY(-50%)',
                           color: '#94a3b8',
+                          pointerEvents: 'none',
                         }}
                       />
                       <input
@@ -1492,47 +1402,78 @@ export function FirstAccessInviteCampaignModal({
                         onChange={e => setSearchQuery(e.target.value)}
                         style={{
                           width: '100%',
-                          padding: '8px 12px 8px 34px',
-                          borderRadius: 10,
+                          height: 36,
+                          padding: '6px 30px 6px 32px',
+                          borderRadius: 9,
                           border: '1px solid #cbd5e1',
                           background: '#ffffff',
-                          fontSize: 13,
+                          fontSize: 12.5,
                           color: '#0f172a',
                           fontWeight: 500,
                         }}
                       />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          title="Limpar busca"
+                          style={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#94a3b8',
+                            cursor: 'pointer',
+                            padding: 2,
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
 
                     <select
                       value={categoryFilter}
                       onChange={e => handleCategoryChange(e.target.value as CampaignCategoryFilter)}
                       style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
+                        width: 'auto',
+                        flex: '0 1 auto',
+                        height: 36,
+                        padding: '6px 10px',
+                        borderRadius: 9,
                         border: '1px solid #cbd5e1',
                         background: '#ffffff',
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: 700,
                         color: '#0f172a',
+                        cursor: 'pointer',
                       }}
                     >
-                      <option value="responsavel">Público: Apenas Responsáveis (Pais)</option>
-                      <option value="aluno">Público: Apenas Alunos</option>
-                      <option value="colaborador">Público: Apenas Colaboradores</option>
-                      <option value="todos">Público: Todos os Pendentes (Unificado)</option>
+                      <option value="responsavel">Público: Responsáveis (Pais)</option>
+                      <option value="aluno">Público: Alunos</option>
+                      <option value="colaborador">Público: Colaboradores</option>
+                      <option value="todos">Público: Todos (Unificado)</option>
                     </select>
 
                     <select
                       value={turmaFilter}
                       onChange={e => setTurmaFilter(e.target.value)}
                       style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
+                        width: 'auto',
+                        flex: '0 1 auto',
+                        height: 36,
+                        padding: '6px 10px',
+                        borderRadius: 9,
                         border: '1px solid #cbd5e1',
                         background: '#ffffff',
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: 700,
                         color: '#0f172a',
+                        cursor: 'pointer',
                       }}
                     >
                       <option value="Todas">Turma: Todas as Turmas</option>
@@ -1542,52 +1483,120 @@ export function FirstAccessInviteCampaignModal({
                         </option>
                       ))}
                     </select>
-
-                    <select
-                      value={inviteStatusFilter}
-                      onChange={e => setInviteStatusFilter(e.target.value as any)}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        color: '#0f172a',
-                      }}
-                    >
-                      <option value="todos">Envio: Todos s/ 1º acesso</option>
-                      <option value="nao_enviados">Envio: Apenas inéditos (ainda não convidados)</option>
-                      <option value="ja_enviados">Envio: Apenas quem já recebeu antes</option>
-                    </select>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={toggleSelectAllFiltered}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        color: '#0f172a',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <CheckSquare size={14} color="#2563eb" />
-                      <span>
-                        {filteredRecipients.length > 0 &&
-                        filteredRecipients.every(r => selectedEmails.has(r.email))
-                          ? 'Desmarcar Filtrados'
-                          : `Selecionar Filtrados (${filteredRecipients.length})`}
-                      </span>
-                    </button>
+                  {/* Linha 2: Filtro de Status em Pílulas + Ações de Seleção */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      paddingTop: 8,
+                      borderTop: '1px solid #e2e8f0',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setInviteStatusFilter('todos')}
+                        style={{
+                          padding: '5px 11px',
+                          borderRadius: 8,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: inviteStatusFilter === 'todos' ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                          background: inviteStatusFilter === 'todos' ? '#2563eb' : '#ffffff',
+                          color: inviteStatusFilter === 'todos' ? '#ffffff' : '#475569',
+                        }}
+                      >
+                        Todos ({liveCounts.total})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInviteStatusFilter('nao_enviados')}
+                        style={{
+                          padding: '5px 11px',
+                          borderRadius: 8,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: inviteStatusFilter === 'nao_enviados' ? '1px solid #d97706' : '1px solid #cbd5e1',
+                          background: inviteStatusFilter === 'nao_enviados' ? '#d97706' : '#ffffff',
+                          color: inviteStatusFilter === 'nao_enviados' ? '#ffffff' : '#b45309',
+                        }}
+                      >
+                        ⏳ Não Enviados ({liveCounts.faltaEnviar})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInviteStatusFilter('ja_enviados')}
+                        style={{
+                          padding: '5px 11px',
+                          borderRadius: 8,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: inviteStatusFilter === 'ja_enviados' ? '1px solid #059669' : '1px solid #cbd5e1',
+                          background: inviteStatusFilter === 'ja_enviados' ? '#059669' : '#ffffff',
+                          color: inviteStatusFilter === 'ja_enviados' ? '#ffffff' : '#047857',
+                        }}
+                      >
+                        📨 Já Enviados ({liveCounts.jaEnviados})
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginInlineStart: 'auto' }}>
+                      {liveCounts.faltaEnviar > 0 && (
+                        <button
+                          type="button"
+                          onClick={selectOnlyUninvitedInCategory}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '5px 11px',
+                            borderRadius: 8,
+                            border: '1px solid #a7f3d0',
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          🎯 Selecionar {liveCounts.faltaEnviar} Não Enviados
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllFiltered}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 11px',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          color: '#0f172a',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <CheckSquare size={13} color="#2563eb" />
+                        <span>
+                          {filteredRecipients.length > 0 &&
+                          filteredRecipients.every(r => selectedEmails.has(r.email))
+                            ? 'Desmarcar Filtrados'
+                            : `Selecionar Filtrados (${filteredRecipients.length})`}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1595,11 +1604,11 @@ export function FirstAccessInviteCampaignModal({
                 <div
                   style={{
                     border: '1px solid #e2e8f0',
-                    borderRadius: 16,
+                    borderRadius: 14,
                     overflow: 'hidden',
                   }}
                 >
-                  <div style={{ maxHeight: 370, overflowY: 'auto' }}>
+                  <div style={{ maxHeight: 420, overflowY: 'auto', scrollbarGutter: 'stable', overscrollBehavior: 'contain' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr
@@ -2125,6 +2134,7 @@ export function FirstAccessInviteCampaignModal({
                         onChange={e => setDispatchMode(e.target.value as 'safe' | 'fast')}
                         disabled={dispatchStatus === 'running'}
                         style={{
+                          width: 'auto',
                           padding: '9px 12px',
                           borderRadius: 10,
                           border: '1px solid #93c5fd',

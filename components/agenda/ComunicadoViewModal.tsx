@@ -13,6 +13,7 @@ import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -952,22 +953,32 @@ export function ComunicadoViewModal({
   }
 
   const handleGeneratePaymentForCob = async (cob: any, dest: any) => {
-    if (!dest?.id || !cob?.id) return;
+    if ((!dest?.id && !dest?.destinatario_id) || !cob?.id) return;
     setGeneratingPaymentIds(prev => ({ ...prev, [cob.id]: true }));
     try {
-      const res = await fetch('/api/cobrancas/mercadopago-generate', {
+      const res = await apiFetch('/api/cobrancas/mercadopago-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cobranca_destinatario_id: dest.id,
-          cobranca_id: cob.id
+          cobranca_id: cob.id,
+          destinatario_id: dest.destinatario_id
         })
       });
       const data = await res.json();
-      if (data.error) {
-        alert('Erro ao gerar cobrança: ' + data.error);
+      if (!res.ok || data.error || !data.invoiceUrl) {
+        alert('Erro ao gerar cobrança: ' + (data.error || 'Não foi possível gerar o link de pagamento'));
       } else {
         setPaymentLinksMap(prev => ({ ...prev, [cob.id]: data.invoiceUrl }));
+        setCobrancasList(prev => prev.map((c: any) => {
+          if (String(c.id) !== String(cob.id)) return c;
+          return {
+            ...c,
+            agenda_cobrancas_destinatarios: (c.agenda_cobrancas_destinatarios || []).map((d: any) =>
+              d.id === dest.id ? { ...d, url_pagamento: data.invoiceUrl } : d
+            )
+          };
+        }));
         // Abre automaticamente a fatura recém gerada
         if (typeof window !== 'undefined' && (window as any).Capacitor) {
           window.open(data.invoiceUrl, '_system') || window.open(data.invoiceUrl, '_blank');
@@ -1725,7 +1736,10 @@ export function ComunicadoViewModal({
                       );
                       const statusStr = cobDest?.status || 'PENDING';
                       const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED';
-                      const isOverdue = !isPaid && cob.vencimento && new Date(cob.vencimento) < new Date(new Date().setHours(0,0,0,0));
+                      const vencDate = cob.vencimento
+                        ? new Date(String(cob.vencimento).includes('T') ? cob.vencimento : `${cob.vencimento}T23:59:59`)
+                        : null;
+                      const isOverdue = Boolean(!isPaid && vencDate && !isNaN(vencDate.getTime()) && vencDate < new Date());
                       const curPaymentLink = paymentLinksMap[cob.id] || cobDest?.url_pagamento || '';
                       const isGenerating = !!generatingPaymentIds[cob.id];
 

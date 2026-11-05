@@ -437,8 +437,11 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
      userPerms.includes('/matriculas/digital'))
 
   const hasFinanceiroInheritedAccess =
-    (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar')) &&
+    (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar') || matchedRoute === '/configuracoes/financeiro/centro-custo' || pathname.startsWith('/configuracoes/financeiro/centro-custo')) &&
     (userPerms.includes('/financeiro/pagar') ||
+     userPerms.includes('/configuracoes/financeiro/centro-custo') ||
+     userPerms.includes('/configuracoes/financeiro/plano-contas') ||
+     userPerms.includes('configuracoes') ||
      userPerms.includes('financeiro') ||
      userPerms.includes('/financeiro/receber') ||
      userPerms.includes('/financeiro/dre') ||

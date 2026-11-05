@@ -1,15 +1,17 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useDebounce } from 'use-debounce'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import {
   TrendingDown, Plus, Search, Upload, Printer,
-  CheckCircle2, AlertTriangle, Calendar, BarChart3, Target,
+  AlertTriangle, Calendar, BarChart3, Target,
   Building2, Repeat, Eye, Edit3, Trash2, Check,
   LayoutList, LayoutGrid, FileSpreadsheet, RotateCcw,
-  QrCode, MoreVertical, Barcode
+  QrCode, MoreVertical, Barcode, Copy, X, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
@@ -19,6 +21,7 @@ import {
   type OrcamentoCategoriaItem,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
+  resolveCentrosCustoEscolares,
   STATUS_CONTA_PAGAR_CONFIG,
   PRIORIDADE_CONTA_PAGAR_CONFIG,
   TEMPLATES_DESPESAS_ESCOLARES,
@@ -29,13 +32,27 @@ import {
 import { ContaPagarFormModal } from './components/ContaPagarFormModal'
 import { BaixaContaModal } from './components/BaixaContaModal'
 import { ContaFichaModal } from './components/ContaFichaModal'
-import { RelatoriosContasPagarTab } from './components/RelatoriosContasPagarTab'
-import { CalendarioDesembolsoTab } from './components/CalendarioDesembolsoTab'
-import {
-  OrcamentoEscolarTab,
-  FornecedoresEscolaresTab,
-  RecorrentesTemplatesTab,
-} from './components/OrcamentoFornecedoresTabs'
+
+const RelatoriosContasPagarTab = dynamic(
+  () => import('./components/RelatoriosContasPagarTab').then((m) => m.RelatoriosContasPagarTab),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando Central de Relatórios & BI...</div> }
+)
+const CalendarioDesembolsoTab = dynamic(
+  () => import('./components/CalendarioDesembolsoTab').then((m) => m.CalendarioDesembolsoTab),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando Calendário de Desembolso...</div> }
+)
+const OrcamentoEscolarTab = dynamic(
+  () => import('./components/OrcamentoFornecedoresTabs').then((m) => m.OrcamentoEscolarTab),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando Orçamento Escolar...</div> }
+)
+const FornecedoresEscolaresTab = dynamic(
+  () => import('./components/OrcamentoFornecedoresTabs').then((m) => m.FornecedoresEscolaresTab),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando Diretório de Fornecedores...</div> }
+)
+const RecorrentesTemplatesTab = dynamic(
+  () => import('./components/OrcamentoFornecedoresTabs').then((m) => m.RecorrentesTemplatesTab),
+  { ssr: false, loading: () => <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando Matriz de Contratos & Recorrências...</div> }
+)
 
 type MainTab =
   | 'lancamentos'
@@ -45,12 +62,24 @@ type MainTab =
   | 'fornecedores'
   | 'recorrentes'
 
+const PAGE_SIZE = 20
+
 export default function ContasPagarPage() {
-  const { alunos, titulos, cfgPlanoContas, cfgEventos } = useData()
+  const { alunos, titulos, cfgPlanoContas, cfgEventos, cfgCentrosCusto } = useData()
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     if (type === 'error') toast.error(msg)
     else toast.success(msg)
   }, [])
+
+  const centrosCustoAtivos = useMemo(
+    () => resolveCentrosCustoEscolares(cfgCentrosCusto, 'despesa', false),
+    [cfgCentrosCusto]
+  )
+
+  const todosCentrosCusto = useMemo(
+    () => resolveCentrosCustoEscolares(cfgCentrosCusto, 'todos', true),
+    [cfgCentrosCusto]
+  )
 
   const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const mesAtualStr = useMemo(() => hojeStr.slice(0, 7), [hojeStr])
@@ -62,6 +91,7 @@ export default function ContasPagarPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<MainTab>('lancamentos')
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Filtros e Busca
   const [searchInput, setSearchInput] = useState('')
@@ -84,6 +114,7 @@ export default function ContasPagarPage() {
   const [fichaConta, setFichaConta] = useState<ContaPagarRecord | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [copiedPixId, setCopiedPixId] = useState<string | null>(null)
+  const [confirmDeleteIds, setConfirmDeleteIds] = useState<string[] | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -552,6 +583,70 @@ export default function ContasPagarPage() {
     [contasFiltradas, selectedIds]
   )
 
+  // Reset página ao alterar filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, statusFilter, categoriaFilter, centroCustoFilter, competenciaFilter, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(contasFiltradas.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+  const contasPaginadas = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE
+    return contasFiltradas.slice(start, start + PAGE_SIZE)
+  }, [contasFiltradas, safePage])
+
+  const hasActiveFilters =
+    Boolean(searchInput.trim()) ||
+    statusFilter !== 'todos' ||
+    categoriaFilter !== 'todas' ||
+    centroCustoFilter !== 'todos' ||
+    competenciaFilter !== 'todos'
+
+  const clearAllFilters = useCallback(() => {
+    setSearchInput('')
+    setStatusFilter('todos')
+    setCategoriaFilter('todas')
+    setCentroCustoFilter('todos')
+    setCompetenciaFilter('todos')
+    setCurrentPage(1)
+  }, [])
+
+  // Duplicar título para o próximo mês
+  const handleDuplicateNextMonth = async (c: ContaPagarRecord) => {
+    const baseDate = new Date((c.vencimento || hojeStr) + 'T12:00:00')
+    baseDate.setMonth(baseDate.getMonth() + 1)
+    const nextVenc = baseDate.toISOString().slice(0, 10)
+    const nextComp = nextVenc.slice(0, 7)
+
+    await handleSaveContas([
+      {
+        codigo: `CP-${nextComp.replace('-', '')}-${String(Math.floor(100 + Math.random() * 899))}`,
+        descricao: c.descricao,
+        fornecedorId: c.fornecedorId,
+        fornecedorNome: c.fornecedorNome,
+        fornecedorDocumento: c.fornecedorDocumento,
+        categoria: c.categoria,
+        subcategoria: c.subcategoria,
+        centroCusto: c.centroCusto,
+        tipoCusto: c.tipoCusto,
+        prioridade: c.prioridade,
+        competencia: nextComp,
+        vencimento: nextVenc,
+        valorBase: c.valorBase,
+        desconto: c.desconto,
+        juros: 0,
+        multa: 0,
+        retencaoImpostos: c.retencaoImpostos,
+        valor: c.valor,
+        formaPagamento: c.formaPagamento,
+        chavePix: c.chavePix,
+        recorrente: c.recorrente,
+        frequenciaRecorrencia: c.frequenciaRecorrencia,
+        aprovacaoStatus: 'aprovado',
+      },
+    ])
+  }
+
   return (
     <div style={{ padding: '20px 24px 60px', maxWidth: 1560, margin: '0 auto', color: '#0f172a' }}>
       {/* CSS de Tabela Responsiva Light Mode (Sem rolagem horizontal no desktop + @container para telas menores) */}
@@ -560,6 +655,8 @@ export default function ContasPagarPage() {
           __html: `
           .table-wrapper.cp-table-region {
             container-type: inline-size;
+            content-visibility: auto;
+            contain-intrinsic-size: auto 600px;
             width: 100%;
             overflow: visible;
             border-radius: 16px;
@@ -587,10 +684,12 @@ export default function ContasPagarPage() {
             padding: 12px 10px;
             text-align: left;
             border-bottom: 1.5px solid #e2e8f0;
+            white-space: normal !important;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            overflow: hidden;
           }
           .cp-data-table tbody th {
-            position: sticky;
-            inset-inline-start: 0;
             background: #ffffff;
             text-align: left;
             padding: 12px 10px;
@@ -598,7 +697,10 @@ export default function ContasPagarPage() {
             color: #0f172a !important;
             border-top: 1px solid #f1f5f9;
             vertical-align: middle;
+            white-space: normal !important;
+            overflow-wrap: break-word;
             word-break: break-word;
+            overflow: hidden;
           }
           .cp-data-table tbody td {
             padding: 12px 10px;
@@ -606,7 +708,13 @@ export default function ContasPagarPage() {
             vertical-align: middle;
             color: #1e293b;
             background: #ffffff;
+            white-space: normal !important;
+            overflow-wrap: break-word;
             word-break: break-word;
+            overflow: hidden;
+          }
+          .cp-data-table tbody td.cp-actions-cell {
+            overflow: visible !important;
           }
           .cp-data-table tbody tr:hover th,
           .cp-data-table tbody tr:hover td {
@@ -1259,12 +1367,21 @@ export default function ContasPagarPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="cp-filter-cc"
-                style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: 5 }}
-              >
-                Segmento / Centro Custo
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                <label
+                  htmlFor="cp-filter-cc"
+                  style={{ display: 'block', fontSize: 10.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}
+                >
+                  Segmento / Centro Custo
+                </label>
+                <Link
+                  href="/configuracoes/financeiro/centro-custo"
+                  style={{ fontSize: 10, fontWeight: 800, color: '#0284c7', textDecoration: 'none' }}
+                  title="Configurar Centros de Custo"
+                >
+                  Configurar
+                </Link>
+              </div>
               <select
                 id="cp-filter-cc"
                 value={centroCustoFilter}
@@ -1281,7 +1398,7 @@ export default function ContasPagarPage() {
                 }}
               >
                 <option value="todos">Todos os Segmentos</option>
-                {CENTROS_CUSTO_ESCOLARES.map((cc) => (
+                {todosCentrosCusto.map((cc) => (
                   <option key={cc.id} value={cc.id}>{cc.label}</option>
                 ))}
               </select>
@@ -1345,6 +1462,30 @@ export default function ContasPagarPage() {
               </select>
             </div>
           </div>
+
+          {hasActiveFilters && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -6 }}>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: '#fff1f2',
+                  border: '1px solid #fecdd3',
+                  color: '#be123c',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={13} /> Limpar Filtros Ativos
+              </button>
+            </div>
+          )}
 
           {/* Barra de Ações em Lote quando há itens selecionados */}
           {selectedIds.size > 0 && (
@@ -1421,7 +1562,7 @@ export default function ContasPagarPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDeleteIds(Array.from(selectedIds))}
+                  onClick={() => setConfirmDeleteIds(Array.from(selectedIds))}
                   style={{
                     padding: '8px 14px',
                     borderRadius: 9,
@@ -1473,15 +1614,17 @@ export default function ContasPagarPage() {
                         aria-label="Selecionar todas as contas visíveis"
                         type="checkbox"
                         checked={
-                          contasFiltradas.length > 0 &&
-                          contasFiltradas.every((c) => selectedIds.has(c.id))
+                          contasPaginadas.length > 0 &&
+                          contasPaginadas.every((c) => selectedIds.has(c.id))
                         }
                         onChange={(e) => {
+                          const next = new Set(selectedIds)
                           if (e.target.checked) {
-                            setSelectedIds(new Set(contasFiltradas.map((c) => c.id)))
+                            contasPaginadas.forEach((c) => next.add(c.id))
                           } else {
-                            setSelectedIds(new Set())
+                            contasPaginadas.forEach((c) => next.delete(c.id))
                           }
+                          setSelectedIds(next)
                         }}
                       />
                     </th>
@@ -1501,14 +1644,14 @@ export default function ContasPagarPage() {
                         Carregando lançamentos financeiros da tesouraria escolar...
                       </td>
                     </tr>
-                  ) : contasFiltradas.length === 0 ? (
+                  ) : contasPaginadas.length === 0 ? (
                     <tr>
                       <td colSpan={8} style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
                         Nenhuma conta a pagar encontrada para os filtros selecionados.
                       </td>
                     </tr>
                   ) : (
-                    contasFiltradas.map((c) => {
+                    contasPaginadas.map((c) => {
                       const stCfg = STATUS_CONTA_PAGAR_CONFIG[c.status] || STATUS_CONTA_PAGAR_CONFIG.pendente
                       const prioCfg = PRIORIDADE_CONTA_PAGAR_CONFIG[c.prioridade] || PRIORIDADE_CONTA_PAGAR_CONFIG.media
                       const isVenceHoje = c.status !== 'pago' && c.vencimento === hojeStr
@@ -1670,7 +1813,10 @@ export default function ContasPagarPage() {
                           </td>
 
                           {/* COLUNA AÇÕES ENXUTA: 1 Botão Principal + Menu 3 Pontinhos (⋮) */}
-                          <td style={{ '--label': 'Ações', textAlign: 'right', position: 'relative' } as React.CSSProperties}>
+                          <td
+                            className="cp-actions-cell"
+                            style={{ '--label': 'Ações', textAlign: 'right', position: 'relative' } as React.CSSProperties}
+                          >
                             <div
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}
                               onClick={(e) => e.stopPropagation()}
@@ -1745,7 +1891,7 @@ export default function ContasPagarPage() {
                                       right: 0,
                                       top: 34,
                                       zIndex: 60,
-                                      width: 225,
+                                      width: 235,
                                       background: '#ffffff',
                                       border: '1px solid #cbd5e1',
                                       borderRadius: 12,
@@ -1810,6 +1956,33 @@ export default function ContasPagarPage() {
                                     >
                                       <Edit3 size={14} color="#475569" />
                                       Editar Lançamento
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => {
+                                        setOpenMenuId(null)
+                                        handleDuplicateNextMonth(c)
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        width: '100%',
+                                        padding: '8px 10px',
+                                        borderRadius: 8,
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#047857',
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                      }}
+                                    >
+                                      <Copy size={14} color="#059669" />
+                                      Duplicar para Próximo Mês
                                     </button>
 
                                     {c.chavePix && (
@@ -1937,7 +2110,7 @@ export default function ContasPagarPage() {
                                       role="menuitem"
                                       onClick={() => {
                                         setOpenMenuId(null)
-                                        handleDeleteIds([c.id])
+                                        setConfirmDeleteIds([c.id])
                                       }}
                                       style={{
                                         display: 'flex',
@@ -1973,7 +2146,7 @@ export default function ContasPagarPage() {
           ) : (
             /* VISÃO EM CARDS KANBAN LIGHT MODE */
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
-              {contasFiltradas.map((c) => {
+              {contasPaginadas.map((c) => {
                 const stCfg = STATUS_CONTA_PAGAR_CONFIG[c.status] || STATUS_CONTA_PAGAR_CONFIG.pendente
                 return (
                   <div
@@ -2077,6 +2250,81 @@ export default function ContasPagarPage() {
               })}
             </div>
           )}
+
+          {/* RODAPÉ DE PAGINAÇÃO E RESUMO */}
+          {contasFiltradas.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderRadius: 14,
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                fontSize: 12,
+                color: '#475569',
+                flexWrap: 'wrap',
+                gap: 10,
+              }}
+            >
+              <div>
+                Exibindo <strong>{(safePage - 1) * PAGE_SIZE + 1}</strong>–
+                <strong>{Math.min(safePage * PAGE_SIZE, contasFiltradas.length)}</strong> de{' '}
+                <strong>{contasFiltradas.length}</strong> lançamento(s) • Subtotal filtrado:{' '}
+                <strong style={{ color: '#0f172a' }}>
+                  {formatCurrency(contasFiltradas.reduce((a, b) => a + (Number(b.valor) || 0), 0))}
+                </strong>
+              </div>
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    disabled={safePage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: safePage <= 1 ? '#f8fafc' : '#ffffff',
+                      color: safePage <= 1 ? '#94a3b8' : '#334155',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <ChevronLeft size={14} /> Anterior
+                  </button>
+                  <span style={{ fontWeight: 700, padding: '0 8px' }}>
+                    Página {safePage} de {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: safePage >= totalPages ? '#f8fafc' : '#ffffff',
+                      color: safePage >= totalPages ? '#94a3b8' : '#334155',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Próxima <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -2084,7 +2332,11 @@ export default function ContasPagarPage() {
           ABA 2: CENTRAL DE RELATÓRIOS & BI ESCOLAR (7 RELATÓRIOS)
          ═════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'relatorios' && (
-        <RelatoriosContasPagarTab contas={contas} totalAlunosAtivos={totalAlunosAtivos} />
+        <RelatoriosContasPagarTab
+          contas={contas}
+          totalAlunosAtivos={totalAlunosAtivos}
+          centrosCusto={todosCentrosCusto}
+        />
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════════
@@ -2117,6 +2369,7 @@ export default function ContasPagarPage() {
         <FornecedoresEscolaresTab
           fornecedores={fornecedores}
           contas={contas}
+          centrosCusto={centrosCustoAtivos}
           onSaveFornecedor={handleSaveFornecedor}
           onDeleteFornecedor={handleDeleteFornecedor}
         />
@@ -2143,6 +2396,7 @@ export default function ContasPagarPage() {
         fornecedores={fornecedores}
         planoContas={cfgPlanoContas || []}
         eventosFinanceiros={cfgEventos || []}
+        centrosCusto={centrosCustoAtivos}
         onSave={handleSaveContas}
         onQuickCreateFornecedor={handleSaveFornecedor}
       />
@@ -2165,6 +2419,100 @@ export default function ContasPagarPage() {
         onBaixar={(c) => setBaixaTargets([c])}
         onReverterBaixa={handleReverterBaixa}
       />
+
+      {/* Modal de Confirmação de Exclusão */}
+      {confirmDeleteIds && confirmDeleteIds.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: 20,
+          }}
+          onClick={() => setConfirmDeleteIds(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: 18,
+              border: '1px solid #fecdd3',
+              padding: 24,
+              maxWidth: 420,
+              width: '100%',
+              boxShadow: '0 20px 50px rgba(15, 23, 42, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: '#fff1f2',
+                  color: '#e11d48',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Confirmar Exclusão</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  Deseja realmente excluir {confirmDeleteIds.length} lançamento(s) selecionado(s)?
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteIds(null)}
+                style={{
+                  flex: 1,
+                  padding: '9px 14px',
+                  borderRadius: 10,
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  color: '#334155',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ids = confirmDeleteIds
+                  setConfirmDeleteIds(null)
+                  await handleDeleteIds(ids)
+                }}
+                style={{
+                  flex: 1,
+                  padding: '9px 14px',
+                  borderRadius: 10,
+                  background: '#e11d48',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
-import { resolveUserRole } from '@/lib/server/authGuard'
+import { resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
 
 export async function POST(request: Request) {
   try {
-    const { user, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+    const { user, dbUser, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
     if (errorResponse || !user) return errorResponse!
 
     const body = await request.json()
@@ -15,11 +15,28 @@ export async function POST(request: Request) {
     }
 
     // Busca destinatário e valida vínculo com cobranca_id para impedir manipulação de preço
-    const { data: existingDest } = await supabase
+    // Nota: na tabela agenda_cobrancas_destinatarios a coluna real do aluno é destinatario_id
+    let { data: existingDest } = await supabase
       .from('agenda_cobrancas_destinatarios')
-      .select('id, cobranca_id, aluno_id, destinatario_nome, url_pagamento, status, pagador_usuario_id, pagador_usuario_nome')
+      .select('*')
       .eq('id', cobranca_destinatario_id)
       .maybeSingle()
+
+    if (!existingDest && (body.destinatario_id || body.aluno_id)) {
+      const cleanDestId = String(body.destinatario_id || body.aluno_id).replace(/^(a_|_ALU)/, '').trim()
+      if (cleanDestId) {
+        const { data: fallbackDest } = await supabase
+          .from('agenda_cobrancas_destinatarios')
+          .select('*')
+          .eq('cobranca_id', cobranca_id)
+          .in('destinatario_id', [cleanDestId, `a_${cleanDestId}`, `_ALU${cleanDestId}`])
+          .limit(1)
+          .maybeSingle()
+        if (fallbackDest) {
+          existingDest = fallbackDest
+        }
+      }
+    }
 
     if (!existingDest || String(existingDest.cobranca_id) !== String(cobranca_id)) {
       return NextResponse.json(
@@ -39,23 +56,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Esta cobrança já se encontra quitada' }, { status: 400 })
     }
 
-    if (isFamilyOrStudent && existingDest.aluno_id) {
+    const rawTargetAlunoId = String(existingDest.destinatario_id || existingDest.aluno_id || '').trim()
+    const cleanTargetAlunoId = rawTargetAlunoId.replace(/^(a_|_ALU)/, '').trim()
+
+    if (isFamilyOrStudent && cleanTargetAlunoId) {
+      const authorizedAlunoIds = await getAuthorizedAlunoIdsForUser(user)
+      const normalizedAuthorizedIds = new Set(
+        Array.from(authorizedAlunoIds).map(id => String(id).replace(/^(a_|_ALU)/, '').trim())
+      )
+
       const userEmail = (user.email || '').trim().toLowerCase()
-      const metaAlunoId = String(user.user_metadata?.aluno_id || user.user_metadata?.alunoId || '')
+      const metaAlunoId = String(user.user_metadata?.aluno_id || user.user_metadata?.alunoId || '').replace(/^(a_|_ALU)/, '').trim()
       const metaAlunosIds: string[] = Array.isArray(user.user_metadata?.alunos_ids)
-        ? user.user_metadata.alunos_ids.map(String)
+        ? user.user_metadata.alunos_ids.map((id: any) => String(id).replace(/^(a_|_ALU)/, '').trim())
         : []
 
       let hasAccess =
-        metaAlunoId === String(existingDest.aluno_id) ||
-        metaAlunosIds.includes(String(existingDest.aluno_id)) ||
+        normalizedAuthorizedIds.has(cleanTargetAlunoId) ||
+        metaAlunoId === cleanTargetAlunoId ||
+        metaAlunosIds.includes(cleanTargetAlunoId) ||
         Boolean(existingDest.pagador_usuario_id && String(existingDest.pagador_usuario_id) === String(user.id))
 
       if (!hasAccess && userEmail) {
+        const lookupIds = Array.from(new Set([cleanTargetAlunoId, rawTargetAlunoId].filter(Boolean)))
         const { data: alunoRow } = await supabase
           .from('alunos')
           .select('id, email, dados')
-          .eq('id', existingDest.aluno_id)
+          .in('id', lookupIds)
+          .limit(1)
           .maybeSingle()
 
         if (alunoRow) {
@@ -97,16 +125,29 @@ export async function POST(request: Request) {
     }
 
     const isGeneratedByAdmin = Boolean(body.from_admin) && !isFamilyOrStudent
+    const resolvedUserName =
+      dbUser?.nome ||
+      user.user_metadata?.nome ||
+      user.user_metadata?.name ||
+      existingDest.destinatario_nome ||
+      user.email?.split('@')[0] ||
+      'Cliente'
     const nome = isGeneratedByAdmin
-      ? (existingDest.destinatario_nome || 'Cliente')
-      : (user.user_metadata?.name || user.email?.split('@')[0] || 'Cliente')
-    const email = user.email || 'email@naocadastrado.com'
+      ? (existingDest.destinatario_nome || resolvedUserName)
+      : resolvedUserName
+
+    const rawUserEmail = String(user.email || dbUser?.email || '').trim().toLowerCase()
+    const isValidExternalEmail =
+      rawUserEmail.includes('@') &&
+      !rawUserEmail.endsWith('.local') &&
+      /\.[a-z]{2,}$/i.test(rawUserEmail)
+    const email = isValidExternalEmail ? rawUserEmail : 'financeiro@impacto-edu.net'
 
     // 1. Buscar dados da cobrança original no Supabase
     const { data: cobranca, error: errCob } = await supabase
       .from('agenda_cobrancas')
       .select('*')
-      .eq('id', cobranca_id)
+      .eq('id', existingDest.cobranca_id)
       .single()
 
     if (errCob || !cobranca) {
@@ -114,7 +155,11 @@ export async function POST(request: Request) {
     }
 
     // 2. Criar a Preferência no Mercado Pago (Checkout Pro)
-    const expirationDate = new Date(cobranca.vencimento);
+    const expirationDate = new Date(
+      typeof cobranca.vencimento === 'string' && !cobranca.vencimento.includes('T')
+        ? `${cobranca.vencimento}T23:59:59`
+        : cobranca.vencimento
+    );
     expirationDate.setDate(expirationDate.getDate() + 5); // Adiciona 5 dias de tolerância após vencimento
     const minFutureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
     if (isNaN(expirationDate.getTime()) || expirationDate < minFutureDate) {
@@ -124,18 +169,18 @@ export async function POST(request: Request) {
     const mpPayload = {
       items: [
         {
-          title: cobranca.titulo,
+          title: cobranca.titulo || 'Cobrança Escolar',
           quantity: 1,
-          unit_price: Number(cobranca.valor),
+          unit_price: Number(Number(cobranca.valor).toFixed(2)),
           currency_id: 'BRL',
-          description: `Cobrança via Edu Impacto - ${cobranca.titulo}`
+          description: `Cobrança via Edu Impacto - ${cobranca.titulo || 'Cobrança Escolar'}`
         }
       ],
       payer: {
         email: email,
         name: nome
       },
-      external_reference: cobranca_destinatario_id, // Usamos para linkar no Webhook
+      external_reference: String(existingDest.id), // Usamos para linkar no Webhook
       statement_descriptor: 'EDU IMPACTO',
       notification_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/api/webhooks/mercadopago`,
       expires: true,
@@ -158,21 +203,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falha ao criar cobrança no Mercado Pago' }, { status: 500 });
     }
 
-    // 3. Salvar os IDs no Supabase (Reaproveitando colunas antigas para evitar migrations)
+    // 3. Salvar os IDs no Supabase (Reaproveitando colunas existentes de forma resiliente)
     const updatePayload: Record<string, any> = {
-      asaas_customer_id: mpData.client_id || 'MP_CLIENT', // Apenas para preencher algo
-      asaas_payment_id: mpData.id, // ID da preference no MP
       url_pagamento: mpData.init_point // Link de pagamento real
     }
+    if ('asaas_customer_id' in existingDest) {
+      updatePayload.asaas_customer_id = String(mpData.client_id || 'MP_CLIENT')
+    }
+    if ('asaas_payment_id' in existingDest) {
+      updatePayload.asaas_payment_id = String(mpData.id || '')
+    }
     if (!isGeneratedByAdmin) {
-      updatePayload.pagador_usuario_id = user.id
-      updatePayload.pagador_usuario_nome = nome
+      if ('pagador_usuario_id' in existingDest) {
+        updatePayload.pagador_usuario_id = user.id
+      }
+      if ('pagador_usuario_nome' in existingDest) {
+        updatePayload.pagador_usuario_nome = nome
+      }
     }
 
-    const { error: errUpdate } = await supabase
+    let { error: errUpdate } = await supabase
       .from('agenda_cobrancas_destinatarios')
       .update(updatePayload)
-      .eq('id', cobranca_destinatario_id)
+      .eq('id', existingDest.id)
+
+    if (errUpdate) {
+      console.warn('Aviso ao salvar campos estendidos em agenda_cobrancas_destinatarios, salvando url_pagamento:', errUpdate)
+      const fallbackUpdate = await supabase
+        .from('agenda_cobrancas_destinatarios')
+        .update({ url_pagamento: mpData.init_point })
+        .eq('id', existingDest.id)
+      errUpdate = fallbackUpdate.error
+    }
 
     if (errUpdate) {
       console.error('Erro ao salvar no Supabase:', errUpdate)

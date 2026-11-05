@@ -240,16 +240,104 @@ export const CATEGORIAS_ESCOLARES: CategoriaEscolarMeta[] = [
   },
 ]
 
-export const CENTROS_CUSTO_ESCOLARES = [
-  { id: 'Educação Infantil', label: 'Educação Infantil', sigla: 'INF', cor: '#ec4899' },
-  { id: 'Fundamental Anos Iniciais', label: 'Fundamental Anos Iniciais (1º ao 5º)', sigla: 'EF1', cor: '#38bdf8' },
-  { id: 'Fundamental Anos Finais', label: 'Fundamental Anos Finais (6º ao 9º)', sigla: 'EF2', cor: '#6366f1' },
-  { id: 'Ensino Médio & Pré-Vestibular', label: 'Ensino Médio & Pré-Vestibular', sigla: 'EM', cor: '#a855f7' },
-  { id: 'Período Integral / Bilíngue', label: 'Período Integral & Programa Bilíngue', sigla: 'INT', cor: '#10b981' },
-  { id: 'Administração & Diretoria Geral', label: 'Administração, Secretaria & Diretoria', sigla: 'ADM', cor: '#f59e0b' },
-  { id: 'Infraestrutura, Limpeza & Segurança', label: 'Infraestrutura, Campus & Facilities', sigla: 'INFRA', cor: '#06b6d4' },
-  { id: 'Marketing & Captação (Matrículas)', label: 'Comercial, Marketing & Captação', sigla: 'MKT', cor: '#f43f5e' },
+export interface CentroCustoEscolarOption {
+  id: string
+  label: string
+  sigla: string
+  cor: string
+  codigo?: string
+  tipo?: 'pedagogico' | 'administrativo' | 'operacional' | 'comercial' | 'projetos'
+  natureza?: 'ambos' | 'despesa' | 'receita'
+  responsavel?: string
+  orcamentoMensal?: number
+  pesoRateioPadrao?: number
+  situacao?: 'ativo' | 'inativo'
+}
+
+export const CENTROS_CUSTO_ESCOLARES: CentroCustoEscolarOption[] = [
+  { id: 'Educação Infantil', label: 'Educação Infantil', sigla: 'INF', cor: '#ec4899', codigo: 'CC001', tipo: 'pedagogico', natureza: 'ambos', orcamentoMensal: 65000, pesoRateioPadrao: 20, situacao: 'ativo' },
+  { id: 'Fundamental Anos Iniciais', label: 'Fundamental Anos Iniciais (1º ao 5º)', sigla: 'EF1', cor: '#38bdf8', codigo: 'CC002', tipo: 'pedagogico', natureza: 'ambos', orcamentoMensal: 95000, pesoRateioPadrao: 30, situacao: 'ativo' },
+  { id: 'Fundamental Anos Finais', label: 'Fundamental Anos Finais (6º ao 9º)', sigla: 'EF2', cor: '#6366f1', codigo: 'CC003', tipo: 'pedagogico', natureza: 'ambos', orcamentoMensal: 110000, pesoRateioPadrao: 30, situacao: 'ativo' },
+  { id: 'Ensino Médio & Pré-Vestibular', label: 'Ensino Médio & Pré-Vestibular', sigla: 'EM', cor: '#a855f7', codigo: 'CC004', tipo: 'pedagogico', natureza: 'ambos', orcamentoMensal: 90000, pesoRateioPadrao: 20, situacao: 'ativo' },
+  { id: 'Período Integral / Bilíngue', label: 'Período Integral & Programa Bilíngue', sigla: 'INT', cor: '#10b981', codigo: 'CC005', tipo: 'pedagogico', natureza: 'ambos', orcamentoMensal: 45000, pesoRateioPadrao: 0, situacao: 'ativo' },
+  { id: 'Administração & Diretoria Geral', label: 'Administração, Secretaria & Diretoria', sigla: 'ADM', cor: '#f59e0b', codigo: 'CC006', tipo: 'administrativo', natureza: 'ambos', orcamentoMensal: 70000, pesoRateioPadrao: 0, situacao: 'ativo' },
+  { id: 'Infraestrutura, Limpeza & Segurança', label: 'Infraestrutura, Campus & Facilities', sigla: 'INFRA', cor: '#06b6d4', codigo: 'CC007', tipo: 'operacional', natureza: 'despesa', orcamentoMensal: 55000, pesoRateioPadrao: 0, situacao: 'ativo' },
+  { id: 'Marketing & Captação (Matrículas)', label: 'Comercial, Marketing & Captação', sigla: 'MKT', cor: '#f43f5e', codigo: 'CC008', tipo: 'comercial', natureza: 'despesa', orcamentoMensal: 25000, pesoRateioPadrao: 0, situacao: 'ativo' },
 ]
+
+/**
+ * Converte a lista dinâmica de `cfgCentrosCusto` (Config. Financeiro → Centro de Custo)
+ * para o formato de opções utilizado em Contas a Pagar e Contas a Receber, com fallback
+ * automático para `CENTROS_CUSTO_ESCOLARES`.
+ */
+export function resolveCentrosCustoEscolares(
+  cfgCentrosCusto?: any[],
+  naturezaFiltro: 'despesa' | 'receita' | 'todos' = 'todos',
+  incluirInativos = false
+): CentroCustoEscolarOption[] {
+  const source = Array.isArray(cfgCentrosCusto) && cfgCentrosCusto.length > 0
+    ? cfgCentrosCusto
+    : CENTROS_CUSTO_ESCOLARES.map(c => ({
+        id: c.id,
+        codigo: c.codigo || 'CC',
+        sigla: c.sigla,
+        nome: c.id,
+        descricao: c.label,
+        tipo: c.tipo || 'pedagogico',
+        natureza: c.natureza || 'ambos',
+        cor: c.cor,
+        orcamentoMensal: c.orcamentoMensal,
+        pesoRateioPadrao: c.pesoRateioPadrao,
+        situacao: c.situacao || 'ativo',
+      }))
+
+  const filtered = source.filter(cc => {
+    if (!incluirInativos && cc.situacao === 'inativo') return false
+    if (naturezaFiltro === 'despesa') {
+      return !cc.natureza || cc.natureza === 'ambos' || cc.natureza === 'despesa'
+    }
+    if (naturezaFiltro === 'receita') {
+      return !cc.natureza || cc.natureza === 'ambos' || cc.natureza === 'receita'
+    }
+    return true
+  })
+
+  if (filtered.length === 0 && !incluirInativos) {
+    return CENTROS_CUSTO_ESCOLARES
+  }
+
+  return filtered.map((cc, idx) => {
+    const resolvedNome = String(cc?.nome || cc?.descricao || cc?.label || cc?.codigo || cc?.id || `Centro ${idx + 1}`).trim()
+    const resolvedDesc = String(cc?.descricao || cc?.label || resolvedNome).trim()
+    const resolvedSigla = String(
+      cc?.sigla ||
+      cc?.codigo ||
+      resolvedNome
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w: string) => w[0])
+        .join('')
+        .slice(0, 4) ||
+      'CC'
+    )
+      .trim()
+      .toUpperCase()
+
+    return {
+      id: resolvedNome,
+      label: resolvedDesc && resolvedDesc !== resolvedNome ? `${resolvedNome} — ${resolvedDesc}` : resolvedNome,
+      sigla: resolvedSigla,
+      cor: typeof cc?.cor === 'string' && cc.cor.startsWith('#') ? cc.cor : '#3b82f6',
+      codigo: cc?.codigo,
+      tipo: cc?.tipo,
+      natureza: cc?.natureza || 'ambos',
+      responsavel: cc?.responsavel,
+      orcamentoMensal: typeof cc?.orcamentoMensal === 'number' ? cc.orcamentoMensal : undefined,
+      pesoRateioPadrao: typeof cc?.pesoRateioPadrao === 'number' ? cc.pesoRateioPadrao : undefined,
+      situacao: cc?.situacao === 'inativo' ? 'inativo' : 'ativo',
+    }
+  })
+}
 
 export const FORMAS_PAGAMENTO_CONTAS_PAGAR = [
   'PIX',

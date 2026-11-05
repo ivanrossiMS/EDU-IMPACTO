@@ -180,14 +180,31 @@ export async function DELETE(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    if (!id) return NextResponse.json({ error: 'ID faltando' }, { status: 400 })
+    let id = searchParams.get('id')
+    let ids: string[] = []
+    const idsParam = searchParams.get('ids')
+    if (idsParam) {
+      ids = idsParam.split(',').map(s => s.trim()).filter(Boolean)
+    }
+
+    if (!id && ids.length === 0) {
+      const body = await request.json().catch(() => null)
+      if (body?.id) id = String(body.id)
+      if (Array.isArray(body?.ids)) {
+        ids = body.ids.map((x: any) => String(x)).filter(Boolean)
+      }
+    }
+
+    const targetIds = ids.length > 0 ? ids : (id ? [id] : [])
+    if (targetIds.length === 0) {
+      return NextResponse.json({ error: 'ID faltando' }, { status: 400 })
+    }
 
     const supabase = await createProtectedClient()
-    const { error } = await supabase.from('titulos').delete().eq('id', id)
+    const { error } = await supabase.from('titulos').delete().in('id', targetIds)
     if (error) throw new Error(error.message)
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, deletedCount: targetIds.length })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

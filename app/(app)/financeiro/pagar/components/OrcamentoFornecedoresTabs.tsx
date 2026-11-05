@@ -247,6 +247,7 @@ export function OrcamentoEscolarTab({
 interface FornecedoresEscolaresTabProps {
   fornecedores: FornecedorEscolar[]
   contas: ContaPagarRecord[]
+  centrosCusto?: any[]
   onSaveFornecedor: (f: Partial<FornecedorEscolar>) => Promise<FornecedorEscolar | null>
   onDeleteFornecedor: (id: string) => Promise<void>
 }
@@ -254,9 +255,14 @@ interface FornecedoresEscolaresTabProps {
 export function FornecedoresEscolaresTab({
   fornecedores,
   contas,
+  centrosCusto,
   onSaveFornecedor,
   onDeleteFornecedor,
 }: FornecedoresEscolaresTabProps) {
+  const listaCentrosCusto = useMemo(
+    () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
+    [centrosCusto]
+  )
   const [busca, setBusca] = useState('')
   const [editing, setEditing] = useState<Partial<FornecedorEscolar> | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -431,6 +437,21 @@ export function FornecedoresEscolaresTab({
             >
               {CATEGORIAS_ESCOLARES.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="f-edit-cc" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+              Centro de Custo Padrão
+            </label>
+            <select
+              id="f-edit-cc"
+              value={editing.centroCustoPadrao || listaCentrosCusto[0]?.id || CENTROS_CUSTO_ESCOLARES[0].id}
+              onChange={(e) => setEditing({ ...editing, centroCustoPadrao: e.target.value })}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a', fontSize: 12 }}
+            >
+              {listaCentrosCusto.map((cc: any) => (
+                <option key={cc.id} value={cc.id}>{cc.label} ({cc.sigla})</option>
               ))}
             </select>
           </div>

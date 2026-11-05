@@ -34,6 +34,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
+import { apiFetch } from '@/lib/api/apiClient'
 
 function formatBRL(val: number): string {
   return Number(val || 0).toLocaleString('pt-BR', {
@@ -44,11 +45,10 @@ function formatBRL(val: number): string {
 
 function isVencidaDate(vencimento?: string | null): boolean {
   if (!vencimento) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const vDate = new Date(vencimento)
-  vDate.setHours(0, 0, 0, 0)
-  return vDate < today
+  const str = String(vencimento).trim()
+  const vDate = new Date(str.includes('T') ? str : `${str}T23:59:59`)
+  if (isNaN(vDate.getTime())) return false
+  return vDate < new Date()
 }
 
 export default function ADAdminCobrancas() {
@@ -302,12 +302,13 @@ export default function ADAdminCobrancas() {
 
     setGeneratingLinkIds(prev => ({ ...prev, [dest.id]: true }))
     try {
-      const res = await fetch('/api/cobrancas/mercadopago-generate', {
+      const res = await apiFetch('/api/cobrancas/mercadopago-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cobranca_destinatario_id: dest.id,
           cobranca_id: dest.cobranca_id,
+          destinatario_id: dest.destinatario_id,
           from_admin: true
         })
       })

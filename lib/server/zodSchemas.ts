@@ -14,11 +14,11 @@ export const APIListQuerySchema = z.object({
 
 // Schema de Validação de Títulos Financeiros
 export const ZodTituloFinanceiro = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string().min(1).optional(),
   valor: z.coerce.number().min(0, "Valor não pode ser negativo"),
   vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Vencimento inválido. Formato esperado: YYYY-MM-DD"),
-  status: z.enum(['pendente', 'pago', 'cancelado', 'excluido', 'vencido']).default('pendente'),
-  descricao: z.string().min(3, "Descrição muito curta").max(300),
+  status: z.enum(['pendente', 'pago', 'atrasado', 'cancelado', 'excluido', 'vencido', 'renegociado']).default('pendente'),
+  descricao: z.string().min(1, "Descrição obrigatória").max(300),
   parcelaId: z.string().optional(),
   aluno: z.string().optional(),
   responsavel: z.string().optional(),

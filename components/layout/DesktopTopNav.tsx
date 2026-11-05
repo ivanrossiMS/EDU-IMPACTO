@@ -112,6 +112,9 @@ export function DesktopTopNav() {
       if ((href === '/financeiro/pagar' || href === '/financeiro/contas-a-pagar') && (userPerms.includes('/financeiro/pagar') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber') || userPerms.includes('/financeiro/dre') || userPerms.includes('/financeiro/renegociacao'))) {
         return true
       }
+      if (href === '/configuracoes/financeiro/centro-custo' && (userPerms.includes('/configuracoes/financeiro/centro-custo') || userPerms.includes('configuracoes') || userPerms.includes('financeiro') || userPerms.includes('/configuracoes/financeiro/plano-contas'))) {
+        return true
+      }
       return userPerms.some(perm => href === perm || href.startsWith(perm + '/'))
     }
     return true
@@ -267,6 +270,7 @@ export function DesktopTopNav() {
           title: 'Config. Financeiro',
           icon: <Landmark size={14} />,
           items: [
+            { id: 'cfg-cc', label: 'Centro de Custo', href: '/configuracoes/financeiro/centro-custo', icon: <TargetIcon size={14} />, badge: 'NOVO', badgeColor: 'green' },
             { id: 'cfg-pc', label: 'Plano de Contas', href: '/configuracoes/financeiro/plano-contas', icon: <Landmark size={14} /> },
             { id: 'cfg-card', label: 'Cartões', href: '/configuracoes/financeiro/cartoes', icon: <CreditCard size={14} /> },
             { id: 'cfg-met', label: 'Métodos Pagamento', href: '/configuracoes/financeiro/metodos-pagamento', icon: <Coins size={14} /> },

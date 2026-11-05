@@ -150,6 +150,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       {
         label: 'CONFIG. FINANCEIRO', icon: <Landmark size={16} />,
         children: [
+          { label: 'CENTRO DE CUSTO', href: '/configuracoes/financeiro/centro-custo', icon: <TargetIcon size={11} /> },
           { label: 'PLANO DE CONTAS', href: '/configuracoes/financeiro/plano-contas', icon: <CandlestickChart size={11} /> },
           { label: 'CARTÕES', href: '/configuracoes/financeiro/cartoes', icon: <CardIcon size={11} /> },
           { label: 'MÉTODOS DE PAGAMENTOS', href: '/configuracoes/financeiro/metodos-pagamento', icon: <Coins size={11} /> },

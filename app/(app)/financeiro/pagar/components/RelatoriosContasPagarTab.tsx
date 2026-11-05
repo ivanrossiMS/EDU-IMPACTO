@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx'
 import { formatCurrency } from '@/lib/utils'
 import {
   type ContaPagarRecord,
+  type CentroCustoEscolarOption,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   openPrintBorderoPagamentos,
@@ -21,6 +22,7 @@ import {
 interface RelatoriosContasPagarTabProps {
   contas: ContaPagarRecord[]
   totalAlunosAtivos: number
+  centrosCusto?: CentroCustoEscolarOption[]
 }
 
 type ReportType =
@@ -40,7 +42,12 @@ const CHART_COLORS = [
 export function RelatoriosContasPagarTab({
   contas,
   totalAlunosAtivos,
+  centrosCusto,
 }: RelatoriosContasPagarTabProps) {
+  const listaCentrosCusto = useMemo(
+    () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
+    [centrosCusto]
+  )
   const [activeReport, setActiveReport] = useState<ReportType>('curva_abc_categorias')
   const [regime, setRegime] = useState<'vencimento' | 'competencia' | 'caixa'>('vencimento')
   const [filtroCompetencia, setFiltroCompetencia] = useState<string>('todos')
@@ -169,10 +176,10 @@ export function RelatoriosContasPagarTab({
         : [{ centro: c.centroCusto || 'Administração & Diretoria Geral', valor: Number(c.valor || 0) }]
 
       for (const aloc of allocations) {
-        const meta = CENTROS_CUSTO_ESCOLARES.find((x) => x.id === aloc.centro)
+        const meta = listaCentrosCusto.find((x) => x.id === aloc.centro)
         const cur = map.get(aloc.centro) || {
           centroCusto: aloc.centro,
-          sigla: meta?.sigla || 'ADM',
+          sigla: meta?.sigla || aloc.centro.slice(0, 4).toUpperCase(),
           cor: meta?.cor || '#0284c7',
           qtdLancamentos: 0,
           totalAlocado: 0,
@@ -198,7 +205,7 @@ export function RelatoriosContasPagarTab({
             ? Math.round((item.totalAlocado / item.estimativaAlunosSegmento) * 100) / 100
             : 0,
       }))
-  }, [contasBase, totalGeral, totalAlunosAtivos])
+  }, [contasBase, totalGeral, totalAlunosAtivos, listaCentrosCusto])
 
   // ── 3. RELATÓRIO RANKING ABC DE FORNECEDORES / CREDORES ───────────────────
   const dadosFornecedores = useMemo(() => {

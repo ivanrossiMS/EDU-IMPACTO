@@ -138,9 +138,41 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
   const successRate = activeCount > 0 ? Math.round((successfulCount / activeCount) * 100) : 100
 
   return (
-    <div className="push-history-container" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* ── ESTILOS MOBILE DE AUDITORIA ── */}
+    <div className="push-history-container" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ── ESTILOS DE AUDITORIA E COMPACTAÇÃO ── */}
       <style dangerouslySetInnerHTML={{__html: `
+        .ph-compact-select {
+          width: auto !important;
+          min-width: 150px;
+          max-width: 220px;
+          flex: 0 0 auto;
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+          background-repeat: no-repeat !important;
+          background-position: right 10px center !important;
+          padding: 0 30px 0 11px !important;
+          height: 36px;
+          border-radius: 10px;
+          border: 1px solid hsl(var(--border-subtle));
+          background-color: hsl(var(--bg-main));
+          color: hsl(var(--text-main));
+          font-size: 12px;
+          font-weight: 600;
+          outline: none;
+          cursor: pointer;
+          transition: border-color 0.15s ease;
+        }
+        .ph-compact-select:hover,
+        .ph-compact-select:focus {
+          border-color: #6366f1;
+        }
+        .push-history-selects {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: nowrap;
+        }
         @media (max-width: 768px) {
           .push-history-container {
             padding-bottom: 120px !important;
@@ -161,7 +193,7 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             display: none !important;
           }
           .push-history-user-scope {
-            padding: 14px 16px !important;
+            padding: 12px 14px !important;
             border-radius: 14px !important;
           }
           .push-history-user-scope-actions {
@@ -171,8 +203,8 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
           .push-history-user-scope-actions button {
             width: 100% !important;
             justify-content: center !important;
-            padding: 10px 14px !important;
-            font-size: 13px !important;
+            padding: 9px 14px !important;
+            font-size: 12px !important;
           }
           .push-history-filters {
             padding: 12px !important;
@@ -194,10 +226,12 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
             gap: 8px !important;
             width: 100% !important;
           }
-          .push-history-selects select {
+          .push-history-selects select,
+          .ph-compact-select {
             width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
             font-size: 11px !important;
-            padding: 8px 6px !important;
           }
           .push-history-dates-row {
             width: 100% !important;
@@ -319,24 +353,24 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         }
       `}} />
 
-      {/* ── SEÇÃO SUPERIOR: CARDS KPI / RESUMO DE ENTREGA ── */}
-      <div className="push-history-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+      {/* ── SEÇÃO SUPERIOR: CARDS KPI COMPACTOS ── */}
+      <div className="push-history-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 16,
-          padding: '16px 20px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+          borderRadius: 14,
+          padding: '13px 16px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Disparos Registrados
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(99, 102, 241, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Send size={16} color="#6366f1" />
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99, 102, 241, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Send size={14} color="#6366f1" />
             </div>
           </div>
-          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 25, fontWeight: 900, fontFamily: 'Outfit, sans-serif', marginTop: 4, lineHeight: 1.1 }}>
             {totalCount.toLocaleString('pt-BR')}
           </div>
           <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
@@ -347,19 +381,19 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 16,
-          padding: '16px 20px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+          borderRadius: 14,
+          padding: '13px 16px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Taxa de Sucesso no Gateway
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle2 size={16} color="#10b981" />
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckCircle2 size={14} color="#10b981" />
             </div>
           </div>
-          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#10b981', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 25, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#10b981', marginTop: 4, lineHeight: 1.1 }}>
             {successRate}%
           </div>
           <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
@@ -370,19 +404,19 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 16,
-          padding: '16px 20px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+          borderRadius: 14,
+          padding: '13px 16px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Aparelhos Conectados
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(14, 165, 233, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Smartphone size={16} color="#0ea5e9" />
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(14, 165, 233, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Smartphone size={14} color="#0ea5e9" />
             </div>
           </div>
-          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#0ea5e9', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 25, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#0ea5e9', marginTop: 4, lineHeight: 1.1 }}>
             {selectedUser ? userDevices.length : '100%'}
           </div>
           <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
@@ -395,19 +429,19 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         <div className="push-history-kpi-card" style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 16,
-          padding: '16px 20px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+          borderRadius: 14,
+          padding: '13px 16px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Aberturas Confirmadas
             </span>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(236, 72, 153, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Eye size={16} color="#ec4899" />
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(236, 72, 153, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Eye size={14} color="#ec4899" />
             </div>
           </div>
-          <div className="kpi-val" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#ec4899', marginTop: 8 }}>
+          <div className="kpi-val" style={{ fontSize: 25, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#ec4899', marginTop: 4, lineHeight: 1.1 }}>
             {readCount}
           </div>
           <div className="kpi-desc" style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>
@@ -416,311 +450,339 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
         </div>
       </div>
 
-      {/* ── CARD DE SELEÇÃO DE USUÁRIO (AUDITORIA INDIVIDUAL OU GLOBAL) ── */}
-      <div className="push-history-user-scope" style={{
-        background: 'hsl(var(--bg-surface))',
-        border: '1.5px solid hsl(var(--border-subtle))',
-        borderRadius: 18,
-        padding: '18px 22px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <User size={18} color="#6366f1" />
-              <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>
-                Escopo de Usuário para Auditoria
-              </h3>
-            </div>
-            <p style={{ margin: '3px 0 0', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
-              Selecione um aluno, pai/mãe ou colaborador para auditar os pushes enviados a ele e os aparelhos receptores.
-            </p>
-          </div>
-
-          <div className="push-history-user-scope-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => setIsUserSearchOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 16px',
-                borderRadius: 10,
-                background: '#6366f1',
-                color: 'white',
-                fontSize: 13,
-                fontWeight: 700,
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              <Search size={14} />
-              {selectedUser ? 'Trocar Usuário' : 'Selecionar Usuário Específico'}
-            </button>
-
-            {selectedUser && (
-              <button
-                onClick={() => {
-                  setSelectedUser(null)
-                  setUserDevices([])
-                  setPage(1)
-                }}
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: 12 }}
-                title="Limpar seleção e voltar à visão geral da escola"
-              >
-                Ver Todos os Usuários
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Informações do Usuário Selecionado */}
-        {selectedUser ? (
-          <div style={{
-            background: 'hsl(var(--bg-main))',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            borderRadius: 14,
-            padding: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <UserAvatar name={selectedUser.nome} fotoUrl={selectedUser.foto || undefined} size={46} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16, fontWeight: 800 }}>{selectedUser.nome}</span>
-                    <span style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: 6,
-                      background: 'rgba(99, 102, 241, 0.15)',
-                      color: '#6366f1',
-                      textTransform: 'uppercase',
-                    }}>
-                      {selectedUser.tipo}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                    {selectedUser.subtitulo || `ID: ${selectedUser.id}`}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{
-                  padding: '4px 10px',
-                  borderRadius: 8,
-                  background: userDevices.length > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                  color: userDevices.length > 0 ? '#059669' : '#dc2626',
-                  fontWeight: 700,
-                  fontSize: 12,
-                }}>
-                  {userDevices.length} aparelho(s) registrado(s) no OneSignal
-                </span>
-              </div>
-            </div>
-
-            {/* Lista dos Aparelhos do Usuário (se houver) */}
-            {userDevices.length > 0 ? (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                gap: 8,
-                marginTop: 4,
-                paddingTop: 10,
-                borderTop: '1px solid hsl(var(--border-subtle))'
-              }}>
-                {userDevices.map((dev: any, i: number) => {
-                  const isDevActive = dev.isSubscribed
-                  return (
-                    <div
-                      key={dev.id || i}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        background: 'hsl(var(--bg-surface))',
-                        border: '1px solid hsl(var(--border-subtle))',
-                        fontSize: 11,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {dev.tipo === 'iOS' ? <Smartphone size={14} color="#6366f1" /> : dev.tipo === 'Android' ? <Smartphone size={14} color="#10b981" /> : <Laptop size={14} color="#0ea5e9" />}
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{dev.modelo || dev.tipo}</div>
-                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{dev.sistema || dev.tipo}</div>
-                        </div>
-                      </div>
-                      <span style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: isDevActive ? '#10b981' : '#ef4444',
-                      }} title={isDevActive ? 'Push Conectado' : 'Push Inativo ou Bloqueado'} />
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic', paddingTop: 4 }}>
-                Nenhum aparelho com token ativo associado a este usuário no momento.
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{
-            background: 'hsl(var(--bg-main))',
-            borderRadius: 12,
-            padding: '12px 16px',
-            fontSize: 12,
-            color: 'hsl(var(--text-muted))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }} />
-              <b>Modo Global:</b> Exibindo todos os disparos registrados na escola (frequência, comunicados, portaria, etc.).
-            </div>
-            <span style={{ fontSize: 11 }}>Página {page} de {totalPages}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ── BARRA DE FILTROS E PESQUISA ── */}
+      {/* ── PAINEL UNIFICADO DE ESCOPO DE AUDITORIA E FILTROS ── */}
       <div className="push-history-filters" style={{
         background: 'hsl(var(--bg-surface))',
         border: '1px solid hsl(var(--border-subtle))',
         borderRadius: 16,
-        padding: '14px 18px',
+        padding: '12px 16px',
         display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
+        flexDirection: 'column',
+        gap: 10,
       }}>
-        <div className="push-history-filter-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
-          <div className="push-history-search" style={{ position: 'relative', width: '100%', maxWidth: 360 }}>
-            <Search size={15} color="hsl(var(--text-muted))" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => handleFilterChange(setSearchQuery, e.target.value)}
-              placeholder="Buscar no título ou texto..."
-              style={{
-                width: '100%',
-                padding: '8px 12px 8px 34px',
-                borderRadius: 10,
-                border: '1px solid hsl(var(--border-subtle))',
-                background: 'hsl(var(--bg-main))',
-                color: 'hsl(var(--text-main))',
-                fontSize: 12,
-                outline: 'none',
-              }}
-            />
-          </div>
+        {/* Linha 1: Escopo de Usuário (Modo Global compacto ou Card de Usuário Selecionado) */}
+        <div className="push-history-user-scope" style={{
+          background: 'hsl(var(--bg-main))',
+          border: selectedUser ? '1px solid rgba(99, 102, 241, 0.35)' : '1px solid hsl(var(--border-subtle) / 0.7)',
+          borderRadius: 12,
+          padding: selectedUser ? '12px 14px' : '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}>
+          {!selectedUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                <span style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 7,
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Users size={13} color="#6366f1" />
+                </span>
+                <span>
+                  <strong style={{ color: 'hsl(var(--text-main))', fontWeight: 800 }}>Escopo: Modo Global</strong>
+                  {' '}— Exibindo todos os disparos da escola (frequência, comunicados, portaria, etc.)
+                </span>
+              </div>
 
-          <div className="push-history-selects">
-            {/* Filtro de Categoria */}
-            <select
-              value={selectedCategory}
-              onChange={e => handleFilterChange(setSelectedCategory, e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: '1px solid hsl(var(--border-subtle))',
-                background: 'hsl(var(--bg-main))',
-                color: 'hsl(var(--text-main))',
-                fontSize: 12,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">Todas as Categorias</option>
-              <option value="chat">💬 Chat & Mensagens</option>
-              <option value="saida">🚗 Portaria & Saída</option>
-              <option value="frequencia">✅ Frequência Escolar</option>
-              <option value="comunicados">📢 Comunicados Oficiais</option>
-              <option value="momentos">📸 Momentos & Mídia</option>
-              <option value="calendario">📅 Eventos & Calendário</option>
-              <option value="notas">🏆 Boletim & Notas</option>
-              <option value="ocorrencias">⚠️ Ocorrências</option>
-              <option value="cobrancas">💰 Cobranças & Financeiro</option>
-              <option value="test">🔔 Diagnóstico / Testes</option>
-            </select>
+              <div className="push-history-user-scope-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+                  Pág. {page} de {totalPages}
+                </span>
+                <button
+                  onClick={() => setIsUserSearchOpen(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    height: 32,
+                    padding: '0 12px',
+                    borderRadius: 9,
+                    background: '#6366f1',
+                    color: 'white',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <User size={13} />
+                  Auditar Usuário Específico
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <UserAvatar name={selectedUser.nome} fotoUrl={selectedUser.foto || undefined} size={40} />
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 800 }}>{selectedUser.nome}</span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#6366f1',
+                        textTransform: 'uppercase',
+                      }}>
+                        {selectedUser.tipo}
+                      </span>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        background: userDevices.length > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        color: userDevices.length > 0 ? '#059669' : '#dc2626',
+                        fontWeight: 700,
+                        fontSize: 11,
+                      }}>
+                        {userDevices.length} aparelho(s) OneSignal
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                      {selectedUser.subtitulo || `ID: ${selectedUser.id}`}
+                    </div>
+                  </div>
+                </div>
 
-            {/* Filtro de Status */}
-            <select
-              value={selectedStatus}
-              onChange={e => handleFilterChange(setSelectedStatus, e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: '1px solid hsl(var(--border-subtle))',
-                background: 'hsl(var(--bg-main))',
-                color: 'hsl(var(--text-main))',
-                fontSize: 12,
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="all">Todos os Status</option>
-              <option value="sent">🟢 Enviados com Sucesso</option>
-              <option value="failed">🔴 Falhas / Rejeitados</option>
-              <option value="paused">⏸️ Pausados / Silenciados</option>
-            </select>
-          </div>
+                <div className="push-history-user-scope-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setIsUserSearchOpen(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      height: 32,
+                      padding: '0 12px',
+                      borderRadius: 8,
+                      background: '#6366f1',
+                      color: 'white',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Search size={13} />
+                    Trocar Usuário
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedUser(null)
+                      setUserDevices([])
+                      setPage(1)
+                    }}
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: 11.5, height: 32, padding: '0 10px', borderRadius: 8 }}
+                    title="Limpar seleção e voltar à visão geral da escola"
+                  >
+                    <X size={13} />
+                    Ver Todos
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista dos Aparelhos do Usuário (se houver) */}
+              {userDevices.length > 0 ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 6,
+                  paddingTop: 8,
+                  borderTop: '1px solid hsl(var(--border-subtle))'
+                }}>
+                  {userDevices.map((dev: any, i: number) => {
+                    const isDevActive = dev.isSubscribed
+                    return (
+                      <div
+                        key={dev.id || i}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          fontSize: 11,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          {dev.tipo === 'iOS' ? <Smartphone size={13} color="#6366f1" /> : dev.tipo === 'Android' ? <Smartphone size={13} color="#10b981" /> : <Laptop size={13} color="#0ea5e9" />}
+                          <div>
+                            <div style={{ fontWeight: 700, lineHeight: 1.2 }}>{dev.modelo || dev.tipo}</div>
+                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{dev.sistema || dev.tipo}</div>
+                          </div>
+                        </div>
+                        <span style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: isDevActive ? '#10b981' : '#ef4444',
+                        }} title={isDevActive ? 'Push Conectado' : 'Push Inativo ou Bloqueado'} />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
+                  Nenhum aparelho com token ativo associado a este usuário no momento.
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Filtros de Período e Botão de Atualização */}
-        <div className="push-history-dates-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div className="push-history-date-tabs" style={{ display: 'flex', background: 'hsl(var(--bg-main))', borderRadius: 10, padding: 3, border: '1px solid hsl(var(--border-subtle))' }}>
-            {[
-              { id: 'today', label: 'Hoje' },
-              { id: '7d', label: '7 Dias' },
-              { id: '30d', label: '30 Dias' },
-              { id: 'all', label: 'Todos' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => handleFilterChange(setSelectedDateRange, tab.id)}
+        {/* Linha 2: Busca + Selects Compactos Lado a Lado + Período */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}>
+          <div className="push-history-filter-controls" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 460px', flexWrap: 'wrap' }}>
+            <div className="push-history-search" style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>
+              <Search size={14} color="hsl(var(--text-muted))" style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => handleFilterChange(setSearchQuery, e.target.value)}
+                placeholder="Buscar no título ou texto..."
                 style={{
-                  padding: '4px 10px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: selectedDateRange === tab.id ? '#6366f1' : 'transparent',
-                  color: selectedDateRange === tab.id ? 'white' : 'hsl(var(--text-muted))',
-                  fontSize: 11,
-                  fontWeight: selectedDateRange === tab.id ? 700 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
+                  width: '100%',
+                  height: 36,
+                  padding: searchQuery ? '0 30px 0 32px' : '0 12px 0 32px',
+                  borderRadius: 10,
+                  border: '1px solid hsl(var(--border-subtle))',
+                  background: 'hsl(var(--bg-main))',
+                  color: 'hsl(var(--text-main))',
+                  fontSize: 12,
+                  outline: 'none',
                 }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => handleFilterChange(setSearchQuery, '')}
+                  title="Limpar busca"
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'hsl(var(--text-muted))',
+                    cursor: 'pointer',
+                    padding: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            <div className="push-history-selects">
+              {/* Filtro de Categoria */}
+              <select
+                value={selectedCategory}
+                onChange={e => handleFilterChange(setSelectedCategory, e.target.value)}
+                className="ph-compact-select"
               >
-                {tab.label}
+                <option value="all">Todas as Categorias</option>
+                <option value="chat">💬 Chat & Mensagens</option>
+                <option value="saida">🚗 Portaria & Saída</option>
+                <option value="frequencia">✅ Frequência Escolar</option>
+                <option value="comunicados">📢 Comunicados Oficiais</option>
+                <option value="momentos">📸 Momentos & Mídia</option>
+                <option value="calendario">📅 Eventos & Calendário</option>
+                <option value="notas">🏆 Boletim & Notas</option>
+                <option value="ocorrencias">⚠️ Ocorrências</option>
+                <option value="cobrancas">💰 Cobranças & Financeiro</option>
+                <option value="test">🔔 Diagnóstico / Testes</option>
+              </select>
+
+              {/* Filtro de Status */}
+              <select
+                value={selectedStatus}
+                onChange={e => handleFilterChange(setSelectedStatus, e.target.value)}
+                className="ph-compact-select"
+              >
+                <option value="all">Todos os Status</option>
+                <option value="sent">🟢 Enviados com Sucesso</option>
+                <option value="failed">🔴 Falhas / Rejeitados</option>
+                <option value="paused">⏸️ Pausados / Silenciados</option>
+              </select>
+            </div>
+
+            {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchQuery) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setSelectedCategory('all')
+                  setSelectedStatus('all')
+                  setPage(1)
+                }}
+                className="btn btn-ghost btn-sm"
+                style={{ height: 36, padding: '0 10px', borderRadius: 10, fontSize: 11.5, color: 'hsl(var(--text-muted))' }}
+                title="Resetar filtros"
+              >
+                <X size={13} /> Limpar
               </button>
-            ))}
+            )}
           </div>
 
-          <button
-            onClick={() => loadHistory()}
-            disabled={isLoading}
-            className="btn btn-ghost btn-sm"
-            style={{ borderRadius: 10, padding: 8 }}
-            title="Atualizar lista"
-          >
-            <RefreshCw size={15} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
-          </button>
+          {/* Filtros de Período e Botão de Atualização */}
+          <div className="push-history-dates-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="push-history-date-tabs" style={{ display: 'flex', alignItems: 'center', height: 36, background: 'hsl(var(--bg-main))', borderRadius: 10, padding: 3, border: '1px solid hsl(var(--border-subtle))' }}>
+              {[
+                { id: 'today', label: 'Hoje' },
+                { id: '7d', label: '7 Dias' },
+                { id: '30d', label: '30 Dias' },
+                { id: 'all', label: 'Todos' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => handleFilterChange(setSelectedDateRange, tab.id)}
+                  style={{
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 7,
+                    border: 'none',
+                    background: selectedDateRange === tab.id ? '#6366f1' : 'transparent',
+                    color: selectedDateRange === tab.id ? 'white' : 'hsl(var(--text-muted))',
+                    fontSize: 11.5,
+                    fontWeight: selectedDateRange === tab.id ? 700 : 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => loadHistory()}
+              disabled={isLoading}
+              className="btn btn-ghost btn-sm"
+              style={{ borderRadius: 10, width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1px solid hsl(var(--border-subtle))' }}
+              title="Atualizar lista"
+            >
+              <RefreshCw size={14} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+            </button>
+          </div>
         </div>
       </div>
 

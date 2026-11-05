@@ -1508,7 +1508,12 @@ export async function POST(request: Request) {
             row.tipoRelatorio === 'individual' ||
             row.dados?.tipoRelatorio === 'individual'
           );
-          const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(row.dados || {}), id: row.id, tipoRelatorio: row.tipoRelatorio || row.dados?.tipoRelatorio });
+          const { students, directColaboradores } = await getStudentTargetsForComunicados({
+            ...(row.dados || {}),
+            id: row.id,
+            destino: row.destino,
+            tipoRelatorio: row.tipoRelatorio || row.dados?.tipoRelatorio
+          });
           
           if (!isInterno) {
             if (isIndividualStudentReport) {
@@ -1647,18 +1652,22 @@ export async function POST(request: Request) {
 
     if (cobrancasToSave.length > 0 && data.destino !== 'interno') {
        try {
-         const { students } = await getStudentTargetsForComunicados(data.dados);
+         const { students } = await getStudentTargetsForComunicados({
+           ...(data.dados || {}),
+           id: data.id,
+           destino: data.destino
+         });
 
          // Limpar cobranças antigas se for edição para evitar duplicatas
-         const { data: existingCobs } = await supabase
+         const { data: existingCobs } = await supabaseServer
            .from('agenda_cobrancas')
            .select('id')
            .eq('comunicado_id', String(data.id));
 
          if (existingCobs && existingCobs.length > 0) {
            const existingCobIds = existingCobs.map((c: any) => c.id);
-           await supabase.from('agenda_cobrancas_destinatarios').delete().in('cobranca_id', existingCobIds);
-           await supabase.from('agenda_cobrancas').delete().eq('comunicado_id', String(data.id));
+           await supabaseServer.from('agenda_cobrancas_destinatarios').delete().in('cobranca_id', existingCobIds);
+           await supabaseServer.from('agenda_cobrancas').delete().eq('comunicado_id', String(data.id));
          }
 
          for (const cob of cobrancasToSave) {
@@ -1670,7 +1679,7 @@ export async function POST(request: Request) {
              vencimento: cob.vencimento
            };
            
-           const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single();
+           const { data: cobrancaSalva, error: cobrancaErr } = await supabaseServer.from('agenda_cobrancas').insert(cobrancaObj).select().single();
            
            if (cobrancaErr) {
               cobrancaError = true;
@@ -1684,7 +1693,7 @@ export async function POST(request: Request) {
                 status: 'PENDING'
               }));
               
-              const { error: destErr } = await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert);
+              const { error: destErr } = await supabaseServer.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert);
               if (destErr) {
                 cobrancaError = true;
                 cobrancaErrorMessage = destErr.message;
@@ -1716,7 +1725,12 @@ export async function POST(request: Request) {
           data.tipoRelatorio === 'individual' ||
           data.dados?.tipoRelatorio === 'individual'
         );
-        const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id, tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio });
+        const { students, directColaboradores } = await getStudentTargetsForComunicados({
+          ...(data.dados || {}),
+          id: data.id,
+          destino: data.destino,
+          tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio
+        });
         console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
         const pushTasks: Array<() => Promise<any>> = [];
         
@@ -2411,6 +2425,78 @@ export async function PUT(request: Request) {
 
     const { data, error } = await supabase.from('comunicados').update(updateFields).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // Sincronizar cobranças anexadas em caso de edição ou publicação de rascunho
+    const cobrancasToSync: any[] = Array.isArray(dados?.cobrancas) && dados.cobrancas.length > 0
+      ? dados.cobrancas
+      : (dados?.cobranca && dados.cobranca.valor ? [dados.cobranca] : []);
+
+    if (cobrancasToSync.length > 0 && data.destino !== 'interno') {
+      try {
+        const { students } = await getStudentTargetsForComunicados({
+          ...(data.dados || {}),
+          id: data.id,
+          destino: data.destino
+        });
+
+        const { data: existingCobs } = await supabaseServer
+          .from('agenda_cobrancas')
+          .select('*, agenda_cobrancas_destinatarios(*)')
+          .eq('comunicado_id', String(data.id))
+          .order('created_at', { ascending: true });
+
+        if (!existingCobs || existingCobs.length === 0) {
+          for (const cob of cobrancasToSync) {
+            if (!cob || !cob.valor) continue;
+            const cobrancaObj = {
+              comunicado_id: String(data.id),
+              titulo: cob.titulo || 'Cobrança',
+              valor: typeof cob.valor === 'string' ? parseFloat(cob.valor.replace(',', '.')) : Number(cob.valor),
+              vencimento: cob.vencimento
+            };
+            const { data: cobrancaSalva } = await supabaseServer
+              .from('agenda_cobrancas')
+              .insert(cobrancaObj)
+              .select()
+              .single();
+
+            if (cobrancaSalva && students.length > 0) {
+              const destinatariosToInsert = students.map((s: any) => ({
+                cobranca_id: cobrancaSalva.id,
+                destinatario_id: s.aluno_id,
+                destinatario_nome: s.aluno_nome,
+                status: 'PENDING'
+              }));
+              await supabaseServer.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert);
+            }
+          }
+        } else if (students.length > 0) {
+          for (const existingCob of existingCobs) {
+            const existingDestSet = new Set(
+              (existingCob.agenda_cobrancas_destinatarios || []).map((d: any) =>
+                String(d.destinatario_id || '').replace(/^(a_|_ALU)/, '').trim()
+              )
+            );
+            const missingStudents = students.filter((s: any) => {
+              const cleanId = String(s.aluno_id || '').replace(/^(a_|_ALU)/, '').trim();
+              return cleanId && !existingDestSet.has(cleanId);
+            });
+            if (missingStudents.length > 0) {
+              await supabaseServer.from('agenda_cobrancas_destinatarios').insert(
+                missingStudents.map((s: any) => ({
+                  cobranca_id: existingCob.id,
+                  destinatario_id: s.aluno_id,
+                  destinatario_nome: s.aluno_nome,
+                  status: 'PENDING'
+                }))
+              );
+            }
+          }
+        }
+      } catch (syncCobErr) {
+        console.error('Erro ao sincronizar cobranças na edição do comunicado:', syncCobErr);
+      }
+    }
 
     return NextResponse.json(normalizeRow(data))
   } catch (e: any) {

@@ -140,7 +140,7 @@ export default function ADAdminDashboard() {
         }).then(r => (r.ok ? r.json() : [])),
         supabase
           .from('agenda_cobrancas_destinatarios')
-          .select('id, aluno_id, aluno_nome, status, valor_pago, agenda_cobrancas(id, titulo, valor, data_vencimento, status)')
+          .select('*, agenda_cobrancas(*)')
           .order('created_at', { ascending: false })
           .limit(500)
       ])
@@ -407,10 +407,14 @@ export default function ADAdminDashboard() {
       if (st === 'PAID' || st === 'PAGO' || st === 'RECEIVED' || st === 'CONFIRMED') {
         recebidoApp += valor
       } else {
-        const venc = cob.data_vencimento ? new Date(`${cob.data_vencimento}T12:00:00`) : null
-        if (venc && venc < hoje) {
+        const rawVenc = cob.vencimento || cob.data_vencimento
+        const venc = rawVenc
+          ? new Date(String(rawVenc).includes('T') ? rawVenc : `${rawVenc}T23:59:59`)
+          : null
+        if (venc && !isNaN(venc.getTime()) && venc < new Date()) {
           vencidoApp += valor
-          if (row.aluno_id) alunosVencidosSet.add(String(row.aluno_id))
+          const targetId = row.destinatario_id || row.aluno_id
+          if (targetId) alunosVencidosSet.add(String(targetId))
         } else {
           abertoApp += valor
         }

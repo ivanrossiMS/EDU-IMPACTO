@@ -119,6 +119,8 @@ export interface Titulo {
   status: 'pago' | 'pendente' | 'atrasado'; metodo: string | null; parcela: string
   eventoId?: string
   eventoDescricao?: string
+  centroCusto?: string
+  centroCustoId?: string
   // ── Campos bancários (preenchidos pela API /api/boletos/emitir) ──
   nossoNumero?: string
   nossoNumeroDV?: number
@@ -169,6 +171,8 @@ export interface ContaPagar {
   vencimento: string; status: 'pago' | 'pendente'; fornecedor: string
   numeroDocumento?: string
   planoContasId?: string
+  centroCusto?: string
+  centroCustoId?: string
   codigo?: string // Adicionado para consistência visual nas contas a pagar
   
   usaRateio?: boolean
@@ -800,6 +804,154 @@ export interface ConfigPlanoContas {
   createdAt: string
 }
 
+export interface ConfigCentroCusto {
+  id: string
+  codigo: string                 // ex: 'CC001', 'CC002'
+  sigla: string                  // ex: 'INF', 'EF1', 'ADM'
+  nome: string                   // identificador / nome principal (usado em c.centroCusto)
+  descricao: string              // descrição completa de exibição
+  tipo: 'pedagogico' | 'administrativo' | 'operacional' | 'comercial' | 'projetos'
+  natureza: 'ambos' | 'despesa' | 'receita' // aplicabilidade: Contas a Pagar, Receber ou Ambos
+  cor: string                    // cor hex (ex: '#ec4899')
+  responsavel?: string           // gestor ou coordenador responsável
+  orcamentoMensal?: number       // teto/meta de orçamento mensal opcional (R$)
+  pesoRateioPadrao?: number      // % sugerido no rateio pedagógico automático
+  unidadeId?: string             // '' = Todas as unidades
+  situacao: 'ativo' | 'inativo'
+  createdAt: string
+}
+
+export const CENTROS_CUSTO_DEFAULT: ConfigCentroCusto[] = [
+  {
+    id: 'CC-INF',
+    codigo: 'CC001',
+    sigla: 'INF',
+    nome: 'Educação Infantil',
+    descricao: 'Educação Infantil (Berçário ao Pré)',
+    tipo: 'pedagogico',
+    natureza: 'ambos',
+    cor: '#ec4899',
+    responsavel: 'Coordenação Educação Infantil',
+    orcamentoMensal: 65000,
+    pesoRateioPadrao: 20,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-EF1',
+    codigo: 'CC002',
+    sigla: 'EF1',
+    nome: 'Fundamental Anos Iniciais',
+    descricao: 'Fundamental Anos Iniciais (1º ao 5º)',
+    tipo: 'pedagogico',
+    natureza: 'ambos',
+    cor: '#38bdf8',
+    responsavel: 'Coordenação Fundamental I',
+    orcamentoMensal: 95000,
+    pesoRateioPadrao: 30,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-EF2',
+    codigo: 'CC003',
+    sigla: 'EF2',
+    nome: 'Fundamental Anos Finais',
+    descricao: 'Fundamental Anos Finais (6º ao 9º)',
+    tipo: 'pedagogico',
+    natureza: 'ambos',
+    cor: '#6366f1',
+    responsavel: 'Coordenação Fundamental II',
+    orcamentoMensal: 110000,
+    pesoRateioPadrao: 30,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-EM',
+    codigo: 'CC004',
+    sigla: 'EM',
+    nome: 'Ensino Médio & Pré-Vestibular',
+    descricao: 'Ensino Médio & Pré-Vestibular',
+    tipo: 'pedagogico',
+    natureza: 'ambos',
+    cor: '#a855f7',
+    responsavel: 'Coordenação Ensino Médio',
+    orcamentoMensal: 90000,
+    pesoRateioPadrao: 20,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-INT',
+    codigo: 'CC005',
+    sigla: 'INT',
+    nome: 'Período Integral / Bilíngue',
+    descricao: 'Período Integral & Programa Bilíngue',
+    tipo: 'pedagogico',
+    natureza: 'ambos',
+    cor: '#10b981',
+    responsavel: 'Coordenação Bilíngue & Integral',
+    orcamentoMensal: 45000,
+    pesoRateioPadrao: 0,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-ADM',
+    codigo: 'CC006',
+    sigla: 'ADM',
+    nome: 'Administração & Diretoria Geral',
+    descricao: 'Administração, Secretaria & Diretoria',
+    tipo: 'administrativo',
+    natureza: 'ambos',
+    cor: '#f59e0b',
+    responsavel: 'Diretoria Administrativa & Financeira',
+    orcamentoMensal: 70000,
+    pesoRateioPadrao: 0,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-INFRA',
+    codigo: 'CC007',
+    sigla: 'INFRA',
+    nome: 'Infraestrutura, Limpeza & Segurança',
+    descricao: 'Infraestrutura, Campus & Facilities',
+    tipo: 'operacional',
+    natureza: 'despesa',
+    cor: '#06b6d4',
+    responsavel: 'Gerência de Operações & Patrimônio',
+    orcamentoMensal: 55000,
+    pesoRateioPadrao: 0,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'CC-MKT',
+    codigo: 'CC008',
+    sigla: 'MKT',
+    nome: 'Marketing & Captação (Matrículas)',
+    descricao: 'Comercial, Marketing & Captação',
+    tipo: 'comercial',
+    natureza: 'despesa',
+    cor: '#f43f5e',
+    responsavel: 'Coordenação Comercial & Matrículas',
+    orcamentoMensal: 25000,
+    pesoRateioPadrao: 0,
+    unidadeId: '',
+    situacao: 'ativo',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+]
+
 
 // ─── MOVIMENTAÇÕES FINANCEIRAS ─────────────────────────────────────
 export type TipoMovimentacao = 'receita' | 'despesa'
@@ -1034,6 +1186,7 @@ const KEYS = {
   cfgGruposDesconto: 'edu-cfg-grupos-desconto',
   cfgPadroesPagamento: 'edu-cfg-padroes-pagamento',
   cfgPlanoContas: 'edu-cfg-plano-contas',
+  cfgCentrosCusto: 'edu-cfg-centros-custo',
   cfgTiposDocumento: 'edu-cfg-tipos-documento',
   cfgConvenios: 'edu-cfg-convenios',
 
@@ -1238,6 +1391,7 @@ interface DataState {
   cfgGruposDesconto: ConfigGrupoDesconto[]; setCfgGruposDesconto: Setter<ConfigGrupoDesconto[]>
   cfgPadroesPagamento: ConfigPadraoPagamento[]; setCfgPadroesPagamento: Setter<ConfigPadraoPagamento[]>
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
+  cfgCentrosCusto: ConfigCentroCusto[]; setCfgCentrosCusto: Setter<ConfigCentroCusto[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
   cfgCalendarioLetivo: ConfigCalendarioLetivo[]; setCfgCalendarioLetivo: Setter<ConfigCalendarioLetivo[]>
@@ -1260,10 +1414,10 @@ export const DEFAULT_PERFIS: Perfil[] = [
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','agenda-digital','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/administrativo/declaracao-irpf','agenda-digital','/agenda-digital','provas-online','/provas-online','credimpacto','/credimpacto'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade','agenda-digital','/agenda-digital','simulados','/simulados','provas-online','/provas-online','credimpacto','/credimpacto'] },
-  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/administrativo/declaracao-irpf','relatorios','/bi','/relatorios/mec','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
+  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/eventos','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/padrao-pagamento','/administrativo/declaracao-irpf','relatorios','/bi','/relatorios/mec','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
   { id: 'P6', nome: 'Portaria & Segurança', cor: '#64748b', descricao: 'Controle de acesso e saída', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','portaria','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/anunciar','/saida-alunos/relatorios','/saida-alunos/configuracoes','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
-  { id: 'P7', nome: 'Administrador', cor: '#4b5563', descricao: 'Acesso administrativo completo', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
-  { id: 'P8', nome: 'TI', cor: '#1e3a8a', descricao: 'Suporte e gerenciamento de TI', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
+  { id: 'P7', nome: 'Administrador', cor: '#4b5563', descricao: 'Acesso administrativo completo', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
+  { id: 'P8', nome: 'TI', cor: '#1e3a8a', descricao: 'Suporte e gerenciamento de TI', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
 ]
 
 const NOOP = () => {}
@@ -1301,6 +1455,7 @@ export interface FinanceiroDataState {
   cfgGruposDesconto: ConfigGrupoDesconto[]; setCfgGruposDesconto: Setter<ConfigGrupoDesconto[]>
   cfgPadroesPagamento: ConfigPadraoPagamento[]; setCfgPadroesPagamento: Setter<ConfigPadraoPagamento[]>
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
+  cfgCentrosCusto: ConfigCentroCusto[]; setCfgCentrosCusto: Setter<ConfigCentroCusto[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
@@ -1363,6 +1518,7 @@ const DataContext = createContext<DataState>({
   cfgGruposDesconto: [], setCfgGruposDesconto: NOOP,
   cfgPadroesPagamento: [], setCfgPadroesPagamento: NOOP,
   cfgPlanoContas: [], setCfgPlanoContas: NOOP,
+  cfgCentrosCusto: [], setCfgCentrosCusto: NOOP,
   cfgTiposDocumento: [], setCfgTiposDocumento: NOOP,
   cfgConvenios: [], setCfgConvenios: NOOP,
   cfgCalendarioLetivo: [], setCfgCalendarioLetivo: NOOP,
@@ -1468,6 +1624,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgGruposDesconto, setData: setCfgGruposDesconto } = useConfigDb<ConfigGrupoDesconto>('cfgGruposDesconto')
   const { data: cfgPadroesPagamento, setData: setCfgPadroesPagamento } = useConfigDb<ConfigPadraoPagamento>('cfgPadroesPagamento')
   const { data: cfgPlanoContas, setData: setCfgPlanoContas } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
+  const { data: cfgCentrosCusto, setData: setCfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto', CENTROS_CUSTO_DEFAULT)
   const { data: cfgTiposDocumento, setData: setCfgTiposDocumento } = useConfigDb<ConfigTipoDocumento>('cfgTiposDocumento')
   const CONVENIO_ITAU_SEED: ConfigConvenio[] = [{
     id: 'CONV-ITAU-6492-34022',
@@ -1678,6 +1835,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgGruposDesconto: createTrackedSetter('Configurações', 'Grupos de Desconto', setCfgGruposDesconto),
     setCfgPadroesPagamento: createTrackedSetter('Configurações', 'Padrões de Pagamento', setCfgPadroesPagamento),
     setCfgPlanoContas: createTrackedSetter('Configurações', 'Plano de Contas', setCfgPlanoContas),
+    setCfgCentrosCusto: createTrackedSetter('Configurações', 'Centros de Custo', setCfgCentrosCusto),
     setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
     setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
     setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
@@ -1729,10 +1887,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     cfgGruposDesconto, setCfgGruposDesconto: trackedSetters.setCfgGruposDesconto,
     cfgPadroesPagamento, setCfgPadroesPagamento: trackedSetters.setCfgPadroesPagamento,
     cfgPlanoContas, setCfgPlanoContas: trackedSetters.setCfgPlanoContas,
+    cfgCentrosCusto, setCfgCentrosCusto: trackedSetters.setCfgCentrosCusto,
     cfgTiposDocumento, setCfgTiposDocumento: trackedSetters.setCfgTiposDocumento,
     cfgConvenios, setCfgConvenios: trackedSetters.setCfgConvenios,
     movimentacoesManuais, setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais,
-  }), [mantenedores, cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto, cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios, movimentacoesManuais, trackedSetters]);
+  }), [mantenedores, cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto, cfgPadroesPagamento, cfgPlanoContas, cfgCentrosCusto, cfgTiposDocumento, cfgConvenios, movimentacoesManuais, trackedSetters]);
 
   const operacionalValue = useMemo(() => ({
     eventosAgenda, setEventosAgenda: trackedSetters.setEventosAgenda, setLocalEventosAgenda,

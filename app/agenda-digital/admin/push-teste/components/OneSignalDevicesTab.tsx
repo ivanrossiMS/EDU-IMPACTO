@@ -499,12 +499,14 @@ export function OneSignalDevicesTab({
           border-radius: 14px;
           border: 1px solid hsl(var(--border-subtle));
           background: hsl(var(--bg-surface));
+          scrollbar-gutter: stable;
+          overscroll-behavior: contain;
         }
         .os-fleet-table {
           width: 100%;
           border-collapse: separate;
           border-spacing: 0;
-          font-size: 12.5px;
+          font-size: 12px;
           --label-device: "Aparelho";
           --label-status: "Status Push";
           --label-usage: "Último Uso";
@@ -518,9 +520,9 @@ export function OneSignalDevicesTab({
           background: hsl(var(--bg-main));
         }
         .os-fleet-table thead th {
-          padding: 11px 14px;
+          padding: 10px 12px;
           text-align: left;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 800;
           text-transform: uppercase;
           letter-spacing: 0.4px;
@@ -536,10 +538,11 @@ export function OneSignalDevicesTab({
         }
         .os-fleet-table tbody th,
         .os-fleet-table tbody td {
-          padding: 12px 14px;
+          padding: 9px 11px;
           border-bottom: 1px solid hsl(var(--border-subtle));
           vertical-align: middle;
           text-align: left;
+          white-space: normal;
         }
         .os-fleet-table tbody th {
           position: sticky;
@@ -547,6 +550,53 @@ export function OneSignalDevicesTab({
           z-index: 1;
           background: hsl(var(--bg-surface));
           font-weight: 600;
+          max-width: 280px;
+        }
+        .os-filter-pills {
+          display: flex;
+          flex-wrap: wrap;
+          flex-wrap: balance;
+          align-items: center;
+          gap: 6px;
+        }
+        .os-compact-select {
+          width: auto !important;
+          min-width: 148px;
+          height: 36px;
+          padding: 0 30px 0 11px !important;
+          border-radius: 10px !important;
+          border: 1px solid hsl(var(--border-subtle)) !important;
+          background-color: hsl(var(--bg-main)) !important;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+          background-repeat: no-repeat !important;
+          background-position: right 9px center !important;
+          background-size: 13px !important;
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          color: hsl(var(--text-main)) !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          cursor: pointer;
+          white-space: nowrap;
+          flex: 0 0 auto;
+        }
+        .os-compact-select:hover {
+          border-color: rgba(99, 102, 241, 0.4) !important;
+        }
+        @media (max-width: 768px) {
+          .os-toolbar-selects {
+            width: 100% !important;
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .os-toolbar-selects .os-compact-select {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .os-toolbar-selects .os-compact-select:last-child {
+            grid-column: 1 / -1;
+          }
         }
         @container (width < 760px) {
           .os-fleet-table,
@@ -614,27 +664,27 @@ export function OneSignalDevicesTab({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-          gap: 14,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 12,
         }}
       >
         {/* Card 1: Aparelhos Ativos */}
         <div
           style={{
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, hsl(var(--bg-surface)) 100%)',
-            border: '1.5px solid rgba(16, 185, 129, 0.35)',
-            borderRadius: 16,
-            padding: '16px 18px',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, hsl(var(--bg-surface)) 100%)',
+            border: '1px solid rgba(16, 185, 129, 0.32)',
+            borderRadius: 14,
+            padding: '13px 16px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            gap: 8,
+            gap: 6,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 11,
                 fontWeight: 800,
                 color: '#059669',
                 textTransform: 'uppercase',
@@ -645,24 +695,24 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: 'rgba(16, 185, 129, 0.18)',
+                width: 26,
+                height: 26,
+                borderRadius: 7,
+                background: 'rgba(16, 185, 129, 0.16)',
                 color: '#059669',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <CheckCircle2 size={16} />
+              <CheckCircle2 size={14} />
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span
               style={{
-                fontSize: 30,
+                fontSize: 26,
                 fontWeight: 900,
                 fontFamily: 'Outfit, sans-serif',
                 color: '#059669',
@@ -671,18 +721,18 @@ export function OneSignalDevicesTab({
             >
               {isLoading ? '...' : summary.activeDevices}
             </span>
-            <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+            <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
               de {summary.totalDevices} registrados
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
             <span
               style={{
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: 700,
-                padding: '2px 7px',
-                borderRadius: 6,
+                padding: '2px 6px',
+                borderRadius: 5,
                 background: 'hsl(var(--bg-main))',
                 border: '1px solid hsl(var(--border-subtle))',
               }}
@@ -691,10 +741,10 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: 700,
-                padding: '2px 7px',
-                borderRadius: 6,
+                padding: '2px 6px',
+                borderRadius: 5,
                 background: 'hsl(var(--bg-main))',
                 border: '1px solid hsl(var(--border-subtle))',
               }}
@@ -703,10 +753,10 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                fontSize: 10.5,
+                fontSize: 10,
                 fontWeight: 700,
-                padding: '2px 7px',
-                borderRadius: 6,
+                padding: '2px 6px',
+                borderRadius: 5,
                 background: 'hsl(var(--bg-main))',
                 border: '1px solid hsl(var(--border-subtle))',
               }}
@@ -721,18 +771,18 @@ export function OneSignalDevicesTab({
           style={{
             background: 'hsl(var(--bg-surface))',
             border: '1px solid hsl(var(--border-subtle))',
-            borderRadius: 16,
-            padding: '16px 18px',
+            borderRadius: 14,
+            padding: '13px 16px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            gap: 8,
+            gap: 6,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 11,
                 fontWeight: 800,
                 color: 'hsl(var(--text-muted))',
                 textTransform: 'uppercase',
@@ -743,9 +793,9 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
+                width: 26,
+                height: 26,
+                borderRadius: 7,
                 background: 'rgba(99, 102, 241, 0.12)',
                 color: '#6366f1',
                 display: 'flex',
@@ -753,14 +803,14 @@ export function OneSignalDevicesTab({
                 justifyContent: 'center',
               }}
             >
-              <Users size={16} />
+              <Users size={14} />
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span
               style={{
-                fontSize: 30,
+                fontSize: 26,
                 fontWeight: 900,
                 fontFamily: 'Outfit, sans-serif',
                 color: 'hsl(var(--text-main))',
@@ -769,12 +819,12 @@ export function OneSignalDevicesTab({
             >
               {isLoading ? '...' : summary.uniqueUsersWithActivePush}
             </span>
-            <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+            <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
               contas únicas
             </span>
           </div>
 
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span>👨‍👩‍👧 {summary.byCategory.activeFamily} famílias ativas</span>
             <span>•</span>
             <span>👔 {summary.byCategory.activeStaff} equipe</span>
@@ -785,19 +835,19 @@ export function OneSignalDevicesTab({
         <div
           style={{
             background: 'hsl(var(--bg-surface))',
-            border: '1px solid rgba(245, 158, 11, 0.35)',
-            borderRadius: 16,
-            padding: '16px 18px',
+            border: '1px solid rgba(245, 158, 11, 0.32)',
+            borderRadius: 14,
+            padding: '13px 16px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            gap: 8,
+            gap: 6,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 11,
                 fontWeight: 800,
                 color: '#d97706',
                 textTransform: 'uppercase',
@@ -808,9 +858,9 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
+                width: 26,
+                height: 26,
+                borderRadius: 7,
                 background: 'rgba(245, 158, 11, 0.14)',
                 color: '#d97706',
                 display: 'flex',
@@ -818,14 +868,14 @@ export function OneSignalDevicesTab({
                 justifyContent: 'center',
               }}
             >
-              <UserX size={16} />
+              <UserX size={14} />
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span
               style={{
-                fontSize: 30,
+                fontSize: 26,
                 fontWeight: 900,
                 fontFamily: 'Outfit, sans-serif',
                 color: '#d97706',
@@ -834,12 +884,12 @@ export function OneSignalDevicesTab({
             >
               {isLoading ? '...' : summary.byCategory.inactiveStudents + summary.byCategory.unused60dNonStaff}
             </span>
-            <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+            <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
               aparelhos ociosos
             </span>
           </div>
 
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span>🎓 {summary.byCategory.inactiveStudents} alunos inativos</span>
             <span>•</span>
             <span>⏳ {summary.byCategory.unused60dNonStaff} sem uso (+60d)</span>
@@ -849,20 +899,20 @@ export function OneSignalDevicesTab({
         {/* Card 4: Liberação Rápida de Acessos */}
         <div
           style={{
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%)',
-            border: '1.5px solid rgba(99, 102, 241, 0.4)',
-            borderRadius: 16,
-            padding: '16px 18px',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.06) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.38)',
+            borderRadius: 14,
+            padding: '13px 16px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            gap: 8,
+            gap: 6,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span
               style={{
-                fontSize: 11.5,
+                fontSize: 11,
                 fontWeight: 800,
                 color: '#4f46e5',
                 textTransform: 'uppercase',
@@ -873,9 +923,9 @@ export function OneSignalDevicesTab({
             </span>
             <span
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
+                width: 26,
+                height: 26,
+                borderRadius: 7,
                 background: '#4f46e5',
                 color: 'white',
                 display: 'flex',
@@ -883,14 +933,14 @@ export function OneSignalDevicesTab({
                 justifyContent: 'center',
               }}
             >
-              <Zap size={15} />
+              <Zap size={14} />
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span
               style={{
-                fontSize: 30,
+                fontSize: 26,
                 fontWeight: 900,
                 fontFamily: 'Outfit, sans-serif',
                 color: '#4f46e5',
@@ -899,7 +949,7 @@ export function OneSignalDevicesTab({
             >
               {isLoading ? '...' : summary.byCategory.recommendedCleanupTotal}
             </span>
-            <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
+            <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
               ({summary.byCategory.recommendedActiveSlotsFreed} ativos no push)
             </span>
           </div>
@@ -910,22 +960,22 @@ export function OneSignalDevicesTab({
             disabled={isLoading || summary.byCategory.recommendedCleanupTotal === 0 || isExecutingBatch}
             style={{
               width: '100%',
-              padding: '7px 12px',
-              borderRadius: 9,
+              padding: '6px 10px',
+              borderRadius: 8,
               border: 'none',
               background: summary.byCategory.recommendedCleanupTotal > 0 ? '#4f46e5' : 'rgba(100, 116, 139, 0.2)',
               color: summary.byCategory.recommendedCleanupTotal > 0 ? 'white' : 'hsl(var(--text-muted))',
-              fontSize: 11.5,
+              fontSize: 11,
               fontWeight: 800,
               cursor: summary.byCategory.recommendedCleanupTotal > 0 ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 6,
+              gap: 5,
               transition: 'all 0.15s',
             }}
           >
-            <Sparkles size={13} />
+            <Sparkles size={12} />
             {summary.byCategory.recommendedCleanupTotal > 0
               ? `Liberar ${summary.byCategory.recommendedCleanupTotal} Acessos (1-Clique)`
               : 'OneSignal 100% Otimizado'}
@@ -933,16 +983,16 @@ export function OneSignalDevicesTab({
         </div>
       </div>
 
-      {/* ── 2. CENTRAL DE LIMPEZA INTELIGENTE POR CATEGORIA ── */}
+      {/* ── 2. CENTRAL DE LIMPEZA INTELIGENTE POR CATEGORIA (MAIS LEVE E COMPACTA) ── */}
       <div
         style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 18,
-          padding: '18px 20px',
+          borderRadius: 16,
+          padding: '14px 18px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 12,
         }}
       >
         <div
@@ -951,17 +1001,17 @@ export function OneSignalDevicesTab({
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 10,
+            gap: 8,
           }}
         >
-          <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={17} color="#6366f1" />
-              Assistente de Higienização & Liberação de Acessos no OneSignal
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Sparkles size={15} color="#6366f1" />
+              Assistente de Higienização OneSignal
             </h3>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
-              Exclua quem não usa mais o aplicativo, alunos inativos, sessões duplicadas e registros órfãos sem afetar quem está ativo.
-            </p>
+            <span style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))' }}>
+              Remova registros ociosos, inativos ou duplicados preservando famílias e colaboradores ativos.
+            </span>
           </div>
 
           <button
@@ -972,17 +1022,17 @@ export function OneSignalDevicesTab({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              padding: '7px 13px',
-              borderRadius: 10,
+              padding: '5px 11px',
+              borderRadius: 8,
               border: '1px solid hsl(var(--border-subtle))',
               background: 'hsl(var(--bg-main))',
               color: 'hsl(var(--text-main))',
-              fontSize: 12,
+              fontSize: 11.5,
               fontWeight: 700,
               cursor: isLoading ? 'not-allowed' : 'pointer',
             }}
           >
-            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
             Recarregar Diagnóstico
           </button>
         </div>
@@ -990,44 +1040,43 @@ export function OneSignalDevicesTab({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: 12,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gap: 10,
           }}
         >
           {/* Ação 1: Alunos Inativos */}
           <div
             style={{
-              borderRadius: 14,
-              border: '1px solid rgba(239, 68, 68, 0.28)',
-              background: 'rgba(239, 68, 68, 0.04)',
-              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              background: 'rgba(239, 68, 68, 0.03)',
+              padding: '11px 13px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: 10,
+              gap: 8,
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <GraduationCap size={15} /> Alunos Inativos / Egressos
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <GraduationCap size={14} /> Alunos Inativos
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 10,
-                    background: 'rgba(239, 68, 68, 0.15)',
+                    padding: '1px 7px',
+                    borderRadius: 8,
+                    background: 'rgba(239, 68, 68, 0.14)',
                     color: '#dc2626',
                   }}
                 >
-                  {summary.byCategory.inactiveStudents} aparelhos
+                  {summary.byCategory.inactiveStudents}
                 </span>
               </div>
-              <p style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', margin: '6px 0 0', lineHeight: 1.4 }}>
-                Remove aparelhos de alunos transferidos/inativos e de seus responsáveis.{' '}
-                <strong style={{ color: 'hsl(var(--text-main))' }}>Preserva pais com outro filho ativo e colaboradores.</strong>
+              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '4px 0 0', lineHeight: 1.35 }}>
+                Transferidos/egressos. <strong>Preserva irmãos ativos e equipe.</strong>
               </p>
             </div>
 
@@ -1037,8 +1086,8 @@ export function OneSignalDevicesTab({
                 onClick={() => setActiveFilterTab('inactive_students')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: '1px solid hsl(var(--border-subtle))',
                   background: 'hsl(var(--bg-surface))',
                   color: 'hsl(var(--text-main))',
@@ -1047,7 +1096,7 @@ export function OneSignalDevicesTab({
                   cursor: 'pointer',
                 }}
               >
-                Filtrar ({summary.byCategory.inactiveStudents})
+                Ver ({summary.byCategory.inactiveStudents})
               </button>
               <button
                 type="button"
@@ -1055,10 +1104,10 @@ export function OneSignalDevicesTab({
                 disabled={summary.byCategory.inactiveStudents === 0 || isExecutingBatch}
                 style={{
                   flex: 1.3,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: 'none',
-                  background: summary.byCategory.inactiveStudents > 0 ? '#dc2626' : 'rgba(100,116,139,0.2)',
+                  background: summary.byCategory.inactiveStudents > 0 ? '#dc2626' : 'rgba(100,116,139,0.18)',
                   color: summary.byCategory.inactiveStudents > 0 ? 'white' : 'hsl(var(--text-muted))',
                   fontSize: 11,
                   fontWeight: 800,
@@ -1069,7 +1118,7 @@ export function OneSignalDevicesTab({
                   gap: 4,
                 }}
               >
-                <Trash2 size={12} /> Limpar Inativos
+                <Trash2 size={11} /> Limpar
               </button>
             </div>
           </div>
@@ -1077,81 +1126,83 @@ export function OneSignalDevicesTab({
           {/* Ação 2: Quem Não Usa (Inativos por Tempo) */}
           <div
             style={{
-              borderRadius: 14,
-              border: '1px solid rgba(245, 158, 11, 0.35)',
-              background: 'rgba(245, 158, 11, 0.05)',
-              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(245, 158, 11, 0.32)',
+              background: 'rgba(245, 158, 11, 0.04)',
+              padding: '11px 13px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: 10,
+              gap: 8,
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#d97706', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Clock size={15} /> Quem Não Usa o App
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#d97706', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Clock size={14} /> Sem Uso no App
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 10,
-                    background: 'rgba(245, 158, 11, 0.18)',
+                    padding: '1px 7px',
+                    borderRadius: 8,
+                    background: 'rgba(245, 158, 11, 0.16)',
                     color: '#b45309',
                   }}
                 >
-                  {unusedMatchingDevices.length} aparelhos
+                  {unusedMatchingDevices.length}
                 </span>
               </div>
 
-              {/* Seletor de dias sem acesso */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
-                {[30, 60, 90, 180].map(days => {
-                  const active = unusedThresholdDays === days
-                  return (
-                    <button
-                      key={days}
-                      type="button"
-                      onClick={() => setUnusedThresholdDays(days)}
-                      style={{
-                        flex: 1,
-                        padding: '3px 4px',
-                        borderRadius: 6,
-                        fontSize: 10.5,
-                        fontWeight: active ? 800 : 600,
-                        border: active ? '1px solid #d97706' : '1px solid hsl(var(--border-subtle))',
-                        background: active ? '#d97706' : 'hsl(var(--bg-surface))',
-                        color: active ? 'white' : 'hsl(var(--text-muted))',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      +{days}d
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Seletor de dias + checkbox na mesma linha compacta */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {[30, 60, 90, 180].map(days => {
+                    const active = unusedThresholdDays === days
+                    return (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setUnusedThresholdDays(days)}
+                        style={{
+                          padding: '2px 5px',
+                          borderRadius: 5,
+                          fontSize: 10,
+                          fontWeight: active ? 800 : 600,
+                          border: active ? '1px solid #d97706' : '1px solid hsl(var(--border-subtle))',
+                          background: active ? '#d97706' : 'hsl(var(--bg-surface))',
+                          color: active ? 'white' : 'hsl(var(--text-muted))',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        +{days}d
+                      </button>
+                    )
+                  })}
+                </div>
 
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  fontSize: 11,
-                  color: 'hsl(var(--text-muted))',
-                  marginTop: 6,
-                  cursor: 'pointer',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={protectStaffOnUnused}
-                  onChange={e => setProtectStaffOnUnused(e.target.checked)}
-                  style={{ accentColor: '#d97706' }}
-                />
-                <span>Preservar equipe/colaboradores</span>
-              </label>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    color: 'hsl(var(--text-muted))',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title="Preservar aparelhos da equipe e colaboradores"
+                >
+                  <input
+                    type="checkbox"
+                    checked={protectStaffOnUnused}
+                    onChange={e => setProtectStaffOnUnused(e.target.checked)}
+                    style={{ accentColor: '#d97706', width: 13, height: 13 }}
+                  />
+                  <span>Preservar equipe</span>
+                </label>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1160,8 +1211,8 @@ export function OneSignalDevicesTab({
                 onClick={() => setActiveFilterTab('unused')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: '1px solid hsl(var(--border-subtle))',
                   background: 'hsl(var(--bg-surface))',
                   color: 'hsl(var(--text-main))',
@@ -1170,7 +1221,7 @@ export function OneSignalDevicesTab({
                   cursor: 'pointer',
                 }}
               >
-                Filtrar ({unusedMatchingDevices.length})
+                Ver ({unusedMatchingDevices.length})
               </button>
               <button
                 type="button"
@@ -1178,10 +1229,10 @@ export function OneSignalDevicesTab({
                 disabled={unusedMatchingDevices.length === 0 || isExecutingBatch}
                 style={{
                   flex: 1.3,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: 'none',
-                  background: unusedMatchingDevices.length > 0 ? '#d97706' : 'rgba(100,116,139,0.2)',
+                  background: unusedMatchingDevices.length > 0 ? '#d97706' : 'rgba(100,116,139,0.18)',
                   color: unusedMatchingDevices.length > 0 ? 'white' : 'hsl(var(--text-muted))',
                   fontSize: 11,
                   fontWeight: 800,
@@ -1192,7 +1243,7 @@ export function OneSignalDevicesTab({
                   gap: 4,
                 }}
               >
-                <Trash2 size={12} /> Excluir +{unusedThresholdDays}d
+                <Trash2 size={11} /> Excluir +{unusedThresholdDays}d
               </button>
             </div>
           </div>
@@ -1200,36 +1251,36 @@ export function OneSignalDevicesTab({
           {/* Ação 3: Sessões Duplicadas / Antigas */}
           <div
             style={{
-              borderRadius: 14,
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              background: 'rgba(59, 130, 246, 0.04)',
-              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(59, 130, 246, 0.28)',
+              background: 'rgba(59, 130, 246, 0.03)',
+              padding: '11px 13px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: 10,
+              gap: 8,
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Layers size={15} /> Duplicados / Antigos
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Layers size={14} /> Duplicados / Antigos
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 10,
-                    background: 'rgba(59, 130, 246, 0.15)',
+                    padding: '1px 7px',
+                    borderRadius: 8,
+                    background: 'rgba(59, 130, 246, 0.14)',
                     color: '#2563eb',
                   }}
                 >
-                  {summary.byCategory.duplicatesStale} aparelhos
+                  {summary.byCategory.duplicatesStale}
                 </span>
               </div>
-              <p style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', margin: '6px 0 0', lineHeight: 1.4 }}>
-                Mantém o celular principal mais recente de cada usuário e limpa registros antigos de reinstalações.
+              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '4px 0 0', lineHeight: 1.35 }}>
+                Mantém o celular mais recente e limpa sessões extras.
               </p>
             </div>
 
@@ -1239,8 +1290,8 @@ export function OneSignalDevicesTab({
                 onClick={() => setActiveFilterTab('duplicates')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: '1px solid hsl(var(--border-subtle))',
                   background: 'hsl(var(--bg-surface))',
                   color: 'hsl(var(--text-main))',
@@ -1249,7 +1300,7 @@ export function OneSignalDevicesTab({
                   cursor: 'pointer',
                 }}
               >
-                Filtrar ({summary.byCategory.duplicatesStale})
+                Ver ({summary.byCategory.duplicatesStale})
               </button>
               <button
                 type="button"
@@ -1257,10 +1308,10 @@ export function OneSignalDevicesTab({
                 disabled={summary.byCategory.duplicatesStale === 0 || isExecutingBatch}
                 style={{
                   flex: 1.3,
-                  padding: '6px 10px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: 'none',
-                  background: summary.byCategory.duplicatesStale > 0 ? '#2563eb' : 'rgba(100,116,139,0.2)',
+                  background: summary.byCategory.duplicatesStale > 0 ? '#2563eb' : 'rgba(100,116,139,0.18)',
                   color: summary.byCategory.duplicatesStale > 0 ? 'white' : 'hsl(var(--text-muted))',
                   fontSize: 11,
                   fontWeight: 800,
@@ -1271,7 +1322,7 @@ export function OneSignalDevicesTab({
                   gap: 4,
                 }}
               >
-                <Trash2 size={12} /> Limpar Duplicados
+                <Trash2 size={11} /> Limpar
               </button>
             </div>
           </div>
@@ -1279,36 +1330,36 @@ export function OneSignalDevicesTab({
           {/* Ação 4: Órfãos e Desativados */}
           <div
             style={{
-              borderRadius: 14,
-              border: '1px solid rgba(139, 92, 246, 0.3)',
-              background: 'rgba(139, 92, 246, 0.04)',
-              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(139, 92, 246, 0.28)',
+              background: 'rgba(139, 92, 246, 0.03)',
+              padding: '11px 13px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              gap: 10,
+              gap: 8,
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Ghost size={15} /> Órfãos & Sem Permissão
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Ghost size={14} /> Órfãos & Sem Push
                 </span>
                 <span
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 10,
-                    background: 'rgba(139, 92, 246, 0.15)',
+                    padding: '1px 7px',
+                    borderRadius: 8,
+                    background: 'rgba(139, 92, 246, 0.14)',
                     color: '#7c3aed',
                   }}
                 >
-                  {summary.byCategory.orphans + summary.byCategory.disabledPush} registros
+                  {summary.byCategory.orphans + summary.byCategory.disabledPush}
                 </span>
               </div>
-              <p style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', margin: '6px 0 0', lineHeight: 1.4 }}>
-                {summary.byCategory.orphans} anônimos/órfãos e {summary.byCategory.disabledPush} com push bloqueado ou app desinstalado.
+              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '4px 0 0', lineHeight: 1.35 }}>
+                {summary.byCategory.orphans} anônimos/órfãos e {summary.byCategory.disabledPush} sem permissão push.
               </p>
             </div>
 
@@ -1319,8 +1370,8 @@ export function OneSignalDevicesTab({
                 disabled={summary.byCategory.orphans === 0 || isExecutingBatch}
                 style={{
                   flex: 1,
-                  padding: '6px 8px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: '1px solid rgba(139, 92, 246, 0.35)',
                   background: 'hsl(var(--bg-surface))',
                   color: summary.byCategory.orphans > 0 ? '#7c3aed' : 'hsl(var(--text-muted))',
@@ -1337,10 +1388,10 @@ export function OneSignalDevicesTab({
                 disabled={summary.byCategory.disabledPush === 0 || isExecutingBatch}
                 style={{
                   flex: 1.2,
-                  padding: '6px 8px',
-                  borderRadius: 8,
+                  padding: '5px 8px',
+                  borderRadius: 7,
                   border: 'none',
-                  background: summary.byCategory.disabledPush > 0 ? '#7c3aed' : 'rgba(100,116,139,0.2)',
+                  background: summary.byCategory.disabledPush > 0 ? '#7c3aed' : 'rgba(100,116,139,0.18)',
                   color: summary.byCategory.disabledPush > 0 ? 'white' : 'hsl(var(--text-muted))',
                   fontSize: 11,
                   fontWeight: 800,
@@ -1354,29 +1405,152 @@ export function OneSignalDevicesTab({
         </div>
       </div>
 
-      {/* ── 3. FILTROS, BUSCA E SELEÇÃO EM LOTE DA TABELA ── */}
+      {/* ── 3. BARRA UNIFICADA DE PESQUISA, FILTROS E TABELA ── */}
       <div
         style={{
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 18,
-          padding: '16px 20px',
+          borderRadius: 16,
+          padding: '14px 18px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 12,
         }}
       >
-        {/* Abas rápidas de filtro */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {/* Linha 1: Busca + Seletores Compactos Lado a Lado */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <div
+            style={{
+              flex: '1 1 260px',
+              minWidth: 220,
+              height: 36,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '0 12px',
+              borderRadius: 10,
+              border: '1px solid hsl(var(--border-subtle))',
+              background: 'hsl(var(--bg-main))',
+            }}
+          >
+            <Search size={14} color="hsl(var(--text-muted))" style={{ flexShrink: 0 }} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome, aluno, turma, colaborador, modelo (iPhone, Samsung) ou Sub ID..."
+              style={{
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                width: '100%',
+                padding: 0,
+                fontSize: 12,
+                color: 'hsl(var(--text-main))',
+              }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'hsl(var(--text-muted))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 2,
+                }}
+                title="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="os-toolbar-selects" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <select
+              value={platformFilter}
+              onChange={e => setPlatformFilter(e.target.value as any)}
+              className="os-compact-select"
+              title="Filtrar por plataforma do dispositivo"
+            >
+              <option value="all">Todas Plataformas</option>
+              <option value="iOS">🍏 Apple iOS</option>
+              <option value="Android">🤖 Android</option>
+              <option value="Web">💻 Web (PC/Mac)</option>
+            </select>
+
+            <select
+              value={ownerTypeFilter}
+              onChange={e => setOwnerTypeFilter(e.target.value as any)}
+              className="os-compact-select"
+              title="Filtrar por perfil de usuário"
+            >
+              <option value="all">Todos os Perfis</option>
+              <option value="responsavel">👨‍👩‍👧 Responsáveis</option>
+              <option value="aluno">🎓 Alunos</option>
+              <option value="colaborador">👔 Equipe / Colab.</option>
+              <option value="orfao">👻 Órfãos / Anônimos</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as any)}
+              className="os-compact-select"
+              title="Ordenação da lista"
+            >
+              <option value="priority">Ordenar: Prioridade Limpeza</option>
+              <option value="inactive_desc">Ordenar: Mais Tempo Sem Uso</option>
+              <option value="active_recent">Ordenar: Uso Mais Recente</option>
+              <option value="sessions_desc">Ordenar: Mais Sessões</option>
+              <option value="name_asc">Ordenar: Nome (A-Z)</option>
+            </select>
+
+            {(activeFilterTab !== 'all' || platformFilter !== 'all' || ownerTypeFilter !== 'all' || searchTerm) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveFilterTab('all')
+                  setPlatformFilter('all')
+                  setOwnerTypeFilter('all')
+                  setSearchTerm('')
+                }}
+                style={{
+                  height: 36,
+                  padding: '0 10px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#ef4444',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  whiteSpace: 'nowrap',
+                }}
+                title="Resetar todos os filtros"
+              >
+                <X size={13} /> Limpar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Linha 2: Abas rápidas de filtro (Pills compactas em linha única) */}
+        <div className="os-filter-pills">
           {[
-            { id: 'all', label: 'Todos Registrados', count: summary.totalDevices, color: '#6366f1' },
-            { id: 'recommended', label: '⚡ Sugeridos p/ Limpar', count: summary.byCategory.recommendedCleanupTotal, color: '#4f46e5' },
-            { id: 'active', label: '🟢 Ativos (Recebendo Push)', count: summary.activeDevices, color: '#059669' },
-            { id: 'inactive_students', label: '🎓 Alunos Inativos', count: summary.byCategory.inactiveStudents, color: '#dc2626' },
+            { id: 'all', label: 'Todos', count: summary.totalDevices, color: '#6366f1' },
+            { id: 'recommended', label: '⚡ Sugeridos', count: summary.byCategory.recommendedCleanupTotal, color: '#4f46e5' },
+            { id: 'active', label: '🟢 Ativos (Push ON)', count: summary.activeDevices, color: '#059669' },
+            { id: 'inactive_students', label: '🎓 Inativos', count: summary.byCategory.inactiveStudents, color: '#dc2626' },
             { id: 'unused', label: `⏳ Sem Uso (+${unusedThresholdDays}d)`, count: unusedMatchingDevices.length, color: '#d97706' },
             { id: 'duplicates', label: '📱 Duplicados', count: summary.byCategory.duplicatesStale, color: '#2563eb' },
-            { id: 'orphans', label: '👻 Órfãos / Anônimos', count: summary.byCategory.orphans, color: '#7c3aed' },
-            { id: 'disabled', label: '🔴 Push Desativado', count: summary.byCategory.disabledPush, color: '#ef4444' },
+            { id: 'orphans', label: '👻 Órfãos', count: summary.byCategory.orphans, color: '#7c3aed' },
+            { id: 'disabled', label: '🔴 Sem Push', count: summary.byCategory.disabledPush, color: '#ef4444' },
           ].map(tab => {
             const active = activeFilterTab === tab.id
             return (
@@ -1387,26 +1561,27 @@ export function OneSignalDevicesTab({
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  borderRadius: 10,
-                  fontSize: 12,
+                  gap: 5,
+                  padding: '5px 10px',
+                  borderRadius: 9,
+                  fontSize: 11.5,
                   fontWeight: active ? 800 : 600,
                   border: active ? `1.5px solid ${tab.color}` : '1px solid hsl(var(--border-subtle))',
                   background: active ? `${tab.color}15` : 'hsl(var(--bg-main))',
                   color: active ? tab.color : 'hsl(var(--text-muted))',
                   cursor: 'pointer',
                   transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <span>{tab.label}</span>
                 <span
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: 800,
-                    padding: '1px 6px',
-                    borderRadius: 8,
-                    background: active ? tab.color : 'rgba(100,116,139,0.15)',
+                    padding: '1px 5px',
+                    borderRadius: 6,
+                    background: active ? tab.color : 'rgba(100,116,139,0.14)',
                     color: active ? 'white' : 'inherit',
                   }}
                 >
@@ -1415,109 +1590,6 @@ export function OneSignalDevicesTab({
               </button>
             )
           })}
-        </div>
-
-        {/* Barra de Pesquisa e Seletores */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div
-            style={{
-              flex: '1 1 280px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-            }}
-          >
-            <Search size={15} color="hsl(var(--text-muted))" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Buscar por responsável, aluno, turma, colaborador, modelo (iPhone, Samsung) ou Sub ID..."
-              style={{
-                border: 'none',
-                background: 'transparent',
-                outline: 'none',
-                width: '100%',
-                fontSize: 12.5,
-                color: 'hsl(var(--text-main))',
-              }}
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          <select
-            value={platformFilter}
-            onChange={e => setPlatformFilter(e.target.value as any)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-              color: 'hsl(var(--text-main))',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">Todas Plataformas</option>
-            <option value="iOS">🍏 Apple iOS (iPhone/iPad)</option>
-            <option value="Android">🤖 Google Android</option>
-            <option value="Web">💻 Navegador Web (PC/Mac)</option>
-          </select>
-
-          <select
-            value={ownerTypeFilter}
-            onChange={e => setOwnerTypeFilter(e.target.value as any)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-              color: 'hsl(var(--text-main))',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <option value="all">Todos os Perfis</option>
-            <option value="responsavel">👨‍👩‍👧 Responsáveis / Família</option>
-            <option value="aluno">🎓 Alunos (Acesso Direto)</option>
-            <option value="colaborador">👔 Colaboradores / Equipe</option>
-            <option value="orfao">👻 Órfãos / Sem Conta</option>
-          </select>
-
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as any)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-main))',
-              color: 'hsl(var(--text-main))',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <option value="priority">Ordenar: Prioridade de Limpeza</option>
-            <option value="inactive_desc">Ordenar: Mais Tempo Sem Usar</option>
-            <option value="active_recent">Ordenar: Uso Mais Recente</option>
-            <option value="sessions_desc">Ordenar: Mais Sessões no App</option>
-            <option value="name_asc">Ordenar: Nome (A-Z)</option>
-          </select>
         </div>
 
         {/* Barra de Seleção Múltipla (aparece quando há itens selecionados) */}

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import {
   X, Plus, Trash2, Building2, DollarSign,
   AlertTriangle, Split, Repeat, Percent
@@ -13,6 +14,7 @@ import {
   type ContaPagarPrioridade,
   type ContaPagarTipoCusto,
   type ContaPagarStatus,
+  type CentroCustoEscolarOption,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   FORMAS_PAGAMENTO_CONTAS_PAGAR,
@@ -27,6 +29,7 @@ interface ContaPagarFormModalProps {
   fornecedores: FornecedorEscolar[]
   planoContas: any[]
   eventosFinanceiros: any[]
+  centrosCusto?: CentroCustoEscolarOption[]
   onSave: (records: Partial<ContaPagarRecord>[]) => Promise<void>
   onQuickCreateFornecedor: (forn: Partial<FornecedorEscolar>) => Promise<FornecedorEscolar | null>
 }
@@ -64,9 +67,14 @@ export function ContaPagarFormModal({
   fornecedores,
   planoContas,
   eventosFinanceiros,
+  centrosCusto,
   onSave,
   onQuickCreateFornecedor,
 }: ContaPagarFormModalProps) {
+  const listaCentrosCusto = useMemo(
+    () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
+    [centrosCusto]
+  )
   const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const mesAtualStr = hojeStr.slice(0, 7)
 
@@ -321,18 +329,31 @@ export function ContaPagarFormModal({
 
   const handleAplicarRateioPedagogicoPadrao = () => {
     setUsarRateio(true)
-    setRateioList([
-      { centroCusto: 'Educação Infantil', percentual: 20, valor: 0 },
-      { centroCusto: 'Fundamental Anos Iniciais', percentual: 30, valor: 0 },
-      { centroCusto: 'Fundamental Anos Finais', percentual: 30, valor: 0 },
-      { centroCusto: 'Ensino Médio & Pré-Vestibular', percentual: 20, valor: 0 },
-    ])
+    const configuradosComPeso = listaCentrosCusto.filter(
+      (c) => typeof c.pesoRateioPadrao === 'number' && c.pesoRateioPadrao > 0
+    )
+    if (configuradosComPeso.length > 0) {
+      setRateioList(
+        configuradosComPeso.map((c) => ({
+          centroCusto: c.id,
+          percentual: Number(c.pesoRateioPadrao || 0),
+          valor: 0,
+        }))
+      )
+    } else {
+      setRateioList([
+        { centroCusto: 'Educação Infantil', percentual: 20, valor: 0 },
+        { centroCusto: 'Fundamental Anos Iniciais', percentual: 30, valor: 0 },
+        { centroCusto: 'Fundamental Anos Finais', percentual: 30, valor: 0 },
+        { centroCusto: 'Ensino Médio & Pré-Vestibular', percentual: 20, valor: 0 },
+      ])
+    }
   }
 
   const handleAddRateioRow = () => {
     const restante = Math.max(0, 100 - somaPercentualRateio)
     const used = new Set(rateioList.map((r) => r.centroCusto))
-    const nextCentro = CENTROS_CUSTO_ESCOLARES.find((c) => !used.has(c.id))?.id || CENTROS_CUSTO_ESCOLARES[0].id
+    const nextCentro = listaCentrosCusto.find((c) => !used.has(c.id))?.id || listaCentrosCusto[0]?.id || CENTROS_CUSTO_ESCOLARES[0].id
     setRateioList((prev) => [...prev, { centroCusto: nextCentro, percentual: restante, valor: 0 }])
   }
 
@@ -876,20 +897,36 @@ export function ContaPagarFormModal({
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="cp-centro-custo" style={labelStyle}>
-                      Centro de Custo / Segmento Principal
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                      <label htmlFor="cp-centro-custo" style={{ ...labelStyle, marginBottom: 0 }}>
+                        Centro de Custo / Segmento Principal
+                      </label>
+                      <Link
+                        href="/configuracoes/financeiro/centro-custo"
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          color: '#0284c7',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        + Gerenciar
+                      </Link>
+                    </div>
                     <select
                       id="cp-centro-custo"
                       value={centroCusto}
                       onChange={(e) => setCentroCusto(e.target.value)}
                       style={inputStyle}
                     >
-                      {CENTROS_CUSTO_ESCOLARES.map((cc) => (
+                      {listaCentrosCusto.map((cc) => (
                         <option key={cc.id} value={cc.id}>
                           {cc.label} ({cc.sigla})
                         </option>
                       ))}
+                      {centroCusto && !listaCentrosCusto.some((cc) => cc.id === centroCusto) && (
+                        <option value={centroCusto}>{centroCusto}</option>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -1454,11 +1491,14 @@ export function ContaPagarFormModal({
                               }}
                               style={inputStyle}
                             >
-                              {CENTROS_CUSTO_ESCOLARES.map((cc) => (
+                              {listaCentrosCusto.map((cc) => (
                                 <option key={cc.id} value={cc.id}>
                                   {cc.label} ({cc.sigla})
                                 </option>
                               ))}
+                              {item.centroCusto && !listaCentrosCusto.some((cc) => cc.id === item.centroCusto) && (
+                                <option value={item.centroCusto}>{item.centroCusto}</option>
+                              )}
                             </select>
                           </div>
                           <div>

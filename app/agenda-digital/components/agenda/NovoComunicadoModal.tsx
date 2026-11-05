@@ -917,7 +917,7 @@ export default function NovoComunicadoModal({
           <div>
             <div className="ad-nc-section-title">
               <div className="ad-nc-section-number">3</div>
-              Mensagem
+              Mensagem <span style={{ fontWeight: 500, color: '#94A3B8', fontSize: 12 }}>(opcional)</span>
             </div>
             
             <div className="ad-nc-card" style={{ padding: '12px 14px' }}>
