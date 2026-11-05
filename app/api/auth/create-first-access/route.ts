@@ -9,6 +9,11 @@ import {
 import { requireStaff, clearAuthGuardCache } from '@/lib/server/authGuard'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 import { enviarEmailCredenciaisPrimeiroAcesso } from '@/lib/server/emailService'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -221,13 +226,32 @@ export async function POST(request: Request) {
     else if (type === 'responsavel') {
       const { data: resp, error: dbErr } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, celular, auth_id')
+        .select('id, nome, email, celular, auth_id, proibido, dados')
         .eq('id', id)
         .maybeSingle()
 
       if (dbErr) throw dbErr
       if (!resp) {
         return NextResponse.json({ error: 'Responsável não encontrado.' }, { status: 404 })
+      }
+
+      if (isResponsavelAccessBlocked(resp)) {
+        return NextResponse.json(
+          { error: 'Não é possível gerar acesso para um responsável com acesso bloqueado/inativo.' },
+          { status: 403 }
+        )
+      }
+
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(resp.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      })
+
+      if (!hasActiveStudent) {
+        return NextResponse.json(
+          { error: 'Não é possível gerar acesso: este responsável não possui nenhum aluno ativo vinculado.' },
+          { status: 403 }
+        )
       }
 
       const storedEmail = (resp.email || '').trim().toLowerCase()
@@ -311,13 +335,20 @@ export async function POST(request: Request) {
     else if (type === 'aluno') {
       const { data: aluno, error: dbErr } = await supabaseAdmin
         .from('alunos')
-        .select('id, nome, email, matricula, dados')
+        .select('id, nome, email, matricula, status, dados')
         .eq('id', id)
         .maybeSingle()
 
       if (dbErr) throw dbErr
       if (!aluno) {
         return NextResponse.json({ error: 'Aluno não encontrado.' }, { status: 404 })
+      }
+
+      if (isStudentAccessBlocked(aluno)) {
+        return NextResponse.json(
+          { error: 'Não é possível gerar acesso para um aluno com matrícula ou acesso inativo.' },
+          { status: 403 }
+        )
       }
 
       const matricula = aluno.matricula || aluno.dados?.codigo || aluno.id

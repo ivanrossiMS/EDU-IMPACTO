@@ -436,7 +436,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
      userPerms.includes('/matriculas/valores') ||
      userPerms.includes('/matriculas/digital'))
 
-  if (matchedRoute && !userPerms.includes(matchedRoute) && !hasMatriculaInheritedAccess && !perfisFailedOrEmpty) {
+  const hasFinanceiroInheritedAccess =
+    (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar')) &&
+    (userPerms.includes('/financeiro/pagar') ||
+     userPerms.includes('financeiro') ||
+     userPerms.includes('/financeiro/receber') ||
+     userPerms.includes('/financeiro/dre') ||
+     userPerms.includes('/financeiro/renegociacao'))
+
+  if (matchedRoute && !userPerms.includes(matchedRoute) && !hasMatriculaInheritedAccess && !hasFinanceiroInheritedAccess && !perfisFailedOrEmpty) {
     if (!showDenied) {
       return (
         <div style={{

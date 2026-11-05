@@ -330,6 +330,24 @@ export async function resolveUserRole(req?: Request) {
 
   const metaCargo = String(user.user_metadata?.cargo || '')
   const fallbackCargo = metaCargo === 'Aluno' ? 'Aluno' : 'Responsável'
+
+  // Verifica de forma autoritativa se o aluno ou responsável possui vínculo ativo (não inativo/bloqueado)
+  const familyScope = await resolveFamilyScope(user)
+  if (familyScope.alunoIds.size === 0) {
+    return {
+      user,
+      dbUser: null,
+      isStaff: false,
+      isFamilyOrStudent: false,
+      perfil: 'Família',
+      cargo: fallbackCargo,
+      errorResponse: NextResponse.json(
+        { error: 'Acesso bloqueado: Matrícula inativa ou sem alunos ativos vinculados.' },
+        { status: 403 }
+      ),
+    }
+  }
+
   return {
     user,
     dbUser: null,
@@ -540,23 +558,30 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
 
   const promise = (async () => {
     const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
-    const alunoIds = new Set<string>()
+    const { isStudentAccessBlocked, isResponsavelAccessBlocked } = require('./studentStatusHelper')
+    const candidateAlunoIds = new Set<string>()
     const responsavelIds = new Set<string>()
 
     const metaAlunoId = String(user.user_metadata?.aluno_id || user.app_metadata?.aluno_id || '').trim()
     const metaRespId = String(user.user_metadata?.responsavel_id || user.app_metadata?.responsavel_id || '').trim()
     const metaMatricula = String(user.user_metadata?.matricula || user.app_metadata?.matricula || '').trim()
     const rawEmail = String(user.email || '').trim().toLowerCase()
-    const isVirtualStudentEmail = rawEmail.endsWith('@impactoedu.local')
+    const isVirtualStudentEmail =
+      rawEmail.endsWith('@impactoedu.local') || rawEmail.endsWith('@aluno.impacto.edu.br')
 
-    if (metaAlunoId) alunoIds.add(metaAlunoId.replace(/^(a_|_ALU)/, ''))
-    if (metaRespId) responsavelIds.add(metaRespId)
+    if (metaAlunoId) candidateAlunoIds.add(metaAlunoId.replace(/^(a_|_ALU)/, ''))
 
-    // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local
+    // Se for e-mail virtual de aluno: aluno.{matricula}@impactoedu.local ou {matricula}@aluno.impacto.edu.br
     let virtualMatricula = metaMatricula
-    if (!virtualMatricula && rawEmail.startsWith('aluno.') && isVirtualStudentEmail) {
-      virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
+    if (!virtualMatricula && isVirtualStudentEmail) {
+      if (rawEmail.startsWith('aluno.') && rawEmail.endsWith('@impactoedu.local')) {
+        virtualMatricula = rawEmail.slice('aluno.'.length, -'@impactoedu.local'.length).trim()
+      } else if (rawEmail.endsWith('@aluno.impacto.edu.br')) {
+        virtualMatricula = rawEmail.slice(0, -'@aluno.impacto.edu.br'.length).trim()
+      }
     }
+
+    const activeAlunoIds = new Set<string>()
 
     try {
       // 1. Preparar busca de responsaveis e alunos diretos + aluno_responsavel inicial (para metaRespId) em PARALELO
@@ -580,27 +605,28 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
         alunoOrParts.push(`email.ilike."${rawEmail.replace(/"/g, '')}"`)
       }
 
-      const initialRespIds = Array.from( new Set([String(user.id), metaRespId].filter(Boolean)) )
+      const initialRespIds = Array.from(new Set([String(user.id), metaRespId].filter(Boolean)))
 
       const [respRes, directAlunosRes, initialLinksRes] = await Promise.all([
         supabaseAdmin
           .from('responsaveis')
-          .select('id, email, dados')
+          .select('id, email, proibido, dados')
           .or(respOrParts.join(','))
           .limit(20),
         supabaseAdmin
           .from('alunos')
-          .select('id, email, matricula, dados')
+          .select('id, email, matricula, status, dados')
           .or(alunoOrParts.join(','))
           .limit(20),
         initialRespIds.length > 0
           ? supabaseAdmin
               .from('aluno_responsavel')
-              .select('aluno_id, responsavel_id')
+              .select('aluno_id, responsavel_id, resp_financeiro, resp_pedagogico, tipo')
               .in('responsavel_id', initialRespIds)
           : Promise.resolve({ data: [] })
       ])
 
+      const blockedRespIds = new Set<string>()
       const respRows = respRes.data
       if (Array.isArray(respRows)) {
         for (const r of respRows) {
@@ -608,20 +634,30 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
           if (!isVirtualStudentEmail && rEmail && rawEmail && rEmail !== rawEmail) {
             continue
           }
-          if (r?.id) responsavelIds.add(String(r.id))
+          if (isResponsavelAccessBlocked(r)) {
+            if (r?.id) blockedRespIds.add(String(r.id).trim())
+            continue
+          }
+          if (r?.id) responsavelIds.add(String(r.id).trim())
           const vincs = r?.dados?.alunosVinculados || r?.dados?.alunos_vinculados
           if (Array.isArray(vincs)) {
             vincs.forEach((aid: any) => {
               const cleanAid = String(typeof aid === 'object' ? aid?.id || aid?.aluno_id : aid || '').trim()
-              if (cleanAid) alunoIds.add(cleanAid)
+              if (cleanAid) candidateAlunoIds.add(cleanAid)
             })
           }
         }
       }
 
+      if (metaRespId && !blockedRespIds.has(metaRespId) && responsavelIds.size > 0) {
+        responsavelIds.add(metaRespId)
+      }
+
       if (Array.isArray(initialLinksRes.data)) {
         for (const l of initialLinksRes.data) {
-          if (l?.aluno_id) alunoIds.add(String(l.aluno_id).trim())
+          const rid = String(l?.responsavel_id || '').trim()
+          if (blockedRespIds.has(rid)) continue
+          if (l?.aluno_id) candidateAlunoIds.add(String(l.aluno_id).trim())
         }
       }
 
@@ -634,11 +670,12 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
           .in('responsavel_id', extraRespIds)
         if (Array.isArray(extraLinks)) {
           for (const l of extraLinks) {
-            if (l?.aluno_id) alunoIds.add(String(l.aluno_id).trim())
+            if (l?.aluno_id) candidateAlunoIds.add(String(l.aluno_id).trim())
           }
         }
       }
 
+      const knownStudentsMap = new Map<string, any>()
       const directAlunos = directAlunosRes.data
       if (Array.isArray(directAlunos)) {
         for (const a of directAlunos) {
@@ -646,8 +683,42 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
           if (!isVirtualStudentEmail && aEmail && rawEmail && aEmail !== rawEmail) {
             continue
           }
-          if (a?.id) alunoIds.add(String(a.id).trim())
+          if (a?.id) {
+            const sid = String(a.id).trim()
+            candidateAlunoIds.add(sid)
+            knownStudentsMap.set(sid, a)
+            if (a.matricula) knownStudentsMap.set(String(a.matricula).trim(), a)
+          }
         }
+      }
+
+      // 3. Validar status ATIVO de todos os candidateAlunoIds na tabela alunos
+      const missingLookupIds = Array.from(candidateAlunoIds).filter(id => !knownStudentsMap.has(id))
+      if (missingLookupIds.length > 0) {
+        const formatRef = (r: string) => (/[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r)
+        const formattedRefs = missingLookupIds.map(formatRef).join(',')
+        const { data: fetchedStudents } = await supabaseAdmin
+          .from('alunos')
+          .select('id, matricula, status, dados')
+          .or(`id.in.(${formattedRefs}),matricula.in.(${formattedRefs})`)
+        if (Array.isArray(fetchedStudents)) {
+          for (const s of fetchedStudents) {
+            if (s?.id) knownStudentsMap.set(String(s.id).trim(), s)
+            if (s?.matricula) knownStudentsMap.set(String(s.matricula).trim(), s)
+          }
+        }
+      }
+
+      for (const cid of candidateAlunoIds) {
+        const st = knownStudentsMap.get(cid)
+        if (st && !isStudentAccessBlocked(st)) {
+          activeAlunoIds.add(String(st.id).trim())
+        }
+      }
+
+      // Se não há nenhum aluno ativo vinculado, bloqueia também os responsavelIds
+      if (activeAlunoIds.size === 0) {
+        responsavelIds.clear()
       }
     } catch (err) {
       console.warn('[authGuard] Aviso ao resolver familyScope:', err)
@@ -657,12 +728,12 @@ export async function resolveFamilyScope(user: any): Promise<{ alunoIds: Set<str
       familyScopeCache.clear()
     }
     familyScopeCache.set(cacheKey, {
-      alunoIds: new Set(alunoIds),
+      alunoIds: new Set(activeAlunoIds),
       responsavelIds: new Set(responsavelIds),
       expiresAt: Date.now() + FAMILY_SCOPE_CACHE_TTL_MS,
     })
 
-    return { alunoIds, responsavelIds }
+    return { alunoIds: activeAlunoIds, responsavelIds }
   })().finally(() => {
     inflightFamilyScope.delete(cacheKey)
   })

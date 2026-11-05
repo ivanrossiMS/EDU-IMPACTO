@@ -207,8 +207,9 @@ export async function GET(request: Request) {
       const rPhoneDigits = rPhone.replace(/\D/g, '').slice(-8)
 
       const authUser = (authUsers || []).find((u: any) => {
-        if (resp.auth_id && String(u.id) === String(resp.auth_id)) return true
         const uEmail = String(u.email || u.user_metadata?.email || '').toLowerCase().trim()
+        if (rEmail && uEmail && uEmail !== rEmail) return false
+        if (resp.auth_id && String(u.id) === String(resp.auth_id)) return true
         const uMetaRespId = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
         const uCpf = String(u.user_metadata?.cpf || '').replace(/\D/g, '')
         const uPhoneDigits = String(u.phone || u.user_metadata?.telefone || u.user_metadata?.celular || '').replace(/\D/g, '').slice(-8)

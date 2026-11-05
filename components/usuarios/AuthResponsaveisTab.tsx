@@ -64,6 +64,7 @@ export function AuthResponsaveisTab() {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ativo' | 'inativo' | 'todos_com_inativos'>('ativo');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -71,9 +72,9 @@ export function AuthResponsaveisTab() {
   }, [search]);
 
   const { data: apiData, isLoading } = useApiQuery<any>(
-    ['responsaveis_auth_tab', String(page), String(limit), debouncedSearch],
+    ['responsaveis_auth_tab', String(page), String(limit), debouncedSearch, statusFilter],
     '/api/responsaveis',
-    { lightweight: true, page, limit, search: debouncedSearch }
+    { lightweight: true, page, limit, search: debouncedSearch, status: statusFilter }
   )
   const queryClient = useQueryClient()
 
@@ -156,12 +157,29 @@ export function AuthResponsaveisTab() {
     const authRecord = authUsers.find(u => u.user_type === 'guardian' && (u.reference_key === refKey || (g.cpf && u.reference_key === g.cpf) || (g.email && u.reference_key === g.email)))
     const searchEmail = (g.email || (authRecord?.email) || '').trim().toLowerCase()
     const usersList: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
-    const realUser = usersList.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    const realUser = usersList.find(
+      u => u.id === `resp-${g.id}` || (searchEmail && u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    )
 
     const rawRespEmail = (g.email || '').trim()
     const rawRespPhone = (g.celular || g.telefone || '').trim()
     const effectiveEmail = rawRespEmail || (authRecord?.email || '').trim()
     const effectivePhone = rawRespPhone || (authRecord?.celular || '').trim()
+
+    const isGuardianInactive =
+      g.status === 'inativo' ||
+      g.acessoInativo === true ||
+      g.dados?.acesso_inativo === true ||
+      g.dados?.acesso_bloqueado === true ||
+      String(g.dados?.auth_status || '').trim().toUpperCase() === 'INATIVO' ||
+      (g.alunosAtivosCount !== undefined && g.alunosAtivosCount === 0 && (g.todosAlunosVinculados?.length || g.alunosVinculados?.length || 0) > 0)
+
+    const resolvedStatus = isGuardianInactive ? 'INATIVO' : 'ATIVO'
+
+    const resolvedLastLogin =
+      (g.ultimoAcesso && g.ultimoAcesso !== 'Nunca acessou' ? g.ultimoAcesso : null) ||
+      (realUser?.ultimoAcesso && realUser.ultimoAcesso !== 'Nunca acessou' ? realUser.ultimoAcesso : null) ||
+      null
 
     const defaultAuth = {
       id: `virtual-${refKey}`,
@@ -170,20 +188,19 @@ export function AuthResponsaveisTab() {
       login: effectiveEmail || effectivePhone || '',
       email: effectiveEmail,
       celular: effectivePhone,
-      status: 'ATIVO',
+      status: resolvedStatus,
       profile_code: 'FAMILIA',
-      last_login: realUser ? realUser.ultimoAcesso : null
+      last_login: resolvedLastLogin
     }
 
     const auth = authRecord ? {
       ...authRecord,
       login: effectiveEmail || effectivePhone || authRecord.login || '',
       email: effectiveEmail,
-      celular: effectivePhone
+      celular: effectivePhone,
+      status: isGuardianInactive ? 'INATIVO' : (g.dados?.auth_status || authRecord.status || 'ATIVO'),
+      last_login: resolvedLastLogin || authRecord.last_login || null,
     } : defaultAuth
-    if (realUser && realUser.ultimoAcesso) {
-      auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
-    }
 
     // Map backward compatibility for UI
     g.key = refKey
@@ -305,11 +322,38 @@ export function AuthResponsaveisTab() {
     setResetModal(null)
   }
 
-  const toggleStatus = (guardian: any) => {
+  const toggleStatus = async (guardian: any) => {
     const auth = guardian.auth || handleCreateAuth(guardian)
-    const newStatus = auth.status === 'ATIVO' ? 'INATIVO' : 'ATIVO'
-    setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, status: newStatus } : u))
-    logSystemAction('Config (Acessos)', 'Edição', `Alteração de status de acesso (Responsável: ${guardian.nome}) -> ${newStatus}`, { registroId: auth.id, detalhesDepois: { status: newStatus } })
+    const currentStatus = auth.status === 'INATIVO' ? 'INATIVO' : 'ATIVO'
+    const targetActive = currentStatus !== 'ATIVO'
+    const newStatus = targetActive ? 'ATIVO' : 'INATIVO'
+    const respId = guardian.id || guardian.responsavel_id
+
+    try {
+      const res = await fetch('/api/auth/toggle-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'responsavel', id: respId, active: targetActive }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível alterar o status de acesso.')
+        return
+      }
+      setAuthUsers(prev => prev.map(u => (u.id === auth.id || u.reference_key === guardian.key) ? { ...u, status: newStatus } : u))
+      setLocalResps(prev => prev.map(r => (r.id === respId || r.responsavel_id === respId) ? {
+        ...r,
+        status: targetActive ? 'ativo' : 'inativo',
+        acessoInativo: !targetActive,
+        dados: { ...(r.dados || {}), acesso_inativo: !targetActive, auth_status: newStatus }
+      } : r))
+      queryClient.invalidateQueries({ queryKey: ['responsaveis_auth_tab'] })
+      queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      logSystemAction('Config (Acessos)', 'Edição', `Alteração de status de acesso (Responsável: ${guardian.nome}) -> ${newStatus}`, { registroId: respId || auth.id, detalhesDepois: { status: newStatus } })
+    } catch {
+      alert('Erro ao comunicar com o servidor para alterar o acesso.')
+    }
   }
 
   const badgeStatus = (status: string) => {
@@ -335,6 +379,15 @@ export function AuthResponsaveisTab() {
             <option value={20} style={{ color: '#0f172a', background: '#ffffff' }}>20 por pág.</option>
             <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
             <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value as any); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 700 }}
+          >
+            <option value="ativo">Status: Ativos (Com Alunos Ativos)</option>
+            <option value="inativo">🚫 Inativos (Alunos Inativos / Bloqueados)</option>
+            <option value="todos_com_inativos">📋 Todos (Com Inativos)</option>
           </select>
           <select
             value={inviteFilter}
@@ -607,16 +660,26 @@ export function AuthResponsaveisTab() {
               <button className="btn btn-ghost btn-icon" onClick={() => setLinksModal(null)}>×</button>
             </div>
             <div style={{ padding: 20, display: 'grid', gap: 12 }}>
-              {linksModal.alunos.map((a: any) => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8 }}>
-                  <div className="avatar" style={{ width: 28, height: 28, background: '#6366f120', color: '#6366f1', fontSize: 10, borderRadius: 6 }}>{getInitials(a.nome)}</div>
-                  <div style={{ flex: 1 }}>
-                     <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
-                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {getTurmaNome(a.turma) || '-'}</div>
+              {(linksModal.todosAlunosVinculados || linksModal.alunos || []).map((a: any) => {
+                const isAluInativo = a.inativo || String(a.status || '').toLowerCase() === 'inativo'
+                return (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8 }}>
+                    <div className="avatar" style={{ width: 28, height: 28, background: isAluInativo ? '#fee2e2' : '#6366f120', color: isAluInativo ? '#b91c1c' : '#6366f1', fontSize: 10, borderRadius: 6 }}>{getInitials(a.nome)}</div>
+                    <div style={{ flex: 1 }}>
+                       <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                         {a.nome}
+                         {isAluInativo && (
+                           <span style={{ padding: '1px 6px', fontSize: 10, fontWeight: 700, borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
+                             Inativo
+                           </span>
+                         )}
+                       </div>
+                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {getTurmaNome(a.turma) || '-'}</div>
+                    </div>
+                    <div><code style={{ fontSize: 10, padding: '2px 6px', background: 'hsl(var(--bg-overlay))', borderRadius: 4 }}>{(a as any).codigo || (a as any).matricula || String(a.id).substring(0,8)}</code></div>
                   </div>
-                  <div><code style={{ fontSize: 10, padding: '2px 6px', background: 'hsl(var(--bg-overlay))', borderRadius: 4 }}>{(a as any).codigo || (a as any).matricula || a.id.substring(0,8)}</code></div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </motion.div>
         

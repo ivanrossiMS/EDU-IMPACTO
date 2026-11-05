@@ -2,6 +2,7 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { resolveCollaboratorUsers } from '@/lib/server/collaboratorLookup'
 import { checkIsAdmin, sortTurmasByName } from '@/lib/chatPermissions'
 import { getAlunoVinculosComPeriodo } from '@/lib/studentTurmaUtils'
+import { isStudentAccessBlocked } from '@/lib/server/studentStatusHelper'
 
 export interface LinkedStudentTurmaGrupo {
   id: string
@@ -260,13 +261,29 @@ export async function resolveFamilyScope(
     }
   }
 
-  // 5. Buscar dados dos alunos vinculados
+  // 5. Buscar dados dos alunos vinculados (excluindo inativos para acesso de família/aluno)
   const { data: alunosRows } = await supabase
     .from('alunos')
     .select('id, nome, turma, status, foto, serie, dados')
     .in('id', Array.from(linkedAlunoIds))
 
-  const alunos = alunosRows || []
+  const isStaffMirroring = isAdmin && Boolean(espelharAluno || espelharRespId || alunoIdParam)
+  const alunos = (alunosRows || []).filter((a: any) => isStaffMirroring || !isStudentAccessBlocked(a))
+
+  if (alunos.length === 0) {
+    return {
+      isFamilyOrStudent: true,
+      isAdmin: false,
+      students: [],
+      allStudentIds: new Set(),
+      allTurmaIds: new Set(),
+      allGroupIds: new Set(),
+      allColabIds: new Set(),
+      historicalGroupIds: new Map(),
+      equipeEscolarGroups: [],
+      candidateUserIds
+    }
+  }
 
   // Coletar todos os possíveis IDs de turma (da coluna turma, historicoTurmas e dos grupos da agenda)
   const candidateTurmaIds = new Set<string>()

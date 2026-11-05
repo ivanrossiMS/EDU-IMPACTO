@@ -14,6 +14,8 @@ export async function GET() {
     const hoje = new Date()
     const hojeStr = hoje.toISOString().split('T')[0]
 
+    const seteDiasStr = new Date(hoje.getTime() + 7 * 86400000).toISOString().split('T')[0]
+
     // Todas as queries críticas em paralelo
     const [
       resFrequencia,
@@ -22,17 +24,19 @@ export async function GET() {
       resContasPagarProx,
       resContasPagarVencidas,
       resOcorrencias,
+      resCfgContasPagar,
     ] = await Promise.all([
       supabase.from('alunos').select('id, nome, frequencia').lt('frequencia', 60).eq('status', 'matriculado').limit(20),
       supabase.from('titulos').select('id, valor').eq('status', 'atrasado'),
       supabase.from('alunos').select('id', { count: 'exact', head: true }).eq('risco_evasao', 'alto'),
       supabase.from('contas_pagar').select('id, valor, vencimento').neq('status', 'pago')
         .gte('vencimento', hojeStr)
-        .lte('vencimento', new Date(hoje.getTime() + 7 * 86400000).toISOString().split('T')[0]),
+        .lte('vencimento', seteDiasStr),
       supabase.from('contas_pagar').select('id, valor, vencimento').neq('status', 'pago')
         .lt('vencimento', hojeStr),
       supabase.from('ocorrencias').select('id', { count: 'exact', head: true })
         .eq('ciencia_responsavel', false),
+      supabase.from('configuracoes').select('valor').eq('chave', 'fin_contas_pagar_v1').maybeSingle(),
     ])
 
     const alertas: {
@@ -84,8 +88,13 @@ export async function GET() {
       })
     }
 
+    // Contas a pagar (mescla tabela + configuracoes fin_contas_pagar_v1)
+    const cfgContasList: any[] = Array.isArray(resCfgContasPagar?.data?.valor) ? resCfgContasPagar.data.valor : []
+    const cfgProx = cfgContasList.filter((c: any) => c && c.status !== 'pago' && c.status !== 'cancelado' && c.vencimento >= hojeStr && c.vencimento <= seteDiasStr)
+    const cfgVenc = cfgContasList.filter((c: any) => c && c.status !== 'pago' && c.status !== 'cancelado' && c.vencimento < hojeStr)
+
     // Contas a pagar nos próximos 7 dias
-    const proxVenc = resContasPagarProx.data ?? []
+    const proxVenc = (resContasPagarProx.data && resContasPagarProx.data.length > 0) ? resContasPagarProx.data : cfgProx
     if (proxVenc.length > 0) {
       const val = proxVenc.reduce((s: number, c: any) => s + (Number(c.valor) || 0), 0)
       alertas.push({
@@ -99,7 +108,7 @@ export async function GET() {
     }
 
     // Contas vencidas
-    const vencidas = resContasPagarVencidas.data ?? []
+    const vencidas = (resContasPagarVencidas.data && resContasPagarVencidas.data.length > 0) ? resContasPagarVencidas.data : cfgVenc
     if (vencidas.length > 0) {
       const val = vencidas.reduce((s: number, c: any) => s + (Number(c.valor) || 0), 0)
       alertas.push({

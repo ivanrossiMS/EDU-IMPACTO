@@ -83,6 +83,7 @@ export default function ResponsaveisPage() {
   const { logSystemAction } = useData()
   
   const [search, setSearch] = useState('')
+  const [statusFiltro, setStatusFiltro] = useState<'ativo' | 'inativo' | 'todos_com_inativos'>('ativo')
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [itensPorPagina, setItensPorPagina] = useState(10)
 
@@ -154,9 +155,9 @@ export default function ResponsaveisPage() {
 
   // Query para buscar responsáveis (Cache via React Query)
   const { data: apiResponse, isLoading: loadingList, isFetching } = useApiQuery<{ data: any[], total: number }>(
-    ['responsaveis', String(paginaAtual), String(itensPorPagina), search],
+    ['responsaveis', String(paginaAtual), String(itensPorPagina), search, statusFiltro],
     '/api/responsaveis',
-    { page: paginaAtual, limit: itensPorPagina, search: search }
+    { page: paginaAtual, limit: itensPorPagina, search: search, status: statusFiltro }
   )
 
   const responsaveis = apiResponse?.data || []
@@ -461,9 +462,19 @@ export default function ResponsaveisPage() {
           />
         </div>
         <div className="responsaveis-toolbar-actions" style={{ display: 'flex', gap: 8 }}>
-          <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
-            <Filter size={16} /> Filtros
-          </button>
+          <select
+            className="form-input"
+            value={statusFiltro}
+            onChange={e => {
+              setStatusFiltro(e.target.value as any)
+              setPaginaAtual(1)
+            }}
+            style={{ background: '#fff', width: 'auto', minWidth: 210, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          >
+            <option value="ativo">Responsáveis Ativos</option>
+            <option value="inativo">Inativos (Alunos Inativos)</option>
+            <option value="todos_com_inativos">Todos (Com Inativos)</option>
+          </select>
           <button onClick={handleExportCSV} className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
             <Download size={16} /> Exportar
           </button>
@@ -500,7 +511,14 @@ export default function ResponsaveisPage() {
                   <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{resp.codigo || resp.id?.substring(0, 8)}</td>
                   <td style={{ padding: '14px 16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{resp.nome}</span>
+                      <span style={{ fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {resp.nome}
+                        {resp.status === 'inativo' && (
+                          <span style={{ padding: '2px 7px', background: '#fee2e2', color: '#b91c1c', borderRadius: 10, fontSize: 10, fontWeight: 800 }}>
+                            Inativo
+                          </span>
+                        )}
+                      </span>
                       {(resp.cpf || resp.dados?.cpf) && (
                         <span style={{ fontSize: 11, color: '#64748b' }}>CPF: {formatCpfMask(resp.cpf || resp.dados?.cpf)}</span>
                       )}
@@ -511,7 +529,8 @@ export default function ResponsaveisPage() {
                       {resp.alunosVinculados && resp.alunosVinculados.length > 0 ? (
                         resp.alunosVinculados.map((aluno: any) => (
                           <span key={aluno.id} style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Users size={12} style={{ color: '#3b82f6' }} /> {aluno.nome || `ID: ${aluno.id}`}
+                            <Users size={12} style={{ color: aluno.inativo ? '#ef4444' : '#3b82f6' }} /> {aluno.nome || `ID: ${aluno.id}`}
+                            {aluno.inativo && <span style={{ marginLeft: 4, padding: '1px 6px', background: '#fee2e2', color: '#b91c1c', borderRadius: '10px', fontSize: 10, fontWeight: 700 }}>Inativo</span>}
                             {aluno.parentesco && <span style={{ marginLeft: 4, padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '12px', fontSize: 10, fontWeight: 700, textTransform: 'capitalize' }}>{aluno.parentesco}</span>}
                           </span>
                         ))

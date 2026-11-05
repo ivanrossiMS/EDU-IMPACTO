@@ -84,6 +84,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { label: 'CONTAS A RECEBER', href: '/financeiro/receber', icon: <CreditCard size={16} /> },
+      { label: 'CONTAS A PAGAR', href: '/financeiro/pagar', icon: <TrendingDown size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'RENEGOCIAÇÃO', href: '/financeiro/renegociacao', icon: <Handshake size={16} /> },
       { label: 'DRE', href: '/financeiro/dre', icon: <BarChart3 size={16} />, badge: 'IA', badgeColor: 'purple' },
     ],

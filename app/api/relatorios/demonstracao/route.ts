@@ -200,10 +200,21 @@ export async function GET(request: Request) {
     }
 
     // ── 3. Contas a Pagar ─────────────────────────────────────────────────────
-    const { data: pagar } = await supabase.from('contas_pagar').select('*')
-      .gte('vencimento', dataInicio).lte('vencimento', dataFim)
+    const [{ data: pagar }, { data: cfgPagarRow }] = await Promise.all([
+      supabase.from('contas_pagar').select('*').gte('vencimento', dataInicio).lte('vencimento', dataFim),
+      supabase.from('configuracoes').select('valor').eq('chave', 'fin_contas_pagar_v1').maybeSingle(),
+    ])
 
-    for (const p of (pagar || [])) {
+    const cfgContasList: any[] = Array.isArray(cfgPagarRow?.valor)
+      ? cfgPagarRow.valor.filter((c: any) => {
+          const refDate = por === 'pagamento' && c?.status === 'pago' && c?.dataPagamento ? c.dataPagamento : c?.vencimento
+          return refDate && refDate >= dataInicio! && refDate <= dataFim!
+        })
+      : []
+
+    const todasContasPagar = [...(pagar || []), ...cfgContasList]
+
+    for (const p of todasContasPagar) {
       const parsed      = { ...p, ...(p.dados || {}) }
       const statusFinal = parsed.status
       if (statusFinal === 'cancelado') continue
@@ -215,7 +226,7 @@ export async function GET(request: Request) {
         descricao:        parsed.descricao || 'Despesa',
         planoContasId:    resolvePlano(parsed),
         valorEsperado:    Number(parsed.valor),
-        valorPago:        statusFinal === 'pago' ? Number(parsed.valor) : 0,
+        valorPago:        statusFinal === 'pago' ? Number(parsed.valorPago ?? parsed.valor) : 0,
         dataCompetencia:  parsed.vencimento,
         dataVencimento:   parsed.vencimento,
         dataPagamento:    statusFinal === 'pago' ? (parsed.dataPagamento || parsed.vencimento) : null,

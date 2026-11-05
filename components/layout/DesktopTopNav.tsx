@@ -109,6 +109,9 @@ export function DesktopTopNav() {
       if (href === '/matriculas/negociacoes' && (userPerms.includes('/matriculas/negociacoes') || userPerms.includes('matriculas') || userPerms.includes('/matriculas/valores') || userPerms.includes('/matriculas/digital'))) {
         return true
       }
+      if ((href === '/financeiro/pagar' || href === '/financeiro/contas-a-pagar') && (userPerms.includes('/financeiro/pagar') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber') || userPerms.includes('/financeiro/dre') || userPerms.includes('/financeiro/renegociacao'))) {
+        return true
+      }
       return userPerms.some(perm => href === perm || href.startsWith(perm + '/'))
     }
     return true
@@ -173,6 +176,7 @@ export function DesktopTopNav() {
       columns: 1,
       items: [
         { id: 'fin-rec', label: 'Contas a Receber', href: '/financeiro/receber', icon: <CreditCard size={15} /> },
+        { id: 'fin-pagar', label: 'Contas a Pagar', href: '/financeiro/pagar', icon: <TrendingDown size={15} />, badge: 'NOVO', badgeColor: 'green' },
         { id: 'fin-reneg', label: 'Renegociação', href: '/financeiro/renegociacao', icon: <Handshake size={15} /> },
         { id: 'fin-dre', label: 'DRE', href: '/financeiro/dre', icon: <BarChart3 size={15} />, badge: 'IA', badgeColor: 'purple' }
       ],

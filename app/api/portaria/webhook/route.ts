@@ -209,18 +209,19 @@ export async function POST(req: Request) {
           .maybeSingle()
 
         if (respFound) {
-          const { data: link } = await supabase
+          const { data: respLinks } = await supabase
             .from('aluno_responsavel')
             .select('aluno_id')
             .eq('responsavel_id', respFound.id)
-            .limit(1)
-            .maybeSingle()
 
-          if (link?.aluno_id) {
+          const linkAlunoIds = (respLinks || []).map((l: any) => l.aluno_id).filter(Boolean)
+          if (linkAlunoIds.length > 0) {
             const { data: linkedStudent } = await supabase
               .from('alunos')
               .select('id, nome, matricula, turma, turno, status, dados')
-              .eq('id', link.aluno_id)
+              .in('id', linkAlunoIds)
+              .or('status.neq.inativo,status.is.null')
+              .limit(1)
               .maybeSingle()
             if (linkedStudent) match = linkedStudent
           }

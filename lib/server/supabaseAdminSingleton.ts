@@ -418,6 +418,9 @@ export async function syncResponsavelAuthOnEmailChange(params: {
     })
 
     if (staleUsers.length === 0 && !existingNewAuthUser) {
+      if (candidateAuthId) {
+        await admin.from('responsaveis').update({ auth_id: null }).eq('id', respId)
+      }
       return
     }
 
@@ -499,6 +502,9 @@ export async function syncResponsavelAuthOnEmailChange(params: {
         for (const extra of migratableOrDeletable.slice(1)) {
           await admin.auth.admin.deleteUser(extra.id).catch(() => {})
         }
+      } else {
+        // A conta Auth anterior pertencia a outro usuário (ex: e-mail familiar compartilhado) e o novo e-mail ainda não possui conta Auth
+        await admin.from('responsaveis').update({ auth_id: null }).eq('id', respId)
       }
     } else {
       // Novo e-mail vazio ou inválido: exclui todas as contas Auth antigas deste responsável

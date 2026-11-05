@@ -259,10 +259,15 @@ export default function UsuariosPage() {
   const { logSystemAction, perfis, setPerfis, perfisLoading } = useData();
   const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos');
 
-  // Calcula o total virtual de usuários da Família (alunos + responsáveis únicos)
+  // Calcula o total virtual de usuários ativos da Família (alunos ativos + responsáveis únicos vinculados a alunos ativos)
+  const activeAlunosList = useMemo(
+    () => (alunos || []).filter((a: any) => String(a?.status || a?.dados?.status || '').trim().toLowerCase() !== 'inativo'),
+    [alunos]
+  )
+
   const totalFamiliaUsuarios = useMemo(() => {
     let guardianKeys = new Set<string>()
-    ;(alunos || []).forEach(aluno => {
+    activeAlunosList.forEach(aluno => {
       const parseG = (g: any) => {
         if (!g.nome) return
         const isLegacyOutro = g.isOutro && !g.isFinanceiro && !g.isPedagogico
@@ -278,8 +283,8 @@ export default function UsuariosPage() {
         guardianKeys.add((aluno as any).cpf_responsavel || (aluno as any).cpfResponsavel || aluno.responsavel)
       }
     })
-    return (alunos || []).length + guardianKeys.size
-  }, [alunos])
+    return activeAlunosList.length + guardianKeys.size
+  }, [activeAlunosList])
 
   /* User CRUD state */
   const [userModal, setUserModal] = useState<'add' | 'edit' | null>(null)
@@ -698,11 +703,11 @@ export default function UsuariosPage() {
         </button>
         <button className={`tab-trigger ${tab === 'alunos' ? 'active' : ''}`} onClick={() => setTab('alunos')}>
           <GraduationCap size={12} />Alunos
-          {(alunos || []).length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{(alunos || []).length}</span>}
+          {activeAlunosList.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{activeAlunosList.length}</span>}
         </button>
         <button className={`tab-trigger ${tab === 'responsaveis' ? 'active' : ''}`} onClick={() => setTab('responsaveis')}>
           <Users size={12} />Responsáveis
-          {totalFamiliaUsuarios > (alunos || []).length && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{Math.max(0, totalFamiliaUsuarios - (alunos || []).length)}</span>}
+          {totalFamiliaUsuarios > activeAlunosList.length && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{Math.max(0, totalFamiliaUsuarios - activeAlunosList.length)}</span>}
         </button>
         <button className={`tab-trigger ${tab === 'perfis' ? 'active' : ''}`} onClick={() => setTab('perfis')}><Lock size={12} />Perfis & Permissões</button>
         <button className={`tab-trigger ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>📋 Logs de Acesso</button>

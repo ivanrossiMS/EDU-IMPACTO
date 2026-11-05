@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
-import { getAdminClient, syncResponsavelAuthOnEmailChange } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, syncResponsavelAuthOnEmailChange, getAllAuthUsersCached } from '@/lib/server/supabaseAdminSingleton'
 import {
   requireStaff,
   resolveUserRole,
   getAuthorizedResponsavelIdsForUser,
   clearAuthGuardCache,
 } from '@/lib/server/authGuard'
+import {
+  getInactiveOnlyResponsavelIds,
+  isStudentInactiveStatus,
+  isResponsavelAccessBlocked,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -174,6 +179,7 @@ export async function GET(request: Request) {
 
     const pageParam = searchParams.get('page')
     const limitParam = searchParams.get('limit')
+    const statusParam = (searchParams.get('status') || 'ativo').trim().toLowerCase()
     const isExplicitAll = searchParams.get('all') === 'true'
     const all = isExplicitAll || (!pageParam && !limitParam && !cpfParam && !rfid)
 
@@ -182,6 +188,8 @@ export async function GET(request: Request) {
     
     const from = (page - 1) * limit
     const to = from + limit - 1
+
+    const { inactiveRespIds } = await getInactiveOnlyResponsavelIds(supabase)
 
     let query = supabase
       .from('responsaveis')
@@ -192,6 +200,23 @@ export async function GET(request: Request) {
         return NextResponse.json({ data: [], total: 0, page, limit })
       }
       query = query.in('id', Array.from(allowedRespIds))
+    }
+
+    // Filtrar responsáveis cujos alunos vinculados estão todos inativos (exceto em busca exata por CPF/RFID para reaproveitamento cadastral)
+    if (!cpfParam && !rfid) {
+      if (statusParam === 'inativo') {
+        const inactiveIdList = Array.from(inactiveRespIds)
+        if (inactiveIdList.length > 0) {
+          query = query.or(`id.in.(${inactiveIdList.join(',')}),dados->>acesso_inativo.eq.true,dados->>auth_status.eq.INATIVO`)
+        } else {
+          query = query.or('dados->>acesso_inativo.eq.true,dados->>auth_status.eq.INATIVO')
+        }
+      } else if (statusParam !== 'todos_com_inativos') {
+        // Padrão ('ativo' ou 'todos'): oculta responsáveis que possuem apenas alunos inativos
+        if (inactiveRespIds.size > 0) {
+          query = query.not('id', 'in', `(${Array.from(inactiveRespIds).join(',')})`)
+        }
+      }
     }
 
     if (cpfParam) {
@@ -310,11 +335,86 @@ export async function GET(request: Request) {
       }
     }
 
+    // Buscar usuários do Supabase Auth (em cache) para preencher ultimoAcesso real mesmo quando inativo
+    const allAuthUsers = await getAllAuthUsersCached().catch(() => [] as any[])
+    const authByEmail = new Map<string, any>()
+    const authById = new Map<string, any>()
+    for (const au of allAuthUsers) {
+      if (au?.id) authById.set(String(au.id), au)
+      if (au?.email) authByEmail.set(String(au.email).trim().toLowerCase(), au)
+    }
+
     // Formatar dados
     const formattedData = responsaveisData.map((resp: any) => {
       const d = resp.dados || {}
+      const respIdStr = String(resp.id).trim()
+      const respEmailClean = String(resp.email || d.email || '').trim().toLowerCase()
+      const respAuthId = resp.auth_id || d.auth_id || d.user_id
+      const matchedAuthUser =
+        (respAuthId ? authById.get(String(respAuthId)) : undefined) ||
+        (respEmailClean ? authByEmail.get(respEmailClean) : undefined)
+      const ultimoAcesso = matchedAuthUser?.last_sign_in_at
+        ? new Date(matchedAuthUser.last_sign_in_at).toLocaleDateString('pt-BR')
+        : 'Nunca acessou'
+
+      const allLinkedStudents = links
+        .filter((l: any) => String(l.responsavel_id).trim() === respIdStr)
+        .map((l: any) => {
+          const targetRef = String(l.aluno_id).trim().toLowerCase()
+          const targetUnpadded = targetRef.replace(/^0+/, '')
+          const aluno = students.find((s: any) => {
+            const sId = String(s.id || '').trim().toLowerCase()
+            const sMat = String(s.matricula || '').trim().toLowerCase()
+            const sCod = String(s.codigo || '').trim().toLowerCase()
+            const sDCod = String(s.dados?.codigo || '').trim().toLowerCase()
+            const sDCodAlu = String(s.dados?.codigoAluno || '').trim().toLowerCase()
+            const sDId = String(s.dados?.id || '').trim().toLowerCase()
+            return (
+              sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
+              sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded) ||
+              sCod === targetRef || (targetUnpadded && sCod.replace(/^0+/, '') === targetUnpadded) ||
+              sDCod === targetRef || (targetUnpadded && sDCod.replace(/^0+/, '') === targetUnpadded) ||
+              sDCodAlu === targetRef || (targetUnpadded && sDCodAlu.replace(/^0+/, '') === targetUnpadded) ||
+              sDId === targetRef || (targetUnpadded && sDId.replace(/^0+/, '') === targetUnpadded)
+            )
+          }) || {}
+          const studentInactive = isStudentInactiveStatus(aluno)
+          return {
+            ...aluno,
+            id: aluno.id || l.aluno_id,
+            nome: aluno.nome || `Aluno (${l.aluno_id})`,
+            status: studentInactive ? 'inativo' : (aluno.status || aluno.dados?.status || 'ativo'),
+            inativo: studentInactive,
+            foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
+            parentesco: l.parentesco,
+            isFinanceiro: l.resp_financeiro === true,
+            isPedagogico: l.resp_pedagogico === true,
+            isOutro: l.resp_outro === true
+          }
+        })
+        .filter((a: any) => a.id || a.nome) || []
+
+      const activeLinkedStudents = allLinkedStudents.filter((a: any) => !a.inativo)
+      const isRespInactive =
+        inactiveRespIds.has(respIdStr) ||
+        isResponsavelAccessBlocked(resp) ||
+        (allLinkedStudents.length > 0 && activeLinkedStudents.length === 0)
+
+      // No filtro padrão de ativos, exibe apenas os filhos ativos em alunosVinculados para não exibir vínculos inativos como ativos
+      const displayStudents =
+        statusParam === 'inativo' || statusParam === 'todos_com_inativos'
+          ? allLinkedStudents
+          : activeLinkedStudents.length > 0
+            ? activeLinkedStudents
+            : allLinkedStudents
+
       return {
         ...resp,
+        status: isRespInactive ? 'inativo' : 'ativo',
+        acessoInativo: isRespInactive,
+        ultimoAcesso,
+        alunosAtivosCount: activeLinkedStudents.length,
+        alunosInativosCount: allLinkedStudents.length - activeLinkedStudents.length,
         dataNasc: resp.data_nasc || d.dataNasc || d.data_nasc || '',
         diasAcesso: resp.dias_acesso || d.diasAcesso || d.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
         cpf: d.cpf || resp.cpf || '',
@@ -342,40 +442,8 @@ export async function GET(request: Request) {
         comercialBairro: d.comercialBairro || '',
         comercialCidade: d.comercialCidade || '',
         comercialUf: d.comercialUf || '',
-        alunosVinculados: links
-          .filter((l: any) => String(l.responsavel_id).trim() === String(resp.id).trim())
-          .map((l: any) => {
-            const targetRef = String(l.aluno_id).trim().toLowerCase()
-            const targetUnpadded = targetRef.replace(/^0+/, '')
-            const aluno = students.find((s: any) => {
-              const sId = String(s.id || '').trim().toLowerCase()
-              const sMat = String(s.matricula || '').trim().toLowerCase()
-              const sCod = String(s.codigo || '').trim().toLowerCase()
-              const sDCod = String(s.dados?.codigo || '').trim().toLowerCase()
-              const sDCodAlu = String(s.dados?.codigoAluno || '').trim().toLowerCase()
-              const sDId = String(s.dados?.id || '').trim().toLowerCase()
-              return (
-                sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
-                sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded) ||
-                sCod === targetRef || (targetUnpadded && sCod.replace(/^0+/, '') === targetUnpadded) ||
-                sDCod === targetRef || (targetUnpadded && sDCod.replace(/^0+/, '') === targetUnpadded) ||
-                sDCodAlu === targetRef || (targetUnpadded && sDCodAlu.replace(/^0+/, '') === targetUnpadded) ||
-                sDId === targetRef || (targetUnpadded && sDId.replace(/^0+/, '') === targetUnpadded)
-              )
-            }) || {}
-            return {
-              ...aluno,
-              id: aluno.id || l.aluno_id,
-              nome: aluno.nome || `Aluno (${l.aluno_id})`,
-              status: aluno.status || aluno.dados?.status || 'ativo',
-              foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
-              parentesco: l.parentesco,
-              isFinanceiro: l.resp_financeiro === true,
-              isPedagogico: l.resp_pedagogico === true,
-              isOutro: l.resp_outro === true
-            }
-          })
-          .filter((a: any) => a.id || a.nome) || []
+        alunosVinculados: displayStudents,
+        todosAlunosVinculados: allLinkedStudents,
       }
     })
 

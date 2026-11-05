@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
+import { isStudentAccessBlocked } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -173,14 +174,19 @@ export async function GET(request: Request) {
       return NextResponse.json([])
     }
 
-    // Deduplica alunos caso existam múltiplos vínculos repetidos
+    // Deduplica alunos caso existam múltiplos vínculos repetidos e remove alunos inativos/bloqueados
     const seenAlunos = new Set<string>()
     const alunos = alunosRaw.filter((a: any) => {
+      if (!a || isStudentAccessBlocked(a)) return false
       const idStr = String(a.id)
       if (seenAlunos.has(idStr)) return false
       seenAlunos.add(idStr)
       return true
     })
+
+    if (alunos.length === 0) {
+      return NextResponse.json([])
+    }
 
     // Monta filtro específico dos alunos do responsável para não varrer títulos da escola inteira
     const tituloOrConds: string[] = []

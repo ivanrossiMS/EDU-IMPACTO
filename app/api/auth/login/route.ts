@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { getAdminClient, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import { getAdminClient, findAuthUserByEmail, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +39,99 @@ export async function POST(request: NextRequest) {
     let userType: 'system_user' | 'aluno' | 'responsavel' = 'system_user'
     let alunoRecord: any = null
     let responsavelRecord: any = null
+
+    // ── Pre-check database status before authenticating ──
+    const [preSysRows, preRespRows, preAlunoRows] = await Promise.all([
+      supabaseAdmin
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, status, dados')
+        .ilike('email', loginInput)
+        .limit(1)
+        .then(r => r.data || []),
+      supabaseAdmin
+        .from('responsaveis')
+        .select('id, nome, email, proibido, dados')
+        .ilike('email', loginInput)
+        .limit(5)
+        .then(r => r.data || []),
+      supabaseAdmin
+        .from('alunos')
+        .select('id, nome, email, matricula, status, foto, dados')
+        .or(`email.ilike.${loginInput},dados->>email.ilike.${loginInput}`)
+        .limit(5)
+        .then(r => r.data || []),
+    ])
+
+    const preSys = preSysRows[0] || null
+    const isPreStaffActive = Boolean(preSys && String(preSys.status || 'ativo').toLowerCase() !== 'inativo')
+
+    if (!isPreStaffActive) {
+      if (preSys && String(preSys.status || '').toLowerCase() === 'inativo' && preRespRows.length === 0 && preAlunoRows.length === 0) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' },
+          { status: 200 }
+        )
+      }
+
+      const activePreAlunos = preAlunoRows.filter((a: any) => !isStudentAccessBlocked(a))
+      let activePreResp: any = null
+      for (const r of preRespRows) {
+        if (isResponsavelAccessBlocked(r)) continue
+        const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(r.id), {
+          requireFinOrPed: true,
+          supabaseClient: supabaseAdmin,
+        })
+        if (hasActiveStudent) {
+          activePreResp = r
+          break
+        }
+      }
+
+      if (!activePreResp && activePreAlunos.length === 0) {
+        if (preRespRows.length > 0) {
+          return NextResponse.json(
+            {
+              error:
+                'Acesso bloqueado: Não há alunos ativos vinculados a este responsável. Entre em contato com a secretaria.',
+            },
+            { status: 200 }
+          )
+        }
+        if (preAlunoRows.length > 0) {
+          return NextResponse.json(
+            {
+              error:
+                'Acesso bloqueado: A matrícula deste aluno encontra-se inativa. Entre em contato com a secretaria.',
+            },
+            { status: 200 }
+          )
+        }
+      }
+
+      if (activePreResp) {
+        responsavelRecord = activePreResp
+      } else if (activePreAlunos.length > 0) {
+        alunoRecord = activePreAlunos[0]
+      }
+    }
+
+    // Se o usuário está ativo no banco, mas possui banimento anterior no Auth (ex: aluno reativado), desbloqueia antes do signIn
+    if (isPreStaffActive || responsavelRecord || alunoRecord) {
+      const existingAuth = await findAuthUserByEmail(resolvedEmail)
+      if (existingAuth?.banned_until && new Date(existingAuth.banned_until) > new Date()) {
+        await supabaseAdmin.auth.admin
+          .updateUserById(existingAuth.id, {
+            ban_duration: 'none',
+            user_metadata: {
+              ...(existingAuth.user_metadata || {}),
+              status: 'ativo',
+              acesso_bloqueado: false,
+            },
+          })
+          .catch(() => {})
+        invalidateAuthUsersCache()
+      }
+    }
 
     const cookieStore = await cookies()
     const INFINITE_SESSION_SECONDS = 31536000 // 1 ano (365 dias) — seguro contra overflow de 32 bits (RFC 6265bis)
@@ -215,23 +313,59 @@ export async function POST(request: NextRequest) {
         const sysFoto = dbSystemUser.dados?.foto
         if (sysFoto) resolvedFoto = sysFoto
         
-        // Verifica papel duplo para colaboradores rapidamente
+        // Verifica papel duplo para colaboradores rapidamente (apenas se possuir aluno ativo)
         const { data: respFound } = await supabaseAdmin
           .from('responsaveis')
-          .select('id, dados')
+          .select('id, proibido, dados')
           .ilike('email', resolvedEmail)
           .limit(1)
-        if (respFound && respFound.length > 0) {
-          hasDualRole = true
-          if (!responsavel_id) responsavel_id = respFound[0].id
-          const dualRespFoto = respFound[0].dados?.foto
-          if (!resolvedFoto && dualRespFoto) resolvedFoto = dualRespFoto
+        if (respFound && respFound.length > 0 && !isResponsavelAccessBlocked(respFound[0])) {
+          const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(respFound[0].id), {
+            requireFinOrPed: true,
+            supabaseClient: supabaseAdmin,
+          })
+          if (hasActiveStudent) {
+            hasDualRole = true
+            if (!responsavel_id) responsavel_id = respFound[0].id
+            const dualRespFoto = respFound[0].dados?.foto
+            if (!resolvedFoto && dualRespFoto) resolvedFoto = dualRespFoto
+          }
         }
       }
     }
 
+    const signOutAndBlock = async (message: string) => {
+      const supabaseSignOut = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() { return cookieStore.getAll() },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                cookieStore.set({ name, value, ...options, maxAge: 0 })
+              })
+            },
+          },
+        }
+      )
+      await supabaseSignOut.auth.signOut().catch(() => {})
+      return NextResponse.json({ error: message }, { status: 200 })
+    }
+
     if (!dbRecordExists) {
       if (responsavelRecord) {
+        if (isResponsavelAccessBlocked(responsavelRecord)) {
+          return await signOutAndBlock('Acesso bloqueado: Conta de responsável inativa. Entre em contato com a secretaria.')
+        }
+        const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(responsavelRecord.id), {
+          requireFinOrPed: true,
+          supabaseClient: supabaseAdmin,
+        })
+        if (!hasActiveStudent) {
+          return await signOutAndBlock('Acesso bloqueado: Não há alunos ativos vinculados a este responsável.')
+        }
+
         dbRecordExists = true
         respFoundRecord = responsavelRecord
         responsavel_id = responsavelRecord.id
@@ -255,6 +389,9 @@ export async function POST(request: NextRequest) {
           }
         }
       } else if (userType === 'aluno' && alunoRecord) {
+        if (isStudentAccessBlocked(alunoRecord)) {
+          return await signOutAndBlock('Acesso bloqueado: A matrícula deste aluno encontra-se inativa.')
+        }
         dbRecordExists = true
         alunoFoundRecord = alunoRecord
         aluno_id = alunoRecord.id
@@ -268,7 +405,7 @@ export async function POST(request: NextRequest) {
         const [respLookup, alunoLookup] = await Promise.all([
           supabaseAdmin
             .from('responsaveis')
-            .select('id, nome, email, dados')
+            .select('id, nome, email, proibido, dados')
             .ilike('email', resolvedEmail)
             .limit(1)
             .then(r => r.data?.[0] || null),
@@ -281,6 +418,10 @@ export async function POST(request: NextRequest) {
         ])
 
         if (respLookup) {
+          if (isResponsavelAccessBlocked(respLookup)) {
+            return await signOutAndBlock('Acesso bloqueado: Conta de responsável inativa. Entre em contato com a secretaria.')
+          }
+
           const { data: links } = await supabaseAdmin
             .from('aluno_responsavel')
             .select('resp_financeiro, resp_pedagogico')
@@ -291,24 +432,20 @@ export async function POST(request: NextRequest) {
           )
 
           if (!isAllowed) {
-            const supabaseSignOut = createServerClient(
-              process.env.NEXT_PUBLIC_SUPABASE_URL!,
-              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-              {
-                cookies: {
-                  getAll() { return cookieStore.getAll() },
-                  setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) => {
-                      cookieStore.set({ name, value, ...options, maxAge: 0 })
-                    })
-                  },
-                },
-              }
+            return await signOutAndBlock(
+              'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.'
             )
-            await supabaseSignOut.auth.signOut()
-            return NextResponse.json({ 
-              error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
-            }, { status: 200 })
+          }
+
+          const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(respLookup.id), {
+            requireFinOrPed: true,
+            supabaseClient: supabaseAdmin,
+          })
+
+          if (!hasActiveStudent) {
+            return await signOutAndBlock(
+              'Acesso bloqueado: Não há alunos ativos vinculados a este responsável. Entre em contato com a secretaria.'
+            )
           }
 
           dbRecordExists = true
@@ -321,6 +458,11 @@ export async function POST(request: NextRequest) {
           const rFoto = respLookup.dados?.foto
           if (rFoto) resolvedFoto = rFoto
         } else if (alunoLookup) {
+          if (isStudentAccessBlocked(alunoLookup)) {
+            return await signOutAndBlock(
+              'Acesso bloqueado: A matrícula deste aluno encontra-se inativa. Entre em contato com a secretaria.'
+            )
+          }
           dbRecordExists = true
           alunoFoundRecord = alunoLookup
           userType = 'aluno'

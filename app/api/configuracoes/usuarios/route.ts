@@ -4,6 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getAdminClient, findAuthUserByEmail, getAllAuthUsersCached, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { getCachedColaboradores, setCachedColaboradores, invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
+import { isStudentInactiveStatus, isStudentAccessBlocked, isResponsavelAccessBlocked } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -189,13 +190,28 @@ export async function GET(req: Request) {
         const [sysUsers, allAuthUsers, alunosData, respData, linksData] = await Promise.all([
           fetchAll('system_users', 'id, auth_id, nome, email, cargo, perfil, status, dados'),
           getAllAuthUsersCached(),
-          fetchAll('alunos', 'id, nome, email, matricula'),
-          fetchAll('responsaveis', 'id, nome, email'),
-          fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
+          fetchAll('alunos', 'id, nome, email, matricula, status, dados'),
+          fetchAll('responsaveis', 'id, nome, email, auth_id, dados'),
+          fetchAll('aluno_responsavel', 'aluno_id, responsavel_id, resp_financeiro, resp_pedagogico')
         ])
 
+        const activeAlunosData = (alunosData || []).filter((a: any) => !isStudentInactiveStatus(a))
+        const activeAlunoRefs = new Set<string>()
+        for (const a of activeAlunosData) {
+          for (const ref of [a.id, a.matricula, a.dados?.codigo, a.dados?.codigoAluno]) {
+            if (ref !== undefined && ref !== null && String(ref).trim() !== '') {
+              const clean = String(ref).trim().toLowerCase()
+              activeAlunoRefs.add(clean)
+              const unpadded = clean.replace(/^0+/, '')
+              if (unpadded) activeAlunoRefs.add(unpadded)
+            }
+          }
+        }
+
         const authMap = new Map<string, any>()
+        const authById = new Map<string, any>()
         for (const au of allAuthUsers) {
+          if (au.id) authById.set(String(au.id), au)
           if (au.email) authMap.set(au.email.toLowerCase(), au)
         }
         
@@ -234,10 +250,18 @@ export async function GET(req: Request) {
         })
 
         const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
-          const alunoEmail = (aluno.email || '').trim().toLowerCase()
-          const virtualEmail = `aluno.${aluno.matricula || aluno.id}@impactoedu.local`.toLowerCase()
+          const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
+          const code = String(aluno.matricula || aluno.dados?.codigo || aluno.id).toLowerCase()
+          const virtualEmail = `aluno.${code}@impactoedu.local`
+          const altVirtualEmail = `${code}@aluno.impacto.edu.br`
           
-          const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
+          const authUser =
+            (aluno.dados?.auth_id ? authById.get(String(aluno.dados.auth_id)) : undefined) ||
+            (alunoEmail ? authMap.get(alunoEmail) : undefined) ||
+            authMap.get(virtualEmail) ||
+            authMap.get(altVirtualEmail)
+          const isBlocked = isStudentAccessBlocked(aluno)
+          const vinculoAtivo = !isStudentInactiveStatus(aluno)
           
           acc.push({
             id: `virtual-${aluno.id}`,
@@ -245,7 +269,8 @@ export async function GET(req: Request) {
             email: alunoEmail || '',
             cargo: 'Alunos',
             perfil: 'Família',
-            status: authUser ? 'ativo' : 'inativo',
+            status: authUser && !isBlocked ? 'ativo' : 'inativo',
+            vinculoAtivo,
             ultimoAcesso: authUser?.last_sign_in_at 
               ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
               : 'Nunca acessou'
@@ -255,18 +280,28 @@ export async function GET(req: Request) {
 
         const activeRespIds = new Set(
           (linksData || [])
-            .filter((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
-            .map((l: any) => String(l.responsavel_id))
+            .filter((l: any) => {
+              if (l.resp_financeiro !== true && l.resp_pedagogico !== true) return false
+              const ref = String(l.aluno_id || '').trim().toLowerCase()
+              const unpadded = ref.replace(/^0+/, '')
+              return activeAlunoRefs.has(ref) || (Boolean(unpadded) && activeAlunoRefs.has(unpadded))
+            })
+            .map((l: any) => String(l.responsavel_id).trim())
         )
 
         const mappedResps: any[] = []
 
         if (respData && Array.isArray(respData)) {
           respData.forEach((resp: any) => {
-            if (!activeRespIds.has(String(resp.id))) return
+            const respIdStr = String(resp.id).trim()
+            const vinculoAtivo = activeRespIds.has(respIdStr)
 
-            const email = (resp.email || '').trim().toLowerCase()
-            const authUser = email ? authMap.get(email) : undefined
+            const email = (resp.email || resp.dados?.email || '').trim().toLowerCase()
+            const authId = resp.auth_id || resp.dados?.auth_id || resp.dados?.user_id
+            const authUser =
+              (authId ? authById.get(String(authId)) : undefined) ||
+              (email ? authMap.get(email) : undefined)
+            const isBlocked = !vinculoAtivo || isResponsavelAccessBlocked(resp)
 
             mappedResps.push({
               id: `resp-${resp.id}`,
@@ -274,7 +309,8 @@ export async function GET(req: Request) {
               email: email || '',
               cargo: 'Responsáveis',
               perfil: 'Família',
-              status: authUser ? 'ativo' : 'inativo',
+              status: authUser && !isBlocked ? 'ativo' : 'inativo',
+              vinculoAtivo,
               ultimoAcesso: authUser?.last_sign_in_at 
                 ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
                 : 'Nunca acessou'
@@ -287,8 +323,11 @@ export async function GET(req: Request) {
         let alunos = 0, alunosTotal = 0
         let resps = 0, respsTotal = 0
         let totalAtivos = 0
+        let totalGeralAtivos = 0
 
         for (const u of combined) {
+          if (u.vinculoAtivo === false) continue
+          totalGeralAtivos++
           const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
           if (isAtivo) totalAtivos++
           if (u.cargo === 'Alunos') {
@@ -311,7 +350,7 @@ export async function GET(req: Request) {
           resps,
           respsTotal,
           total: totalAtivos,
-          totalGeral: combined.length
+          totalGeral: totalGeralAtivos
         }
 
         const entry = { data: combined, stats, expires: Date.now() + 60_000 }

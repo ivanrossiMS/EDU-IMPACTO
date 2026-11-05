@@ -5,6 +5,7 @@ import {
   cleanupOneSignalForInactiveStudent,
   isStudentInactiveStatus,
 } from '@/lib/server/pushService'
+import { syncStudentAndGuardiansAccess } from '@/lib/server/studentStatusHelper'
 import {
   getAdminClient,
   findAuthUserByEmail,
@@ -248,38 +249,31 @@ export async function GET(request: Request) {
       // Se selecionou Apenas Inativos
       query = query.eq('status', 'inativo')
     } else if (status === 'todos') {
-      // Regra de Negócio: Se for todos (Ativos) e NÃO tiver busca, esconde inativos
-      if (!search) {
-        query = query.or('status.neq.inativo,status.is.null')
-      }
-      // Se tiver busca, 'todos' significa buscar também nos inativos para que a busca encontre o aluno
+      // Regra de Negócio: 'todos' representa "Todos (Ativos)" — sempre oculta inativos mesmo durante busca.
+      // Para buscar incluindo inativos, utiliza-se 'todos_com_inativos' ou 'inativo'.
+      query = query.or('status.neq.inativo,status.is.null')
     } else if (status === 'com_observacoes') {
-      if (!search) {
-        query = query.or('status.neq.inativo,status.is.null')
-      }
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.or('obs.neq."",dados->observacoes.neq.[]')
     } else if (status === 'sem_observacoes') {
-      if (!search) {
-        query = query.or('status.neq.inativo,status.is.null')
-      }
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.or('obs.is.null,obs.eq.""').or('dados->observacoes.is.null,dados->observacoes.eq.[]')
     } else if (status === 'matriculado_vazio') {
       query = query.or('status.eq.MATRICULADO,status.eq.matriculado,status.is.null')
     } else if (status === 'pode_sair_sim') {
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.filter('dados->autorizadoSairSozinho', 'eq', 'true')
     } else if (status === 'pode_sair_nao') {
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
     } else if (status === 'integral_sim') {
-      if (!search) {
-        query = query.or('status.neq.inativo,status.is.null')
-      }
+      query = query.or('status.neq.inativo,status.is.null')
       integralIntermediario = 'sim'
     } else if (status === 'integral_nao') {
-      if (!search) {
-        query = query.or('status.neq.inativo,status.is.null')
-      }
+      query = query.or('status.neq.inativo,status.is.null')
       integralIntermediario = 'nao'
     } else if (status === 'com_responsaveis' || status === 'sem_responsaveis') {
+      query = query.or('status.neq.inativo,status.is.null')
       // Como os responsáveis estão em uma tabela de relacionamento (aluno_responsavel) e também em campos de texto,
       // buscamos os alunos que possuem vínculo ativo na tabela para cruzar com a query principal.
       const { data: ar } = await supabase.from('aluno_responsavel').select('aluno_id').limit(10000);
@@ -306,8 +300,10 @@ export async function GET(request: Request) {
         }
       }
     } else if (status === 'com_turma') {
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.not('turma', 'is', null).neq('turma', '')
     } else if (status === 'sem_turma') {
+      query = query.or('status.neq.inativo,status.is.null')
       query = query.or('turma.is.null,turma.eq.')
     }
     // se for todos_com_inativos, não aplica filtro de status
@@ -2083,7 +2079,14 @@ export async function PUT(request: Request) {
       ])
     }
 
-    // Sincronizar grupos da Agenda Digital para garantir que o aluno esteja APENAS na turma CURSANDO
+    // Sincronizar bloqueio/desbloqueio de acesso (Supabase Auth, sessões, responsáveis sem outros filhos ativos e grupos)
+    if (savedStudent?.id) {
+      await syncStudentAndGuardiansAccess(String(savedStudent.id)).catch(err =>
+        console.error('[Student/Guardian Access Sync Error]', err?.message)
+      )
+    }
+
+    // Sincronizar grupos da Agenda Digital para garantir que o aluno esteja APENAS na turma CURSANDO (e ATIVO)
     if (savedStudent && savedStudent.id && savedStudent.turma) {
       try {
         const { data: groups } = await supabase.from('agenda_grupos').select('*')
@@ -2091,6 +2094,7 @@ export async function PUT(request: Request) {
           const studentId = String(savedStudent.id)
           const activeTurma = String(savedStudent.turma || '').trim()
           const hist = savedStudent.dados?.historicoTurmas || savedStudent.historicoTurmas || []
+          const studentIsInactive = isStudentInactiveStatus(savedStudent)
           
           for (const group of groups) {
             const gDados = group.dados || {}
@@ -2100,7 +2104,7 @@ export async function PUT(request: Request) {
             const gAno = String(gDados.ano || '').trim()
 
             let isCursando = false
-            if (activeTurma) {
+            if (activeTurma && !studentIsInactive) {
               let cursandoNome = activeTurma
               if (Array.isArray(hist) && hist.length > 0) {
                 if (gAno) {

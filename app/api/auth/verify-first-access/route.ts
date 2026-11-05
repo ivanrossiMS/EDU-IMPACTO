@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient, findAuthUserByEmail } from '@/lib/server/supabaseAdminSingleton'
 import { maskEmail } from '@/lib/server/firstAccessSecurity'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,10 +92,8 @@ export async function POST(request: Request) {
     })
 
     if (aluno) {
-      const activeStatus = ['ativo', 'matriculado', 'cursando', 'ativo_transferencia']
-      const isActive = !aluno.status || activeStatus.includes((aluno.status || '').toLowerCase())
-      if (!isActive) {
-        return NextResponse.json({ error: 'Matrícula inativa. Verifique com a secretaria.' }, { status: 403 })
+      if (isStudentAccessBlocked(aluno)) {
+        return NextResponse.json({ error: 'Acesso bloqueado: Matrícula inativa. Verifique com a secretaria.' }, { status: 403 })
       }
 
       // Check if student already set a password in Auth
@@ -163,6 +166,10 @@ export async function POST(request: Request) {
     })
 
     if (responsavel) {
+      if (isResponsavelAccessBlocked(responsavel)) {
+        return NextResponse.json({ error: 'Acesso bloqueado: Conta de responsável inativa. Verifique com a secretaria.' }, { status: 403 })
+      }
+
       // ── Verify if they are Financeiro or Pedagogico ────────────────
       const { data: links } = await supabaseAdmin
         .from('aluno_responsavel')
@@ -176,6 +183,17 @@ export async function POST(request: Request) {
       if (!isAllowed) {
         return NextResponse.json({ 
           error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
+        }, { status: 403 })
+      }
+
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(responsavel.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      })
+
+      if (!hasActiveStudent) {
+        return NextResponse.json({
+          error: 'Acesso bloqueado: Não há alunos ativos vinculados a este responsável. Verifique com a secretaria.'
         }, { status: 403 })
       }
 

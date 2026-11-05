@@ -13,6 +13,7 @@ import {
   type AlunoVinculadoConvite,
 } from '@/lib/server/emailService'
 import { isNonDeliverableTestEmail, isValidEmailSyntax } from '@/lib/utils/emailValidation'
+import { isStudentAccessBlocked, isResponsavelAccessBlocked } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -41,18 +42,27 @@ export interface MissingEmailPendingUser {
   detalhe: string
 }
 
-async function fetchAllRows(supabase: any, table: string, cols: string) {
+async function fetchAllRows(supabase: any, table: string, cols: string, orderByCol: string | null = 'id') {
   let all: any[] = []
   let fromLoop = 0
   let toLoop = 999
   let hasMore = true
   let selectCols = cols
+  let useOrder = orderByCol
   while (hasMore) {
-    const { data, error } = await supabase.from(table).select(selectCols).range(fromLoop, toLoop)
+    let q = supabase.from(table).select(selectCols)
+    if (useOrder) {
+      q = q.order(useOrder, { ascending: true })
+    }
+    const { data, error } = await q.range(fromLoop, toLoop)
     if (error) {
       console.error(`[Convite1Acesso] Erro ao buscar tabela "${table}" com colunas (${selectCols}):`, error.message)
       if (selectCols !== '*') {
         selectCols = '*'
+        continue
+      }
+      if (useOrder) {
+        useOrder = null
         continue
       }
       hasMore = false
@@ -167,10 +177,12 @@ export async function GET(req: Request) {
       if (t.nome) turmaMap.set(String(t.nome), label)
     }
 
-    // 3. Mapa de Alunos (id / matricula / codigo -> dados do aluno e turma)
+    // 3. Mapa de Alunos ATIVOS (id / matricula / codigo -> dados do aluno e turma)
+    // Alunos inativos/bloqueados são ignorados para que não recebam convite nem mantenham responsáveis inativos na lista.
+    const activeAlunosList = (alunosData || []).filter((a: any) => !isStudentAccessBlocked(a))
     const alunoById = new Map<string, { id: string; nome: string; turma: string; email: string; matricula: string; status: string }>()
     const alunoByAnyRef = new Map<string, { id: string; nome: string; turma: string; email: string; matricula: string; status: string }>()
-    for (const a of alunosData || []) {
+    for (const a of activeAlunosList) {
       const rawTurma = a.turma || a.dados?.turma || ''
       const turmaNome = turmaMap.get(String(rawTurma)) || String(rawTurma || '')
       const rawEmail = (a.email || a.dados?.email || '').trim().toLowerCase()
@@ -210,16 +222,25 @@ export async function GET(req: Request) {
     }
 
     const hasUserEverSignedIn = (email?: string, authId?: string | null, virtualEmail?: string): boolean => {
+      const cleanEmail = (email || '').trim().toLowerCase()
+      const cleanVirt = (virtualEmail || '').trim().toLowerCase()
       if (authId) {
         const byId = authById.get(String(authId))
-        if (byId?.last_sign_in_at) return true
+        if (byId?.last_sign_in_at) {
+          const byIdEmail = (byId.email || '').trim().toLowerCase()
+          // Só considera o auth_id se o e-mail da conta Auth corresponder ao e-mail atual do cadastro,
+          // evitando falso-positivo quando auth_id foi herdado de um e-mail familiar compartilhado anteriormente.
+          if (!cleanEmail || byIdEmail === cleanEmail || (cleanVirt && byIdEmail === cleanVirt)) {
+            return true
+          }
+        }
       }
-      if (email) {
-        const byEmail = authByEmail.get(email.trim().toLowerCase())
+      if (cleanEmail) {
+        const byEmail = authByEmail.get(cleanEmail)
         if (byEmail?.last_sign_in_at) return true
       }
-      if (virtualEmail) {
-        const byVirt = authByEmail.get(virtualEmail.trim().toLowerCase())
+      if (cleanVirt) {
+        const byVirt = authByEmail.get(cleanVirt)
         if (byVirt?.last_sign_in_at) return true
       }
       return false
@@ -234,7 +255,7 @@ export async function GET(req: Request) {
       return true
     }
 
-    // ── A. Processar RESPONSÁVEIS ──────────────────────────────────────────
+    // ── A. Processar RESPONSÁVEIS (apenas vinculados a alunos ATIVOS) ────────
     const respLinksMap = new Map<string, AlunoVinculadoConvite[]>()
     for (const l of linksData || []) {
       if (l.resp_financeiro !== true && l.resp_pedagogico !== true) continue
@@ -245,14 +266,14 @@ export async function GET(req: Request) {
       const alunoInfo =
         alunoByAnyRef.get(rawAlunoRef) ||
         (unpaddedRef ? alunoByAnyRef.get(unpaddedRef) : undefined)
+      // Se o aluno não está no mapa de alunos ativos, ignora este vínculo
+      if (!alunoInfo) continue
       if (!respLinksMap.has(rId)) {
         respLinksMap.set(rId, [])
       }
-      if (alunoInfo) {
-        const list = respLinksMap.get(rId)!
-        if (!list.some(x => x.nome === alunoInfo.nome)) {
-          list.push({ nome: alunoInfo.nome, turma: alunoInfo.turma || undefined })
-        }
+      const list = respLinksMap.get(rId)!
+      if (!list.some(x => x.nome === alunoInfo.nome)) {
+        list.push({ nome: alunoInfo.nome, turma: alunoInfo.turma || undefined })
       }
     }
 
@@ -266,7 +287,8 @@ export async function GET(req: Request) {
 
     for (const r of respData || []) {
       const rId = String(r.id || '').trim()
-      if (!respLinksMap.has(rId)) continue // Apenas responsáveis ativos (Financeiro ou Pedagógico)
+      if (!respLinksMap.has(rId)) continue // Apenas responsáveis com pelo menos 1 aluno ativo
+      if (isResponsavelAccessBlocked(r)) continue
 
       respTotal++
       const d = r.dados || {}
@@ -332,7 +354,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // ── B. Processar ALUNOS ────────────────────────────────────────────────
+    // ── B. Processar ALUNOS ATIVOS ─────────────────────────────────────────
     let alunosTotal = 0
     let alunosAtivos = 0
     let alunosPendentesTotal = 0
@@ -340,7 +362,7 @@ export async function GET(req: Request) {
 
     const alunosByEmail = new Map<string, PendingInviteRecipient>()
 
-    for (const a of alunosData || []) {
+    for (const a of activeAlunosList) {
       alunosTotal++
       const alunoInfo = alunoById.get(String(a.id))!
       const email = alunoInfo.email

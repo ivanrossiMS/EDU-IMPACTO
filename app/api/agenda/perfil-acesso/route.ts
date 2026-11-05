@@ -4,6 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 import { getPerfilAcessoCache, setPerfilAcessoCache, CACHE_TTL } from '@/lib/server/perfilAcessoCache'
+import { isStudentAccessBlocked } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -72,6 +73,13 @@ export async function GET(request: Request) {
     if (!aluno) {
       // Retornar 200 com null em vez de 404 para evitar erros no console do cliente
       return NextResponse.json({ aluno: null, vinculo: null, meusAlunos: [] })
+    }
+
+    if (!isStaff && isStudentAccessBlocked(aluno)) {
+      return NextResponse.json(
+        { error: 'Acesso bloqueado: matrícula do aluno encontra-se inativa.' },
+        { status: 403 }
+      )
     }
 
     // 1.5. Resolver nome e turno da Turma e Modalidade Integral via cache
@@ -202,7 +210,9 @@ export async function GET(request: Request) {
           const meusLinks = meusLinksRes.data
           
           if (meusLinks && meusLinks.length > 0) {
-            meusAlunos = meusLinks.map((l: any) => Array.isArray(l.alunos) ? l.alunos[0] : l.alunos).filter(Boolean)
+            meusAlunos = meusLinks
+              .map((l: any) => Array.isArray(l.alunos) ? l.alunos[0] : l.alunos)
+              .filter((a: any) => Boolean(a) && (isStaff || !isStudentAccessBlocked(a)))
 
             // Populate turma_nome for meusAlunos via cached turmas
             meusAlunos.forEach(a => {

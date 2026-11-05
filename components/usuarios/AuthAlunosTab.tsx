@@ -63,6 +63,7 @@ export function AuthAlunosTab() {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ativo' | 'inativo' | 'todos_com_inativos'>('ativo');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 400);
@@ -70,9 +71,9 @@ export function AuthAlunosTab() {
   }, [search]);
 
   const { data: apiData, isLoading } = useApiQuery<any>(
-    ['alunos_auth_tab', String(page), String(limit), debouncedSearch],
+    ['alunos_auth_tab', String(page), String(limit), debouncedSearch, statusFilter],
     '/api/alunos',
-    { lightweight: true, page, limit, search: debouncedSearch }
+    { lightweight: true, page, limit, search: debouncedSearch, status: statusFilter }
   )
   const queryClient = useQueryClient()
 
@@ -211,9 +212,25 @@ export function AuthAlunosTab() {
 
     const searchEmail = effectiveEmail.toLowerCase()
     const usersList: any[] = Array.isArray(usersData) ? usersData : (Array.isArray((usersData as any)?.data) ? (usersData as any).data : [])
-    const realUser = usersList.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    const realUser = usersList.find(
+      u => u.id === `virtual-${aluno.id}` || (searchEmail && u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+    )
 
-    // Virtual record automatically linking the user to FAMILIA and ATIVO
+    const isAcademicInactive = String(aluno.status || aluno.dados?.status || '').trim().toLowerCase() === 'inativo'
+    const isAccessBlocked =
+      isAcademicInactive ||
+      aluno.dados?.acesso_inativo === true ||
+      aluno.dados?.acesso_bloqueado === true ||
+      String(aluno.dados?.auth_status || '').trim().toUpperCase() === 'INATIVO'
+
+    const resolvedStatus = isAccessBlocked ? 'INATIVO' : 'ATIVO'
+
+    const resolvedLastLogin =
+      (aluno.ultimoAcesso && aluno.ultimoAcesso !== 'Nunca acessou' ? aluno.ultimoAcesso : null) ||
+      (realUser?.ultimoAcesso && realUser.ultimoAcesso !== 'Nunca acessou' ? realUser.ultimoAcesso : null) ||
+      null
+
+    // Virtual record automatically linking the user to FAMILIA and real status
     const defaultAuth = {
       id: `virtual-${aluno.id}`,
       user_type: 'student',
@@ -221,22 +238,19 @@ export function AuthAlunosTab() {
       login: studentLogin,
       email: effectiveEmail,
       celular: effectivePhone,
-      status: 'ATIVO',
+      status: resolvedStatus,
       profile_code: 'FAMILIA',
-      last_login: realUser ? realUser.ultimoAcesso : null
+      last_login: resolvedLastLogin
     }
 
     const auth = authRecord ? {
       ...authRecord,
       login: authRecord.login || studentLogin,
       email: effectiveEmail,
-      celular: effectivePhone
+      celular: effectivePhone,
+      status: isAccessBlocked ? 'INATIVO' : (aluno.dados?.auth_status || authRecord.status || 'ATIVO'),
+      last_login: resolvedLastLogin || authRecord.last_login || null,
     } : defaultAuth
-
-    // Sobrescreve o last_login mockado com o real do Supabase
-    if (realUser && realUser.ultimoAcesso) {
-      auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
-    }
 
     const inviteSentInfo = searchEmail ? inviteHistoryMap[searchEmail] || null : null
 
@@ -376,11 +390,34 @@ export function AuthAlunosTab() {
     setResetModal(null)
   }
 
-  const toggleStatus = (student: any) => {
+  const toggleStatus = async (student: any) => {
     const auth = student.auth || handleCreateAuth(student)
-    const newStatus = auth.status === 'ATIVO' ? 'INATIVO' : 'ATIVO'
-    setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, status: newStatus } : u))
-    logSystemAction('Config (Acessos)', 'Edição', `Alteração de status de acesso (Aluno: ${student.nome}) -> ${newStatus}`, { registroId: auth.id, detalhesDepois: { status: newStatus } })
+    const currentStatus = auth.status === 'INATIVO' ? 'INATIVO' : 'ATIVO'
+    const targetActive = currentStatus !== 'ATIVO'
+    const newStatus = targetActive ? 'ATIVO' : 'INATIVO'
+
+    try {
+      const res = await fetch('/api/auth/toggle-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'aluno', id: student.id, active: targetActive }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Não foi possível alterar o status de acesso.')
+        return
+      }
+      setAuthUsers(prev => prev.map(u => (u.id === auth.id || u.academic_id === student.id) ? { ...u, status: newStatus } : u))
+      setAlunos(prev => prev.map(a => a.id === student.id ? {
+        ...a,
+        dados: { ...(a.dados || {}), acesso_inativo: !targetActive, auth_status: newStatus }
+      } : a))
+      queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      logSystemAction('Config (Acessos)', 'Edição', `Alteração de status de acesso (Aluno: ${student.nome}) -> ${newStatus}`, { registroId: student.id, detalhesDepois: { status: newStatus } })
+    } catch {
+      alert('Erro ao comunicar com o servidor para alterar o acesso.')
+    }
   }
 
   const badgeStatus = (status: string) => {
@@ -406,6 +443,15 @@ export function AuthAlunosTab() {
             <option value={20} style={{ color: '#0f172a', background: '#ffffff' }}>20 por pág.</option>
             <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
             <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value as any); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 700 }}
+          >
+            <option value="ativo">Status: Apenas Ativos</option>
+            <option value="inativo">🚫 Apenas Inativos</option>
+            <option value="todos_com_inativos">📋 Todos (Com Inativos)</option>
           </select>
         </div>
         <div style={{ fontSize: 13, color: '#64748b' }}>
@@ -444,7 +490,14 @@ export function AuthAlunosTab() {
                             {getInitials(a.nome)}
                           </div>
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {a.nome}
+                              {String(a.status || a.dados?.status || '').toLowerCase() === 'inativo' && (
+                                <span style={{ padding: '1px 6px', fontSize: 10, fontWeight: 700, borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
+                                  Matrícula Inativa
+                                </span>
+                              )}
+                            </div>
                             <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                               <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Alunos</span>
                             </div>

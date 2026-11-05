@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton';
 import { extractAccessTokenFromCookieList, isJwtTokenExpired } from '@/lib/server/supabaseServerFactory';
 import { verifyTokenWithDedup } from '@/lib/server/authGuard';
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper';
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -213,9 +218,33 @@ export async function GET(request: Request) {
     dbAluno = await fetchDbAluno(dbUser.dados.aluno_id);
   }
 
+  // Bloqueia acesso se o registro estiver inativo (colaborador inativo, aluno inativo ou responsável sem alunos ativos)
+  if (dbUser && String(dbUser.status || '').trim().toLowerCase() === 'inativo') {
+    dbUser = null;
+  }
+  if (dbAluno && isStudentAccessBlocked(dbAluno)) {
+    dbAluno = null;
+  }
+  if (dbResp) {
+    if (isResponsavelAccessBlocked(dbResp)) {
+      dbResp = null;
+    } else {
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(dbResp.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      });
+      if (!hasActiveStudent) {
+        dbResp = null;
+      }
+    }
+  }
+
   if (!dbUser && !dbResp && !dbAluno) {
     await supabase.auth.signOut().catch(() => {});
-    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401, headers: NO_CACHE_HEADERS });
+    return NextResponse.json(
+      { error: 'Acesso bloqueado: Usuário ou matrícula inativa.', ip },
+      { status: 401, headers: NO_CACHE_HEADERS }
+    );
   }
 
   // Resolve user photo: prioritize user_metadata, then responsaveis, alunos, or system_users
@@ -264,14 +293,7 @@ export async function GET(request: Request) {
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
   const hasStaffRole = Boolean(dbUser && (dbUser.perfil || dbUser.cargo) && dbUser.status !== 'inativo');
-  const hasFamilyRole = Boolean(
-    dbResp || 
-    dbAluno || 
-    (dbUser?.dados?.responsavel_id && String(dbUser.dados.responsavel_id).trim() !== '') || 
-    (dbUser?.dados?.aluno_id && String(dbUser.dados.aluno_id).trim() !== '') ||
-    (user.user_metadata?.responsavel_id && String(user.user_metadata.responsavel_id).trim() !== '') ||
-    (user.user_metadata?.aluno_id && String(user.user_metadata.aluno_id).trim() !== '')
-  );
+  const hasFamilyRole = Boolean(dbResp || dbAluno);
   const isDualRole = Boolean(hasStaffRole && hasFamilyRole);
 
   const userData = {
@@ -286,8 +308,8 @@ export async function GET(request: Request) {
     colaborador_id: dbUser?.id || '',
     system_user_id: dbUser?.id || '',
     hasDualRole: isDualRole,
-    responsavel_id: dbResp?.id || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
-    aluno_id: dbAluno?.id || dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
+    responsavel_id: dbResp?.id || '',
+    aluno_id: dbAluno?.id || '',
   };
 
   // Corrige metadados no Supabase se hasDualRole estiver dessincronizado

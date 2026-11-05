@@ -8,6 +8,11 @@ import {
 } from '@/lib/server/supabaseAdminSingleton'
 import { verifyCreationToken } from '@/lib/server/firstAccessSecurity'
 import { clearAuthGuardCache } from '@/lib/server/authGuard'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,12 +75,19 @@ export async function POST(request: Request) {
 
       const { data: aluno } = await supabaseAdmin
         .from('alunos')
-        .select('id, nome, email, matricula, dados')
+        .select('id, nome, email, matricula, status, dados')
         .eq('id', realId)
         .maybeSingle()
 
       if (!aluno) {
         return NextResponse.json({ error: 'Cadastro do estudante não encontrado.' }, { status: 404 })
+      }
+
+      if (isStudentAccessBlocked(aluno)) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: A matrícula deste aluno encontra-se inativa.' },
+          { status: 403 }
+        )
       }
 
       const matricula = aluno.matricula || aluno.dados?.codigo || aluno.id
@@ -171,12 +183,31 @@ export async function POST(request: Request) {
 
       const { data: resp } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, celular, auth_id')
+        .select('id, nome, email, celular, auth_id, proibido, dados')
         .eq('id', realId)
         .maybeSingle()
 
       if (!resp) {
         return NextResponse.json({ error: 'Cadastro do responsável não encontrado.' }, { status: 404 })
+      }
+
+      if (isResponsavelAccessBlocked(resp)) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Conta de responsável inativa.' },
+          { status: 403 }
+        )
+      }
+
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(resp.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      })
+
+      if (!hasActiveStudent) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Não há alunos ativos vinculados a este responsável.' },
+          { status: 403 }
+        )
       }
 
       const storedRespEmail = (resp.email || '').trim().toLowerCase()

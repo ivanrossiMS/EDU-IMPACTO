@@ -9,6 +9,11 @@ import {
 import { clearAuthGuardCache } from '@/lib/server/authGuard'
 import { enviarEmailRecuperacaoSenha } from '@/lib/server/emailService'
 import { isNonDeliverableTestEmail } from '@/lib/utils/emailValidation'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,7 +92,7 @@ export async function POST(request: Request) {
         .limit(1),
       supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, auth_id')
+        .select('id, nome, email, auth_id, proibido, dados')
         .ilike('email', cleanEmail)
         .limit(1),
       supabaseAdmin
@@ -130,6 +135,13 @@ export async function POST(request: Request) {
     }
 
     if (!sysUser && respUser) {
+      if (isResponsavelAccessBlocked(respUser)) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Conta de responsável inativa. Contate a secretaria escolar.' },
+          { status: 403 }
+        )
+      }
+
       const { data: links } = await supabaseAdmin
         .from('aluno_responsavel')
         .select('resp_financeiro, resp_pedagogico')
@@ -148,15 +160,27 @@ export async function POST(request: Request) {
           { status: 403 }
         )
       }
+
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(respUser.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      })
+
+      if (!hasActiveStudent && (!alunoUser || isStudentAccessBlocked(alunoUser))) {
+        return NextResponse.json(
+          {
+            error:
+              'Acesso bloqueado: Não há alunos ativos vinculados a este responsável. Por favor, verifique com a secretaria escolar.',
+          },
+          { status: 403 }
+        )
+      }
     }
 
     if (!sysUser && !respUser && alunoUser) {
-      const activeStatus = ['ativo', 'matriculado', 'cursando', 'ativo_transferencia']
-      const isActive =
-        !alunoUser.status || activeStatus.includes((alunoUser.status || '').toLowerCase())
-      if (!isActive) {
+      if (isStudentAccessBlocked(alunoUser)) {
         return NextResponse.json(
-          { error: 'Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
+          { error: 'Acesso bloqueado: Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
           { status: 403 }
         )
       }
@@ -317,13 +341,28 @@ export async function PUT(request: Request) {
 
     const userEmail = (targetUser.email || '').trim().toLowerCase()
     if (userEmail) {
-      const { data: sysRows } = await supabaseAdmin
-        .from('system_users')
-        .select('id, status, senha_definida')
-        .ilike('email', userEmail)
-        .limit(1)
+      const [sysRowsRes, respRowsRes, alunoRowsRes] = await Promise.all([
+        supabaseAdmin
+          .from('system_users')
+          .select('id, status, senha_definida')
+          .ilike('email', userEmail)
+          .limit(1),
+        supabaseAdmin
+          .from('responsaveis')
+          .select('id, proibido, dados')
+          .ilike('email', userEmail)
+          .limit(1),
+        supabaseAdmin
+          .from('alunos')
+          .select('id, status, dados')
+          .or(`email.ilike.${userEmail},dados->>email.ilike.${userEmail}`)
+          .limit(1),
+      ])
 
-      const sysCheck = sysRows?.[0]
+      const sysCheck = sysRowsRes.data?.[0]
+      const respCheck = respRowsRes.data?.[0]
+      const alunoCheck = alunoRowsRes.data?.[0]
+
       if (sysCheck) {
         if (sysCheck.status === 'inativo') {
           return NextResponse.json(
@@ -338,6 +377,30 @@ export async function PUT(request: Request) {
                 'Você ainda não realizou o seu Primeiro Acesso. Para cadastrar sua senha pela primeira vez, acesse a opção "Primeiro Acesso" na tela de login.',
               needsFirstAccess: true,
             },
+            { status: 403 }
+          )
+        }
+      } else {
+        if (respCheck) {
+          if (isResponsavelAccessBlocked(respCheck)) {
+            return NextResponse.json(
+              { error: 'Acesso bloqueado: Conta de responsável inativa. Contate a secretaria escolar.' },
+              { status: 403 }
+            )
+          }
+          const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(respCheck.id), {
+            requireFinOrPed: true,
+            supabaseClient: supabaseAdmin,
+          })
+          if (!hasActiveStudent) {
+            return NextResponse.json(
+              { error: 'Acesso bloqueado: Não há alunos ativos vinculados a este responsável.' },
+              { status: 403 }
+            )
+          }
+        } else if (alunoCheck && isStudentAccessBlocked(alunoCheck)) {
+          return NextResponse.json(
+            { error: 'Acesso bloqueado: Matrícula inativa. Contate a secretaria escolar.' },
             { status: 403 }
           )
         }

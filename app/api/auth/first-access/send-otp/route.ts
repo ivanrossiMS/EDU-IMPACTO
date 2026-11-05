@@ -6,6 +6,11 @@ import {
   type FirstAccessUserPayload,
 } from '@/lib/server/firstAccessSecurity'
 import { enviarCodigoOtpPrimeiroAcesso } from '@/lib/server/emailService'
+import {
+  isStudentAccessBlocked,
+  isResponsavelAccessBlocked,
+  checkResponsavelHasActiveStudent,
+} from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,6 +107,13 @@ export async function POST(request: Request) {
     const responsavel = responsaveisRows?.[0]
 
     if (responsavel) {
+      if (isResponsavelAccessBlocked(responsavel)) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Conta de responsável inativa. Contate a secretaria escolar.' },
+          { status: 403 }
+        )
+      }
+
       // Verifica autorização (Financeiro ou Pedagógico)
       const { data: links } = await supabaseAdmin
         .from('aluno_responsavel')
@@ -117,6 +129,21 @@ export async function POST(request: Request) {
           {
             error:
               'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.',
+          },
+          { status: 403 }
+        )
+      }
+
+      const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(responsavel.id), {
+        requireFinOrPed: true,
+        supabaseClient: supabaseAdmin,
+      })
+
+      if (!hasActiveStudent) {
+        return NextResponse.json(
+          {
+            error:
+              'Acesso bloqueado: Não há alunos ativos vinculados a este responsável. Por favor, verifique com a secretaria escolar.',
           },
           { status: 403 }
         )
@@ -178,11 +205,9 @@ export async function POST(request: Request) {
     const aluno = alunosRows?.[0]
 
     if (aluno) {
-      const activeStatus = ['ativo', 'matriculado', 'cursando', 'ativo_transferencia']
-      const isActive = !aluno.status || activeStatus.includes((aluno.status || '').toLowerCase())
-      if (!isActive) {
+      if (isStudentAccessBlocked(aluno)) {
         return NextResponse.json(
-          { error: 'Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
+          { error: 'Acesso bloqueado: Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
           { status: 403 }
         )
       }
