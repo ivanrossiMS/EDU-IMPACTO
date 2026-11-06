@@ -3,28 +3,23 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
+import { getCachedPerfis, resolveUserPerfil, isPlataformaShaiBlocked } from '@/lib/auth/moduleRouting'
 
 export default function ShaiRedirectPage() {
   const router = useRouter()
-  const { currentUser, hydrated } = useApp()
+  const { currentUser, currentUserPerfil, hydrated } = useApp()
 
   useEffect(() => {
     if (!hydrated) return
 
-    const isAdmin = 
-      currentUser?.cargo === 'Administrador Master' || 
-      currentUser?.perfil === 'Administrador' || 
-      currentUser?.perfil === 'Diretor Geral' ||
-      currentUser?.cargo === 'Diretor Geral' ||
-      currentUser?.perfil === 'Administrador Master' ||
-      currentUser?.cargo === 'Administrador'
-
-    if (isAdmin) {
-      router.replace('/gestao-pessoas/shai')
-    } else {
+    const cachedPerfis = getCachedPerfis()
+    const userPerfilObj = resolveUserPerfil(cachedPerfis, currentUserPerfil, currentUser)
+    if (isPlataformaShaiBlocked(userPerfilObj)) {
       router.replace('/gestao-pessoas')
+    } else {
+      router.replace('/gestao-pessoas/shai')
     }
-  }, [router, currentUser, hydrated])
+  }, [router, currentUser, currentUserPerfil, hydrated])
 
   return (
     <div style={{

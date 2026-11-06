@@ -430,11 +430,14 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
   // ── Step 3: If route is protected and not in permissions → deny ───────────
   const hasMatriculaInheritedAccess =
-    matchedRoute === '/matriculas/negociacoes' &&
+    (matchedRoute === '/matriculas/negociacoes' || matchedRoute === '/matriculas/conciliacao-isaac') &&
     (userPerms.includes('/matriculas/negociacoes') ||
+     userPerms.includes('/matriculas/conciliacao-isaac') ||
      userPerms.includes('matriculas') ||
      userPerms.includes('/matriculas/valores') ||
-     userPerms.includes('/matriculas/digital'))
+     userPerms.includes('/matriculas/digital') ||
+     userPerms.includes('financeiro') ||
+     userPerms.includes('/financeiro/receber'))
 
   const hasFinanceiroInheritedAccess =
     (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar') || matchedRoute === '/configuracoes/financeiro/centro-custo' || pathname.startsWith('/configuracoes/financeiro/centro-custo')) &&

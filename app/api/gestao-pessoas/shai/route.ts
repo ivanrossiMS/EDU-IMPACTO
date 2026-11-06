@@ -16,8 +16,8 @@ function isHrOrAdmin(perfil?: string | null, cargo?: string | null): boolean {
 export async function GET(request: Request) {
   const roleCtx = await resolveUserRole(request)
   if (roleCtx.errorResponse) return roleCtx.errorResponse
-  if (!roleCtx.isStaff || !isHrOrAdmin(roleCtx.perfil, roleCtx.cargo)) {
-    return NextResponse.json({ error: 'Acesso restrito ao RH e Diretoria.' }, { status: 403 })
+  if (!roleCtx.isStaff) {
+    return NextResponse.json({ error: 'Acesso restrito a colaboradores.' }, { status: 403 })
   }
 
   try {
@@ -66,8 +66,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const roleCtx = await resolveUserRole(request)
   if (roleCtx.errorResponse) return roleCtx.errorResponse
-  if (!roleCtx.isStaff || !isHrOrAdmin(roleCtx.perfil, roleCtx.cargo)) {
-    return NextResponse.json({ error: 'Acesso restrito ao RH e Diretoria.' }, { status: 403 })
+  if (!roleCtx.isStaff) {
+    return NextResponse.json({ error: 'Acesso restrito a colaboradores.' }, { status: 403 })
   }
 
   try {

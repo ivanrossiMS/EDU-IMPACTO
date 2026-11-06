@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   type ContaPagarRecord,
   type CentroCustoEscolarOption,
+  type PlanoContasEscolarOption,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   openPrintBorderoPagamentos,
@@ -23,6 +24,7 @@ interface RelatoriosContasPagarTabProps {
   contas: ContaPagarRecord[]
   totalAlunosAtivos: number
   centrosCusto?: CentroCustoEscolarOption[]
+  planoContas?: PlanoContasEscolarOption[]
 }
 
 type ReportType =
@@ -43,6 +45,7 @@ export function RelatoriosContasPagarTab({
   contas,
   totalAlunosAtivos,
   centrosCusto,
+  planoContas,
 }: RelatoriosContasPagarTabProps) {
   const listaCentrosCusto = useMemo(
     () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
@@ -102,12 +105,15 @@ export function RelatoriosContasPagarTab({
     >()
 
     for (const c of contasBase) {
+      const planoMeta = planoContas?.find(
+        (x) => x.id === c.planoContasId || x.label === c.categoria || x.descricao === c.categoria
+      )
       const catMeta = CATEGORIAS_ESCOLARES.find((x) => x.id === c.categoria)
-      const key = c.categoria || 'Outros Custos Operacionais'
+      const key = planoMeta?.label || c.categoria || 'Outros Custos Operacionais'
       const cur = map.get(key) || {
         categoria: key,
-        grupoDre: catMeta?.grupoDre || 'Despesas Operacionais',
-        cor: catMeta?.cor || '#0284c7',
+        grupoDre: planoMeta?.grupoDre || catMeta?.grupoDre || 'Despesas Operacionais',
+        cor: planoMeta?.cor || catMeta?.cor || '#0284c7',
         qtd: 0,
         valorBruto: 0,
         valorLiquido: 0,
@@ -139,7 +145,7 @@ export function RelatoriosContasPagarTab({
         classeAbc,
       }
     })
-  }, [contasBase, totalGeral])
+  }, [contasBase, totalGeral, planoContas])
 
   // ── 2. RELATÓRIO CENTRO DE CUSTO / SEGMENTO ESCOLAR & CUSTO POR ALUNO ─────
   const dadosCentroCusto = useMemo(() => {
@@ -626,7 +632,7 @@ export function RelatoriosContasPagarTab({
         {/* 7 Abas de Relatórios */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[
-            { id: 'curva_abc_categorias', label: '1. Curva ABC por Categoria', icon: <PieChartIcon size={14} /> },
+            { id: 'curva_abc_categorias', label: '1. Curva ABC por Plano de Contas', icon: <PieChartIcon size={14} /> },
             { id: 'centro_custo_aluno', label: '2. Rateio Segmentos & Custo/Aluno', icon: <GraduationCap size={14} /> },
             { id: 'ranking_fornecedores', label: '3. Ranking de Fornecedores', icon: <Building2 size={14} /> },
             { id: 'aging_passivos', label: '4. Aging List & Atrasos', icon: <Clock size={14} /> },
@@ -663,13 +669,13 @@ export function RelatoriosContasPagarTab({
         </div>
       </div>
 
-      {/* CONTEÚDO DO RELATÓRIO 1: CURVA ABC POR CATEGORIA */}
+      {/* CONTEÚDO DO RELATÓRIO 1: CURVA ABC POR PLANO DE CONTAS */}
       {activeReport === 'curva_abc_categorias' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16 }}>
             <div style={{ ...cardContainerStyle, padding: 18, height: 320 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', marginBottom: 12 }}>
-                Distribuição de Despesas por Categoria Escolar (R$)
+                Distribuição de Despesas por Plano de Contas (R$)
               </div>
               <ResponsiveContainer width="100%" height="88%">
                 <BarChart data={dadosCategorias.slice(0, 8)} layout="vertical" margin={{ left: 10, right: 20 }}>
@@ -724,7 +730,7 @@ export function RelatoriosContasPagarTab({
               <thead>
                 <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left', borderBottom: '1px solid #e2e8f0' }}>
                   <th style={{ padding: '12px 14px' }}>Curva</th>
-                  <th style={{ padding: '12px 14px' }}>Categoria Escolar</th>
+                  <th style={{ padding: '12px 14px' }}>Plano de Contas</th>
                   <th style={{ padding: '12px 14px' }}>Grupo DRE</th>
                   <th style={{ padding: '12px 14px', textAlign: 'center' }}>Títulos</th>
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Pago (R$)</th>

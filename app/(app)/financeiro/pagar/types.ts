@@ -88,7 +88,7 @@ export interface ContaPagarRecord {
   totalParcelas?: number
   grupoParcelamentoId?: string
   recorrente?: boolean
-  frequenciaRecorrencia?: 'mensal' | 'bimestral' | 'trimestral' | 'semestral' | 'anual'
+  frequenciaRecorrencia?: 'mensal' | 'dias_30' | 'bimestral' | 'trimestral' | 'semestral' | 'anual'
   aprovacaoStatus?: 'aprovado' | 'pendente_aprovacao' | 'rejeitado'
   aprovadoPor?: string
   observacoes?: string
@@ -131,6 +131,115 @@ export interface CategoriaEscolarMeta {
   cor: string
   orcamentoSugeridoMensal: number
   tipoCustoPadrao: ContaPagarTipoCusto
+}
+
+export interface PlanoContasEscolarOption {
+  id: string
+  codPlano: string
+  descricao: string
+  label: string
+  value: string
+  tipo: 'analitico' | 'sintetico' | 'detalhe'
+  grupoConta: 'receitas' | 'despesas' | 'investimentos'
+  grupoDre: string
+  parentId: string
+  situacao: 'ativo' | 'inativo'
+  cor: string
+  orcamentoSugeridoMensal: number
+  tipoCustoPadrao: ContaPagarTipoCusto
+}
+
+/**
+ * Converte a lista dinâmica de `cfgPlanoContas` (/configuracoes/financeiro/plano-contas)
+ * para opções padronizadas de Plano de Contas usadas em Contas a Pagar.
+ */
+export function resolvePlanoContasEscolares(
+  cfgPlanoContas?: any[],
+  grupoFiltro: 'todos' | 'despesas' | 'receitas' | 'investimentos' = 'todos',
+  incluirInativos = false
+): PlanoContasEscolarOption[] {
+  const rawList = Array.isArray(cfgPlanoContas) ? cfgPlanoContas : []
+  if (rawList.length === 0) return []
+
+  const filtered = rawList.filter((p) => {
+    if (!p || typeof p !== 'object') return false
+    if (!incluirInativos && p.situacao === 'inativo') return false
+    if (grupoFiltro !== 'todos' && p.grupoConta && p.grupoConta !== grupoFiltro) return false
+    return true
+  })
+
+  const sorted = [...filtered].sort((a, b) =>
+    String(a.codPlano || a.codigo || '').localeCompare(
+      String(b.codPlano || b.codigo || ''),
+      undefined,
+      { numeric: true }
+    )
+  )
+
+  return sorted.map((p, idx) => {
+    const codPlano = String(p.codPlano || p.codigo || '').trim()
+    const descricao = String(p.descricao || p.nome || p.label || `Conta ${idx + 1}`).trim()
+    const grupoConta: 'receitas' | 'despesas' | 'investimentos' =
+      p.grupoConta === 'receitas' || p.grupoConta === 'investimentos' ? p.grupoConta : 'despesas'
+    const tipo: 'analitico' | 'sintetico' | 'detalhe' =
+      p.tipo === 'sintetico' || p.tipo === 'detalhe' ? p.tipo : 'analitico'
+    const cor =
+      grupoConta === 'receitas'
+        ? '#10b981'
+        : grupoConta === 'investimentos'
+          ? '#3b82f6'
+          : '#ef4444'
+    const grupoDre =
+      grupoConta === 'receitas'
+        ? 'Receitas'
+        : grupoConta === 'investimentos'
+          ? 'Investimentos'
+          : 'Despesas'
+
+    return {
+      id: String(p.id || codPlano || descricao),
+      codPlano,
+      descricao,
+      label: codPlano ? `${codPlano} — ${descricao}` : descricao,
+      value: codPlano ? `${codPlano} - ${descricao}` : descricao,
+      tipo,
+      grupoConta,
+      grupoDre,
+      parentId: String(p.parentId || ''),
+      situacao: p.situacao === 'inativo' ? 'inativo' : 'ativo',
+      cor,
+      orcamentoSugeridoMensal: typeof p.orcamentoSugeridoMensal === 'number' ? p.orcamentoSugeridoMensal : 10000,
+      tipoCustoPadrao: grupoConta === 'investimentos' ? 'investimento' : 'fixo',
+    }
+  })
+}
+
+export function matchContaPlanoContas(
+  conta: ContaPagarRecord,
+  filterVal: string,
+  planoContasOptions: PlanoContasEscolarOption[]
+): boolean {
+  if (!filterVal || filterVal === 'todas' || filterVal === 'todos') return true
+  if (conta.planoContasId === filterVal || conta.categoria === filterVal) return true
+
+  const opt = planoContasOptions.find(
+    (p) =>
+      p.id === filterVal ||
+      p.value === filterVal ||
+      p.label === filterVal ||
+      p.descricao === filterVal ||
+      p.codPlano === filterVal
+  )
+  if (!opt) return false
+
+  return (
+    conta.planoContasId === opt.id ||
+    conta.categoria === opt.value ||
+    conta.categoria === opt.label ||
+    conta.categoria === opt.descricao ||
+    conta.categoria === opt.id ||
+    (Boolean(opt.codPlano) && conta.categoria.startsWith(`${opt.codPlano} `))
+  )
 }
 
 export const CATEGORIAS_ESCOLARES: CategoriaEscolarMeta[] = [
@@ -561,7 +670,10 @@ export function normalizarContaPagar(
     fornecedorDocumento: unpacked.fornecedorDocumento || undefined,
     categoria: String(unpacked.categoria || CATEGORIAS_ESCOLARES[0].id),
     subcategoria: unpacked.subcategoria || undefined,
-    centroCusto: String(unpacked.centroCusto || CENTROS_CUSTO_ESCOLARES[0].id),
+    centroCusto:
+      unpacked.centroCusto !== undefined && unpacked.centroCusto !== null
+        ? String(unpacked.centroCusto)
+        : '',
     rateio: Array.isArray(unpacked.rateio) ? unpacked.rateio : [],
     planoContasId: unpacked.planoContasId || undefined,
     eventoId: unpacked.eventoId || undefined,
@@ -654,7 +766,7 @@ export function openPrintOrdemPagamento(conta: ContaPagarRecord) {
         <div class="sub">CNPJ/CPF: ${conta.fornecedorDocumento || 'Não informado'}</div>
       </div>
       <div class="cell">
-        <div class="lbl">Classificação Orçamentária</div>
+        <div class="lbl">Plano de Contas</div>
         <div class="val">${conta.categoria}</div>
         <div class="sub">Centro de Custo: ${conta.centroCusto}</div>
       </div>

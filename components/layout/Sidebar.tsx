@@ -59,6 +59,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       { label: 'MATRÍCULA DIGITAL', href: '/matriculas/digital', icon: <FileCheck2 size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'VALORES', href: '/matriculas/valores', icon: <Calculator size={16} />, badge: '2027', badgeColor: 'green' },
       { label: 'NEGOCIAÇÕES', href: '/matriculas/negociacoes', icon: <Handshake size={16} />, badge: '2027', badgeColor: 'green' },
+      { label: 'CONCILIAÇÃO ISAAC', href: '/matriculas/conciliacao-isaac', icon: <ShieldCheck size={16} />, badge: 'LIVE', badgeColor: 'purple' },
     ],
   },
   {

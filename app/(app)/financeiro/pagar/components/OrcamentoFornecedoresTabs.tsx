@@ -10,18 +10,20 @@ import {
   type ContaPagarRecord,
   type FornecedorEscolar,
   type OrcamentoCategoriaItem,
+  type PlanoContasEscolarOption,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   TEMPLATES_DESPESAS_ESCOLARES,
 } from '../types'
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. ABA DE METAS ORÇAMENTÁRIAS (BUDGET VS. REALIZADO POR CATEGORIA)
+// 1. ABA DE METAS ORÇAMENTÁRIAS (BUDGET VS. REALIZADO POR PLANO DE CONTAS)
 // ═══════════════════════════════════════════════════════════════════════════
 interface OrcamentoEscolarTabProps {
   contas: ContaPagarRecord[]
   orcamentos: OrcamentoCategoriaItem[]
   competenciaFiltro: string
+  planoContas?: PlanoContasEscolarOption[]
   onSaveOrcamentos: (novos: OrcamentoCategoriaItem[]) => Promise<void>
 }
 
@@ -29,10 +31,34 @@ export function OrcamentoEscolarTab({
   contas,
   orcamentos,
   competenciaFiltro,
+  planoContas,
   onSaveOrcamentos,
 }: OrcamentoEscolarTabProps) {
   const mesAtual = useMemo(() => new Date().toISOString().slice(0, 7), [])
   const mesReferencia = competenciaFiltro !== 'todos' ? competenciaFiltro : mesAtual
+
+  const listaPlanoContas = useMemo(() => {
+    if (Array.isArray(planoContas) && planoContas.length > 0) {
+      return planoContas
+        .filter((p) => p.grupoConta !== 'receitas')
+        .map((p) => ({
+          id: p.label,
+          planoId: p.id,
+          label: p.label,
+          grupoDre: p.grupoDre,
+          cor: p.cor,
+          orcamentoSugeridoMensal: p.orcamentoSugeridoMensal,
+        }))
+    }
+    return CATEGORIAS_ESCOLARES.map((c) => ({
+      id: c.id,
+      planoId: c.id,
+      label: c.label,
+      grupoDre: c.grupoDre,
+      cor: c.cor,
+      orcamentoSugeridoMensal: c.orcamentoSugeridoMensal,
+    }))
+  }, [planoContas])
 
   const [draftMetas, setDraftMetas] = useState<Record<string, number>>(() => {
     const map: Record<string, number> = {}
@@ -40,18 +66,23 @@ export function OrcamentoEscolarTab({
       const found = orcamentos.find((o) => o.categoria === c.id)
       map[c.id] = found ? found.metaMensal : c.orcamentoSugeridoMensal
     }
+    for (const o of orcamentos) {
+      map[o.categoria] = o.metaMensal
+    }
     return map
   })
   const [saving, setSaving] = useState(false)
 
   const linhasOrcamento = useMemo(() => {
-    return CATEGORIAS_ESCOLARES.map((cat) => {
-      const meta = Number(draftMetas[cat.id] ?? cat.orcamentoSugeridoMensal) || 0
+    return listaPlanoContas.map((cat) => {
+      const foundOrc = orcamentos.find((o) => o.categoria === cat.id || o.categoria === cat.planoId)
+      const defaultMeta = foundOrc ? foundOrc.metaMensal : cat.orcamentoSugeridoMensal
+      const meta = Number(draftMetas[cat.id] ?? defaultMeta) || 0
       const realizado = contas
         .filter(
           (c) =>
             c.status !== 'cancelado' &&
-            c.categoria === cat.id &&
+            (c.categoria === cat.id || c.planoContasId === cat.planoId) &&
             (c.competencia || c.vencimento.slice(0, 7)) === mesReferencia
         )
         .reduce((acc, c) => acc + (Number(c.valor) || 0), 0)
@@ -67,7 +98,7 @@ export function OrcamentoEscolarTab({
         statusOrcamento: pct > 100 ? 'estourado' : pct >= 85 ? 'atencao' : 'ok',
       }
     })
-  }, [contas, draftMetas, mesReferencia])
+  }, [contas, draftMetas, mesReferencia, listaPlanoContas, orcamentos])
 
   const totalMeta = useMemo(() => linhasOrcamento.reduce((a, b) => a + b.meta, 0), [linhasOrcamento])
   const totalRealizado = useMemo(() => linhasOrcamento.reduce((a, b) => a + b.realizado, 0), [linhasOrcamento])
@@ -75,7 +106,7 @@ export function OrcamentoEscolarTab({
   const handleSave = async () => {
     setSaving(true)
     try {
-      const payload: OrcamentoCategoriaItem[] = CATEGORIAS_ESCOLARES.map((c) => ({
+      const payload: OrcamentoCategoriaItem[] = listaPlanoContas.map((c) => ({
         categoria: c.id,
         metaMensal: Math.max(0, Number(draftMetas[c.id] ?? c.orcamentoSugeridoMensal) || 0),
         alertaPercentual: 85,
@@ -248,6 +279,7 @@ interface FornecedoresEscolaresTabProps {
   fornecedores: FornecedorEscolar[]
   contas: ContaPagarRecord[]
   centrosCusto?: any[]
+  planoContas?: PlanoContasEscolarOption[]
   onSaveFornecedor: (f: Partial<FornecedorEscolar>) => Promise<FornecedorEscolar | null>
   onDeleteFornecedor: (id: string) => Promise<void>
 }
@@ -256,6 +288,7 @@ export function FornecedoresEscolaresTab({
   fornecedores,
   contas,
   centrosCusto,
+  planoContas,
   onSaveFornecedor,
   onDeleteFornecedor,
 }: FornecedoresEscolaresTabProps) {
@@ -263,6 +296,17 @@ export function FornecedoresEscolaresTab({
     () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
     [centrosCusto]
   )
+  const opcoesPlanoContas = useMemo(() => {
+    if (Array.isArray(planoContas) && planoContas.length > 0) {
+      const despesasFirst = [...planoContas].sort((a, b) => {
+        if (a.grupoConta === 'receitas' && b.grupoConta !== 'receitas') return 1
+        if (a.grupoConta !== 'receitas' && b.grupoConta === 'receitas') return -1
+        return 0
+      })
+      return despesasFirst.map((p) => ({ id: p.label, label: p.label }))
+    }
+    return CATEGORIAS_ESCOLARES.map((c) => ({ id: c.id, label: c.label }))
+  }, [planoContas])
   const [busca, setBusca] = useState('')
   const [editing, setEditing] = useState<Partial<FornecedorEscolar> | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -324,7 +368,7 @@ export function FornecedoresEscolaresTab({
             Cadastro de Fornecedores, Prestadores e Credores Escolares ({fornecedores.length})
           </h3>
           <p style={{ margin: '3px 0 0', fontSize: 12, color: '#475569' }}>
-            Gerencie dados bancários, chaves PIX, CNPJ e categoria contábil padrão de cada fornecedor
+            Gerencie dados bancários, chaves PIX, CNPJ e plano de contas padrão de cada fornecedor
           </p>
         </div>
 
@@ -337,7 +381,7 @@ export function FornecedoresEscolaresTab({
             spellCheck={false}
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, CNPJ ou categoria..."
+            placeholder="Buscar por nome, CNPJ ou plano de contas..."
             style={{
               padding: '9px 14px',
               borderRadius: 10,
@@ -355,8 +399,8 @@ export function FornecedoresEscolaresTab({
                 nome: '',
                 nomeFantasia: '',
                 documento: '',
-                categoriaPadrao: CATEGORIAS_ESCOLARES[0].id,
-                centroCustoPadrao: CENTROS_CUSTO_ESCOLARES[0].id,
+                categoriaPadrao: opcoesPlanoContas[0]?.id || CATEGORIAS_ESCOLARES[0].id,
+                centroCustoPadrao: '',
                 formaPagamentoPadrao: 'PIX',
                 chavePix: '',
                 telefone: '',
@@ -427,15 +471,15 @@ export function FornecedoresEscolaresTab({
           </div>
           <div>
             <label htmlFor="f-edit-cat" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
-              Categoria Padrão
+              Plano de Contas Padrão
             </label>
             <select
               id="f-edit-cat"
-              value={editing.categoriaPadrao || CATEGORIAS_ESCOLARES[0].id}
+              value={editing.categoriaPadrao || opcoesPlanoContas[0]?.id || CATEGORIAS_ESCOLARES[0].id}
               onChange={(e) => setEditing({ ...editing, categoriaPadrao: e.target.value })}
               style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a', fontSize: 12 }}
             >
-              {CATEGORIAS_ESCOLARES.map((c) => (
+              {opcoesPlanoContas.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
@@ -446,10 +490,11 @@ export function FornecedoresEscolaresTab({
             </label>
             <select
               id="f-edit-cc"
-              value={editing.centroCustoPadrao || listaCentrosCusto[0]?.id || CENTROS_CUSTO_ESCOLARES[0].id}
+              value={editing.centroCustoPadrao ?? ''}
               onChange={(e) => setEditing({ ...editing, centroCustoPadrao: e.target.value })}
               style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a', fontSize: 12 }}
             >
+              <option value="">---------</option>
               {listaCentrosCusto.map((cc: any) => (
                 <option key={cc.id} value={cc.id}>{cc.label} ({cc.sigla})</option>
               ))}

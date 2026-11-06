@@ -3,22 +3,21 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  X, Plus, Trash2, Building2, DollarSign,
-  AlertTriangle, Split, Repeat, Percent
+  X, Plus, Trash2,
+  AlertTriangle, Split, RotateCw, Search, Check,
+  Edit3, BookOpen, FileText, ListOrdered
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import {
   type ContaPagarRecord,
   type FornecedorEscolar,
   type RateioCentroCustoItem,
-  type ContaPagarPrioridade,
   type ContaPagarTipoCusto,
-  type ContaPagarStatus,
   type CentroCustoEscolarOption,
-  CATEGORIAS_ESCOLARES,
+  type PlanoContasEscolarOption,
   CENTROS_CUSTO_ESCOLARES,
-  FORMAS_PAGAMENTO_CONTAS_PAGAR,
-  CAIXAS_BANCOS_ESCOLARES,
+  TEMPLATES_DESPESAS_ESCOLARES,
+  resolvePlanoContasEscolares,
   calcularValorLiquido,
 } from '../types'
 
@@ -28,7 +27,7 @@ interface ContaPagarFormModalProps {
   editingRecord: ContaPagarRecord | null
   fornecedores: FornecedorEscolar[]
   planoContas: any[]
-  eventosFinanceiros: any[]
+  eventosFinanceiros?: any[]
   centrosCusto?: CentroCustoEscolarOption[]
   onSave: (records: Partial<ContaPagarRecord>[]) => Promise<void>
   onQuickCreateFornecedor: (forn: Partial<FornecedorEscolar>) => Promise<FornecedorEscolar | null>
@@ -60,13 +59,40 @@ function addMonthsISO(isoDate: string, monthsToAdd: number): string {
   return `${targetYear}-${String(normalizedMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
 }
 
+function addDaysISO(isoDate: string, daysToAdd: number): string {
+  const parts = (isoDate || '').split('-').map(Number)
+  if (parts.length < 3 || !parts[0]) {
+    const d = new Date()
+    d.setDate(d.getDate() + daysToAdd)
+    return d.toISOString().split('T')[0]
+  }
+  const [y, m, day] = parts
+  const dt = new Date(y, m - 1, day, 12, 0, 0)
+  dt.setDate(dt.getDate() + daysToAdd)
+  const ry = dt.getFullYear()
+  const rm = String(dt.getMonth() + 1).padStart(2, '0')
+  const rd = String(dt.getDate()).padStart(2, '0')
+  return `${ry}-${rm}-${rd}`
+}
+
+const TIPO_CONTA_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  analitico: { label: 'Analítico', color: '#2563eb', bg: '#eff6ff' },
+  sintetico: { label: 'Sintético', color: '#7c3aed', bg: '#f5f3ff' },
+  detalhe: { label: 'Detalhe', color: '#059669', bg: '#ecfdf5' },
+}
+
+const GRUPO_CONTA_BADGE: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
+  despesas: { label: 'Despesas', emoji: '📉', color: '#dc2626', bg: '#fef2f2' },
+  investimentos: { label: 'Investimentos', emoji: '🪙', color: '#2563eb', bg: '#eff6ff' },
+  receitas: { label: 'Receitas', emoji: '📈', color: '#059669', bg: '#ecfdf5' },
+}
+
 export function ContaPagarFormModal({
   isOpen,
   onClose,
   editingRecord,
   fornecedores,
   planoContas,
-  eventosFinanceiros,
   centrosCusto,
   onSave,
   onQuickCreateFornecedor,
@@ -75,12 +101,26 @@ export function ContaPagarFormModal({
     () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
     [centrosCusto]
   )
-  const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
-  const mesAtualStr = hojeStr.slice(0, 7)
 
-  const [activeSection, setActiveSection] = useState<'dados' | 'financeiro' | 'rateio' | 'parcelamento'>('dados')
+  const listaPlanoContas = useMemo(
+    () => resolvePlanoContasEscolares(planoContas, 'todos', false),
+    [planoContas]
+  )
+
+  const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
+
+  // Abas simplificadas (2 abas: 1. Dados & Parcelas | 2. Rateio de Custo)
+  const [activeSection, setActiveSection] = useState<'dados' | 'rateio'>('dados')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+
+  // Modais/Popovers auxiliares de busca rápida
+  const [showPlanoContasModal, setShowPlanoContasModal] = useState(false)
+  const [buscaPlanoContas, setBuscaPlanoContas] = useState('')
+  const [filtroGrupoPlano, setFiltroGrupoPlano] = useState<'todos' | 'despesas' | 'investimentos' | 'receitas'>('todos')
+  const [showFornecedorSearch, setShowFornecedorSearch] = useState(false)
+  const [showTemplatesPopover, setShowTemplatesPopover] = useState(false)
+  const [showPreviewParcelas, setShowPreviewParcelas] = useState(false)
 
   // Campos principais
   const [codigo, setCodigo] = useState('')
@@ -88,28 +128,28 @@ export function ContaPagarFormModal({
   const [fornecedorId, setFornecedorId] = useState('')
   const [fornecedorNome, setFornecedorNome] = useState('')
   const [fornecedorDocumento, setFornecedorDocumento] = useState('')
-  const [categoria, setCategoria] = useState<string>(CATEGORIAS_ESCOLARES[0].id)
+  const [categoria, setCategoria] = useState<string>('')
   const [subcategoria, setSubcategoria] = useState('')
-  const [centroCusto, setCentroCusto] = useState<string>(CENTROS_CUSTO_ESCOLARES[0].id)
+  const [centroCusto, setCentroCusto] = useState<string>('')
   const [planoContasId, setPlanoContasId] = useState('')
-  const [eventoId, setEventoId] = useState('')
   const [tipoCusto, setTipoCusto] = useState<ContaPagarTipoCusto>('fixo')
-  const [prioridade, setPrioridade] = useState<ContaPagarPrioridade>('media')
+  const [unidadeEmpresa, setUnidadeEmpresa] = useState('')
 
-  // Datas e Status
-  const [dataEmissao, setDataEmissao] = useState(hojeStr)
+  // Datas e Parcelas (Vencimento Inicial, Parcela Inicial, Parcela Final, Emissão)
   const [vencimento, setVencimento] = useState(hojeStr)
-  const [competencia, setCompetencia] = useState(mesAtualStr)
-  const [status, setStatus] = useState<ContaPagarStatus>('pendente')
-  const [dataPagamento, setDataPagamento] = useState(hojeStr)
-  const [aprovacaoStatus, setAprovacaoStatus] = useState<'aprovado' | 'pendente_aprovacao' | 'rejeitado'>('aprovado')
+  const [dataEmissao, setDataEmissao] = useState(hojeStr)
+  const [parcelaInicial, setParcelaInicial] = useState<number>(1)
+  const [parcelaFinal, setParcelaFinal] = useState<number>(1)
+  const [regraVencimento, setRegraVencimento] = useState<'mesmo_dia' | 'cada_30_dias'>('mesmo_dia')
+  const [modoValorParcela, setModoValorParcela] = useState<'repetir' | 'dividir'>('repetir')
+  const [parcelasPreview, setParcelasPreview] = useState<ParcelaPreviewItem[]>([])
 
-  // Valores e retenções
-  const [valorBase, setValorBase] = useState<string>('0')
+  // Alçada e Valores
+  const [aprovacaoStatus, setAprovacaoStatus] = useState<'aprovado' | 'pendente_aprovacao' | 'rejeitado'>('aprovado')
+  const [valorBase, setValorBase] = useState<string>('')
   const [desconto, setDesconto] = useState<string>('0')
   const [juros, setJuros] = useState<string>('0')
   const [multa, setMulta] = useState<string>('0')
-  const [mostrarRetencoes, setMostrarRetencoes] = useState(false)
   const [retIss, setRetIss] = useState<string>('0')
   const [retIrrf, setRetIrrf] = useState<string>('0')
   const [retInss, setRetInss] = useState<string>('0')
@@ -117,8 +157,9 @@ export function ContaPagarFormModal({
 
   // Pagamento e Documentos
   const [formaPagamento, setFormaPagamento] = useState<string>('PIX')
-  const [caixaOrigem, setCaixaOrigem] = useState<string>(CAIXAS_BANCOS_ESCOLARES[0])
-  const [tipoDocumento, setTipoDocumento] = useState<'NF-e' | 'NFS-e' | 'Boleto' | 'Recibo' | 'Contrato' | 'DARF' | 'Folha' | 'Fatura' | 'Outro'>('NFS-e')
+  const [tipoDocumento, setTipoDocumento] = useState<
+    'NF-e' | 'NFS-e' | 'Boleto' | 'Recibo' | 'Contrato' | 'DARF' | 'Folha' | 'Fatura' | 'Outro'
+  >('NFS-e')
   const [numeroDocumento, setNumeroDocumento] = useState('')
   const [notaFiscal, setNotaFiscal] = useState('')
   const [chavePix, setChavePix] = useState('')
@@ -128,13 +169,6 @@ export function ContaPagarFormModal({
   // Rateio Multi-Centro de Custo
   const [usarRateio, setUsarRateio] = useState(false)
   const [rateioList, setRateioList] = useState<RateioCentroCustoItem[]>([])
-
-  // Parcelamento / Recorrência
-  const [modoParcelamento, setModoParcelamento] = useState<'unico' | 'parcelado' | 'recorrente'>('unico')
-  const [qtdParcelas, setQtdParcelas] = useState<number>(2)
-  const [modoValorParcela, setModoValorParcela] = useState<'dividir' | 'repetir'>('repetir')
-  const [frequenciaRecorrencia, setFrequenciaRecorrencia] = useState<'mensal' | 'bimestral' | 'trimestral' | 'semestral' | 'anual'>('mensal')
-  const [parcelasPreview, setParcelasPreview] = useState<ParcelaPreviewItem[]>([])
 
   // Quick Fornecedor inline
   const [showQuickForn, setShowQuickForn] = useState(false)
@@ -146,6 +180,17 @@ export function ContaPagarFormModal({
     if (!isOpen) return
     setFormError('')
     setActiveSection('dados')
+    setShowPlanoContasModal(false)
+    setShowFornecedorSearch(false)
+    setShowTemplatesPopover(false)
+    setShowPreviewParcelas(false)
+    setShowQuickForn(false)
+    setBuscaPlanoContas('')
+
+    const defaultPlano =
+      listaPlanoContas.find((p) => p.grupoConta === 'despesas' && p.tipo !== 'sintetico') ||
+      listaPlanoContas.find((p) => p.grupoConta === 'despesas') ||
+      listaPlanoContas[0]
 
     if (editingRecord) {
       setCodigo(editingRecord.codigo || '')
@@ -153,18 +198,26 @@ export function ContaPagarFormModal({
       setFornecedorId(editingRecord.fornecedorId || '')
       setFornecedorNome(editingRecord.fornecedorNome || '')
       setFornecedorDocumento(editingRecord.fornecedorDocumento || '')
-      setCategoria(editingRecord.categoria || CATEGORIAS_ESCOLARES[0].id)
+
+      const matchedPlano = listaPlanoContas.find(
+        (p) =>
+          p.id === editingRecord.planoContasId ||
+          p.value === editingRecord.categoria ||
+          p.label === editingRecord.categoria ||
+          p.descricao === editingRecord.categoria
+      )
+      setCategoria(matchedPlano ? matchedPlano.value : editingRecord.categoria || defaultPlano?.value || '')
+      setPlanoContasId(matchedPlano ? matchedPlano.id : editingRecord.planoContasId || defaultPlano?.id || '')
+
       setSubcategoria(editingRecord.subcategoria || '')
-      setCentroCusto(editingRecord.centroCusto || CENTROS_CUSTO_ESCOLARES[0].id)
-      setPlanoContasId(editingRecord.planoContasId || '')
-      setEventoId(editingRecord.eventoId || '')
+      setUnidadeEmpresa(editingRecord.subcategoria || '')
+      setCentroCusto(editingRecord.centroCusto || '')
       setTipoCusto(editingRecord.tipoCusto || 'fixo')
-      setPrioridade(editingRecord.prioridade || 'media')
-      setDataEmissao(editingRecord.dataEmissao || hojeStr)
       setVencimento(editingRecord.vencimento || hojeStr)
-      setCompetencia(editingRecord.competencia || (editingRecord.vencimento || hojeStr).slice(0, 7))
-      setStatus(editingRecord.status || 'pendente')
-      setDataPagamento(editingRecord.dataPagamento || hojeStr)
+      setDataEmissao(editingRecord.dataEmissao || hojeStr)
+      setParcelaInicial(editingRecord.parcelaAtual || 1)
+      setParcelaFinal(editingRecord.totalParcelas || 1)
+      setRegraVencimento(editingRecord.frequenciaRecorrencia === 'dias_30' ? 'cada_30_dias' : 'mesmo_dia')
       setAprovacaoStatus(editingRecord.aprovacaoStatus || 'aprovado')
       setValorBase(String(editingRecord.valorBase ?? editingRecord.valor ?? 0))
       setDesconto(String(editingRecord.desconto ?? 0))
@@ -173,14 +226,16 @@ export function ContaPagarFormModal({
 
       const det = editingRecord.detalhesRetencao
       const totalRet = Number(editingRecord.retencaoImpostos || 0)
-      setMostrarRetencoes(totalRet > 0)
       setRetIss(String(det?.iss ?? (totalRet > 0 && !det ? totalRet : 0)))
       setRetIrrf(String(det?.irrf ?? 0))
       setRetInss(String(det?.inss ?? 0))
       setRetCsrf(String(det?.pisCofinsCsll ?? 0))
 
-      setFormaPagamento(editingRecord.formaPagamento || 'PIX')
-      setCaixaOrigem(editingRecord.caixaOrigem || CAIXAS_BANCOS_ESCOLARES[0])
+      setFormaPagamento(
+        editingRecord.formaPagamento && editingRecord.formaPagamento !== 'Carteira'
+          ? editingRecord.formaPagamento
+          : 'PIX'
+      )
       setTipoDocumento(editingRecord.tipoDocumento || 'NFS-e')
       setNumeroDocumento(editingRecord.numeroDocumento || '')
       setNotaFiscal(editingRecord.notaFiscal || '')
@@ -195,9 +250,6 @@ export function ContaPagarFormModal({
         setUsarRateio(false)
         setRateioList([])
       }
-
-      setModoParcelamento(editingRecord.recorrente ? 'recorrente' : 'unico')
-      setQtdParcelas(1)
     } else {
       const randCode = `CP-${new Date().getFullYear()}-${String(Math.floor(100 + Math.random() * 899))}`
       setCodigo(randCode)
@@ -205,30 +257,28 @@ export function ContaPagarFormModal({
       setFornecedorId('')
       setFornecedorNome('')
       setFornecedorDocumento('')
-      setCategoria(CATEGORIAS_ESCOLARES[0].id)
+      setCategoria(defaultPlano?.value || '')
+      setPlanoContasId(defaultPlano?.id || '')
       setSubcategoria('')
-      setCentroCusto(CENTROS_CUSTO_ESCOLARES[0].id)
-      setPlanoContasId('')
-      setEventoId('')
+      setCentroCusto('')
       setTipoCusto('fixo')
-      setPrioridade('media')
-      setDataEmissao(hojeStr)
+      setUnidadeEmpresa('')
       setVencimento(hojeStr)
-      setCompetencia(mesAtualStr)
-      setStatus('pendente')
-      setDataPagamento(hojeStr)
+      setDataEmissao(hojeStr)
+      setParcelaInicial(1)
+      setParcelaFinal(1)
+      setRegraVencimento('mesmo_dia')
+      setModoValorParcela('repetir')
       setAprovacaoStatus('aprovado')
       setValorBase('')
       setDesconto('0')
       setJuros('0')
       setMulta('0')
-      setMostrarRetencoes(false)
       setRetIss('0')
       setRetIrrf('0')
       setRetInss('0')
       setRetCsrf('0')
       setFormaPagamento('PIX')
-      setCaixaOrigem(CAIXAS_BANCOS_ESCOLARES[0])
       setTipoDocumento('NFS-e')
       setNumeroDocumento('')
       setNotaFiscal('')
@@ -237,11 +287,68 @@ export function ContaPagarFormModal({
       setObservacoes('')
       setUsarRateio(false)
       setRateioList([])
-      setModoParcelamento('unico')
-      setQtdParcelas(2)
-      setModoValorParcela('repetir')
     }
-  }, [isOpen, editingRecord, hojeStr, mesAtualStr])
+  }, [isOpen, editingRecord, hojeStr, listaPlanoContas, listaCentrosCusto])
+
+  useEffect(() => {
+    if (!isOpen || editingRecord) return
+    if (!categoria && listaPlanoContas.length > 0) {
+      const defaultPlano =
+        listaPlanoContas.find((p) => p.grupoConta === 'despesas' && p.tipo !== 'sintetico') ||
+        listaPlanoContas.find((p) => p.grupoConta === 'despesas') ||
+        listaPlanoContas[0]
+      if (defaultPlano) {
+        setCategoria(defaultPlano.value)
+        setPlanoContasId(defaultPlano.id)
+      }
+    }
+  }, [isOpen, editingRecord, categoria, listaPlanoContas])
+
+  const planoSelecionadoObj = useMemo(() => {
+    return (
+      listaPlanoContas.find(
+        (p) =>
+          (planoContasId && p.id === planoContasId) ||
+          (categoria && (p.value === categoria || p.label === categoria || p.descricao === categoria))
+      ) || null
+    )
+  }, [listaPlanoContas, planoContasId, categoria])
+
+  const planosFiltradosModal = useMemo(() => {
+    const q = buscaPlanoContas.trim().toLowerCase()
+    return listaPlanoContas.filter((p) => {
+      if (filtroGrupoPlano !== 'todos' && p.grupoConta !== filtroGrupoPlano) return false
+      if (!q) return true
+      return (
+        p.codPlano.toLowerCase().includes(q) ||
+        p.descricao.toLowerCase().includes(q) ||
+        p.label.toLowerCase().includes(q)
+      )
+    })
+  }, [listaPlanoContas, buscaPlanoContas, filtroGrupoPlano])
+
+  const fornecedoresFiltrados = useMemo(() => {
+    const q = fornecedorNome.trim().toLowerCase()
+    if (!q) return fornecedores.slice(0, 12)
+    return fornecedores
+      .filter(
+        (f) =>
+          f.nome.toLowerCase().includes(q) ||
+          (f.nomeFantasia || '').toLowerCase().includes(q) ||
+          (f.documento || '').toLowerCase().includes(q)
+      )
+      .slice(0, 12)
+  }, [fornecedores, fornecedorNome])
+
+  const handleSelectPlanoConta = (item: PlanoContasEscolarOption) => {
+    setPlanoContasId(item.id)
+    setCategoria(item.value)
+    if (item.grupoConta === 'investimentos') {
+      setTipoCusto('investimento')
+    }
+    setShowPlanoContasModal(false)
+    if (formError) setFormError('')
+  }
 
   const numBase = Math.max(0, Number(String(valorBase).replace(',', '.')) || 0)
   const numDesconto = Math.max(0, Number(String(desconto).replace(',', '.')) || 0)
@@ -258,50 +365,60 @@ export function ContaPagarFormModal({
     [numBase, numDesconto, numJuros, numMulta, totalRetencao]
   )
 
-  // Atualiza preview de parcelas quando parâmetros mudam
+  const pIni = Math.max(1, Math.min(60, Number(parcelaInicial) || 1))
+  const pFim = Math.max(pIni, Math.min(60, Number(parcelaFinal) || pIni))
+  const qtdParcelasGeradas = Math.max(1, pFim - pIni + 1)
+
+  // Gera preview de parcelas automaticamente quando Parcela Final > Parcela Inicial
   useEffect(() => {
-    if (modoParcelamento === 'unico' || editingRecord) {
+    if (editingRecord || qtdParcelasGeradas <= 1) {
       setParcelasPreview([])
       return
     }
-    const count = Math.min(60, Math.max(2, Number(qtdParcelas) || 2))
-    const stepMonths =
-      frequenciaRecorrencia === 'bimestral'
-        ? 2
-        : frequenciaRecorrencia === 'trimestral'
-          ? 3
-          : frequenciaRecorrencia === 'semestral'
-            ? 6
-            : frequenciaRecorrencia === 'anual'
-              ? 12
-              : 1
+    const usarIntervalo30Dias = regraVencimento === 'cada_30_dias'
+    const baseDesc = descricao.trim() || fornecedorNome.trim() || 'Despesa'
 
     const list: ParcelaPreviewItem[] = []
-    for (let i = 0; i < count; i++) {
-      const venc = addMonthsISO(vencimento || hojeStr, i * stepMonths)
+    for (let idx = 0; idx < qtdParcelasGeradas; idx++) {
+      const numParcela = pIni + idx
+      const venc = usarIntervalo30Dias
+        ? addDaysISO(vencimento || hojeStr, idx * 30)
+        : addMonthsISO(vencimento || hojeStr, idx)
       const comp = venc.slice(0, 7)
       const vBase =
         modoValorParcela === 'dividir'
-          ? Math.round((numBase / count) * 100) / 100
+          ? Math.round((numBase / qtdParcelasGeradas) * 100) / 100
           : numBase
       const vLiq =
         modoValorParcela === 'dividir'
-          ? Math.round((valorLiquidoCalculado / count) * 100) / 100
+          ? Math.round((valorLiquidoCalculado / qtdParcelasGeradas) * 100) / 100
           : valorLiquidoCalculado
       list.push({
-        numero: i + 1,
-        total: count,
+        numero: numParcela,
+        total: pFim,
         vencimento: venc,
         competencia: comp,
         valorBase: vBase,
         valorLiquido: vLiq,
-        descricao: `${descricao || 'Despesa'} (${String(i + 1).padStart(2, '0')}/${String(count).padStart(2, '0')})`,
+        descricao: `${baseDesc} (${String(numParcela).padStart(2, '0')}/${String(pFim).padStart(2, '0')})`,
       })
     }
     setParcelasPreview(list)
-  }, [modoParcelamento, qtdParcelas, modoValorParcela, frequenciaRecorrencia, vencimento, hojeStr, numBase, valorLiquidoCalculado, descricao, editingRecord])
+  }, [
+    editingRecord,
+    pIni,
+    pFim,
+    qtdParcelasGeradas,
+    regraVencimento,
+    modoValorParcela,
+    vencimento,
+    hojeStr,
+    numBase,
+    valorLiquidoCalculado,
+    descricao,
+    fornecedorNome,
+  ])
 
-  // Sincroniza valores em R$ do rateio quando valorLiquido muda
   const rateioComValores = useMemo(() => {
     return rateioList.map((item) => ({
       ...item,
@@ -314,17 +431,60 @@ export function ContaPagarFormModal({
     [rateioComValores]
   )
 
-  const handleSelectFornecedor = (id: string) => {
-    setFornecedorId(id)
-    const found = fornecedores.find((f) => f.id === id)
-    if (found) {
-      setFornecedorNome(found.nome)
-      setFornecedorDocumento(found.documento || '')
-      if (found.categoriaPadrao) setCategoria(found.categoriaPadrao)
-      if (found.centroCustoPadrao) setCentroCusto(found.centroCustoPadrao)
-      if (found.formaPagamentoPadrao) setFormaPagamento(found.formaPagamentoPadrao)
-      if (found.chavePix) setChavePix(found.chavePix)
+  const handleSelectFornecedor = (found: FornecedorEscolar) => {
+    setFornecedorId(found.id)
+    setFornecedorNome(found.nome)
+    setFornecedorDocumento(found.documento || '')
+    if (!descricao.trim()) {
+      setDescricao(found.nomeFantasia || found.nome)
     }
+    if (found.categoriaPadrao) {
+      const matchedPlano = listaPlanoContas.find(
+        (p) =>
+          p.id === found.categoriaPadrao ||
+          p.value === found.categoriaPadrao ||
+          p.label === found.categoriaPadrao ||
+          p.descricao === found.categoriaPadrao
+      )
+      if (matchedPlano) {
+        setCategoria(matchedPlano.value)
+        setPlanoContasId(matchedPlano.id)
+      } else {
+        setCategoria(found.categoriaPadrao)
+      }
+    }
+    if (found.formaPagamentoPadrao && found.formaPagamentoPadrao !== 'Carteira') {
+      setFormaPagamento(found.formaPagamentoPadrao)
+    }
+    if (found.chavePix) setChavePix(found.chavePix)
+    setShowFornecedorSearch(false)
+    if (formError) setFormError('')
+  }
+
+  const handleApplyTemplate = (tpl: (typeof TEMPLATES_DESPESAS_ESCOLARES)[number]) => {
+    setDescricao(tpl.titulo)
+    if (!fornecedorNome.trim()) {
+      setFornecedorNome(tpl.titulo.split('—')[0].trim())
+    }
+    setCentroCusto(tpl.centroCusto)
+    setTipoCusto(tpl.tipoCusto)
+    setFormaPagamento(tpl.formaPagamento)
+    if (!valorBase || Number(valorBase) === 0) {
+      setValorBase(String(tpl.valorEstimado))
+    }
+    const matchedPlano = listaPlanoContas.find(
+      (p) =>
+        p.descricao.toLowerCase().includes(tpl.categoria.split(' ')[0].toLowerCase()) ||
+        p.label.toLowerCase().includes(tpl.categoria.split(' ')[0].toLowerCase())
+    )
+    if (matchedPlano) {
+      setCategoria(matchedPlano.value)
+      setPlanoContasId(matchedPlano.id)
+    } else {
+      setCategoria(tpl.categoria)
+    }
+    setShowTemplatesPopover(false)
+    if (formError) setFormError('')
   }
 
   const handleAplicarRateioPedagogicoPadrao = () => {
@@ -353,7 +513,10 @@ export function ContaPagarFormModal({
   const handleAddRateioRow = () => {
     const restante = Math.max(0, 100 - somaPercentualRateio)
     const used = new Set(rateioList.map((r) => r.centroCusto))
-    const nextCentro = listaCentrosCusto.find((c) => !used.has(c.id))?.id || listaCentrosCusto[0]?.id || CENTROS_CUSTO_ESCOLARES[0].id
+    const nextCentro =
+      listaCentrosCusto.find((c) => !used.has(c.id))?.id ||
+      listaCentrosCusto[0]?.id ||
+      CENTROS_CUSTO_ESCOLARES[0].id
     setRateioList((prev) => [...prev, { centroCusto: nextCentro, percentual: restante, valor: 0 }])
   }
 
@@ -371,6 +534,7 @@ export function ContaPagarFormModal({
       setFornecedorId(created.id)
       setFornecedorNome(created.nome)
       setFornecedorDocumento(created.documento || '')
+      if (!descricao.trim()) setDescricao(created.nome)
       if (created.chavePix) setChavePix(created.chavePix)
       setShowQuickForn(false)
       setQfNome('')
@@ -383,50 +547,57 @@ export function ContaPagarFormModal({
     e.preventDefault()
     setFormError('')
 
-    if (!descricao.trim()) {
-      setFormError('Informe a descrição da despesa ou compromisso financeiro.')
+    const resolvedFornecedor = fornecedorNome.trim()
+    const resolvedDescricao = descricao.trim() || resolvedFornecedor
+
+    if (!resolvedFornecedor) {
+      setFormError('Informe ou pesquise o Fornecedor / Credor.')
       setActiveSection('dados')
       return
     }
-    if (!fornecedorNome.trim()) {
-      setFormError('Informe ou selecione o Fornecedor / Credor.')
+    if (!categoria.trim()) {
+      setFormError('Selecione uma Conta Plano (Plano de Contas).')
       setActiveSection('dados')
       return
     }
     if (numBase <= 0) {
-      setFormError('O valor bruto da despesa deve ser maior que zero.')
-      setActiveSection('financeiro')
+      setFormError('Informe o Valor (R$) maior que zero.')
+      setActiveSection('dados')
       return
     }
     if (usarRateio && rateioComValores.length > 0 && Math.abs(somaPercentualRateio - 100) > 0.5) {
-      setFormError(`A soma do rateio por Centro de Custo deve ser 100% (atual: ${somaPercentualRateio}%).`)
+      setFormError(`A soma do rateio por Centro de Custo deve fechar em 100% (atual: ${somaPercentualRateio}%).`)
       setActiveSection('rateio')
       return
     }
 
     setSaving(true)
     try {
+      const resolvedEmissao = dataEmissao || editingRecord?.dataEmissao || hojeStr
+      const automaticCompetencia = (vencimento || hojeStr).slice(0, 7)
+      const resolvedPlanoId = planoContasId || planoSelecionadoObj?.id || undefined
+      const initialStatus = editingRecord?.status || 'pendente'
+
       const basePayload: Partial<ContaPagarRecord> = {
         id: editingRecord?.id,
         codigo: codigo.trim() || undefined,
-        descricao: descricao.trim(),
+        descricao: resolvedDescricao,
         fornecedorId: fornecedorId || undefined,
-        fornecedorNome: fornecedorNome.trim(),
+        fornecedorNome: resolvedFornecedor,
         fornecedorDocumento: fornecedorDocumento.trim() || undefined,
-        categoria,
-        subcategoria: subcategoria.trim() || undefined,
+        categoria: categoria.trim(),
+        subcategoria: subcategoria.trim() || unidadeEmpresa || undefined,
         centroCusto,
         rateio: usarRateio && rateioComValores.length > 0 ? rateioComValores : [],
-        planoContasId: planoContasId || undefined,
-        eventoId: eventoId || undefined,
+        planoContasId: resolvedPlanoId,
         tipoCusto,
-        prioridade,
-        dataEmissao,
+        prioridade: editingRecord?.prioridade || 'media',
+        dataEmissao: resolvedEmissao,
         vencimento,
-        competencia: competencia || vencimento.slice(0, 7),
-        status,
-        dataPagamento: status === 'pago' ? dataPagamento : undefined,
-        valorPago: status === 'pago' ? valorLiquidoCalculado : 0,
+        competencia: automaticCompetencia,
+        status: initialStatus,
+        dataPagamento: editingRecord?.status === 'pago' ? editingRecord.dataPagamento : undefined,
+        valorPago: editingRecord?.status === 'pago' ? editingRecord.valorPago : 0,
         aprovacaoStatus,
         valorBase: numBase,
         desconto: numDesconto,
@@ -444,20 +615,25 @@ export function ContaPagarFormModal({
             : undefined,
         valor: valorLiquidoCalculado,
         formaPagamento,
-        caixaOrigem: status === 'pago' ? caixaOrigem : undefined,
+        caixaOrigem: editingRecord?.status === 'pago' ? editingRecord.caixaOrigem : undefined,
         tipoDocumento,
         numeroDocumento: numeroDocumento.trim() || undefined,
         notaFiscal: notaFiscal.trim() || undefined,
         chavePix: chavePix.trim() || undefined,
         linhaDigitavel: linhaDigitavel.trim() || undefined,
         observacoes: observacoes.trim() || undefined,
-        recorrente: modoParcelamento === 'recorrente',
-        frequenciaRecorrencia: modoParcelamento !== 'unico' ? frequenciaRecorrencia : undefined,
+        recorrente: qtdParcelasGeradas > 1,
+        frequenciaRecorrencia:
+          qtdParcelasGeradas > 1
+            ? regraVencimento === 'cada_30_dias'
+              ? 'dias_30'
+              : 'mensal'
+            : undefined,
       }
 
-      if (!editingRecord && modoParcelamento !== 'unico' && parcelasPreview.length > 1) {
+      if (!editingRecord && qtdParcelasGeradas > 1 && parcelasPreview.length > 1) {
         const groupId = `GRP-${Date.now().toString(36).toUpperCase()}`
-        const multiplePayloads: Partial<ContaPagarRecord>[] = parcelasPreview.map((p, idx) => ({
+        const multiplePayloads: Partial<ContaPagarRecord>[] = parcelasPreview.map((p) => ({
           ...basePayload,
           id: `CP-${Date.now().toString(36).toUpperCase()}-P${String(p.numero).padStart(2, '0')}`,
           codigo: `${codigo.trim() || 'CP'}-${String(p.numero).padStart(2, '0')}/${String(p.total).padStart(2, '0')}`,
@@ -466,13 +642,14 @@ export function ContaPagarFormModal({
           competencia: p.competencia,
           valorBase: p.valorBase,
           valor: p.valorLiquido,
-          desconto: modoValorParcela === 'dividir' ? Math.round((numDesconto / p.total) * 100) / 100 : numDesconto,
-          juros: modoValorParcela === 'dividir' ? Math.round((numJuros / p.total) * 100) / 100 : numJuros,
-          multa: modoValorParcela === 'dividir' ? Math.round((numMulta / p.total) * 100) / 100 : numMulta,
-          retencaoImpostos: modoValorParcela === 'dividir' ? Math.round((totalRetencao / p.total) * 100) / 100 : totalRetencao,
-          status: idx === 0 ? status : 'agendado',
-          dataPagamento: idx === 0 && status === 'pago' ? dataPagamento : undefined,
-          valorPago: idx === 0 && status === 'pago' ? p.valorLiquido : 0,
+          desconto: modoValorParcela === 'dividir' ? Math.round((numDesconto / qtdParcelasGeradas) * 100) / 100 : numDesconto,
+          juros: modoValorParcela === 'dividir' ? Math.round((numJuros / qtdParcelasGeradas) * 100) / 100 : numJuros,
+          multa: modoValorParcela === 'dividir' ? Math.round((numMulta / qtdParcelasGeradas) * 100) / 100 : numMulta,
+          retencaoImpostos:
+            modoValorParcela === 'dividir' ? Math.round((totalRetencao / qtdParcelasGeradas) * 100) / 100 : totalRetencao,
+          status: 'pendente',
+          dataPagamento: undefined,
+          valorPago: 0,
           parcelaAtual: p.numero,
           totalParcelas: p.total,
           grupoParcelamentoId: groupId,
@@ -486,7 +663,13 @@ export function ContaPagarFormModal({
         }))
         await onSave(multiplePayloads)
       } else {
-        await onSave([basePayload])
+        await onSave([
+          {
+            ...basePayload,
+            parcelaAtual: pIni,
+            totalParcelas: pFim,
+          },
+        ])
       }
 
       onClose()
@@ -501,24 +684,42 @@ export function ContaPagarFormModal({
 
   const labelStyle: React.CSSProperties = {
     display: 'block',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 700,
     color: '#334155',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: 6,
+    marginBottom: 4,
   }
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: '10px 12px',
-    borderRadius: 10,
+    padding: '8px 11px',
+    borderRadius: 7,
     background: '#ffffff',
     border: '1px solid #cbd5e1',
     color: '#0f172a',
     fontSize: 13,
     outline: 'none',
+    boxSizing: 'border-box',
   }
+
+  const addonBtnStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 10px',
+    background: '#f8fafc',
+    border: '1px solid #cbd5e1',
+    borderLeft: 'none',
+    color: '#334155',
+    cursor: 'pointer',
+    height: 36,
+    flexShrink: 0,
+  }
+
+  const totalCompromisso =
+    !editingRecord && qtdParcelasGeradas > 1 && parcelasPreview.length > 1
+      ? parcelasPreview.reduce((acc, item) => acc + item.valorLiquido, 0)
+      : valorLiquidoCalculado
 
   return (
     <div
@@ -530,7 +731,7 @@ export function ContaPagarFormModal({
         inset: 0,
         zIndex: 1100,
         background: 'rgba(15, 23, 42, 0.55)',
-        backdropFilter: 'blur(6px)',
+        backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -542,52 +743,45 @@ export function ContaPagarFormModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 920,
-          maxHeight: '92vh',
+          maxWidth: 670,
+          maxHeight: '94vh',
           background: '#ffffff',
           border: '1px solid #cbd5e1',
-          borderRadius: 20,
-          boxShadow: '0 25px 60px rgba(15, 23, 42, 0.22)',
+          borderRadius: 12,
+          boxShadow: '0 24px 55px rgba(15, 23, 42, 0.25)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
-        {/* Header */}
+        {/* HEADER SIMPLIFICADO (Estilo Imagem 2 + Melhorias) */}
         <div
           style={{
-            padding: '18px 24px',
+            padding: '14px 20px',
             borderBottom: '1px solid #e2e8f0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: '#f8fafc',
+            background: '#ffffff',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <RotateCw size={19} color="#2563eb" style={{ flexShrink: 0 }} />
+            <h2
+              id="modal-conta-pagar-title"
               style={{
-                width: 42,
-                height: 42,
-                borderRadius: 12,
-                background: '#fff1f2',
-                border: '1px solid #fecdd3',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#e11d48',
+                margin: 0,
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#2563eb',
+                letterSpacing: '-0.01em',
               }}
             >
-              <DollarSign size={20} />
-            </div>
-            <div>
-              <h2 id="modal-conta-pagar-title" style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
-                {editingRecord ? `Editar Conta a Pagar • ${editingRecord.codigo || editingRecord.id}` : 'Novo Lançamento de Conta a Pagar'}
-              </h2>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: '#475569' }}>
-                Controladoria Escolar • Classificação por Categoria, Segmento Pedagógico, Retenções Fiscais e Parcelamento
-              </p>
-            </div>
+              {editingRecord
+                ? `Editar Lançamento • ${editingRecord.codigo || editingRecord.id}`
+                : 'Gerar Parcelas / Novo Lançamento'}
+            </h2>
           </div>
 
           <button
@@ -595,40 +789,46 @@ export function ContaPagarFormModal({
             onClick={onClose}
             aria-label="Fechar modal"
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background: '#ffffff',
-              border: '1px solid #cbd5e1',
-              color: '#475569',
+              width: 30,
+              height: 30,
+              borderRadius: 6,
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
             }}
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
-        {/* Navigation Sub-tabs */}
+        {/* ABAS SIMPLIFICADAS (Apenas Dados & Parcelas e Rateio de Custo) */}
         <div
           style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
             gap: 6,
-            padding: '10px 24px',
+            padding: '8px 20px',
             borderBottom: '1px solid #e2e8f0',
-            background: '#f1f5f9',
-            overflowX: 'auto',
+            background: '#f8fafc',
           }}
         >
           {[
-            { id: 'dados', label: '1. Identificação & Classificação', icon: <Building2 size={14} /> },
-            { id: 'financeiro', label: '2. Valores, Impostos & Pagamento', icon: <DollarSign size={14} /> },
-            { id: 'rateio', label: `3. Rateio por Segmento (${usarRateio ? `${somaPercentualRateio}%` : 'Padrão'})`, icon: <Split size={14} /> },
-            ...(!editingRecord
-              ? [{ id: 'parcelamento', label: `4. Parcelamento / Recorrência (${modoParcelamento === 'unico' ? 'À Vista' : `${qtdParcelas}x`})`, icon: <Repeat size={14} /> }]
-              : []),
+            {
+              id: 'dados',
+              label: '1. Dados & Parcelas',
+              icon: <FileText size={13} />,
+              badge: qtdParcelasGeradas > 1 ? `${qtdParcelasGeradas}x` : undefined,
+            },
+            {
+              id: 'rateio',
+              label: '2. Rateio de Custo',
+              icon: <Split size={13} />,
+              badge: usarRateio ? `${somaPercentualRateio}%` : undefined,
+            },
           ].map((tab) => {
             const active = activeSection === tab.id
             return (
@@ -639,53 +839,772 @@ export function ContaPagarFormModal({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 7,
-                  padding: '8px 14px',
-                  borderRadius: 10,
-                  border: active ? '1px solid #38bdf8' : '1px solid transparent',
-                  background: active ? '#e0f2fe' : '#ffffff',
-                  color: active ? '#0369a1' : '#475569',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: active ? '1px solid #93c5fd' : '1px solid transparent',
+                  background: active ? '#eff6ff' : 'transparent',
+                  color: active ? '#1d4ed8' : '#475569',
                   fontSize: 12,
-                  fontWeight: 800,
+                  fontWeight: active ? 700 : 600,
                   cursor: 'pointer',
-                  whiteSpace: 'nowrap',
+                  transition: 'all 0.12s ease',
                 }}
               >
                 {tab.icon}
-                {tab.label}
+                <span>{tab.label}</span>
+                {tab.badge && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: '1px 6px',
+                      borderRadius: 99,
+                      background: active ? '#2563eb' : '#e2e8f0',
+                      color: active ? '#ffffff' : '#334155',
+                    }}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
 
-        {/* Form Body */}
+        {/* CORPO DO FORMULÁRIO */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-            {formError && (
-              <div
-                style={{
-                  marginBottom: 16,
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  background: '#fff1f2',
-                  border: '1px solid #fecdd3',
-                  color: '#be123c',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                }}
-              >
-                <AlertTriangle size={16} />
-                <span>{formError}</span>
-              </div>
-            )}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+            <div aria-live="polite">
+              {formError && (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    background: '#fff1f2',
+                    border: '1px solid #fecdd3',
+                    color: '#be123c',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <AlertTriangle size={15} />
+                  <span>{formError}</span>
+                </div>
+              )}
+            </div>
 
-            {/* SECTION 1: IDENTIFICAÇÃO E CLASSIFICAÇÃO ESCOLAR */}
+            {/* ABA 1: DADOS & PARCELAS (Visual idêntico à Imagem 2 com melhorias) */}
             {activeSection === 'dados' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                {/* LINHA 1: Fornecedor (Com busca integrada e botões laterais como na Imagem 2) */}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <label htmlFor="cp-fornecedor-input" style={{ ...labelStyle, marginBottom: 0 }}>
+                      Fornecedor:
+                    </label>
+                    {fornecedorDocumento && (
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                        CNPJ/CPF: {fornecedorDocumento}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                    <input
+                      id="cp-fornecedor-input"
+                      name="fornecedorNome"
+                      type="text"
+                      required
+                      value={fornecedorNome}
+                      onFocus={() => setShowFornecedorSearch(true)}
+                      onBlur={() => {
+                        setTimeout(() => setShowFornecedorSearch(false), 180)
+                      }}
+                      onChange={(e) => {
+                        setFornecedorNome(e.target.value)
+                        setFornecedorId('')
+                        setShowFornecedorSearch(true)
+                        if (formError) setFormError('')
+                      }}
+                      placeholder="Clique/Toque Para Pesquisar ou digite o nome do fornecedor"
+                      style={{
+                        ...inputStyle,
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0,
+                        background: '#f8fafc',
+                        height: 36,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      title="Cadastrar novo fornecedor rápido"
+                      onClick={() => {
+                        setShowQuickForn((v) => !v)
+                        setShowFornecedorSearch(false)
+                      }}
+                      style={addonBtnStyle}
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Pesquisar na lista de fornecedores"
+                      onClick={() => setShowFornecedorSearch((v) => !v)}
+                      style={{
+                        ...addonBtnStyle,
+                        borderTopRightRadius: 7,
+                        borderBottomRightRadius: 7,
+                      }}
+                    >
+                      <Search size={14} />
+                    </button>
+                  </div>
+
+                  {/* Dropdown de Busca de Fornecedores */}
+                  {showFornecedorSearch && fornecedoresFiltrados.length > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        zIndex: 40,
+                        marginTop: 4,
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 8,
+                        boxShadow: '0 12px 28px rgba(15, 23, 42, 0.15)',
+                        maxHeight: 210,
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {fornecedoresFiltrados.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            handleSelectFornecedor(f)
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            textAlign: 'left',
+                            background: fornecedorId === f.id ? '#eff6ff' : '#ffffff',
+                            border: 'none',
+                            borderBottom: '1px solid #f1f5f9',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            fontSize: 12.5,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{f.nomeFantasia || f.nome}</div>
+                            {f.documento && <div style={{ fontSize: 11, color: '#64748b' }}>{f.documento}</div>}
+                          </div>
+                          {f.categoriaPadrao && (
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {f.categoriaPadrao}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Mini painel de cadastro rápido de fornecedor */}
+                  {showQuickForn && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: 10,
+                        borderRadius: 8,
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        display: 'grid',
+                        gridTemplateColumns: '1.3fr 1fr 1fr auto',
+                        gap: 8,
+                        alignItems: 'end',
+                      }}
+                    >
+                      <div>
+                        <label htmlFor="qf-nome" style={{ ...labelStyle, fontSize: 11 }}>
+                          Novo Fornecedor
+                        </label>
+                        <input
+                          id="qf-nome"
+                          type="text"
+                          value={qfNome}
+                          onChange={(e) => setQfNome(e.target.value)}
+                          placeholder="Razão Social / Nome"
+                          style={{ ...inputStyle, height: 32, fontSize: 12 }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="qf-doc" style={{ ...labelStyle, fontSize: 11 }}>
+                          CNPJ / CPF
+                        </label>
+                        <input
+                          id="qf-doc"
+                          type="text"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          value={qfDoc}
+                          onChange={(e) => setQfDoc(e.target.value)}
+                          placeholder="00.000.000/0001-00"
+                          style={{ ...inputStyle, height: 32, fontSize: 12 }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="qf-pix" style={{ ...labelStyle, fontSize: 11 }}>
+                          Chave PIX
+                        </label>
+                        <input
+                          id="qf-pix"
+                          type="text"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          value={qfPix}
+                          onChange={(e) => setQfPix(e.target.value)}
+                          placeholder="Opcional"
+                          style={{ ...inputStyle, height: 32, fontSize: 12 }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveQuickFornecedor}
+                        style={{
+                          height: 32,
+                          padding: '0 12px',
+                          borderRadius: 6,
+                          background: '#16a34a',
+                          border: 'none',
+                          color: '#ffffff',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* LINHA 2: Nº Documento | Tipo Doc | Vencimento Inicial | Parcela Inicial | Parcela Final */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.05fr 1.2fr 0.75fr 0.85fr', gap: 8 }}>
+                  <div>
+                    <label htmlFor="cp-num-doc" style={labelStyle}>
+                      Nº Documento
+                    </label>
+                    <input
+                      id="cp-num-doc"
+                      name="numeroDocumento"
+                      type="text"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      value={numeroDocumento}
+                      onChange={(e) => setNumeroDocumento(e.target.value)}
+                      placeholder="Ex: 1042"
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="cp-tipo-doc" style={labelStyle}>
+                      Documento
+                    </label>
+                    <select
+                      id="cp-tipo-doc"
+                      aria-label="Tipo de Documento"
+                      value={tipoDocumento}
+                      onChange={(e) => setTipoDocumento(e.target.value as any)}
+                      style={{ ...inputStyle, height: 36, background: '#f8fafc' }}
+                    >
+                      <option value="NFS-e">NFS-e</option>
+                      <option value="Boleto">Boleto</option>
+                      <option value="NF-e">NF-e</option>
+                      <option value="Fatura">Fatura</option>
+                      <option value="Recibo">Recibo</option>
+                      <option value="Contrato">Contrato</option>
+                      <option value="Folha">Folha</option>
+                      <option value="DARF">DARF / Guia</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="cp-vencimento" style={labelStyle}>
+                      Vencimento Inicial
+                    </label>
+                    <input
+                      id="cp-vencimento"
+                      name="vencimento"
+                      type="date"
+                      required
+                      value={vencimento}
+                      onChange={(e) => setVencimento(e.target.value)}
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="cp-parcela-ini" style={labelStyle}>
+                      Parc. Inicial
+                    </label>
+                    <input
+                      id="cp-parcela-ini"
+                      name="parcelaInicial"
+                      type="number"
+                      min={1}
+                      max={60}
+                      disabled={Boolean(editingRecord)}
+                      value={parcelaInicial}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(60, Number(e.target.value) || 1))
+                        setParcelaInicial(v)
+                        if (parcelaFinal < v) setParcelaFinal(v)
+                      }}
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label htmlFor="cp-parcela-fim" style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>
+                        Parc. Final
+                      </label>
+                    </div>
+                    <input
+                      id="cp-parcela-fim"
+                      name="parcelaFinal"
+                      type="number"
+                      min={parcelaInicial}
+                      max={60}
+                      disabled={Boolean(editingRecord)}
+                      value={parcelaFinal}
+                      onChange={(e) => {
+                        const v = Math.max(1, Math.min(60, Number(e.target.value) || 1))
+                        setParcelaFinal(v)
+                      }}
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+                </div>
+
+                {/* LINHA 3: Modelo de Parcelamento */}
+                <fieldset
+                  style={{
+                    border: 'none',
+                    margin: 0,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: '#f8fafc',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>Modelo de Parcelamento:</span>
+
+                      <label
+                        htmlFor="mod-30dias"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12.5,
+                          color: '#334155',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          id="mod-30dias"
+                          type="radio"
+                          name="modeloParcelamento"
+                          checked={regraVencimento === 'cada_30_dias'}
+                          onChange={() => setRegraVencimento('cada_30_dias')}
+                          style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+                        />
+                        30 dias Comerciais
+                      </label>
+
+                      <label
+                        htmlFor="mod-mesmodia"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 12.5,
+                          color: '#334155',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          id="mod-mesmodia"
+                          type="radio"
+                          name="modeloParcelamento"
+                          checked={regraVencimento === 'mesmo_dia'}
+                          onChange={() => setRegraVencimento('mesmo_dia')}
+                          style={{ accentColor: '#2563eb', cursor: 'pointer' }}
+                        />
+                        Mesmo dia do vencimento inicial
+                      </label>
+                    </div>
+
+                    {!editingRecord && qtdParcelasGeradas > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <select
+                          aria-label="Modo de cálculo do valor das parcelas"
+                          value={modoValorParcela}
+                          onChange={(e) => setModoValorParcela(e.target.value as any)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            color: '#334155',
+                          }}
+                        >
+                          <option value="repetir">Repetir valor em cada parcela</option>
+                          <option value="dividir">Dividir valor total ({qtdParcelasGeradas}x)</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowPreviewParcelas((v) => !v)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '4px 9px',
+                            borderRadius: 6,
+                            border: '1px solid #93c5fd',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <ListOrdered size={13} />
+                          {showPreviewParcelas ? 'Ocultar Parcelas' : `Ver ${qtdParcelasGeradas} Parcelas`}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabela compacta de prévia das parcelas quando expandida */}
+                  {!editingRecord && qtdParcelasGeradas > 1 && showPreviewParcelas && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        borderRadius: 7,
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        maxHeight: 155,
+                        overflowY: 'auto',
+                      }}
+                    >
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9', color: '#475569', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 10px' }}>Parc.</th>
+                            <th style={{ padding: '6px 10px' }}>Descrição</th>
+                            <th style={{ padding: '6px 10px' }}>Vencimento</th>
+                            <th style={{ padding: '6px 10px', textAlign: 'right' }}>Valor (R$)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parcelasPreview.map((p, idx) => (
+                            <tr key={p.numero} style={{ borderTop: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '5px 10px', fontWeight: 700, color: '#2563eb' }}>
+                                {String(p.numero).padStart(2, '0')}/{String(p.total).padStart(2, '0')}
+                              </td>
+                              <td style={{ padding: '5px 10px', color: '#0f172a' }}>{p.descricao}</td>
+                              <td style={{ padding: '5px 10px' }}>
+                                <input
+                                  aria-label={`Vencimento da parcela ${p.numero}`}
+                                  type="date"
+                                  value={p.vencimento}
+                                  onChange={(e) => {
+                                    const nv = e.target.value
+                                    setParcelasPreview((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx ? { ...item, vencimento: nv, competencia: nv.slice(0, 7) } : item
+                                      )
+                                    )
+                                  }}
+                                  style={{
+                                    padding: '2px 6px',
+                                    borderRadius: 5,
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: 11.5,
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: '#047857' }}>
+                                {formatCurrency(p.valorLiquido)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </fieldset>
+
+                {/* LINHA 4: Conta Plano */}
+                <div>
+                  <label htmlFor="cp-plano-contas-btn" style={labelStyle}>
+                    Conta Plano
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                    <button
+                      id="cp-plano-contas-btn"
+                      type="button"
+                      onClick={() => setShowPlanoContasModal(true)}
+                      style={{
+                        ...inputStyle,
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0,
+                        background: '#f8fafc',
+                        height: 36,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: planoSelecionadoObj || categoria ? '#0f172a' : '#64748b',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {planoSelecionadoObj
+                          ? planoSelecionadoObj.codPlano
+                            ? `${planoSelecionadoObj.codPlano} - ${planoSelecionadoObj.descricao}`
+                            : planoSelecionadoObj.descricao
+                          : categoria || 'Clique/Toque Para Pesquisar no Plano de Contas...'}
+                      </span>
+                    </button>
+
+                    <Link
+                      href="/configuracoes/financeiro/plano-contas"
+                      title="Gerenciar Plano de Contas"
+                      style={{
+                        ...addonBtnStyle,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <Edit3 size={14} />
+                    </Link>
+
+                    <button
+                      type="button"
+                      title="Pesquisar Conta Plano"
+                      onClick={() => setShowPlanoContasModal(true)}
+                      style={{
+                        ...addonBtnStyle,
+                        borderTopRightRadius: 7,
+                        borderBottomRightRadius: 7,
+                      }}
+                    >
+                      <Search size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* LINHA 5: Unidade/Empresa (sem seleção "----") & Centro de Custo (sem seleção "-----") */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 10 }}>
+                  <div>
+                    <label htmlFor="cp-unidade" style={labelStyle}>
+                      Unidade/Empresa
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                      <select
+                        id="cp-unidade"
+                        value={unidadeEmpresa}
+                        onChange={(e) => setUnidadeEmpresa(e.target.value)}
+                        style={{
+                          ...inputStyle,
+                          height: 36,
+                          background: '#f8fafc',
+                        }}
+                      >
+                        <option value="">----</option>
+                        <option value="Colégio Impacto — Matriz">Colégio Impacto — Matriz</option>
+                        <option value="Colégio Impacto — Unidade Infantil">Colégio Impacto — Unidade Infantil</option>
+                        <option value="Colégio Impacto — Ensino Médio">Colégio Impacto — Ensino Médio</option>
+                        {unidadeEmpresa &&
+                          ![
+                            'Colégio Impacto — Matriz',
+                            'Colégio Impacto — Unidade Infantil',
+                            'Colégio Impacto — Ensino Médio',
+                          ].includes(unidadeEmpresa) && <option value={unidadeEmpresa}>{unidadeEmpresa}</option>}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label htmlFor="cp-centro-custo" style={{ ...labelStyle, marginBottom: 0 }}>
+                        Centro de Custo:
+                      </label>
+                      <Link
+                        href="/configuracoes/financeiro/centro-custo"
+                        style={{ fontSize: 10.5, fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        + Gerenciar
+                      </Link>
+                    </div>
+                    <select
+                      id="cp-centro-custo"
+                      value={centroCusto}
+                      onChange={(e) => setCentroCusto(e.target.value)}
+                      style={{ ...inputStyle, height: 36 }}
+                    >
+                      <option value="">-----</option>
+                      {listaCentrosCusto.map((cc) => (
+                        <option key={cc.id} value={cc.id}>
+                          {cc.label} ({cc.sigla})
+                        </option>
+                      ))}
+                      {centroCusto && !listaCentrosCusto.some((cc) => cc.id === centroCusto) && (
+                        <option value={centroCusto}>{centroCusto}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                {/* LINHA 6: Emissão | Valor (Sem o campo Carteira) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label htmlFor="cp-emissao" style={labelStyle}>
+                      Emissão
+                    </label>
+                    <input
+                      id="cp-emissao"
+                      name="dataEmissao"
+                      type="date"
+                      value={dataEmissao}
+                      onChange={(e) => setDataEmissao(e.target.value)}
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label htmlFor="cp-valor-base" style={{ ...labelStyle, marginBottom: 0 }}>
+                        Valor
+                      </label>
+                      {(numDesconto > 0 || numJuros > 0 || numMulta > 0 || totalRetencao > 0) && (
+                        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#047857' }}>
+                          Líq: {formatCurrency(valorLiquidoCalculado)}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      id="cp-valor-base"
+                      name="valorBase"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      value={valorBase}
+                      onBlur={() => {
+                        if (valorBase !== '' && numBase <= 0) {
+                          setFormError('Informe um Valor (R$) maior que zero.')
+                        }
+                      }}
+                      onChange={(e) => {
+                        setValorBase(e.target.value)
+                        if (formError) setFormError('')
+                      }}
+                      placeholder="0,00"
+                      style={{
+                        ...inputStyle,
+                        height: 36,
+                        fontWeight: 700,
+                        fontSize: 14,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* LINHA 7: Chave PIX do Favorecido | Linha Digitável / Código de Barras (Conforme Imagem 2) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 10 }}>
+                  <div>
+                    <label htmlFor="cp-chave-pix" style={labelStyle}>
+                      Chave PIX do Favorecido
+                    </label>
+                    <input
+                      id="cp-chave-pix"
+                      type="text"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      value={chavePix}
+                      onChange={(e) => setChavePix(e.target.value)}
+                      placeholder="CNPJ, E-mail, Telefone ou Aleatória"
+                      style={{ ...inputStyle, height: 36 }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="cp-linha-digitavel" style={labelStyle}>
+                      Linha Digitável / Código de Barras
+                    </label>
+                    <input
+                      id="cp-linha-digitavel"
+                      type="text"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      value={linhaDigitavel}
+                      onChange={(e) => setLinhaDigitavel(e.target.value)}
+                      placeholder="00000.00000 00000.000000..."
+                      style={{ ...inputStyle, height: 36, fontFamily: 'monospace' }}
+                    />
+                  </div>
+                </div>
+
+                {/* LINHA 8: Código Interno | Natureza do Custo | Alçada de Aprovação (Conforme Imagem 2) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                   <div>
                     <label htmlFor="cp-codigo" style={labelStyle}>
                       Código Interno
@@ -698,236 +1617,8 @@ export function ContaPagarFormModal({
                       spellCheck={false}
                       value={codigo}
                       onChange={(e) => setCodigo(e.target.value)}
-                      placeholder="Ex: CP-2026-001"
-                      style={inputStyle}
+                      style={{ ...inputStyle, height: 36 }}
                     />
-                  </div>
-                  <div>
-                    <label htmlFor="cp-descricao" style={labelStyle}>
-                      Descrição da Despesa / Compromisso *
-                    </label>
-                    <input
-                      id="cp-descricao"
-                      type="text"
-                      required
-                      value={descricao}
-                      onChange={(e) => setDescricao(e.target.value)}
-                      placeholder="Ex: Folha de Pagamento Docente, Energia Elétrica Campus, Material Didático..."
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-
-                {/* Seleção de Fornecedor + Quick Create */}
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 14,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Fornecedor / Credor Escolar
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickForn((v) => !v)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        padding: '5px 10px',
-                        borderRadius: 8,
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
-                        color: '#047857',
-                        fontSize: 11,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Plus size={13} />
-                      {showQuickForn ? 'Fechar Cadastro Rápido' : 'Cadastrar Novo Fornecedor'}
-                    </button>
-                  </div>
-
-                  {showQuickForn && (
-                    <div
-                      style={{
-                        marginBottom: 14,
-                        padding: 14,
-                        borderRadius: 12,
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
-                        display: 'grid',
-                        gridTemplateColumns: '1.4fr 1fr 1fr auto',
-                        gap: 10,
-                        alignItems: 'end',
-                      }}
-                    >
-                      <div>
-                        <label htmlFor="qf-nome" style={labelStyle}>Razão Social / Nome</label>
-                        <input
-                          id="qf-nome"
-                          type="text"
-                          value={qfNome}
-                          onChange={(e) => setQfNome(e.target.value)}
-                          placeholder="Nome do fornecedor"
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="qf-doc" style={labelStyle}>CNPJ / CPF</label>
-                        <input
-                          id="qf-doc"
-                          type="text"
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                          value={qfDoc}
-                          onChange={(e) => setQfDoc(e.target.value)}
-                          placeholder="00.000.000/0001-00"
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="qf-pix" style={labelStyle}>Chave PIX</label>
-                        <input
-                          id="qf-pix"
-                          type="text"
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                          value={qfPix}
-                          onChange={(e) => setQfPix(e.target.value)}
-                          placeholder="CNPJ, E-mail ou Telefone"
-                          style={inputStyle}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSaveQuickFornecedor}
-                        style={{
-                          padding: '10px 14px',
-                          borderRadius: 10,
-                          background: '#059669',
-                          border: 'none',
-                          color: '#ffffff',
-                          fontWeight: 800,
-                          fontSize: 12,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Salvar Credor
-                      </button>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr 1fr', gap: 12 }}>
-                    <div>
-                      <label htmlFor="cp-fornecedor-select" style={labelStyle}>
-                        Selecionar da Base de Credores
-                      </label>
-                      <select
-                        id="cp-fornecedor-select"
-                        value={fornecedorId}
-                        onChange={(e) => handleSelectFornecedor(e.target.value)}
-                        style={inputStyle}
-                      >
-                        <option value="">-- Digitar manualmente ou escolher --</option>
-                        {fornecedores.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.nomeFantasia || f.nome} {f.documento ? `(${f.documento})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="cp-fornecedor-nome" style={labelStyle}>
-                        Nome do Fornecedor / Beneficiário *
-                      </label>
-                      <input
-                        id="cp-fornecedor-nome"
-                        type="text"
-                        required
-                        value={fornecedorNome}
-                        onChange={(e) => setFornecedorNome(e.target.value)}
-                        placeholder="Razão Social ou Nome Completo"
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cp-fornecedor-doc" style={labelStyle}>
-                        CNPJ / CPF do Credor
-                      </label>
-                      <input
-                        id="cp-fornecedor-doc"
-                        type="text"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck={false}
-                        value={fornecedorDocumento}
-                        onChange={(e) => setFornecedorDocumento(e.target.value)}
-                        placeholder="00.000.000/0001-00"
-                        style={inputStyle}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Classificação Escolar: Categoria, Centro de Custo, Tipo de Custo, Prioridade */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.8fr 0.8fr', gap: 12 }}>
-                  <div>
-                    <label htmlFor="cp-categoria" style={labelStyle}>
-                      Categoria de Despesa Escolar
-                    </label>
-                    <select
-                      id="cp-categoria"
-                      value={categoria}
-                      onChange={(e) => setCategoria(e.target.value)}
-                      style={inputStyle}
-                    >
-                      {CATEGORIAS_ESCOLARES.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.label} ({cat.grupoDre})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                      <label htmlFor="cp-centro-custo" style={{ ...labelStyle, marginBottom: 0 }}>
-                        Centro de Custo / Segmento Principal
-                      </label>
-                      <Link
-                        href="/configuracoes/financeiro/centro-custo"
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          color: '#0284c7',
-                          textDecoration: 'none',
-                        }}
-                      >
-                        + Gerenciar
-                      </Link>
-                    </div>
-                    <select
-                      id="cp-centro-custo"
-                      value={centroCusto}
-                      onChange={(e) => setCentroCusto(e.target.value)}
-                      style={inputStyle}
-                    >
-                      {listaCentrosCusto.map((cc) => (
-                        <option key={cc.id} value={cc.id}>
-                          {cc.label} ({cc.sigla})
-                        </option>
-                      ))}
-                      {centroCusto && !listaCentrosCusto.some((cc) => cc.id === centroCusto) && (
-                        <option value={centroCusto}>{centroCusto}</option>
-                      )}
-                    </select>
                   </div>
                   <div>
                     <label htmlFor="cp-tipo-custo" style={labelStyle}>
@@ -937,73 +1628,13 @@ export function ContaPagarFormModal({
                       id="cp-tipo-custo"
                       value={tipoCusto}
                       onChange={(e) => setTipoCusto(e.target.value as ContaPagarTipoCusto)}
-                      style={inputStyle}
+                      style={{ ...inputStyle, height: 36 }}
                     >
                       <option value="fixo">Custo Fixo</option>
                       <option value="variavel">Custo Variável</option>
                       <option value="investimento">Investimento / CAPEX</option>
                       <option value="extraordinario">Extraordinário</option>
                     </select>
-                  </div>
-                  <div>
-                    <label htmlFor="cp-prioridade" style={labelStyle}>
-                      Prioridade Operacional
-                    </label>
-                    <select
-                      id="cp-prioridade"
-                      value={prioridade}
-                      onChange={(e) => setPrioridade(e.target.value as ContaPagarPrioridade)}
-                      style={inputStyle}
-                    >
-                      <option value="critica">Crítica (Essencial)</option>
-                      <option value="alta">Alta</option>
-                      <option value="media">Média / Normal</option>
-                      <option value="baixa">Baixa</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Datas e Integração Contábil DRE */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  <div>
-                    <label htmlFor="cp-data-emissao" style={labelStyle}>
-                      Data de Emissão
-                    </label>
-                    <input
-                      id="cp-data-emissao"
-                      type="date"
-                      value={dataEmissao}
-                      onChange={(e) => setDataEmissao(e.target.value)}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="cp-vencimento" style={labelStyle}>
-                      Data de Vencimento *
-                    </label>
-                    <input
-                      id="cp-vencimento"
-                      type="date"
-                      required
-                      value={vencimento}
-                      onChange={(e) => {
-                        setVencimento(e.target.value)
-                        if (e.target.value) setCompetencia(e.target.value.slice(0, 7))
-                      }}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="cp-competencia" style={labelStyle}>
-                      Mês de Competência (DRE)
-                    </label>
-                    <input
-                      id="cp-competencia"
-                      type="month"
-                      value={competencia}
-                      onChange={(e) => setCompetencia(e.target.value)}
-                      style={inputStyle}
-                    />
                   </div>
                   <div>
                     <label htmlFor="cp-aprovacao" style={labelStyle}>
@@ -1013,7 +1644,7 @@ export function ContaPagarFormModal({
                       id="cp-aprovacao"
                       value={aprovacaoStatus}
                       onChange={(e) => setAprovacaoStatus(e.target.value as any)}
-                      style={inputStyle}
+                      style={{ ...inputStyle, height: 36 }}
                     >
                       <option value="aprovado">Aprovado para Pagamento</option>
                       <option value="pendente_aprovacao">Aguardando Diretoria</option>
@@ -1022,491 +1653,127 @@ export function ContaPagarFormModal({
                   </div>
                 </div>
 
-                {/* Plano de Contas & Eventos Financeiros (Integração DRE) */}
-                {(planoContas.length > 0 || eventosFinanceiros.length > 0) && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <label htmlFor="cp-plano-contas" style={labelStyle}>
-                        Vincular ao Plano de Contas (DRE Oficial)
-                      </label>
-                      <select
-                        id="cp-plano-contas"
-                        value={planoContasId}
-                        onChange={(e) => setPlanoContasId(e.target.value)}
-                        style={inputStyle}
-                      >
-                        <option value="">-- Automático pela Categoria --</option>
-                        {planoContas.map((p: any) => (
-                          <option key={p.id} value={p.id}>
-                            {p.codigo ? `${p.codigo} - ` : ''}{p.nome || p.descricao}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="cp-evento-fin" style={labelStyle}>
-                        Evento Financeiro Vinculado
-                      </label>
-                      <select
-                        id="cp-evento-fin"
-                        value={eventoId}
-                        onChange={(e) => setEventoId(e.target.value)}
-                        style={inputStyle}
-                      >
-                        <option value="">-- Nenhum evento específico --</option>
-                        {eventosFinanceiros.map((ev: any) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.nome || ev.descricao}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SECTION 2: VALORES, RETENÇÕES FISCAIS E DADOS BANCÁRIOS/DOCUMENTOS */}
-            {activeSection === 'financeiro' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {/* Calculadora de Valor Líquido */}
-                <div
-                  style={{
-                    padding: 18,
-                    borderRadius: 16,
-                    background: '#f8fafc',
-                    border: '1px solid #cbd5e1',
-                  }}
-                >
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, alignItems: 'end' }}>
-                    <div>
-                      <label htmlFor="cp-valor-base" style={labelStyle}>
-                        Valor Bruto (R$) *
-                      </label>
-                      <input
-                        id="cp-valor-base"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        required
-                        value={valorBase}
-                        onChange={(e) => setValorBase(e.target.value)}
-                        placeholder="0,00"
-                        style={{ ...inputStyle, fontSize: 15, fontWeight: 800, borderColor: '#38bdf8' }}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cp-desconto" style={labelStyle}>
-                        (-) Desconto (R$)
-                      </label>
-                      <input
-                        id="cp-desconto"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={desconto}
-                        onChange={(e) => setDesconto(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cp-juros" style={labelStyle}>
-                        (+) Juros (R$)
-                      </label>
-                      <input
-                        id="cp-juros"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={juros}
-                        onChange={(e) => setJuros(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cp-multa" style={labelStyle}>
-                        (+) Multa (R$)
-                      </label>
-                      <input
-                        id="cp-multa"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={multa}
-                        onChange={(e) => setMulta(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        padding: '10px 14px',
-                        borderRadius: 12,
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
-                        textAlign: 'right',
-                      }}
-                    >
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
-                        Valor Líquido a Pagar
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: '#047857', marginTop: 2 }}>
-                        {formatCurrency(valorLiquidoCalculado)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Retenções Fiscais na Fonte */}
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <button
-                        type="button"
-                        onClick={() => setMostrarRetencoes((v) => !v)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#0369a1',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: 0,
-                        }}
-                      >
-                        <Percent size={14} />
-                        {mostrarRetencoes
-                          ? 'Ocultar Retenções de Impostos na Fonte (ISS / IRRF / INSS / CSRF)'
-                          : `Informar Retenções Fiscais na Fonte (ISS, IRRF, INSS, PIS/COFINS/CSLL) ${totalRetencao > 0 ? `• Retido: ${formatCurrency(totalRetencao)}` : ''}`}
-                      </button>
-                      {totalRetencao > 0 && (
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#b45309' }}>
-                          Total Retido na Fonte: - {formatCurrency(totalRetencao)}
-                        </span>
-                      )}
-                    </div>
-
-                    {mostrarRetencoes && (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 12 }}>
-                        <div>
-                          <label htmlFor="cp-ret-iss" style={labelStyle}>ISS Retido (R$)</label>
-                          <input
-                            id="cp-ret-iss"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={retIss}
-                            onChange={(e) => setRetIss(e.target.value)}
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="cp-ret-irrf" style={labelStyle}>IRRF Retido (R$)</label>
-                          <input
-                            id="cp-ret-irrf"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={retIrrf}
-                            onChange={(e) => setRetIrrf(e.target.value)}
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="cp-ret-inss" style={labelStyle}>INSS Retido 11% (R$)</label>
-                          <input
-                            id="cp-ret-inss"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={retInss}
-                            onChange={(e) => setRetInss(e.target.value)}
-                            style={inputStyle}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="cp-ret-csrf" style={labelStyle}>PIS/COFINS/CSLL 4,65% (R$)</label>
-                          <input
-                            id="cp-ret-csrf"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={retCsrf}
-                            onChange={(e) => setRetCsrf(e.target.value)}
-                            style={inputStyle}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status, Forma de Pagamento e Documento Fiscal */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  <div>
-                    <label htmlFor="cp-status" style={labelStyle}>Situação do Título</label>
-                    <select
-                      id="cp-status"
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as ContaPagarStatus)}
-                      style={inputStyle}
-                    >
-                      <option value="pendente">Em Aberto / A Pagar</option>
-                      <option value="agendado">Agendado no Banco</option>
-                      <option value="pago">Já Pago / Liquidado</option>
-                      <option value="vencido">Vencido</option>
-                      <option value="cancelado">Cancelado</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="cp-forma-pgto" style={labelStyle}>Forma de Pagamento</label>
-                    <select
-                      id="cp-forma-pgto"
-                      value={formaPagamento}
-                      onChange={(e) => setFormaPagamento(e.target.value)}
-                      style={inputStyle}
-                    >
-                      {FORMAS_PAGAMENTO_CONTAS_PAGAR.map((fp) => (
-                        <option key={fp} value={fp}>{fp}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="cp-tipo-doc" style={labelStyle}>Tipo de Documento</label>
-                    <select
-                      id="cp-tipo-doc"
-                      value={tipoDocumento}
-                      onChange={(e) => setTipoDocumento(e.target.value as any)}
-                      style={inputStyle}
-                    >
-                      <option value="NFS-e">NFS-e (Serviços)</option>
-                      <option value="NF-e">NF-e (Mercadorias)</option>
-                      <option value="Boleto">Boleto Bancário</option>
-                      <option value="DARF">DARF / Guia Imposto</option>
-                      <option value="Folha">Folha de Pagamento</option>
-                      <option value="Contrato">Contrato Mensal</option>
-                      <option value="Fatura">Fatura Concessionária</option>
-                      <option value="Recibo">Recibo / RPA</option>
-                      <option value="Outro">Outro</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="cp-num-doc" style={labelStyle}>Nº Documento / NF</label>
-                    <input
-                      id="cp-num-doc"
-                      type="text"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      value={numeroDocumento}
-                      onChange={(e) => setNumeroDocumento(e.target.value)}
-                      placeholder="Ex: NFS-e 2026/0419"
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-
-                {status === 'pago' && (
-                  <div
-                    style={{
-                      padding: 14,
-                      borderRadius: 12,
-                      background: '#ecfdf5',
-                      border: '1px solid #a7f3d0',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1.5fr',
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <label htmlFor="cp-data-pagto" style={labelStyle}>Data Efetiva do Pagamento</label>
-                      <input
-                        id="cp-data-pagto"
-                        type="date"
-                        value={dataPagamento}
-                        onChange={(e) => setDataPagamento(e.target.value)}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="cp-caixa-origem" style={labelStyle}>Conta Bancária / Caixa Desembolsado</label>
-                      <select
-                        id="cp-caixa-origem"
-                        value={caixaOrigem}
-                        onChange={(e) => setCaixaOrigem(e.target.value)}
-                        style={inputStyle}
-                      >
-                        {CAIXAS_BANCOS_ESCOLARES.map((cx) => (
-                          <option key={cx} value={cx}>{cx}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Chave PIX e Linha Digitável */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 12 }}>
-                  <div>
-                    <label htmlFor="cp-chave-pix" style={labelStyle}>
-                      Chave PIX ou Copia e Cola do Favorecido
-                    </label>
-                    <input
-                      id="cp-chave-pix"
-                      type="text"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      value={chavePix}
-                      onChange={(e) => setChavePix(e.target.value)}
-                      placeholder="CNPJ, E-mail, Telefone ou Chave Aleatória"
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="cp-linha-digitavel" style={labelStyle}>
-                      Linha Digitável do Boleto / Código de Barras
-                    </label>
-                    <input
-                      id="cp-linha-digitavel"
-                      type="text"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      value={linhaDigitavel}
-                      onChange={(e) => setLinhaDigitavel(e.target.value)}
-                      placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
-                      style={{ ...inputStyle, fontFamily: 'monospace' }}
-                    />
-                  </div>
-                </div>
-
+                {/* LINHA 9: Observações sobre esta baixa / lançamento */}
                 <div>
                   <label htmlFor="cp-observacoes" style={labelStyle}>
-                    Observações Internas / Justificativa da Despesa
+                    Observações sobre esta baixa / lançamento
                   </label>
                   <textarea
                     id="cp-observacoes"
-                    rows={3}
+                    name="observacoes"
+                    rows={2}
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
-                    placeholder="Detalhes contratuais, número de pedido de compra, centro de autorização..."
-                    style={{ ...inputStyle, resize: 'vertical' }}
+                    placeholder="Observações complementares, dados bancários ou justificativa..."
+                    style={{ ...inputStyle, resize: 'vertical', minHeight: 54 }}
                   />
                 </div>
               </div>
             )}
 
-            {/* SECTION 3: RATEIO MULTICENTRO DE CUSTO POR SEGMENTO ESCOLAR */}
+            {/* ABA 2: RATEIO POR CENTRO DE CUSTO (Acionada também pelo botão verde "Rateio" do rodapé) */}
             {activeSection === 'rateio' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div
                   style={{
-                    padding: 16,
-                    borderRadius: 14,
-                    background: '#f0f9ff',
-                    border: '1px solid #bae6fd',
+                    padding: 12,
+                    borderRadius: 10,
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
-                    gap: 12,
+                    gap: 10,
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>
-                      Rateio Contábil entre Segmentos Pedagógicos
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#14532d' }}>
+                      Rateio entre Centros de Custo / Segmentos
                     </div>
-                    <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>
-                      Distribua despesas compartilhadas (ex: Folha Docente, Energia, Limpeza) entre Educação Infantil, Fundamental I/II e Ensino Médio.
+                    <div style={{ fontSize: 11.5, color: '#166534' }}>
+                      Divida o valor líquido ({formatCurrency(valorLiquidoCalculado)}) entre múltiplos Centros de Custo.
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
                       onClick={handleAplicarRateioPedagogicoPadrao}
                       style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        background: '#f5f3ff',
-                        border: '1px solid #ddd6fe',
-                        color: '#6d28d9',
-                        fontSize: 12,
-                        fontWeight: 800,
+                        padding: '6px 10px',
+                        borderRadius: 7,
+                        background: '#ffffff',
+                        border: '1px solid #86efac',
+                        color: '#15803d',
+                        fontSize: 11.5,
+                        fontWeight: 700,
                         cursor: 'pointer',
                       }}
                     >
-                      Aplicar Rateio Pedagógico (20/30/30/20%)
+                      Rateio Padrão (20/30/30/20%)
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         setUsarRateio((v) => !v)
                         if (!usarRateio && rateioList.length === 0) {
-                          setRateioList([{ centroCusto, percentual: 100, valor: valorLiquidoCalculado }])
+                          const defaultCc =
+                            centroCusto || listaCentrosCusto[0]?.id || CENTROS_CUSTO_ESCOLARES[0].id
+                          setRateioList([{ centroCusto: defaultCc, percentual: 100, valor: valorLiquidoCalculado }])
                         }
                       }}
                       style={{
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        background: usarRateio ? '#fff1f2' : '#ecfdf5',
-                        border: usarRateio ? '1px solid #fecdd3' : '1px solid #a7f3d0',
-                        color: usarRateio ? '#be123c' : '#047857',
-                        fontSize: 12,
-                        fontWeight: 800,
+                        padding: '6px 10px',
+                        borderRadius: 7,
+                        background: usarRateio ? '#fff1f2' : '#16a34a',
+                        border: usarRateio ? '1px solid #fecdd3' : 'none',
+                        color: usarRateio ? '#be123c' : '#ffffff',
+                        fontSize: 11.5,
+                        fontWeight: 700,
                         cursor: 'pointer',
                       }}
                     >
-                      {usarRateio ? 'Desativar Rateio Múltiplo' : 'Ativar Rateio Múltiplo'}
+                      {usarRateio ? 'Desativar Rateio' : 'Ativar Rateio'}
                     </button>
                   </div>
                 </div>
 
                 {usarRateio ? (
                   <>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {rateioComValores.map((item, idx) => (
                         <div
                           key={idx}
                           style={{
                             display: 'grid',
-                            gridTemplateColumns: '1.6fr 140px 160px 44px',
-                            gap: 10,
+                            gridTemplateColumns: '1.6fr 110px 130px 36px',
+                            gap: 8,
                             alignItems: 'center',
-                            padding: '10px 12px',
-                            borderRadius: 12,
+                            padding: '8px 10px',
+                            borderRadius: 8,
                             background: '#f8fafc',
                             border: '1px solid #e2e8f0',
                           }}
                         >
-                          <div>
-                            <label htmlFor={`rateio-cc-${idx}`} style={{ ...labelStyle, marginBottom: 4 }}>
-                              Segmento / Centro de Custo #{idx + 1}
-                            </label>
-                            <select
-                              id={`rateio-cc-${idx}`}
-                              value={item.centroCusto}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                setRateioList((prev) => prev.map((r, i) => (i === idx ? { ...r, centroCusto: val } : r)))
-                              }}
-                              style={inputStyle}
-                            >
-                              {listaCentrosCusto.map((cc) => (
-                                <option key={cc.id} value={cc.id}>
-                                  {cc.label} ({cc.sigla})
-                                </option>
-                              ))}
-                              {item.centroCusto && !listaCentrosCusto.some((cc) => cc.id === item.centroCusto) && (
-                                <option value={item.centroCusto}>{item.centroCusto}</option>
-                              )}
-                            </select>
-                          </div>
-                          <div>
-                            <label htmlFor={`rateio-pct-${idx}`} style={{ ...labelStyle, marginBottom: 4 }}>
-                              Percentual (%)
-                            </label>
+                          <select
+                            aria-label={`Centro de Custo ${idx + 1}`}
+                            value={item.centroCusto}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setRateioList((prev) => prev.map((r, i) => (i === idx ? { ...r, centroCusto: val } : r)))
+                            }}
+                            style={inputStyle}
+                          >
+                            {listaCentrosCusto.map((cc) => (
+                              <option key={cc.id} value={cc.id}>
+                                {cc.label} ({cc.sigla})
+                              </option>
+                            ))}
+                          </select>
+
+                          <div style={{ position: 'relative' }}>
                             <input
-                              id={`rateio-pct-${idx}`}
+                              aria-label={`Percentual ${idx + 1}`}
                               type="number"
                               step="0.1"
                               min="0"
@@ -1516,33 +1783,44 @@ export function ContaPagarFormModal({
                                 const pct = Math.max(0, Number(e.target.value) || 0)
                                 setRateioList((prev) => prev.map((r, i) => (i === idx ? { ...r, percentual: pct } : r)))
                               }}
-                              style={inputStyle}
+                              style={{ ...inputStyle, paddingRight: 24 }}
                             />
-                          </div>
-                          <div>
-                            <div style={{ ...labelStyle, marginBottom: 4 }}>Valor Alocado</div>
-                            <div
+                            <span
                               style={{
-                                padding: '10px 12px',
-                                borderRadius: 10,
-                                background: '#f0f9ff',
-                                border: '1px solid #bae6fd',
-                                color: '#0369a1',
-                                fontWeight: 800,
-                                fontSize: 13,
+                                position: 'absolute',
+                                right: 8,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                fontSize: 11,
+                                color: '#64748b',
+                                fontWeight: 700,
                               }}
                             >
-                              {formatCurrency(item.valor)}
-                            </div>
+                              %
+                            </span>
                           </div>
+
+                          <div
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: 7,
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              fontWeight: 700,
+                              fontSize: 12.5,
+                              textAlign: 'right',
+                            }}
+                          >
+                            {formatCurrency(item.valor)}
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => setRateioList((prev) => prev.filter((_, i) => i !== idx))}
                             aria-label="Remover linha de rateio"
                             style={{
-                              marginTop: 18,
-                              height: 38,
-                              borderRadius: 10,
+                              height: 34,
+                              borderRadius: 7,
                               background: '#fff1f2',
                               border: '1px solid #fecdd3',
                               color: '#be123c',
@@ -1552,22 +1830,22 @@ export function ContaPagarFormModal({
                               justifyContent: 'center',
                             }}
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       ))}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <button
                         type="button"
                         onClick={handleAddRateioRow}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 6,
-                          padding: '8px 14px',
-                          borderRadius: 10,
+                          gap: 5,
+                          padding: '6px 12px',
+                          borderRadius: 7,
                           background: '#ffffff',
                           border: '1px solid #cbd5e1',
                           color: '#334155',
@@ -1576,187 +1854,45 @@ export function ContaPagarFormModal({
                           cursor: 'pointer',
                         }}
                       >
-                        <Plus size={14} />
-                        Adicionar Segmento ao Rateio
+                        <Plus size={13} />
+                        Adicionar Centro de Custo
                       </button>
 
-                      <div
+                      <span
                         style={{
-                          padding: '8px 14px',
-                          borderRadius: 10,
-                          background: Math.abs(somaPercentualRateio - 100) <= 0.5 ? '#ecfdf5' : '#fffbeb',
-                          border: Math.abs(somaPercentualRateio - 100) <= 0.5 ? '1px solid #a7f3d0' : '1px solid #fde68a',
-                          color: Math.abs(somaPercentualRateio - 100) <= 0.5 ? '#047857' : '#b45309',
                           fontSize: 12,
                           fontWeight: 800,
+                          color: Math.abs(somaPercentualRateio - 100) <= 0.5 ? '#15803d' : '#b45309',
                         }}
                       >
-                        Total Distribuído: {somaPercentualRateio}% ({formatCurrency(rateioComValores.reduce((a, b) => a + b.valor, 0))})
-                      </div>
+                        Total: {somaPercentualRateio}% ({formatCurrency(rateioComValores.reduce((a, b) => a + b.valor, 0))})
+                      </span>
                     </div>
                   </>
                 ) : (
                   <div
                     style={{
-                      padding: 24,
-                      borderRadius: 14,
+                      padding: 20,
+                      borderRadius: 10,
                       background: '#f8fafc',
                       border: '1px dashed #cbd5e1',
                       textAlign: 'center',
                       color: '#64748b',
-                      fontSize: 13,
+                      fontSize: 12.5,
                     }}
                   >
-                    100% da despesa será alocada no Centro de Custo principal selecionado:{' '}
-                    <strong style={{ color: '#0f172a' }}>{centroCusto}</strong>.
+                    100% da despesa será alocada no Centro de Custo selecionado:{' '}
+                    <strong style={{ color: '#0f172a' }}>{centroCusto || '-----'}</strong>.
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* SECTION 4: PARCELAMENTO E RECORRÊNCIA AUTOMÁTICA */}
-            {activeSection === 'parcelamento' && !editingRecord && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  {[
-                    { id: 'unico', title: 'Lançamento Único (À Vista)', desc: 'Apenas 1 título na data de vencimento escolhida' },
-                    { id: 'parcelado', title: 'Compra / Contrato Parcelado (2x a 60x)', desc: 'Gera automaticamente todas as parcelas numeradas' },
-                    { id: 'recorrente', title: 'Assinatura / Despesa Fixa Recorrente', desc: 'Projeta os próximos meses (Energia, Internet, SaaS, Aluguel)' },
-                  ].map((opt) => {
-                    const active = modoParcelamento === opt.id
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setModoParcelamento(opt.id as any)}
-                        style={{
-                          padding: 14,
-                          borderRadius: 14,
-                          textAlign: 'left',
-                          background: active ? '#f0f9ff' : '#f8fafc',
-                          border: active ? '2px solid #0284c7' : '1px solid #e2e8f0',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontSize: 13, fontWeight: 800, color: active ? '#0369a1' : '#0f172a' }}>
-                          {opt.title}
-                        </div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{opt.desc}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {modoParcelamento !== 'unico' && (
-                  <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                      <div>
-                        <label htmlFor="cp-qtd-parcelas" style={labelStyle}>
-                          Quantidade de Parcelas / Meses
-                        </label>
-                        <input
-                          id="cp-qtd-parcelas"
-                          type="number"
-                          min="2"
-                          max="60"
-                          value={qtdParcelas}
-                          onChange={(e) => setQtdParcelas(Math.min(60, Math.max(2, Number(e.target.value) || 2)))}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="cp-freq-parcelas" style={labelStyle}>
-                          Periodicidade dos Vencimentos
-                        </label>
-                        <select
-                          id="cp-freq-parcelas"
-                          value={frequenciaRecorrencia}
-                          onChange={(e) => setFrequenciaRecorrencia(e.target.value as any)}
-                          style={inputStyle}
-                        >
-                          <option value="mensal">Mensal (a cada 1 mês)</option>
-                          <option value="bimestral">Bimestral (a cada 2 meses)</option>
-                          <option value="trimestral">Trimestral (a cada 3 meses)</option>
-                          <option value="semestral">Semestral (a cada 6 meses)</option>
-                          <option value="anual">Anual (a cada 12 meses)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor="cp-modo-valor" style={labelStyle}>
-                          Cálculo do Valor por Parcela
-                        </label>
-                        <select
-                          id="cp-modo-valor"
-                          value={modoValorParcela}
-                          onChange={(e) => setModoValorParcela(e.target.value as any)}
-                          style={inputStyle}
-                        >
-                          <option value="repetir">Repetir {formatCurrency(valorLiquidoCalculado)} em cada parcela</option>
-                          <option value="dividir">Dividir {formatCurrency(valorLiquidoCalculado)} entre as {qtdParcelas} parcelas</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Preview Editável das Parcelas */}
-                    <div
-                      style={{
-                        borderRadius: 14,
-                        border: '1px solid #e2e8f0',
-                        overflow: 'hidden',
-                        maxHeight: 260,
-                        overflowY: 'auto',
-                      }}
-                    >
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ background: '#f8fafc', color: '#475569', textAlign: 'left', borderBottom: '2px solid #e2e8f0' }}>
-                            <th style={{ padding: '10px 12px' }}>Parcela</th>
-                            <th style={{ padding: '10px 12px' }}>Descrição</th>
-                            <th style={{ padding: '10px 12px' }}>Vencimento</th>
-                            <th style={{ padding: '10px 12px' }}>Competência</th>
-                            <th style={{ padding: '10px 12px', textAlign: 'right' }}>Valor Líquido (R$)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parcelasPreview.map((p, idx) => (
-                            <tr key={p.numero} style={{ borderTop: '1px solid #f1f5f9', background: '#ffffff' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 800, color: '#0369a1' }}>
-                                {String(p.numero).padStart(2, '0')}/{String(p.total).padStart(2, '0')}
-                              </td>
-                              <td style={{ padding: '8px 12px', color: '#0f172a', fontWeight: 600 }}>{p.descricao}</td>
-                              <td style={{ padding: '8px 12px' }}>
-                                <input
-                                  aria-label={`Vencimento da parcela ${p.numero}`}
-                                  type="date"
-                                  value={p.vencimento}
-                                  onChange={(e) => {
-                                    const nv = e.target.value
-                                    setParcelasPreview((prev) =>
-                                      prev.map((item, i) => (i === idx ? { ...item, vencimento: nv, competencia: nv.slice(0, 7) } : item))
-                                    )
-                                  }}
-                                  style={{ ...inputStyle, padding: '5px 8px', fontSize: 12 }}
-                                />
-                              </td>
-                              <td style={{ padding: '8px 12px', color: '#64748b' }}>{p.competencia}</td>
-                              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#047857' }}>
-                                {formatCurrency(p.valorLiquido)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
                 )}
               </div>
             )}
           </div>
 
-          {/* Footer */}
+          {/* RODAPÉ NO ESTILO DA IMAGEM 2 (Botões Rateio | Gerar Parcelas | Fechar + Resumo inteligente) */}
           <div
             style={{
-              padding: '16px 24px',
+              padding: '12px 20px',
               borderTop: '1px solid #e2e8f0',
               background: '#f8fafc',
               display: 'flex',
@@ -1766,68 +1902,318 @@ export function ContaPagarFormModal({
               flexWrap: 'wrap',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div>
-                <span style={{ fontSize: 11, color: '#64748b', display: 'block', fontWeight: 600 }}>Valor Líquido por Título</span>
-                <strong style={{ fontSize: 16, color: '#047857', fontWeight: 900 }}>
-                  {formatCurrency(valorLiquidoCalculado)}
-                </strong>
-              </div>
-              {!editingRecord && modoParcelamento !== 'unico' && parcelasPreview.length > 1 && (
-                <div style={{ paddingLeft: 16, borderLeft: '1px solid #cbd5e1' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', display: 'block', fontWeight: 600 }}>
-                    Total do Compromisso ({parcelasPreview.length}x)
-                  </span>
-                  <strong style={{ fontSize: 16, color: '#0369a1', fontWeight: 900 }}>
-                    {formatCurrency(parcelasPreview.reduce((a, b) => a + b.valorLiquido, 0))}
+            <div style={{ fontSize: 12, color: '#475569' }}>
+              {qtdParcelasGeradas > 1 && !editingRecord ? (
+                <span>
+                  <strong>{qtdParcelasGeradas}x</strong> de{' '}
+                  <strong style={{ color: '#0f172a' }}>
+                    {formatCurrency(parcelasPreview[0]?.valorLiquido ?? valorLiquidoCalculado)}
+                  </strong>{' '}
+                  • Total:{' '}
+                  <strong style={{ color: '#2563eb', fontSize: 13.5 }}>{formatCurrency(totalCompromisso)}</strong>
+                </span>
+              ) : (
+                <span>
+                  Total Líquido:{' '}
+                  <strong style={{ color: '#047857', fontSize: 14 }}>
+                    {formatCurrency(valorLiquidoCalculado)}
                   </strong>
-                </div>
+                </span>
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Botão Verde "Rateio" (Idêntico à Imagem 2) */}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => setActiveSection((prev) => (prev === 'rateio' ? 'dados' : 'rateio'))}
                 style={{
-                  padding: '10px 18px',
-                  borderRadius: 11,
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  color: '#475569',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 14px',
+                  borderRadius: 6,
+                  background: '#5cb85c',
+                  border: '1px solid #4cae4c',
+                  color: '#ffffff',
                   fontSize: 13,
                   fontWeight: 700,
                   cursor: 'pointer',
                 }}
               >
-                Cancelar
+                <Split size={14} />
+                {usarRateio ? `Rateio (${somaPercentualRateio}%)` : 'Rateio'}
               </button>
+
+              {/* Botão Azul "✓ Gerar Parcelas" (Idêntico à Imagem 2) */}
               <button
                 type="submit"
                 disabled={saving}
                 style={{
-                  padding: '10px 22px',
-                  borderRadius: 11,
-                  background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
-                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  background: '#337ab7',
+                  border: '1px solid #2e6da4',
                   color: '#ffffff',
                   fontSize: 13,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   cursor: saving ? 'wait' : 'pointer',
-                  boxShadow: '0 6px 16px rgba(5, 150, 105, 0.25)',
                 }}
               >
+                <Check size={15} />
                 {saving
                   ? 'Salvando...'
                   : editingRecord
-                    ? `Salvar Alterações (${formatCurrency(valorLiquidoCalculado)})`
-                    : modoParcelamento !== 'unico' && parcelasPreview.length > 1
-                      ? `Gerar ${parcelasPreview.length} Títulos (${formatCurrency(parcelasPreview.reduce((a, b) => a + b.valorLiquido, 0))})`
-                      : `Confirmar Lançamento de ${formatCurrency(valorLiquidoCalculado)}`}
+                    ? 'Salvar Alterações'
+                    : qtdParcelasGeradas > 1
+                      ? `Gerar Parcelas (${qtdParcelasGeradas}x)`
+                      : 'Gerar Parcelas'}
+              </button>
+
+              {/* Botão Branco "✕ Fechar" (Idêntico à Imagem 2) */}
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '8px 14px',
+                  borderRadius: 6,
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  color: '#334155',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={14} />
+                Fechar
               </button>
             </div>
           </div>
         </form>
+
+        {/* MODAL DE BUSCA E SELEÇÃO DO PLANO DE CONTAS */}
+        {showPlanoContasModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-selecionar-plano-title"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1200,
+              background: 'rgba(15, 23, 42, 0.6)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+            onClick={() => setShowPlanoContasModal(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: 620,
+                maxHeight: '80vh',
+                background: '#ffffff',
+                borderRadius: 14,
+                border: '1px solid #cbd5e1',
+                boxShadow: '0 25px 60px rgba(15, 23, 42, 0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  padding: '14px 18px',
+                  borderBottom: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <BookOpen size={18} color="#2563eb" />
+                  <h3 id="modal-selecionar-plano-title" style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                    Selecionar Conta Plano
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPlanoContasModal(false)}
+                  aria-label="Fechar seleção de plano de contas"
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 6,
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#475569',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              <div style={{ padding: '12px 18px', borderBottom: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ position: 'relative' }}>
+                  <Search
+                    size={15}
+                    style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}
+                  />
+                  <input
+                    type="text"
+                    autoFocus
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    value={buscaPlanoContas}
+                    onChange={(e) => setBuscaPlanoContas(e.target.value)}
+                    placeholder="Buscar por código (ex: 50.01) ou descrição da conta..."
+                    style={{
+                      ...inputStyle,
+                      paddingLeft: 34,
+                      background: '#f8fafc',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(
+                    [
+                      { id: 'todos', label: `Todos (${listaPlanoContas.length})` },
+                      { id: 'despesas', label: `📉 Despesas (${listaPlanoContas.filter((p) => p.grupoConta === 'despesas').length})` },
+                      { id: 'investimentos', label: `🪙 Investimentos (${listaPlanoContas.filter((p) => p.grupoConta === 'investimentos').length})` },
+                      { id: 'receitas', label: `📈 Receitas (${listaPlanoContas.filter((p) => p.grupoConta === 'receitas').length})` },
+                    ] as const
+                  ).map((g) => {
+                    const active = filtroGrupoPlano === g.id
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setFiltroGrupoPlano(g.id)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 99,
+                          fontSize: 11,
+                          fontWeight: active ? 800 : 600,
+                          background: active ? '#2563eb' : '#f1f5f9',
+                          color: active ? '#ffffff' : '#475569',
+                          border: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {g.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+                {planosFiltradosModal.length === 0 ? (
+                  <div style={{ padding: '28px 16px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                    Nenhuma conta encontrada para a busca informada.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {planosFiltradosModal.map((item) => {
+                      const isSelected =
+                        (planoContasId && item.id === planoContasId) ||
+                        (!planoContasId && categoria === item.value)
+                      const depth = item.codPlano ? Math.max(0, item.codPlano.split('.').length - 1) : 0
+                      const tc = TIPO_CONTA_BADGE[item.tipo] || TIPO_CONTA_BADGE.analitico
+                      const gc = GRUPO_CONTA_BADGE[item.grupoConta] || GRUPO_CONTA_BADGE.despesas
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleSelectPlanoConta(item)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            width: '100%',
+                            padding: '8px 10px',
+                            paddingLeft: 10 + depth * 14,
+                            borderRadius: 8,
+                            background: isSelected ? '#eff6ff' : '#ffffff',
+                            border: isSelected ? '1.5px solid #2563eb' : '1px solid #f1f5f9',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                            {item.codPlano && (
+                              <code
+                                style={{
+                                  fontSize: 11.5,
+                                  fontWeight: 800,
+                                  color: gc.color,
+                                  background: gc.bg,
+                                  padding: '2px 6px',
+                                  borderRadius: 5,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {item.codPlano}
+                              </code>
+                            )}
+                            <span
+                              style={{
+                                fontSize: 12.5,
+                                fontWeight: item.tipo === 'sintetico' ? 800 : 600,
+                                color: '#0f172a',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {item.descricao}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: 5,
+                                color: tc.color,
+                                background: tc.bg,
+                              }}
+                            >
+                              {tc.label}
+                            </span>
+                            {isSelected && <Check size={14} color="#2563eb" />}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

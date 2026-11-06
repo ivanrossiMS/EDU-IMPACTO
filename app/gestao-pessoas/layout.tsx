@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context'
 import { DataProvider, useData } from '@/lib/dataContext'
 import { PeopleSidebar } from '@/components/gestao-pessoas/layout/PeopleSidebar'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { resolveUserPerfil, isPlataformaShaiBlocked } from '@/lib/auth/moduleRouting'
 
 export default function GestaoPessoasLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()
@@ -24,7 +25,7 @@ export default function GestaoPessoasLayout({ children }: { children: React.Reac
 }
 
 function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
-  const { currentUser, hydrated, loadingPath, setLoadingPath, setCurrentUser } = useApp()
+  const { currentUser, currentUserPerfil, hydrated, loadingPath, setLoadingPath, setCurrentUser } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
@@ -63,8 +64,9 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!hydrated) return
 
-    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst', '/gestao-pessoas/shai']
+    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst']
     const isTryingToAccessRestricted = restrictedPaths.some(p => pathname.startsWith(p))
+    const isTryingToAccessShai = pathname.startsWith('/gestao-pessoas/shai')
     const pLow = String(currentUser?.perfil || '').toLowerCase()
     const cLow = String(currentUser?.cargo || '').toLowerCase()
     const isAdmin =
@@ -87,6 +89,8 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
         const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
         if (isFamily) return 'denied'
         if (!isAdmin && isTryingToAccessRestricted) return 'denied'
+        const fallbackPerfil = resolveUserPerfil(perfis, currentUserPerfil, currentUser)
+        if (isTryingToAccessShai && isPlataformaShaiBlocked(fallbackPerfil)) return 'denied'
         return 'allowed'
       })
     }, 1500)
@@ -105,13 +109,15 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
 
     if (perfisLoading) return
 
-    const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
+    const userPerfilObj = resolveUserPerfil(perfis, currentUserPerfil, currentUser)
     
     // Se o perfil não foi encontrado na tabela, por padrão PERMITE acesso a funcionários internos (exceto rotas restritas)
     const hasAccess = userPerfilObj ? !userPerfilObj.bloqueadoGestaoPessoas : true
 
     if (hasAccess) {
       if (!isAdmin && isTryingToAccessRestricted) {
+        setAccessState('denied')
+      } else if (isTryingToAccessShai && isPlataformaShaiBlocked(userPerfilObj)) {
         setAccessState('denied')
       } else {
         setAccessState('allowed')
@@ -122,7 +128,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
 
     clearTimeout(emergencyTimer)
     return () => clearTimeout(emergencyTimer)
-  }, [hydrated, currentUser, pathname, perfisLoading, perfis])
+  }, [hydrated, currentUser, currentUserPerfil, pathname, perfisLoading, perfis])
 
   if (accessState === 'checking') {
     return (

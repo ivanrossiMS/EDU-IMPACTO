@@ -736,7 +736,7 @@ async function loadStateFromDb(admin: any) {
     admin
       .from('configuracoes')
       .select('chave, valor')
-      .in('chave', [CFG_KEY_CONTAS, CFG_KEY_FORNECEDORES, CFG_KEY_ORCAMENTOS]),
+      .in('chave', [CFG_KEY_CONTAS, CFG_KEY_FORNECEDORES, CFG_KEY_ORCAMENTOS, 'cfgPlanoContas']),
     admin
       .from('contas_pagar')
       .select('*')
@@ -808,7 +808,11 @@ async function loadStateFromDb(admin: any) {
     (b.vencimento || '').localeCompare(a.vencimento || '')
   )
 
-  return { contas, fornecedores, orcamentos }
+  const planoContas: any[] = Array.isArray(cfgMap.get('cfgPlanoContas'))
+    ? cfgMap.get('cfgPlanoContas')
+    : []
+
+  return { contas, fornecedores, orcamentos, planoContas }
 }
 
 async function persistContas(admin: any, contas: ContaPagarRecord[], touchedRecords?: ContaPagarRecord[]) {
@@ -855,7 +859,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10000', 10)
 
     const admin = getAdminClient()
-    const { contas, fornecedores, orcamentos } = await loadStateFromDb(admin)
+    const { contas, fornecedores, orcamentos, planoContas } = await loadStateFromDb(admin)
     const sliced = contas.slice(0, limit)
 
     if (includeMeta) {
@@ -863,6 +867,7 @@ export async function GET(request: Request) {
         data: sliced,
         fornecedores,
         orcamentos,
+        planoContas,
       })
     }
 
@@ -912,7 +917,7 @@ export async function POST(request: Request) {
         nomeFantasia: f.nomeFantasia?.trim() || f.nome.trim(),
         documento: f.documento?.trim() || '',
         categoriaPadrao: f.categoriaPadrao || 'Outros Custos Operacionais',
-        centroCustoPadrao: f.centroCustoPadrao || 'Administração & Diretoria Geral',
+        centroCustoPadrao: f.centroCustoPadrao ?? '',
         formaPagamentoPadrao: f.formaPagamentoPadrao || 'PIX',
         banco: f.banco || '',
         agencia: f.agencia || '',

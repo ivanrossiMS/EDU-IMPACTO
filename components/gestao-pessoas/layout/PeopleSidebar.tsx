@@ -5,6 +5,8 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
+import { useData } from '@/lib/dataContext'
+import { resolveUserPerfil, isPlataformaShaiBlocked } from '@/lib/auth/moduleRouting'
 import {
   Users, Activity, ShieldAlert,
   ClipboardCheck, GraduationCap,
@@ -19,7 +21,7 @@ import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
   { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores', adminOnly: true },
-  { href: '/gestao-pessoas/shai', icon: KeyRound, label: 'Plataforma SHAI', adminOnly: true },
+  { href: '/gestao-pessoas/shai', icon: KeyRound, label: 'Plataforma SHAI' },
   { href: '/gestao-pessoas/materiais-divulgacao', icon: Megaphone, label: 'Materiais de Divulgação' },
   { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
   { href: '/gestao-pessoas/treinamentos', icon: GraduationCap, label: 'Treinamentos' },
@@ -49,7 +51,8 @@ const SHORT_LABELS: Record<string, string> = {
 export function PeopleSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil } = useApp()
+  const { perfis } = useData()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false)
   const [isTrocarModuloOpen, setIsTrocarModuloOpen] = React.useState(false)
@@ -76,7 +79,17 @@ export function PeopleSidebar() {
     currentUser?.cargo === 'Diretor Geral' ||
     currentUser?.perfil === 'Administrador Master' ||
     currentUser?.cargo === 'Administrador'
-  const filteredMenus = MENUS.filter(m => isAdmin || !m.adminOnly)
+
+  const userPerfilObj = React.useMemo(
+    () => resolveUserPerfil(perfis, currentUserPerfil, currentUser),
+    [perfis, currentUserPerfil, currentUser]
+  )
+  const shaiBlocked = isPlataformaShaiBlocked(userPerfilObj)
+
+  const filteredMenus = MENUS.filter(m => {
+    if (m.href === '/gestao-pessoas/shai') return !shaiBlocked
+    return isAdmin || !m.adminOnly
+  })
 
   if (isMobile) {
     return (

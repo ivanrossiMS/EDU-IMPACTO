@@ -414,3 +414,13 @@ export function isAnyTurmasCardHidden(perfilObj: Perfil | null | undefined): boo
   }
   return false
 }
+
+/**
+ * Verifica se a página Plataforma SHAI (dentro do módulo Gestão de Pessoas) está oculta/bloqueada para o perfil.
+ */
+export function isPlataformaShaiBlocked(perfilObj: Perfil | null | undefined): boolean {
+  if (!perfilObj) return false
+  if (perfilObj.bloqueadoGestaoPessoas === true) return true
+  if (perfilObj.bloqueadoPlataformaShai === true) return true
+  return false
+}

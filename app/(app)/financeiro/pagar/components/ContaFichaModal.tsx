@@ -91,18 +91,6 @@ export function ContaFichaModal({
               >
                 {stCfg.label}
               </span>
-              <span
-                style={{
-                  padding: '3px 9px',
-                  borderRadius: 99,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: prioCfg.color,
-                  background: prioCfg.bg,
-                }}
-              >
-                Prioridade {prioCfg.label}
-              </span>
               <span style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, fontFamily: 'monospace' }}>
                 {conta.codigo || conta.id}
               </span>
@@ -178,7 +166,7 @@ export function ContaFichaModal({
               {conta.fornecedorDocumento && <div style={{ color: '#475569', marginTop: 2 }}>CNPJ/CPF: {conta.fornecedorDocumento}</div>}
             </div>
             <div>
-              <div style={{ color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Classificação Orçamentária</div>
+              <div style={{ color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Plano de Contas</div>
               <div style={{ color: '#0369a1', fontWeight: 800, marginTop: 2 }}>{conta.categoria}</div>
               <div style={{ color: '#475569', marginTop: 2 }}>Segmento: {conta.centroCusto}</div>
             </div>

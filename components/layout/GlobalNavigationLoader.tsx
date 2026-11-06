@@ -25,6 +25,8 @@ const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
   'matriculas': { title: 'Matrículas', subtitle: 'GESTÃO ESCOLAR' },
   'matriculas/digital': { title: 'Matrícula Digital', subtitle: 'MATRÍCULAS' },
   'matriculas/valores': { title: 'Tabela de Valores', subtitle: 'MATRÍCULAS' },
+  'matriculas/negociacoes': { title: 'Negociações', subtitle: 'MATRÍCULAS' },
+  'matriculas/conciliacao-isaac': { title: 'Conciliação ISAAC', subtitle: 'MATRÍCULAS' },
   'matriculas/contratos': { title: 'Contratos', subtitle: 'MATRÍCULAS' },
 
   // Acadêmico

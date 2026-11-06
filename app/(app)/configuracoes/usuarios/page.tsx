@@ -324,7 +324,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoPlataformaShai: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
   const [perfilModalTab, setPerfilModalTab] = useState<'permissoes' | 'usuarios'>('permissoes')
   const [perfilUserSearch, setPerfilUserSearch] = useState('')
@@ -443,7 +443,7 @@ export default function UsuariosPage() {
   /* ── Perfil actions ── */
   /* ── Perfil actions ── */
   const openAddPerfil = () => {
-    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
+    setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoPlataformaShai: false, bloqueadoSimulados: false, bloqueadoProvasOnline: false, bloqueadoCredImpacto: false, bloqueadoKpisDashboard: false, bloqueadoCardsDashboard: [], bloqueadoKpisAlunos: false, bloqueadoCardsAlunos: [], bloqueadoKpisTurmas: false, bloqueadoCardsTurmas: [] })
     setEditingPerfilId(null)
     setPerfilModalTab('permissoes')
     setPerfilUserSearch('')
@@ -461,6 +461,7 @@ export default function UsuariosPage() {
       bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false,
       bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false,
       bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false,
+      bloqueadoPlataformaShai: p.bloqueadoPlataformaShai || false,
       bloqueadoSimulados: p.bloqueadoSimulados || false,
       bloqueadoProvasOnline: p.bloqueadoProvasOnline || false,
       bloqueadoCredImpacto: p.bloqueadoCredImpacto || false,
@@ -1302,21 +1303,66 @@ export default function UsuariosPage() {
                   </div>
 
                   {/* Gestão de Pessoas */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
-                        👥
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
+                          👥
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Gestão de Pessoas</div>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de SST, treinamentos e colaboradores.</div>
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Gestão de Pessoas</div>
-                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de SST, treinamentos e colaboradores.</div>
-                      </div>
+                      <ModernSwitch
+                        checked={!perfilForm.bloqueadoGestaoPessoas}
+                        onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
+                        color="#10b981"
+                      />
                     </div>
-                    <ModernSwitch
-                      checked={!perfilForm.bloqueadoGestaoPessoas}
-                      onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
-                      color="#10b981"
-                    />
+
+                    {/* Sub-opção: Página Plataforma SHAI */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      paddingTop: 12,
+                      borderTop: '1px dashed hsl(var(--border-subtle))',
+                      opacity: perfilForm.bloqueadoGestaoPessoas ? 0.5 : 1,
+                    }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', paddingLeft: 4 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, boxShadow: '0 6px 14px rgba(99,102,241,0.28)' }}>
+                          🔑
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                            <span style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                              Página Plataforma SHAI
+                            </span>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 800,
+                              padding: '2px 7px',
+                              borderRadius: 6,
+                              background: (perfilForm.bloqueadoPlataformaShai || perfilForm.bloqueadoGestaoPessoas) ? 'rgba(239,68,68,0.14)' : 'rgba(16,185,129,0.14)',
+                              color: (perfilForm.bloqueadoPlataformaShai || perfilForm.bloqueadoGestaoPessoas) ? '#ef4444' : '#10b981',
+                            }}>
+                              {(perfilForm.bloqueadoPlataformaShai || perfilForm.bloqueadoGestaoPessoas) ? 'OCULTA' : 'VISÍVEL'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>
+                            Mostrar ou ocultar a página Plataforma SHAI dentro do módulo Gestão de Pessoas para este perfil.
+                          </div>
+                        </div>
+                      </div>
+                      <ModernSwitch
+                        checked={!perfilForm.bloqueadoPlataformaShai && !perfilForm.bloqueadoGestaoPessoas}
+                        onChange={() => setPerfilForm(p => ({ ...p, bloqueadoPlataformaShai: !p.bloqueadoPlataformaShai }))}
+                        disabled={Boolean(perfilForm.bloqueadoGestaoPessoas)}
+                        color="#10b981"
+                      />
+                    </div>
                   </div>
 
                   {/* SIMULADOS */}

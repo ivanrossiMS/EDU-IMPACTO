@@ -106,7 +106,7 @@ export function DesktopTopNav() {
 
     // Se possui permissões explícitas no perfil
     if (!isPrivilegedAdmin && userPerms && userPerms.length > 0) {
-      if (href === '/matriculas/negociacoes' && (userPerms.includes('/matriculas/negociacoes') || userPerms.includes('matriculas') || userPerms.includes('/matriculas/valores') || userPerms.includes('/matriculas/digital'))) {
+      if ((href === '/matriculas/negociacoes' || href === '/matriculas/conciliacao-isaac') && (userPerms.includes('/matriculas/negociacoes') || userPerms.includes('/matriculas/conciliacao-isaac') || userPerms.includes('matriculas') || userPerms.includes('/matriculas/valores') || userPerms.includes('/matriculas/digital') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber'))) {
         return true
       }
       if ((href === '/financeiro/pagar' || href === '/financeiro/contas-a-pagar') && (userPerms.includes('/financeiro/pagar') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber') || userPerms.includes('/financeiro/dre') || userPerms.includes('/financeiro/renegociacao'))) {
@@ -139,7 +139,8 @@ export function DesktopTopNav() {
       items: [
         { id: 'mat-dig', label: 'Matrícula Digital', href: '/matriculas/digital', icon: <FileCheck2 size={15} />, badge: 'NOVO', badgeColor: 'green' },
         { id: 'mat-val', label: 'Valores', href: '/matriculas/valores', icon: <Calculator size={15} />, badge: '2027', badgeColor: 'green' },
-        { id: 'mat-neg', label: 'Negociações', href: '/matriculas/negociacoes', icon: <Handshake size={15} />, badge: '2027', badgeColor: 'green' }
+        { id: 'mat-neg', label: 'Negociações', href: '/matriculas/negociacoes', icon: <Handshake size={15} />, badge: '2027', badgeColor: 'green' },
+        { id: 'mat-isaac', label: 'Conciliação ISAAC', href: '/matriculas/conciliacao-isaac', icon: <ShieldCheck size={15} />, badge: 'LIVE', badgeColor: 'purple' }
       ],
       matchPaths: (path) => path.startsWith('/matriculas')
     },

@@ -9,10 +9,13 @@ import {
 import { useRouter } from 'next/navigation'
 import { motion, Variants } from 'framer-motion'
 import { useApp } from '@/lib/context'
+import { useData } from '@/lib/dataContext'
+import { resolveUserPerfil, isPlataformaShaiBlocked } from '@/lib/auth/moduleRouting'
 
 export default function GestaoPessoasDashboard() {
   const router = useRouter()
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil } = useApp()
+  const { perfis } = useData()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     colaboradores: 0,
@@ -78,9 +81,15 @@ export default function GestaoPessoasDashboard() {
     currentUser?.perfil === 'Administrador Master' ||
     currentUser?.cargo === 'Administrador'
 
+  const userPerfilObj = React.useMemo(
+    () => resolveUserPerfil(perfis, currentUserPerfil, currentUser),
+    [perfis, currentUserPerfil, currentUser]
+  )
+  const shaiBlocked = isPlataformaShaiBlocked(userPerfilObj)
+
   const modules = [
     { title: 'Colaboradores', desc: 'Gestão de equipe e perfis.', icon: Users, link: '/gestao-pessoas/colaboradores', color: '#3b82f6', bg: '#eff6ff', adminOnly: true },
-    { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe', adminOnly: true },
+    { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe' },
     { title: 'Pesquisa de Clima', desc: 'Análise de engajamento.', icon: PieChart, link: '/gestao-pessoas/pesquisa-clima', color: '#0ea5e9', bg: '#e0f2fe' },
     { title: 'Treinamentos', desc: 'Capacitação contínua.', icon: GraduationCap, link: '/gestao-pessoas/treinamentos', color: '#14b8a6', bg: '#ccfbf1' },
     { title: 'SST e NR-01', desc: 'Segurança do trabalho.', icon: Stethoscope, link: '/gestao-pessoas/sst', color: '#8b5cf6', bg: '#f3e8ff', adminOnly: true },
@@ -89,7 +98,10 @@ export default function GestaoPessoasDashboard() {
     { title: 'Denúncias', desc: 'Canal de ética seguro.', icon: ShieldAlert, link: '/gestao-pessoas/denuncias', color: '#f43f5e', bg: '#ffe4e6' },
     { title: 'Direitos', desc: 'Guia do colaborador.', icon: Scale, link: '/gestao-pessoas/direitos', color: '#f59e0b', bg: '#fef3c7' },
     { title: 'FAQ', desc: 'Dúvidas frequentes.', icon: HelpCircle, link: '/gestao-pessoas/faq', color: '#6366f1', bg: '#e0e7ff' },
-  ].filter(m => isAdmin || !m.adminOnly)
+  ].filter(m => {
+    if (m.link === '/gestao-pessoas/shai') return !shaiBlocked
+    return isAdmin || !m.adminOnly
+  })
 
   const containerVariants = {
     hidden: { opacity: 0 },

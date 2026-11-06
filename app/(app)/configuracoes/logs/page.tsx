@@ -476,6 +476,7 @@ export default function LogsAuditoriaPage() {
       bloqueadoAgendaDigital: 'Bloqueio: Agenda Digital',
       bloqueadoGestaoEscolar: 'Bloqueio: Gestão Escolar',
       bloqueadoGestaoPessoas: 'Bloqueio: Gestão de Pessoas',
+      bloqueadoPlataformaShai: 'Bloqueio: Plataforma SHAI (Gestão de Pessoas)',
       bloqueadoKpisDashboard: 'Ocultar todos os Cards da Dashboard',
       bloqueadoCardsDashboard: 'Cards Ocultos na Dashboard',
       bloqueadoKpisAlunos: 'Ocultar todos os Cards de Alunos',
