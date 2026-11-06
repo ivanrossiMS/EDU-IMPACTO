@@ -981,6 +981,8 @@ export async function POST(request: Request) {
       const caixaOrigem = body.caixaOrigem || 'Banco do Brasil — Conta Movimento'
       const comprovanteRef = body.comprovanteRef || ''
       const observacaoBaixa = body.observacao || ''
+      const anexosNovos = Array.isArray(body.anexosNovos) ? body.anexosNovos : []
+      const anexosCombinados = [...(atual.anexos || []), ...anexosNovos]
       const jurosExtra = Math.max(0, Number(body.juros ?? atual.juros ?? 0))
       const multaExtra = Math.max(0, Number(body.multa ?? atual.multa ?? 0))
       const descontoExtra = Math.max(0, Number(body.desconto ?? atual.desconto ?? 0))
@@ -1012,7 +1014,8 @@ export async function POST(request: Request) {
             dataPagamento,
             formaPagamento,
             caixaOrigem,
-            comprovanteUrl: comprovanteRef || atual.comprovanteUrl,
+            comprovanteUrl: comprovanteRef || anexosNovos[0]?.url || atual.comprovanteUrl,
+            anexos: anexosCombinados,
             aprovacaoStatus: 'aprovado',
             updatedAt: nowISO,
             historico: [
@@ -1077,7 +1080,8 @@ export async function POST(request: Request) {
             dataPagamento,
             formaPagamento,
             caixaOrigem,
-            comprovanteUrl: comprovanteRef || atual.comprovanteUrl,
+            comprovanteUrl: comprovanteRef || anexosNovos[0]?.url || atual.comprovanteUrl,
+            anexos: anexosCombinados,
             aprovacaoStatus: 'aprovado',
             updatedAt: nowISO,
             historico: [
@@ -1247,6 +1251,44 @@ export async function POST(request: Request) {
 
       const saved = await persistContas(admin, contas, touched)
       return NextResponse.json({ ok: true, data: saved })
+    }
+
+    // 8.1 Atualizar Anexos / Fotos de um Lançamento Individualmente
+    if (action === 'update_anexos') {
+      const id = String(body.id || '')
+      const targetIdx = contas.findIndex((c) => c.id === id)
+      if (targetIdx < 0) {
+        return NextResponse.json({ error: 'Lançamento não encontrado' }, { status: 404 })
+      }
+      const atual = contas[targetIdx]
+      const anexos = Array.isArray(body.anexos) ? body.anexos : []
+      const acaoHistorico = body.acaoHistorico || 'Anexos Atualizados'
+      const detalhesHistorico = body.detalhesHistorico || `Total de anexos no lançamento: ${anexos.length}.`
+
+      const updated = normalizarContaPagar(
+        {
+          ...atual,
+          anexos,
+          comprovanteUrl: atual.comprovanteUrl || anexos[0]?.url || undefined,
+          updatedAt: nowISO,
+          historico: [
+            ...(atual.historico || []),
+            {
+              id: `hist-anx-${Date.now()}`,
+              data: nowISO,
+              acao: acaoHistorico,
+              usuario: operador,
+              detalhes: detalhesHistorico,
+            },
+          ],
+        },
+        targetIdx,
+        hojeStr
+      )
+
+      contas[targetIdx] = updated
+      const saved = await persistContas(admin, contas, [updated])
+      return NextResponse.json({ ok: true, data: saved, record: updated })
     }
 
     // 9. Upsert de 1 ou Múltiplas Contas a Pagar (Lançamento / Parcelamento / Importação)

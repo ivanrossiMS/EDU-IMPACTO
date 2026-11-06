@@ -7,10 +7,12 @@ import {
 import { formatCurrency } from '@/lib/utils'
 import {
   type ContaPagarRecord,
+  type AnexoContaPagarItem,
   STATUS_CONTA_PAGAR_CONFIG,
   PRIORIDADE_CONTA_PAGAR_CONFIG,
   openPrintOrdemPagamento,
 } from '../types'
+import { AnexosInlineSection } from './AnexosLancamentoModal'
 
 interface ContaFichaModalProps {
   conta: ContaPagarRecord | null
@@ -18,6 +20,12 @@ interface ContaFichaModalProps {
   onEdit: (conta: ContaPagarRecord) => void
   onBaixar: (conta: ContaPagarRecord) => void
   onReverterBaixa: (conta: ContaPagarRecord) => void
+  onUpdateAnexos?: (
+    contaId: string,
+    novosAnexos: AnexoContaPagarItem[],
+    acaoHistorico?: string,
+    detalhesHistorico?: string
+  ) => Promise<void>
 }
 
 export function ContaFichaModal({
@@ -26,6 +34,7 @@ export function ContaFichaModal({
   onEdit,
   onBaixar,
   onReverterBaixa,
+  onUpdateAnexos,
 }: ContaFichaModalProps) {
   if (!conta) return null
 
@@ -208,6 +217,18 @@ export function ContaFichaModal({
               </div>
             </div>
           )}
+
+          {/* Central de Anexos, Comprovantes & Fotos na Ficha */}
+          <AnexosInlineSection
+            anexos={conta.anexos || []}
+            codigoLancamento={conta.codigo || conta.id}
+            tituloSecao="Anexos, Comprovantes & Fotos deste Lançamento"
+            onChange={(novosAnexos, acao, detalhes) => {
+              if (onUpdateAnexos) {
+                onUpdateAnexos(conta.id, novosAnexos, acao, detalhes)
+              }
+            }}
+          />
 
           {/* Trilha de Auditoria (Histórico) */}
           {conta.historico && conta.historico.length > 0 && (

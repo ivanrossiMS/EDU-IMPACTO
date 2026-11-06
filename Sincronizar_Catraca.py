@@ -19,17 +19,63 @@ import sys
 import os
 import ssl
 import time
+import socket
 import urllib.request
 import urllib.error
 import subprocess
 import threading
 from datetime import datetime, timezone, date
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
+
+# Timeout global de socket para impedir travamento infinito em leituras de rede/DNS
+socket.setdefaulttimeout(10)
+
+# Batimento cardíaco monitorado pelo Watchdog anti-congelamento
+ULTIMO_BATIMENTO_LOOP = time.time()
+
+
+def desativar_quickedit_windows():
+    """
+    Desativa o 'Modo de Edição Rápida' (QuickEdit Mode) e 'Insert Mode' do console Windows (cmd.exe).
+    CAUSA RAIZ DE CONGELAMENTO NO WINDOWS: Quando o QuickEdit está ativo e alguém clica dentro da
+    janela preta do terminal, o Windows congela todas as threads que escrevem no stdout (print) até
+    que Enter seja pressionado ou a janela seja fechada/reaberta!
+    Compatível com Python 32-bit e 64-bit no Windows 10/11.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+        kernel32.GetStdHandle.restype = wintypes.HANDLE
+        kernel32.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.GetConsoleMode.restype = wintypes.BOOL
+        kernel32.SetConsoleMode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.SetConsoleMode.restype = wintypes.BOOL
+
+        # STD_INPUT_HANDLE = -10 (0xFFFFFFF6 como DWORD)
+        STD_INPUT_HANDLE = wintypes.DWORD(-10 & 0xFFFFFFFF)
+        h_stdin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+        INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+        if h_stdin and h_stdin != INVALID_HANDLE_VALUE:
+            mode = wintypes.DWORD()
+            if kernel32.GetConsoleMode(h_stdin, ctypes.byref(mode)):
+                ENABLE_QUICK_EDIT_MODE = 0x0040
+                ENABLE_INSERT_MODE = 0x0020
+                ENABLE_EXTENDED_FLAGS = 0x0080
+                new_mode = (mode.value & ~ENABLE_QUICK_EDIT_MODE & ~ENABLE_INSERT_MODE) | ENABLE_EXTENDED_FLAGS
+                kernel32.SetConsoleMode(h_stdin, wintypes.DWORD(new_mode))
+    except Exception:
+        pass
+
 
 # ══════════════════════════════════════════════════════════════
 #  BLINDAGEM DE CONSOLE E ENCODING WINDOWS (UTF-8 TOTAL)
 # ══════════════════════════════════════════════════════════════
 if sys.platform == "win32":
+    desativar_quickedit_windows()
     try:
         os.system("chcp 65001 >nul 2>&1")
     except Exception:
@@ -735,9 +781,19 @@ def processar_fila_pendencias_erp():
                             except Exception:
                                 pass
 
+                        # Garante vínculo do aluno ao Grupo Padrão 1 (obrigatório para liberar giro do braço na Control iD)
+                        try:
+                            call_catraca_fcgi(cat, "create_objects.fcgi", {
+                                "object": "user_groups",
+                                "values": [{"user_id": numeric_id, "group_id": 1}]
+                            })
+                        except Exception:
+                            pass
+
                         print(f"     [ALUNO] [{cat_nome}] Aluno '{nome}' sincronizado.")
 
                         foto_enviada = False
+                        erro_foto_msg = None
                         if foto and isinstance(foto, str) and len(foto) > 50:
                             try:
                                 import base64
@@ -745,25 +801,60 @@ def processar_fila_pendencias_erp():
                                 img_bytes = base64.b64decode(clean_b64)
                                 url, session = obter_sessao_ativa(cat)
                                 if url and session:
-                                    now_ts = int(time.time())
-                                    req_url = f"{url}/user_set_image.fcgi?user_id={numeric_id}&session={session}&timestamp={now_ts}"
-                                    req = urllib.request.Request(req_url, data=img_bytes, method="POST")
-                                    req.add_header("Content-Type", "application/octet-stream")
-                                    req.add_header("Cookie", f"session={session}")
-                                    ctx = SSL_CTX if url.startswith("https") else None
-                                    with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
-                                        pass
-                                    foto_enviada = True
-                                    print(f"     [FOTO] [{cat_nome}] Foto de '{nome}' transmitida.")
-                            except Exception:
-                                pass
+                                    def _enviar_foto_catraca():
+                                        now_ts = int(time.time())
+                                        req_url = f"{url}/user_set_image.fcgi?user_id={numeric_id}&session={session}&timestamp={now_ts}"
+                                        req = urllib.request.Request(req_url, data=img_bytes, method="POST")
+                                        req.add_header("Content-Type", "application/octet-stream")
+                                        req.add_header("Cookie", f"session={session}")
+                                        ctx = SSL_CTX if url.startswith("https") else None
+                                        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                                            raw_resp = r.read().decode("utf-8", errors="ignore")
+                                            try:
+                                                return json.loads(raw_resp)
+                                            except Exception:
+                                                return {"success": True}
 
-                        post_json(url_queue, {
+                                    resp_foto = _enviar_foto_catraca()
+                                    if resp_foto.get("success") is False:
+                                        erros_lista = resp_foto.get("errors") or []
+                                        # Auto-cura para Erro Código 3 ("Face exists"): se o rosto já estava preso em um ID órfão antigo, remove o órfão e reenvia!
+                                        for err_item in erros_lista:
+                                            if err_item.get("code") == 3:
+                                                match_uid = (err_item.get("info") or {}).get("match_user_id")
+                                                if match_uid and int(match_uid) != int(numeric_id):
+                                                    print(f"     [AUTO-HEAL] [{cat_nome}] Biometria de '{nome}' estava vinculada ao ID órfão {match_uid}. Removendo ID {match_uid} e reenviando para {numeric_id}...")
+                                                    try:
+                                                        call_catraca_fcgi(cat, "destroy_objects.fcgi", {
+                                                            "object": "users",
+                                                            "where": {"users": {"id": int(match_uid)}}
+                                                        })
+                                                        resp_foto = _enviar_foto_catraca()
+                                                    except Exception:
+                                                        pass
+                                                elif match_uid and int(match_uid) == int(numeric_id):
+                                                    resp_foto["success"] = True
+
+                                    if resp_foto.get("success") is not False:
+                                        foto_enviada = True
+                                        print(f"     [FOTO] [{cat_nome}] Foto de '{nome}' validada e gravada na biometria.")
+                                    else:
+                                        erros_lista = resp_foto.get("errors") or []
+                                        msg_c = erros_lista[0].get("message", "Foto recusada") if erros_lista else "Foto recusada pela catraca"
+                                        erro_foto_msg = f"Biometria recusada pela catraca ({msg_c})"
+                                        print(f"     [AVISO FOTO] [{cat_nome}] '{nome}' (ID {numeric_id}): {erro_foto_msg}")
+                            except Exception as f_ex:
+                                erro_foto_msg = f"Falha ao transmitir foto: {str(f_ex)[:120]}"
+
+                        payload_queue = {
                             "aluno_id": aluno_id,
                             "dispositivo_id": disp_id or dev_ip,
                             "status": "sincronizado",
                             "foto_enviada": foto_enviada
-                        }, timeout=4)
+                        }
+                        if erro_foto_msg:
+                            payload_queue["erro_detalhe"] = erro_foto_msg
+                        post_json(url_queue, payload_queue, timeout=4)
                 except Exception as ex:
                     post_json(url_queue, {
                         "aluno_id": aluno_id,
@@ -787,8 +878,8 @@ def thread_background_erp():
             reg_ent, reg_sai, _ = carregar_registrados_do_erp()
             if reg_ent is not None:
                 sincronizar_cache_entrada_com_erp(reg_ent)
-            # 3. A cada 5 minutos (15 ciclos de 20s), auditar e recuperar qualquer log de hoje que tenha ficado para trás
-            if ciclo_bg % 15 == 0:
+            # 3. A cada 60 segundos (3 ciclos de 20s), auditar e recuperar qualquer log de hoje que tenha ficado para trás
+            if ciclo_bg % 3 == 0:
                 reconciliar_logs_hoje_catracas(CATRACAS)
             # 4. A cada 30 minutos (90 ciclos de 20s), recalibrar o relógio das catracas contra quedas de energia
             if ciclo_bg % 90 == 0:
@@ -799,9 +890,42 @@ def thread_background_erp():
         time.sleep(20)
 
 
+def thread_watchdog_anticongelamento():
+    """
+    Watchdog independente de alta confiabilidade:
+    Monitora continuamente se o loop principal de varredura está avançando.
+    Se o loop principal ficar travado por mais de 45 segundos (ex: bloqueio de rede em nível de SO),
+    reinicia automaticamente o processo sem depender de intervenção humana!
+    """
+    while True:
+        time.sleep(10)
+        try:
+            if sys.platform == "win32":
+                desativar_quickedit_windows()
+            inativo_s = time.time() - ULTIMO_BATIMENTO_LOOP
+            if inativo_s > 45:
+                try:
+                    ts_w = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    with open(LOG_FILE, "a", encoding="utf-8") as f:
+                        f.write(f"[{ts_w}] [WATCHDOG] Loop principal sem resposta ha {int(inativo_s)}s! Auto-reiniciando processo...\n")
+                except Exception:
+                    pass
+                # Se foi iniciado pelo INICIAR_CATRACA.bat (--from-bat), basta encerrar com os._exit(1)
+                # que o loop nativo do .bat relança imediatamente na mesma janela sem duplicar processos.
+                if "--from-bat" not in sys.argv:
+                    script_abs = os.path.abspath(__file__)
+                    subprocess.Popen([sys.executable, script_abs] + sys.argv[1:], cwd=os.path.dirname(script_abs))
+                os._exit(1)
+        except Exception:
+            pass
+
+
 # ══════════════════════════════════════════════════════════════
 #  CICLO DE VARREDURA PARALELA (POLLING SUB-SEGUNDO)
 # ══════════════════════════════════════════════════════════════
+_SCAN_EXECUTOR = ThreadPoolExecutor(max_workers=max(4, len(CATRACAS) * 2))
+
+
 def escanear_uma_catraca(cat, estado):
     cat_key = cat.get("id") or cat["ip"]
     last_id = estado.get(cat_key, 0)
@@ -811,19 +935,24 @@ def escanear_uma_catraca(cat, estado):
 
 def executar_varredura_paralela(estado):
     """
-    Dispara threads concorrentes para interrogar todas as 4 catracas ao mesmo tempo.
-    Tempo total: ~30ms para todas responderem juntas!
+    Dispara threads concorrentes para interrogar todas as catracas ao mesmo tempo.
+    Usa executor persistente e timeout estrito em as_completed para NUNCA bloquear em shutdown(wait=True).
     """
     eventos_por_catraca = []
-    with ThreadPoolExecutor(max_workers=len(CATRACAS)) as executor:
-        futuros = [executor.submit(escanear_uma_catraca, cat, estado) for cat in CATRACAS]
-        for f in as_completed(futuros):
+    futuros = [_SCAN_EXECUTOR.submit(escanear_uma_catraca, cat, estado) for cat in CATRACAS]
+    try:
+        for f in as_completed(futuros, timeout=6):
             try:
-                cat, cat_key, last_id, novos_logs = f.result()
+                cat, cat_key, last_id, novos_logs = f.result(timeout=1)
                 if novos_logs:
                     eventos_por_catraca.append((cat, cat_key, last_id, novos_logs))
             except Exception:
                 pass
+    except FuturesTimeoutError:
+        for f in futuros:
+            f.cancel()
+    except Exception:
+        pass
     return eventos_por_catraca
 
 
@@ -994,9 +1123,10 @@ def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True
                 if comp_key in entradas_logs_atuais or lid in entradas_logs_atuais:
                     continue
 
-                # Proteção anti-bounce (60s pelo relógio do evento): evita disparo duplo se o aluno parar na frente da câmera
-                ultimo_ts = ULTIMA_ENTRADA_ALUNO.get(uid, 0)
-                if log_ts > 0 and ultimo_ts > 0 and abs(log_ts - ultimo_ts) < 60:
+                # Proteção anti-bounce curta (10s na mesma catraca): evita disparo duplo instantâneo da câmera sem ocultar passagens reais
+                bounce_key = f"{cat_key}:{uid}"
+                ultimo_ts = ULTIMA_ENTRADA_ALUNO.get(bounce_key, 0)
+                if log_ts > 0 and ultimo_ts > 0 and abs(log_ts - ultimo_ts) < 10:
                     registrar_cache_entrada_log(lid, cat_key=cat_key)
                     entradas_logs_atuais.add(lid)
                     entradas_logs_atuais.add(comp_key)
@@ -1015,6 +1145,7 @@ def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True
                     entradas_logs_atuais.add(lid)
                     entradas_logs_atuais.add(comp_key)
                     if log_ts > 0:
+                        ULTIMA_ENTRADA_ALUNO[f"{cat_key}:{uid}"] = log_ts
                         ULTIMA_ENTRADA_ALUNO[uid] = log_ts
                 else:
                     registrar_cache_log_historico(comp_key)
@@ -1039,38 +1170,88 @@ def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True
 
 
 # ══════════════════════════════════════════════════════════════
-#  INSTALADOR WINDOWS
+#  INSTALADOR E AUTO-CONFIGURAÇÃO WINDOWS (STARTUP + DESKTOP)
 # ══════════════════════════════════════════════════════════════
+def garantir_atalhos_windows(silencioso=True):
+    """
+    No Windows, garante automaticamente:
+    1. A existência do arquivo INICIAR_CATRACA.bat na mesma pasta (com loop de auto-reinício).
+    2. O atalho na pasta 'Inicializar' do Windows (shell:startup) para ligar sozinho junto com o PC.
+    3. O atalho 'Sincronizador Catraca iDFace' na Área de Trabalho (Desktop) para acesso rápido.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        script_path = os.path.abspath(__file__)
+        script_dir = os.path.dirname(script_path)
+        bat_path = os.path.join(script_dir, "INICIAR_CATRACA.bat")
+
+        # 1. Garante que o INICIAR_CATRACA.bat existe na mesma pasta com CRLF nativo
+        if not os.path.exists(bat_path):
+            bat_content = (
+                "@echo off\r\n"
+                "chcp 65001 >nul\r\n"
+                "title Sincronizador de Catracas Control iD - EDU IMPACTO\r\n"
+                'cd /d "%~dp0"\r\n\r\n'
+                ":loop\r\n"
+                "echo ==============================================================\r\n"
+                "echo  INICIANDO SINCRONIZADOR DE CATRACAS (EDU IMPACTO)\r\n"
+                "echo ==============================================================\r\n"
+                "echo.\r\n\r\n"
+                "python Sincronizar_Catraca.py --from-bat\r\n\r\n"
+                "echo.\r\n"
+                "echo [AUTO-RESTART] O processo foi encerrado. Reiniciando automaticamente em 3 segundos...\r\n"
+                "timeout /t 3 /nobreak >nul\r\n"
+                "goto loop\r\n"
+            )
+            with open(bat_path, "wb") as f:
+                f.write(bat_content.encode("utf-8"))
+
+        startup_folder = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+        shortcut_startup = os.path.join(startup_folder, "INICIAR_CATRACA.lnk")
+
+        # Remove automaticamente quaisquer atalhos antigos da catraca na pasta Inicializar para evitar duplicidade
+        if os.path.isdir(startup_folder):
+            for fname in os.listdir(startup_folder):
+                f_low = fname.lower()
+                if ("catraca" in f_low or "sincroniza" in f_low) and fname != "INICIAR_CATRACA.lnk":
+                    try:
+                        os.remove(os.path.join(startup_folder, fname))
+                    except Exception:
+                        pass
+
+        # Cria/atualiza o atalho oficial INICIAR_CATRACA.lnk na pasta Inicializar e na Área de Trabalho
+        if not silencioso or not os.path.exists(shortcut_startup):
+            ps_cmd = (
+                f"$ws = New-Object -ComObject WScript.Shell; "
+                f"$s1 = $ws.CreateShortcut('{shortcut_startup}'); "
+                f"$s1.TargetPath = '{bat_path}'; "
+                f"$s1.WorkingDirectory = '{script_dir}'; "
+                f"$s1.Description = 'Sincronizador de Catracas Control iD - EDU IMPACTO'; "
+                f"$s1.Save(); "
+                f"$desk = [Environment]::GetFolderPath('Desktop'); "
+                f"$s2 = $ws.CreateShortcut((Join-Path $desk 'Sincronizador Catraca iDFace.lnk')); "
+                f"$s2.TargetPath = '{bat_path}'; "
+                f"$s2.WorkingDirectory = '{script_dir}'; "
+                f"$s2.Description = 'Sincronizador de Catracas Control iD - EDU IMPACTO'; "
+                f"$s2.Save()"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], capture_output=True, timeout=10)
+            if not silencioso:
+                print(f"[OK] Atalho de Inicializacao Automatica criado em: {shortcut_startup}")
+                print("[OK] Atalho criado na Area de Trabalho: 'Sincronizador Catraca iDFace'")
+    except Exception as e:
+        if not silencioso:
+            print(f"[AVISO] Nao foi possivel criar atalhos automaticos: {e}")
+
+
 def instalar_no_windows():
     if sys.platform != "win32":
         print("[ERRO] Instalacao exclusiva para Windows.")
         sys.exit(1)
-    try:
-        startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
-        shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.lnk")
-        script_path = os.path.abspath(__file__)
-        script_dir = os.path.dirname(script_path)
-        python_exe = sys.executable
-        pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
-        if not os.path.exists(pythonw_exe):
-            pythonw_exe = python_exe
-
-        print(f"[SETUP] Configurando inicializacao de alta performance no Windows...")
-        ps_cmd = (
-            f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_path}'); "
-            f"$s.TargetPath = '{pythonw_exe}'; "
-            f"$s.Arguments = '\"{script_path}\" --intervalo=2'; "
-            f"$s.WorkingDirectory = '{script_dir}'; "
-            f"$s.WindowStyle = 7; "
-            f"$s.Save()"
-        )
-        subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd], check=True)
-        print("[OK] Inicializacao automatica configurada com intervalo de 2s!")
-        subprocess.Popen([pythonw_exe, script_path, "--intervalo=2"], cwd=script_dir)
-        print("[START] Processo em segundo plano ativo!")
-    except Exception as e:
-        print(f"[ERRO] Erro ao instalar: {e}")
-        sys.exit(1)
+    print("[SETUP] Configurando atalhos de Inicializacao Automatica e Area de Trabalho no Windows...")
+    garantir_atalhos_windows(silencioso=False)
+    print("[OK] Configuracao concluida com sucesso!")
 
 
 def desinstalar_no_windows():
@@ -1210,8 +1391,9 @@ def main():
     print(f"   Polling Paralelo Ativo: {intervalo}s entre varreduras")
     print("  ==============================================================")
 
-    # 0. Garantir processo unico e assumir controle eliminando instancias anteriores
+    # 0. Garantir processo unico e assumir controle eliminando instancias anteriores + auto-configurar atalhos no Windows
     garantir_instancia_unica()
+    garantir_atalhos_windows(silencioso=True)
 
     # 1. Carregar caches locais do dia
     carregar_caches_locais()
@@ -1233,10 +1415,17 @@ def main():
     print("  [INTEGRIDADE] Auditando passagens de hoje na memória das catracas...")
     reconciliar_logs_hoje_catracas(CATRACAS)
 
-    # 4. Iniciar Background Worker para fila de cadastros e fotos do ERP
+    # 4. Iniciar Background Worker para fila de cadastros e fotos do ERP + Watchdog Anti-Congelamento
+    global ULTIMO_BATIMENTO_LOOP
+    ULTIMO_BATIMENTO_LOOP = time.time()
+
     bg_thread = threading.Thread(target=thread_background_erp, daemon=True)
     bg_thread.start()
-    print("  [WORKER] Background Worker ativo (fila de fotos/cadastros desacoplada).")
+
+    if loop_mode:
+        wd_thread = threading.Thread(target=thread_watchdog_anticongelamento, daemon=True)
+        wd_thread.start()
+    print("  [WORKER] Background Worker + Watchdog Anti-Congelamento ativos.")
 
     estado = carregar_estado_catracas()
     print("  [STATUS] Verificando integridade dos cursores das catracas...")
@@ -1273,6 +1462,7 @@ def main():
 
     while True:
         t0 = time.time()
+        ULTIMO_BATIMENTO_LOOP = t0
         try:
             carregar_caches_locais()
             eventos = executar_varredura_paralela(estado)
@@ -1299,22 +1489,21 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n  [PARADO] Monitoramento encerrado pelo usuario.")
-    except Exception as e:
-        import traceback
-        err_str = traceback.format_exc()
-        print(f"\n[ERRO FATAL] {e}")
-        print(err_str)
+    while True:
         try:
-            with open("catraca_crash.log", "a", encoding="utf-8") as f:
-                f.write(f"[{datetime.now()}] CRASH:\n{err_str}\n")
-        except Exception:
-            pass
-        if sys.stdout is not None:
+            main()
+            break
+        except KeyboardInterrupt:
+            print("\n  [PARADO] Monitoramento encerrado pelo usuario.")
+            break
+        except Exception as e:
+            import traceback
+            err_str = traceback.format_exc()
+            print(f"\n[ERRO FATAL] {e} — Reiniciando automaticamente em 3s...")
+            print(err_str)
             try:
-                input("\nPressione Enter para sair...")
+                with open("catraca_crash.log", "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now()}] CRASH (auto-restart):\n{err_str}\n")
             except Exception:
                 pass
+            time.sleep(3)

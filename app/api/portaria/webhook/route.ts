@@ -1036,82 +1036,13 @@ export async function POST(req: Request) {
         }
       }
 
-      // Buscar a próxima pendência da fila para ESTE dispositivo (1 por ping = protocolo Push)
-      let syncQuery = supabase
-        .from('portaria_sync')
-        .select('aluno_id, dispositivo_id, status, erro_detalhe')
-        .eq('status', 'pendente')
-        .order('updated_at', { ascending: false })
-
-      if (dispositivoId && dispositivoId !== 'unknown') {
-        const altDevId = dispositivoId.includes('/') ? dispositivoId.replace('/', '-') : dispositivoId.replace('-', '/')
-        syncQuery = syncQuery.or(`dispositivo_id.eq.${dispositivoId},dispositivo_id.eq.${altDevId}`)
-      }
-
-      const { data: pendingRows } = await syncQuery.limit(1)
-
-      if (pendingRows && pendingRows.length > 0) {
-        const row = pendingRows[0]
-
-        // Buscar dados do aluno
-        const rowAlunoIdStr = String(row.aluno_id || '').trim()
-        const isRowAlunoUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rowAlunoIdStr)
-        const alunoQuery = supabase
-          .from('alunos')
-          .select('id, nome, matricula, foto, status, dados')
-        const { data: aluno } = await (isRowAlunoUuid
-          ? alunoQuery.or(`id.eq.${rowAlunoIdStr},matricula.eq.${rowAlunoIdStr}`)
-          : alunoQuery.eq('matricula', rowAlunoIdStr)
-        ).maybeSingle()
-
-        // Determinar ID numérico para a catraca
-        const numId = aluno
-          ? parseInt((aluno.matricula || aluno.dados?.codigo || aluno.id).replace?.(/\D/g, '') ?? String(aluno.matricula || aluno.id), 10)
-          : parseInt(String(row.aluno_id).replace(/\D/g, ''), 10)
-
-        // Marcar como sincronizado ANTES de responder (o dispositivo só volta a pedir quando responder)
-        let statusUpdate = supabase
-          .from('portaria_sync')
-          .update({ status: 'sincronizado', ultima_sync: new Date().toISOString(), erro_detalhe: null, updated_at: new Date().toISOString() })
-          .eq('aluno_id', String(row.aluno_id))
-        if (row.dispositivo_id) statusUpdate = statusUpdate.eq('dispositivo_id', String(row.dispositivo_id))
-        await statusUpdate
-
-        if (!isNaN(numId) && numId > 0) {
-          const isActive = aluno && ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'].includes(aluno.status)
-
-          if (isActive || (!aluno && !row.erro_detalhe?.includes('Exclusão'))) {
-            // ─── ADICIONAR/ATUALIZAR USUÁRIO ───────────────────────────────────────
-            const nameStr = aluno?.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`
-            const regStr = String(numId)
-
-            // Responder com add_objects (cria se não existe, ControlID ignora se já existe)
-            return NextResponse.json({
-              verb: 'POST',
-              endpoint: 'add_objects',
-              body: {
-                object: 'users',
-                values: [{ id: numId, name: nameStr, registration: regStr }]
-              },
-              contentType: 'application/json'
-            })
-          } else {
-            // ─── REMOVER USUÁRIO INATIVO ───────────────────────────────────────────
-            return NextResponse.json({
-              verb: 'POST',
-              endpoint: 'destroy_objects',
-              body: {
-                object: 'users',
-                where: { users: { id: numId } }
-              },
-              contentType: 'application/json'
-            })
-          }
-        }
-      }
+      // NOTA DE ARQUITETURA:
+      // NÃO consumir itens de `portaria_sync` aqui durante o POST de passagem (`object_changes`)!
+      // O daemon `Sincronizar_Catraca.py` consome `/api/portaria/sync-queue` enviando TANTO o cadastro (`create_objects`)
+      // QUANTO a foto facial (`user_set_image.fcgi`). Consumir `portaria_sync` no webhook de passagem marcava
+      // o aluno como `sincronizado` sem enviar a foto facial para a catraca.
     }
 
-    // Sem pendências: resposta vazia (protocolo Push exige resposta vazia quando não há comandos)
     return NextResponse.json({ status: 'ok', evento: eventStatus })
   } catch (e: any) {
     // NUNCA retornar erro — loggar e retornar 200

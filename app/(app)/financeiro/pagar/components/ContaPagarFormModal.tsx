@@ -15,11 +15,13 @@ import {
   type ContaPagarTipoCusto,
   type CentroCustoEscolarOption,
   type PlanoContasEscolarOption,
+  type AnexoContaPagarItem,
   CENTROS_CUSTO_ESCOLARES,
   TEMPLATES_DESPESAS_ESCOLARES,
   resolvePlanoContasEscolares,
   calcularValorLiquido,
 } from '../types'
+import { AnexosInlineSection } from './AnexosLancamentoModal'
 
 interface ContaPagarFormModalProps {
   isOpen: boolean
@@ -165,6 +167,7 @@ export function ContaPagarFormModal({
   const [chavePix, setChavePix] = useState('')
   const [linhaDigitavel, setLinhaDigitavel] = useState('')
   const [observacoes, setObservacoes] = useState('')
+  const [anexos, setAnexos] = useState<AnexoContaPagarItem[]>([])
 
   // Rateio Multi-Centro de Custo
   const [usarRateio, setUsarRateio] = useState(false)
@@ -242,6 +245,7 @@ export function ContaPagarFormModal({
       setChavePix(editingRecord.chavePix || '')
       setLinhaDigitavel(editingRecord.linhaDigitavel || '')
       setObservacoes(editingRecord.observacoes || '')
+      setAnexos(Array.isArray(editingRecord.anexos) ? editingRecord.anexos : [])
 
       if (editingRecord.rateio && editingRecord.rateio.length > 0) {
         setUsarRateio(true)
@@ -285,6 +289,7 @@ export function ContaPagarFormModal({
       setChavePix('')
       setLinhaDigitavel('')
       setObservacoes('')
+      setAnexos([])
       setUsarRateio(false)
       setRateioList([])
     }
@@ -622,6 +627,8 @@ export function ContaPagarFormModal({
         chavePix: chavePix.trim() || undefined,
         linhaDigitavel: linhaDigitavel.trim() || undefined,
         observacoes: observacoes.trim() || undefined,
+        anexos,
+        comprovanteUrl: editingRecord?.comprovanteUrl || anexos[0]?.url || undefined,
         recorrente: qtdParcelasGeradas > 1,
         frequenciaRecorrencia:
           qtdParcelasGeradas > 1
@@ -1668,6 +1675,16 @@ export function ContaPagarFormModal({
                     style={{ ...inputStyle, resize: 'vertical', minHeight: 54 }}
                   />
                 </div>
+
+                {/* LINHA 10: Anexos, Documentos & Tirar Foto */}
+                <AnexosInlineSection
+                  anexos={anexos}
+                  onChange={(novos) => setAnexos(novos)}
+                  codigoLancamento={codigo || 'Novo'}
+                  categoriaPadrao="nota_fiscal"
+                  compact
+                  tituloSecao="Anexar Documento / Comprovante ou Tirar Foto"
+                />
               </div>
             )}
 

@@ -38,6 +38,40 @@ export interface DetalhesRetencaoFiscal {
   pisCofinsCsll: number
 }
 
+export type TipoAnexoContaPagar =
+  | 'nota_fiscal'
+  | 'boleto'
+  | 'comprovante'
+  | 'recibo'
+  | 'contrato'
+  | 'foto'
+  | 'outro'
+
+export interface AnexoContaPagarItem {
+  id: string
+  nome: string
+  url: string
+  tipoMime: string
+  tamanho?: number
+  categoriaAnexo?: TipoAnexoContaPagar
+  origem?: 'upload' | 'camera'
+  criadoEm: string
+  usuario?: string
+}
+
+export const TIPO_ANEXO_CONTA_PAGAR_CONFIG: Record<
+  TipoAnexoContaPagar,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  nota_fiscal: { label: 'Nota Fiscal', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+  boleto: { label: 'Boleto / Guia', color: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe' },
+  comprovante: { label: 'Comprovante', color: '#047857', bg: '#ecfdf5', border: '#a7f3d0' },
+  recibo: { label: 'Recibo', color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd' },
+  contrato: { label: 'Contrato', color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+  foto: { label: 'Foto / Captura', color: '#be185d', bg: '#fdf2f8', border: '#fbcfe8' },
+  outro: { label: 'Documento', color: '#475569', bg: '#f1f5f9', border: '#cbd5e1' },
+}
+
 export interface ContaPagarRecord {
   id: string
   codigo?: string
@@ -92,6 +126,7 @@ export interface ContaPagarRecord {
   aprovacaoStatus?: 'aprovado' | 'pendente_aprovacao' | 'rejeitado'
   aprovadoPor?: string
   observacoes?: string
+  anexos?: AnexoContaPagarItem[]
   historico?: HistoricoContaPagarItem[]
   createdAt?: string
   updatedAt?: string
@@ -711,6 +746,9 @@ export function normalizarContaPagar(
     aprovacaoStatus: unpacked.aprovacaoStatus || 'aprovado',
     aprovadoPor: unpacked.aprovadoPor || undefined,
     observacoes: unpacked.observacoes || unpacked.obs || undefined,
+    anexos: Array.isArray(unpacked.anexos)
+      ? unpacked.anexos.filter((a: any) => a && typeof a === 'object' && a.url)
+      : [],
     historico: Array.isArray(unpacked.historico) ? unpacked.historico : [],
     createdAt: unpacked.createdAt || new Date().toISOString(),
     updatedAt: unpacked.updatedAt || new Date().toISOString(),

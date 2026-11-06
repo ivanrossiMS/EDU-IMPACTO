@@ -7,10 +7,12 @@ import {
 import { formatCurrency } from '@/lib/utils'
 import {
   type ContaPagarRecord,
+  type AnexoContaPagarItem,
   FORMAS_PAGAMENTO_CONTAS_PAGAR,
   CAIXAS_BANCOS_ESCOLARES,
   calcularValorLiquido,
 } from '../types'
+import { AnexosInlineSection } from './AnexosLancamentoModal'
 
 interface BaixaContaModalProps {
   isOpen: boolean
@@ -29,6 +31,7 @@ interface BaixaContaModalProps {
     comprovanteRef: string
     observacao: string
     registrarNoCaixa: boolean
+    anexosNovos?: AnexoContaPagarItem[]
   }) => Promise<void>
   onConfirmBaixaLote: (payload: {
     ids: string[]
@@ -61,6 +64,7 @@ export function BaixaContaModal({
   const [comprovanteRef, setComprovanteRef] = useState('')
   const [observacao, setObservacao] = useState('')
   const [registrarNoCaixa, setRegistrarNoCaixa] = useState(true)
+  const [anexosBaixa, setAnexosBaixa] = useState<AnexoContaPagarItem[]>([])
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -71,6 +75,7 @@ export function BaixaContaModal({
     setComprovanteRef('')
     setObservacao('')
     setRegistrarNoCaixa(true)
+    setAnexosBaixa([])
     if (single && !isLote) {
       setFormaPagamento(single.formaPagamento || 'PIX')
       setCaixaOrigem(single.caixaOrigem || CAIXAS_BANCOS_ESCOLARES[0])
@@ -144,6 +149,7 @@ export function BaixaContaModal({
           comprovanteRef,
           observacao,
           registrarNoCaixa,
+          anexosNovos: anexosBaixa,
         })
       }
       onClose()
@@ -537,6 +543,16 @@ export function BaixaContaModal({
                     />
                   </div>
                 </div>
+
+                {/* Anexar Comprovante ou Tirar Foto do Pagamento */}
+                <AnexosInlineSection
+                  anexos={anexosBaixa}
+                  onChange={(novos) => setAnexosBaixa(novos)}
+                  codigoLancamento={single.codigo || single.id}
+                  categoriaPadrao="comprovante"
+                  compact
+                  tituloSecao="Anexar Comprovante ou Tirar Foto do Recibo"
+                />
               </>
             )}
           </div>

@@ -126,21 +126,43 @@ export class ControliDClient {
     const raw = base64Image.replace(/^data:image\/\w+;base64,/, '')
     const binary = Buffer.from(raw, 'base64')
 
-    const res = await fetch(
-      `${this.baseUrl}/user_set_image.fcgi?user_id=${userId}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          Cookie: `session=${this.session}`,
-        },
-        body: binary,
-        signal: AbortSignal.timeout(30000),
-      }
-    )
+    const sendImage = async () => {
+      const nowTs = Math.floor(Date.now() / 1000)
+      const res = await fetch(
+        `${this.baseUrl}/user_set_image.fcgi?user_id=${userId}&session=${encodeURIComponent(this.session!)}&timestamp=${nowTs}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            Cookie: `session=${this.session}`,
+          },
+          body: binary,
+          signal: AbortSignal.timeout(30000),
+        }
+      )
+      if (!res.ok) throw new Error(`Set image failed: ${res.status}`)
+      return res.json()
+    }
 
-    if (!res.ok) throw new Error(`Set image failed: ${res.status}`)
-    return res.json()
+    let data = await sendImage()
+    if (data && data.success === false) {
+      const faceExistsErr = (data.errors || []).find((e: any) => e.code === 3)
+      const matchUserId = faceExistsErr?.info?.match_user_id
+      if (matchUserId && Number(matchUserId) !== Number(userId)) {
+        // Remove cadastro órfão antigo que prendia a mesma biometria facial e reenvia para o ID atual
+        await this.deleteUser(Number(matchUserId)).catch(() => {})
+        data = await sendImage()
+      } else if (matchUserId && Number(matchUserId) === Number(userId)) {
+        return { ...data, success: true }
+      }
+    }
+
+    if (data && data.success === false) {
+      const errMsg = data.errors?.[0]?.message || 'Foto recusada pela biometria da catraca'
+      throw new Error(`Biometria recusada (${errMsg})`)
+    }
+
+    return data
   }
 
   async getUserImage(userId: number): Promise<string> {

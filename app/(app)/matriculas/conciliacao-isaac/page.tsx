@@ -1058,9 +1058,9 @@ export default function ConciliacaoIsaacPage() {
       border = '#fcd34d'
       color = '#b45309'
     } else if (opts.variant === 'MISSING') {
-      bg = '#fff1f2'
-      border = '#fda4af'
-      color = '#e11d48'
+      bg = '#f3e8ff'
+      border = '#a855f7'
+      color = '#6b21a8'
     }
 
     return (
@@ -2386,6 +2386,18 @@ export default function ConciliacaoIsaacPage() {
                     { id: 'CANCELADA' as const, label: 'Só Canc' },
                   ].map(tp => {
                     const active = filtroTipoFalta === tp.id
+                    const activeBg =
+                      tp.id === 'NAO_GERADA'
+                        ? '#f3e8ff'
+                        : tp.id === 'CANCELADA'
+                        ? '#fef3c7'
+                        : '#f1f5f9'
+                    const activeColor =
+                      tp.id === 'NAO_GERADA'
+                        ? '#6b21a8'
+                        : tp.id === 'CANCELADA'
+                        ? '#92400e'
+                        : '#0f172a'
                     return (
                       <button
                         key={tp.id}
@@ -2399,8 +2411,8 @@ export default function ConciliacaoIsaacPage() {
                           padding: '4px 8px',
                           borderRadius: 6,
                           border: 'none',
-                          background: active ? '#f1f5f9' : 'transparent',
-                          color: active ? '#0f172a' : '#64748b',
+                          background: active ? activeBg : 'transparent',
+                          color: active ? activeColor : '#64748b',
                           fontSize: 10.5,
                           fontWeight: 700,
                           cursor: 'pointer',
@@ -2653,7 +2665,7 @@ export default function ConciliacaoIsaacPage() {
               Canc
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: '#fff1f2', border: '1px solid #fda4af' }} />
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: '#f3e8ff', border: '1px solid #a855f7' }} />
               Falta
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

@@ -11,7 +11,8 @@ import {
   AlertTriangle, Calendar, BarChart3, Target,
   Building2, Repeat, Eye, Edit3, Trash2, Check,
   LayoutList, LayoutGrid, FileSpreadsheet, RotateCcw,
-  QrCode, MoreVertical, Barcode, Copy, X, ChevronLeft, ChevronRight
+  QrCode, MoreVertical, Barcode, Copy, X, ChevronLeft, ChevronRight,
+  Paperclip, Camera
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
@@ -20,6 +21,7 @@ import {
   type FornecedorEscolar,
   type OrcamentoCategoriaItem,
   type PlanoContasEscolarOption,
+  type AnexoContaPagarItem,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   resolveCentrosCustoEscolares,
@@ -35,6 +37,7 @@ import {
 import { ContaPagarFormModal } from './components/ContaPagarFormModal'
 import { BaixaContaModal } from './components/BaixaContaModal'
 import { ContaFichaModal } from './components/ContaFichaModal'
+import { AnexosLancamentoModal } from './components/AnexosLancamentoModal'
 
 const RelatoriosContasPagarTab = dynamic(
   () => import('./components/RelatoriosContasPagarTab').then((m) => m.RelatoriosContasPagarTab),
@@ -133,6 +136,10 @@ export default function ContasPagarPage() {
   const [editingRecord, setEditingRecord] = useState<ContaPagarRecord | null>(null)
   const [baixaTargets, setBaixaTargets] = useState<ContaPagarRecord[]>([])
   const [fichaConta, setFichaConta] = useState<ContaPagarRecord | null>(null)
+  const [anexosModalTarget, setAnexosModalTarget] = useState<{
+    conta: ContaPagarRecord
+    mode: 'arquivos' | 'camera'
+  } | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [copiedPixId, setCopiedPixId] = useState<string | null>(null)
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<string[] | null>(null)
@@ -424,6 +431,39 @@ export default function ContasPagarPage() {
       setContas(json.data)
       showToast('Baixa estornada. O título voltou para aberto.', 'success')
     }
+  }
+
+  const handleUpdateAnexos = async (
+    contaId: string,
+    novosAnexos: AnexoContaPagarItem[],
+    acaoHistorico?: string,
+    detalhesHistorico?: string
+  ) => {
+    const res = await fetch('/api/contas-pagar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update_anexos',
+        id: contaId,
+        anexos: novosAnexos,
+        acaoHistorico,
+        detalhesHistorico,
+      }),
+    })
+    const json = await res.json()
+    if (!res.ok) {
+      showToast(json?.error || 'Erro ao atualizar anexos do lançamento', 'error')
+      return
+    }
+    if (Array.isArray(json.data)) {
+      setContas(json.data)
+      const updatedRecord = json.data.find((c: ContaPagarRecord) => c.id === contaId)
+      if (updatedRecord) {
+        setFichaConta((prev) => (prev && prev.id === contaId ? updatedRecord : prev))
+        setAnexosModalTarget((prev) => (prev && prev.conta.id === contaId ? { ...prev, conta: updatedRecord } : prev))
+      }
+    }
+    showToast(acaoHistorico || 'Anexos do lançamento atualizados!', 'success')
   }
 
   const handleDeleteIds = async (ids: string[]) => {
@@ -1514,14 +1554,14 @@ export default function ContasPagarPage() {
                       }}
                     />
                   </th>
-                  <th style={{ width: '23%' }}>Fornecedor / Credor</th>
+                  <th style={{ width: '21%' }}>Fornecedor / Credor</th>
                   <th style={{ width: '12%' }}>Nº do Doc</th>
-                  <th style={{ width: '21%' }}>Plano de Contas & Centro de Custo</th>
-                  <th style={{ width: '9%', textAlign: 'center' }}>Emissão</th>
-                  <th style={{ width: '9%', textAlign: 'center' }}>Vencimento</th>
-                  <th style={{ width: '11%', textAlign: 'center' }}>Status</th>
-                  <th style={{ width: '11%', textAlign: 'right' }}>Valor Líquido</th>
-                  <th style={{ width: 118, textAlign: 'center' }}>Ações</th>
+                  <th style={{ width: '19%' }}>Plano de Contas & Centro de Custo</th>
+                  <th style={{ width: '8.5%', textAlign: 'center' }}>Emissão</th>
+                  <th style={{ width: '8.5%', textAlign: 'center' }}>Vencimento</th>
+                  <th style={{ width: '10.5%', textAlign: 'center' }}>Status</th>
+                  <th style={{ width: '10.5%', textAlign: 'right' }}>Valor Líquido</th>
+                  <th style={{ width: 176, textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -1654,6 +1694,29 @@ export default function ContasPagarPage() {
                                 {String(c.parcelaAtual).padStart(2, '0')}/{String(c.totalParcelas).padStart(2, '0')}
                               </span>
                             )}
+                            {c.anexos && c.anexos.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setAnexosModalTarget({ conta: c, mode: 'arquivos' })}
+                                title="Ver anexos e fotos deste lançamento"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  padding: '1px 6px',
+                                  borderRadius: 99,
+                                  background: '#eff6ff',
+                                  border: '1px solid #93c5fd',
+                                  color: '#1d4ed8',
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <Paperclip size={10} />
+                                {c.anexos.length}
+                              </button>
+                            )}
                           </div>
                         </td>
 
@@ -1764,16 +1827,89 @@ export default function ContasPagarPage() {
                           style={{ '--label': 'Ações', textAlign: 'right', position: 'relative' } as React.CSSProperties}
                         >
                           <div
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}
                             onClick={(e) => e.stopPropagation()}
                           >
+                            {/* Botão Rápido: Anexar Arquivo */}
+                            <button
+                              type="button"
+                              onClick={() => setAnexosModalTarget({ conta: c, mode: 'arquivos' })}
+                              title="Anexar arquivo ou comprovante neste lançamento"
+                              aria-label={`Anexar arquivo em ${c.fornecedorNome}`}
+                              style={{
+                                position: 'relative',
+                                width: 29,
+                                height: 29,
+                                borderRadius: 7,
+                                background: c.anexos && c.anexos.length > 0 ? '#eff6ff' : '#ffffff',
+                                border:
+                                  c.anexos && c.anexos.length > 0
+                                    ? '1px solid #60a5fa'
+                                    : '1px solid #cbd5e1',
+                                color: c.anexos && c.anexos.length > 0 ? '#1d4ed8' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Paperclip size={13.5} />
+                              {c.anexos && c.anexos.length > 0 && (
+                                <span
+                                  style={{
+                                    position: 'absolute',
+                                    top: -5,
+                                    right: -5,
+                                    minWidth: 15,
+                                    height: 15,
+                                    padding: '0 3px',
+                                    borderRadius: 99,
+                                    background: '#2563eb',
+                                    color: '#ffffff',
+                                    fontSize: 9,
+                                    fontWeight: 800,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '1.5px solid #ffffff',
+                                  }}
+                                >
+                                  {c.anexos.length}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* Botão Rápido: Tirar Foto (Câmera) */}
+                            <button
+                              type="button"
+                              onClick={() => setAnexosModalTarget({ conta: c, mode: 'camera' })}
+                              title="Tirar foto de comprovante / documento com a câmera"
+                              aria-label={`Tirar foto para ${c.fornecedorNome}`}
+                              style={{
+                                width: 29,
+                                height: 29,
+                                borderRadius: 7,
+                                background: '#f5f3ff',
+                                border: '1px solid #c4b5fd',
+                                color: '#6d28d9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Camera size={13.5} />
+                            </button>
+
                             {c.status !== 'pago' && c.status !== 'cancelado' ? (
                               <button
                                 type="button"
                                 onClick={() => setBaixaTargets([c])}
                                 title="Dar Baixa / Liquidar Título"
                                 style={{
-                                  padding: '6px 11px',
+                                  padding: '6px 10px',
                                   borderRadius: 7,
                                   background: '#059669',
                                   border: 'none',
@@ -1835,7 +1971,7 @@ export default function ContasPagarPage() {
                                     right: 0,
                                     top: 33,
                                     zIndex: 60,
-                                    width: 230,
+                                    width: 235,
                                     background: '#ffffff',
                                     border: '1px solid #cbd5e1',
                                     borderRadius: 11,
@@ -1847,6 +1983,62 @@ export default function ContasPagarPage() {
                                     gap: 2,
                                   }}
                                 >
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      setAnexosModalTarget({ conta: c, mode: 'arquivos' })
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      width: '100%',
+                                      padding: '8px 10px',
+                                      borderRadius: 7,
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#1d4ed8',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <Paperclip size={14} color="#2563eb" />
+                                    Anexar Arquivo ({c.anexos?.length || 0})
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setOpenMenuId(null)
+                                      setAnexosModalTarget({ conta: c, mode: 'camera' })
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      width: '100%',
+                                      padding: '8px 10px',
+                                      borderRadius: 7,
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#6d28d9',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <Camera size={14} color="#7c3aed" />
+                                    Tirar Foto (Câmera)
+                                  </button>
+
+                                  <div style={{ height: 1, background: '#e2e8f0', margin: '3px 0' }} />
+
                                   <button
                                     type="button"
                                     role="menuitem"
@@ -2321,6 +2513,14 @@ export default function ContasPagarPage() {
         }}
         onBaixar={(c) => setBaixaTargets([c])}
         onReverterBaixa={handleReverterBaixa}
+        onUpdateAnexos={handleUpdateAnexos}
+      />
+
+      <AnexosLancamentoModal
+        conta={anexosModalTarget?.conta || null}
+        initialMode={anexosModalTarget?.mode || 'arquivos'}
+        onClose={() => setAnexosModalTarget(null)}
+        onUpdateAnexos={handleUpdateAnexos}
       />
 
       {/* Modal de Confirmação de Exclusão */}
