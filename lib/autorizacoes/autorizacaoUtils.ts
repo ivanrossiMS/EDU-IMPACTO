@@ -162,11 +162,23 @@ export function getUserAutorizacaoResposta(
   return null
 }
 
+function parseDeadlineEndOfDay(dataLimite: string): number {
+  const trimmed = String(dataLimite || '').trim()
+  const dateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (dateMatch) {
+    const year = parseInt(dateMatch[1], 10)
+    const month = parseInt(dateMatch[2], 10) - 1
+    const day = parseInt(dateMatch[3], 10)
+    return new Date(year, month, day, 23, 59, 59, 999).getTime()
+  }
+  return new Date(trimmed).getTime()
+}
+
 export function isAutorizacaoClosed(autorizacao?: AutorizacaoData | null): boolean {
   if (!autorizacao) return true
   if (autorizacao.encerrada) return true
   if (autorizacao.dataLimite) {
-    const exp = new Date(autorizacao.dataLimite).getTime()
+    const exp = parseDeadlineEndOfDay(autorizacao.dataLimite)
     if (!isNaN(exp) && Date.now() > exp) return true
   }
   return false
@@ -174,20 +186,20 @@ export function isAutorizacaoClosed(autorizacao?: AutorizacaoData | null): boole
 
 export function formatTimeRemaining(dataLimite?: string | null): string | null {
   if (!dataLimite) return null
-  const exp = new Date(dataLimite).getTime()
+  const exp = parseDeadlineEndOfDay(dataLimite)
   if (isNaN(exp)) return null
   const diff = exp - Date.now()
   if (diff <= 0) return 'Prazo encerrado'
 
-  const mins = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const expDate = new Date(exp)
+  const expStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate()).getTime()
+  const days = Math.round((expStart - todayStart) / (1000 * 60 * 60 * 24))
 
   if (days > 1) return `Encerra em ${days} dias`
   if (days === 1) return `Encerra amanhã`
-  if (hours >= 1) return `Encerra em ${hours}h`
-  if (mins >= 1) return `Encerra em ${mins} min`
-  return 'Encerra em instantes'
+  return 'Encerra hoje'
 }
 
 export function generateDigitalSignatureHash(payload: {
@@ -223,6 +235,66 @@ export function formatDateTimeBR(dateString?: string | null): string {
   } catch (_) {
     return String(dateString)
   }
+}
+
+/**
+ * Formata a data do evento (YYYY-MM-DD) para o padrão brasileiro (DD/MM/YYYY)
+ */
+export function formatDataEventoBR(dateString?: string | null): string {
+  if (!dateString) return ''
+  const trimmed = String(dateString).trim()
+  if (!trimmed) return ''
+
+  const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (dateOnlyMatch) {
+    return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`
+  }
+
+  const dateTimeMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (dateTimeMatch) {
+    return `${dateTimeMatch[3]}/${dateTimeMatch[2]}/${dateTimeMatch[1]} às ${dateTimeMatch[4]}:${dateTimeMatch[5]}`
+  }
+
+  return trimmed
+}
+
+/**
+ * Normaliza valores de data para o formato aceito pelo <input type="date" /> (YYYY-MM-DD)
+ */
+export function normalizeDateInputValue(dateString?: string | null): string {
+  if (!dateString) return ''
+  const trimmed = String(dateString).trim()
+  if (!trimmed) return ''
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed.slice(0, 10)
+
+  const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (brMatch) {
+    return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+  }
+
+  return ''
+}
+
+/**
+ * Formata dinamicamente valores monetários em Real (R$ 0,00)
+ */
+export function formatarMoedaBRL(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value === 'number') {
+    if (isNaN(value)) return ''
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
+
+  const digits = String(value).replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.length >= 2 && parseInt(digits, 10) === 0) return ''
+
+  const cents = parseInt(digits.slice(0, 11), 10)
+  if (isNaN(cents)) return ''
+
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)
 }
 
 /**

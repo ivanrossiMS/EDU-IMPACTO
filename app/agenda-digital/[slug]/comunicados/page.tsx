@@ -118,7 +118,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     String(t.codigo) === String(rawTurma) ||
     (t.nome && typeof rawTurma === 'string' && t.nome.toLowerCase().includes(rawTurma.toLowerCase()))
   ))
-  const turmaNome = turmaObj?.nome || rawTurma
+  const turmaNome = turmaObj?.nome || (aluno as any)?.turmaNome || (aluno as any)?.turma_nome || (aluno as any)?.dados?.turma_nome || rawTurma
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
@@ -417,16 +417,31 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       const rawItem = payload?.item || payload?.new || payload
       if (rawItem && rawItem.id) {
         const cId = String(rawItem.id)
+        const mergeCom = (c: any) => {
+          const merged = { ...c, ...rawItem }
+          if (rawItem.dados && typeof rawItem.dados === 'object') {
+            merged.dados = { ...(c?.dados || {}), ...rawItem.dados }
+          }
+          if (rawItem.dados?.autorizacao || rawItem.autorizacao) {
+            merged.autorizacao = rawItem.dados?.autorizacao || rawItem.autorizacao
+          }
+          if (rawItem.dados?.enquete || rawItem.enquete) {
+            merged.enquete = rawItem.dados?.enquete || rawItem.enquete
+          }
+          return merged
+        }
         queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
           if (!old || !old.pages) return old
           return {
             ...old,
-            pages: old.pages.map((p: any[]) => p.map((c: any) => String(c.id) === cId ? { ...c, ...rawItem } : c))
+            pages: old.pages.map((p: any[]) => p.map((c: any) => String(c.id) === cId ? mergeCom(c) : c))
           }
         })
-        setSelectedComunicado((curr: any) => (curr && String(curr.id) === cId ? { ...curr, ...rawItem } : curr))
+        setSelectedComunicado((curr: any) => (curr && String(curr.id) === cId ? mergeCom(curr) : curr))
       }
-      triggerDebouncedRefetch()
+      if (!payload?.source) {
+        triggerDebouncedRefetch()
+      }
     }
 
     const handleDeleteEvent = (e: any) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileCheck2, Check, Lock, Unlock, Clock, Users, RefreshCw, 
@@ -16,6 +16,7 @@ import {
   isAutorizacaoClosed, 
   formatTimeRemaining,
   formatDateTimeBR,
+  formatDataEventoBR,
   validarCPF,
   formatarCPF,
   formatAutorizacaoTermoHtml,
@@ -23,12 +24,15 @@ import {
 } from '@/lib/autorizacoes/autorizacaoUtils'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api/apiClient'
+import { useData } from '@/lib/dataContext'
 
 interface AutorizacaoWidgetProps {
   autorizacao: AutorizacaoData
   comunicadoId: string
   currentUser?: any
   currentAluno?: any
+  turmas?: any[]
+  alunos?: any[]
   isAdminMode?: boolean
   isAlunoView?: boolean
   onUpdateSuccess?: (updatedAutorizacao: AutorizacaoData) => void
@@ -39,10 +43,47 @@ export function AutorizacaoWidget({
   comunicadoId,
   currentUser,
   currentAluno,
+  turmas: turmasProp = [],
+  alunos: alunosProp = [],
   isAdminMode = false,
   isAlunoView = false,
   onUpdateSuccess
 }: AutorizacaoWidgetProps) {
+  const dataContext = useData() as any
+  const contextTurmas: any[] = dataContext?.turmas || []
+  const contextAlunos: any[] = dataContext?.alunos || []
+
+  const resolveTurmaNome = useCallback((rawTurma?: string | null, alunoId?: string | null): string => {
+    const allTurmas = turmasProp.length > 0 ? [...turmasProp, ...contextTurmas] : contextTurmas
+    const allAlunos = alunosProp.length > 0 ? [...alunosProp, ...contextAlunos] : contextAlunos
+
+    let candidate = String(rawTurma || '').trim()
+    if ((!candidate || /^\d+$/.test(candidate)) && alunoId) {
+      const cleanAid = String(alunoId).trim().replace(/^(a_|_ALU|_)/i, '').trim()
+      const foundStudent = allAlunos.find((a: any) => a && String(a.id).trim() === cleanAid)
+      if (foundStudent) {
+        const stTurma = foundStudent.turma_nome || foundStudent.turmaNome || foundStudent.dados?.turma_nome || foundStudent.turma || foundStudent.dados?.turma
+        if (stTurma) candidate = String(stTurma).trim()
+      }
+    }
+
+    if (!candidate) return ''
+
+    const matchedTurma = allTurmas.find((t: any) =>
+      t && (
+        String(t.id).trim() === candidate ||
+        String(t.codigo || '').trim() === candidate ||
+        String(t.dados?.codigo || '').trim() === candidate
+      )
+    )
+
+    if (matchedTurma) {
+      return String(matchedTurma.nome || matchedTurma.dados?.nome || candidate).trim()
+    }
+
+    return candidate
+  }, [turmasProp, contextTurmas, alunosProp, contextAlunos])
+
   const [autorizacao, setAutorizacao] = useState<AutorizacaoData>(initialAutorizacao)
   const [selectedOpcaoId, setSelectedOpcaoId] = useState<string>('')
   const [observacoes, setObservacoes] = useState<string>('')
@@ -54,22 +95,39 @@ export function AutorizacaoWidget({
   const [searchQuery, setSearchQuery] = useState('')
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
-
-  // Sync prop changes
-  useEffect(() => {
-    if (initialAutorizacao) {
-      setAutorizacao(initialAutorizacao)
-    }
-  }, [initialAutorizacao])
-
-  const stats = useMemo(() => calculateAutorizacaoStats(autorizacao), [autorizacao])
-  const isClosed = useMemo(() => isAutorizacaoClosed(autorizacao), [autorizacao])
-  const timeRemaining = useMemo(() => formatTimeRemaining(autorizacao.dataLimite), [autorizacao.dataLimite])
+  const channelRef = useRef<any>(null)
 
   const currentUserId = currentUser?.id || currentUser?.uid || ''
   const currentAlunoId = currentAluno?.id || null
   const currentAlunoNome = currentAluno?.nome || null
-  const currentAlunoTurma = currentAluno?.turma_nome || currentAluno?.turmaNome || currentAluno?.turma || null
+  const rawCurrentAlunoTurma = currentAluno?.turma_nome || currentAluno?.turmaNome || currentAluno?.turma || null
+  const currentAlunoTurma = resolveTurmaNome(rawCurrentAlunoTurma, currentAlunoId) || rawCurrentAlunoTurma
+
+  // Sync prop changes safely without overwriting an already-recorded local signature with a stale snapshot
+  useEffect(() => {
+    if (initialAutorizacao) {
+      setAutorizacao(prev => {
+        if (!prev || prev.id !== initialAutorizacao.id) return initialAutorizacao
+        const ownKey = getAutorizacaoVoterKey(currentUserId, currentAlunoId)
+        const ownResp = getUserAutorizacaoResposta(prev, currentUserId, currentAlunoId)
+        const incomingResp = getUserAutorizacaoResposta(initialAutorizacao, currentUserId, currentAlunoId)
+        if (ownResp && !incomingResp && ownKey) {
+          return {
+            ...initialAutorizacao,
+            respostas: {
+              ...(initialAutorizacao.respostas || {}),
+              [ownKey]: ownResp
+            }
+          }
+        }
+        return initialAutorizacao
+      })
+    }
+  }, [initialAutorizacao, currentUserId, currentAlunoId])
+
+  const stats = useMemo(() => calculateAutorizacaoStats(autorizacao), [autorizacao])
+  const isClosed = useMemo(() => isAutorizacaoClosed(autorizacao), [autorizacao])
+  const timeRemaining = useMemo(() => formatTimeRemaining(autorizacao.dataLimite), [autorizacao.dataLimite])
 
   const isStudentViewer = useMemo(() => {
     if (isAdminMode) return false
@@ -123,6 +181,7 @@ export function AutorizacaoWidget({
 
     const channelName = `autorizacao_live_${autorizacao.id}`
     const channel = supabase.channel(channelName)
+    channelRef.current = channel
 
     const applyRemoteAutorizacao = (incoming: AutorizacaoData) => {
       setAutorizacao(prev => {
@@ -133,9 +192,7 @@ export function AutorizacaoWidget({
         if (ownResp && ownKey && !mergedRespostas[ownKey] && !incomingHasResp) {
           mergedRespostas[ownKey] = ownResp
         }
-        const merged = { ...incoming, respostas: mergedRespostas }
-        if (onUpdateSuccess) onUpdateSuccess(merged)
-        return merged
+        return { ...incoming, respostas: mergedRespostas }
       })
     }
 
@@ -153,9 +210,10 @@ export function AutorizacaoWidget({
       .subscribe()
 
     const handleComunicadosUpdate = (event: any) => {
-      const item = event?.detail?.item
+      if (event?.detail?.source === 'autorizacao-widget') return
+      const item = event?.detail?.item || event?.detail?.new
       if (item && String(item.id) === String(comunicadoId)) {
-        const remoteAut = item.autorizacao || item.dados?.autorizacao
+        const remoteAut = item.dados?.autorizacao || item.autorizacao
         if (remoteAut) {
           applyRemoteAutorizacao(remoteAut)
         }
@@ -164,20 +222,23 @@ export function AutorizacaoWidget({
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
     return () => {
+      channelRef.current = null
       try { supabase.removeChannel(channel) } catch (_) {}
       window.removeEventListener('ad:comunicados-update', handleComunicadosUpdate)
     }
-  }, [autorizacao.id, comunicadoId, currentUserId, currentAlunoId, onUpdateSuccess])
+  }, [autorizacao?.id, comunicadoId, currentUserId, currentAlunoId])
 
   const broadcastUpdate = useCallback(async (updated: AutorizacaoData, eventName = 'resposta_update') => {
     try {
       const safeAutorizacao = sanitizeAutorizacaoForViewer(updated, []) || updated
-      const channel = supabase.channel(`autorizacao_live_${updated.id}`)
-      await channel.send({
-        type: 'broadcast',
-        event: eventName,
-        payload: { autorizacao: safeAutorizacao, comunicadoId }
-      })
+      const activeChannel = channelRef.current
+      if (activeChannel) {
+        await activeChannel.send({
+          type: 'broadcast',
+          event: eventName,
+          payload: { autorizacao: safeAutorizacao, comunicadoId }
+        })
+      }
     } catch (_) {}
   }, [comunicadoId])
 
@@ -203,6 +264,9 @@ export function AutorizacaoWidget({
     setIsSubmitting(true)
     setFeedbackMessage(null)
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
+
     try {
       const payload = {
         comunicadoId,
@@ -223,7 +287,8 @@ export function AutorizacaoWidget({
       const res = await apiFetch('/api/agenda/autorizacoes/responder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       })
 
       const data = await res.json()
@@ -233,17 +298,32 @@ export function AutorizacaoWidget({
       }
 
       if (data.autorizacao) {
-        setAutorizacao(data.autorizacao)
+        let nextAutorizacao: AutorizacaoData = data.autorizacao
+        if (data.userResposta && !getUserAutorizacaoResposta(nextAutorizacao, currentUserId, currentAlunoId)) {
+          const localVoterKey = getAutorizacaoVoterKey(currentUserId, currentAlunoId) || data.userResposta.usuarioId || 'own'
+          nextAutorizacao = {
+            ...nextAutorizacao,
+            respostas: {
+              ...(nextAutorizacao.respostas || {}),
+              [localVoterKey]: data.userResposta
+            }
+          }
+        }
+        setAutorizacao(nextAutorizacao)
         setIsChangingResposta(false)
         setFeedbackMessage({ type: 'success', text: 'Autorização assinada e registrada com sucesso!' })
-        if (onUpdateSuccess) onUpdateSuccess(data.autorizacao)
-        broadcastUpdate(data.autorizacao, 'resposta_update')
+        if (onUpdateSuccess) onUpdateSuccess(nextAutorizacao)
+        broadcastUpdate(nextAutorizacao, 'resposta_update')
 
         setTimeout(() => setFeedbackMessage(null), 4000)
       }
     } catch (err: any) {
-      setFeedbackMessage({ type: 'error', text: err.message || 'Erro ao registrar autorização. Tente novamente.' })
+      const msg = err?.name === 'AbortError'
+        ? 'A conexão demorou mais que o esperado. Verifique sua internet e tente novamente.'
+        : (err?.message || 'Erro ao registrar autorização. Tente novamente.')
+      setFeedbackMessage({ type: 'error', text: msg })
     } finally {
+      clearTimeout(timeoutId)
       setIsSubmitting(false)
     }
   }
@@ -291,16 +371,20 @@ export function AutorizacaoWidget({
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim()
-      list = list.filter(r => 
-        (r.alunoNome && r.alunoNome.toLowerCase().includes(q)) ||
-        (r.usuarioNome && r.usuarioNome.toLowerCase().includes(q)) ||
-        (r.alunoTurma && r.alunoTurma.toLowerCase().includes(q)) ||
-        (r.observacoes && r.observacoes.toLowerCase().includes(q))
-      )
+      list = list.filter(r => {
+        const displayTurma = resolveTurmaNome(r.alunoTurma, r.alunoId)
+        return (
+          (r.alunoNome && r.alunoNome.toLowerCase().includes(q)) ||
+          (r.usuarioNome && r.usuarioNome.toLowerCase().includes(q)) ||
+          (displayTurma && displayTurma.toLowerCase().includes(q)) ||
+          (r.alunoTurma && r.alunoTurma.toLowerCase().includes(q)) ||
+          (r.observacoes && r.observacoes.toLowerCase().includes(q))
+        )
+      })
     }
 
     return list
-  }, [stats.respostasList, selectedFilter, searchQuery])
+  }, [stats.respostasList, selectedFilter, searchQuery, resolveTurmaNome])
 
   // Print summary sheet for excursion bus
   const handlePrintSummary = () => {
@@ -329,7 +413,7 @@ export function AutorizacaoWidget({
       </head>
       <body>
         <h1>Colégio Impacto — Lista de Autorizações</h1>
-        <p><strong>Atividade:</strong> ${autorizacao.titulo} ${autorizacao.localEvento ? `| <strong>Local:</strong> ${autorizacao.localEvento}` : ''} ${autorizacao.dataEvento ? `| <strong>Data:</strong> ${autorizacao.dataEvento}` : ''}</p>
+        <p><strong>Atividade:</strong> ${autorizacao.titulo} ${autorizacao.localEvento ? `| <strong>Local:</strong> ${autorizacao.localEvento}` : ''} ${autorizacao.dataEvento ? `| <strong>Data:</strong> ${formatDataEventoBR(autorizacao.dataEvento)}` : ''}</p>
         <p>Documento gerado em ${new Date().toLocaleString('pt-BR')} para conferência pedagógica.</p>
         
         <div class="metrics">
@@ -356,7 +440,7 @@ export function AutorizacaoWidget({
               <tr>
                 <td>${i + 1}</td>
                 <td><strong>${r.alunoNome || 'Não informado'}</strong></td>
-                <td>${r.alunoTurma || '-'}</td>
+                <td>${resolveTurmaNome(r.alunoTurma, r.alunoId) || '-'}</td>
                 <td>
                   <span class="${r.tipoDecisao === 'aprova' ? 'badge-aprova' : r.tipoDecisao === 'recusa' ? 'badge-recusa' : ''}">
                     ${r.opcaoTexto}
@@ -543,7 +627,7 @@ export function AutorizacaoWidget({
             )}
             {autorizacao.dataEvento && (
               <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                <Calendar size={12} color="#059669" /> {autorizacao.dataEvento}
+                <Calendar size={12} color="#059669" /> {formatDataEventoBR(autorizacao.dataEvento)}
               </span>
             )}
             {autorizacao.valor && (
@@ -1301,6 +1385,7 @@ export function AutorizacaoWidget({
                   filteredRespostas.map(r => {
                     const isAprova = r.tipoDecisao === 'aprova'
                     const isRecusa = r.tipoDecisao === 'recusa'
+                    const displayTurma = resolveTurmaNome(r.alunoTurma, r.alunoId)
 
                     return (
                       <div
@@ -1322,9 +1407,9 @@ export function AutorizacaoWidget({
                               <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                                 {r.alunoNome || 'Aluno(a)'}
                               </span>
-                              {r.alunoTurma && (
+                              {displayTurma && (
                                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6366F1', background: '#EEF2FF', padding: '2px 8px', borderRadius: 6 }}>
-                                  {r.alunoTurma}
+                                  {displayTurma}
                                 </span>
                               )}
                             </div>

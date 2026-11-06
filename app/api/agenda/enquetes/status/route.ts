@@ -55,14 +55,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
 
-    try {
-      await adminClient.from('enquetes').upsert({
-        id: updatedEnquete.id,
-        titulo: updatedEnquete.pergunta,
-        dados: updatedEnquete
-      })
-    } catch (_) {}
-
     return NextResponse.json({
       ok: true,
       enquete: updatedEnquete

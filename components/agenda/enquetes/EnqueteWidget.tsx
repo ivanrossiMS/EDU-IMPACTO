@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Vote, Check, Lock, Unlock, Clock, Users, RefreshCw, 
@@ -44,21 +44,37 @@ export function EnqueteWidget({
   const [selectedVotersFilter, setSelectedVotersFilter] = useState<string>('all')
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
-
-  // Sync with prop updates
-  useEffect(() => {
-    if (initialEnquete) {
-      setEnquete(initialEnquete)
-    }
-  }, [initialEnquete])
-
-  const stats = useMemo(() => calculateEnqueteStats(enquete), [enquete])
-  const isClosed = useMemo(() => isEnqueteClosed(enquete), [enquete])
-  const timeRemaining = useMemo(() => formatTimeRemaining(enquete.dataExpiracao), [enquete.dataExpiracao])
+  const channelRef = useRef<any>(null)
 
   const currentUserId = currentUser?.id || currentUser?.uid || ''
   const currentAlunoId = currentAluno?.id || null
   const currentAlunoNome = currentAluno?.nome || null
+
+  // Sync with prop updates safely without losing own recorded vote
+  useEffect(() => {
+    if (initialEnquete) {
+      setEnquete(prev => {
+        if (!prev || prev.id !== initialEnquete.id) return initialEnquete
+        const ownKey = getVoterKey(currentUserId, currentAlunoId)
+        const ownVote = getUserVote(prev, currentUserId, currentAlunoId)
+        const incomingVote = getUserVote(initialEnquete, currentUserId, currentAlunoId)
+        if (ownVote && !incomingVote && ownKey) {
+          return {
+            ...initialEnquete,
+            votos: {
+              ...(initialEnquete.votos || {}),
+              [ownKey]: ownVote
+            }
+          }
+        }
+        return initialEnquete
+      })
+    }
+  }, [initialEnquete, currentUserId, currentAlunoId])
+
+  const stats = useMemo(() => calculateEnqueteStats(enquete), [enquete])
+  const isClosed = useMemo(() => isEnqueteClosed(enquete), [enquete])
+  const timeRemaining = useMemo(() => formatTimeRemaining(enquete.dataExpiracao), [enquete.dataExpiracao])
 
   const userVote: EnqueteVoto | null = useMemo(() => {
     return getUserVote(enquete, currentUserId, currentAlunoId)
@@ -83,18 +99,18 @@ export function EnqueteWidget({
 
     const channelName = `enquete_live_${enquete.id}`
     const channel = supabase.channel(channelName)
+    channelRef.current = channel
 
     const applyRemoteEnquete = (incoming: EnqueteData) => {
       setEnquete(prev => {
         const ownKey = getVoterKey(currentUserId, currentAlunoId)
         const ownVote = getUserVote(prev, currentUserId, currentAlunoId)
+        const incomingHasVote = !!getUserVote(incoming, currentUserId, currentAlunoId)
         const mergedVotos = { ...(incoming.votos || {}) }
-        if (ownVote && ownKey && !mergedVotos[ownKey]) {
+        if (ownVote && ownKey && !mergedVotos[ownKey] && !incomingHasVote) {
           mergedVotos[ownKey] = ownVote
         }
-        const merged = { ...incoming, votos: mergedVotos }
-        if (onVoteSuccess) onVoteSuccess(merged)
-        return merged
+        return { ...incoming, votos: mergedVotos }
       })
     }
 
@@ -113,9 +129,10 @@ export function EnqueteWidget({
 
     // 2. Global Comunicados Update Event from AgendaRealtimeProvider
     const handleComunicadosUpdate = (event: any) => {
-      const item = event?.detail?.item
+      if (event?.detail?.source === 'enquete-widget') return
+      const item = event?.detail?.item || event?.detail?.new
       if (item && String(item.id) === String(comunicadoId)) {
-        const remoteEnquete = item.enquete || item.dados?.enquete
+        const remoteEnquete = item.dados?.enquete || item.enquete
         if (remoteEnquete) {
           applyRemoteEnquete(remoteEnquete)
         }
@@ -124,21 +141,24 @@ export function EnqueteWidget({
     window.addEventListener('ad:comunicados-update', handleComunicadosUpdate)
 
     return () => {
+      channelRef.current = null
       try { supabase.removeChannel(channel) } catch (_) {}
       window.removeEventListener('ad:comunicados-update', handleComunicadosUpdate)
     }
-  }, [enquete.id, comunicadoId, currentUserId, currentAlunoId, onVoteSuccess])
+  }, [enquete?.id, comunicadoId, currentUserId, currentAlunoId])
 
   // Broadcast helper
   const broadcastUpdate = useCallback(async (updated: EnqueteData, eventName = 'vote_update') => {
     try {
       const safeEnquete = sanitizeEnqueteForViewer(updated, []) || updated
-      const channel = supabase.channel(`enquete_live_${updated.id}`)
-      await channel.send({
-        type: 'broadcast',
-        event: eventName,
-        payload: { enquete: safeEnquete, comunicadoId }
-      })
+      const activeChannel = channelRef.current
+      if (activeChannel) {
+        await activeChannel.send({
+          type: 'broadcast',
+          event: eventName,
+          payload: { enquete: safeEnquete, comunicadoId }
+        })
+      }
     } catch (_) {}
   }, [comunicadoId])
 
@@ -166,6 +186,9 @@ export function EnqueteWidget({
     setIsSubmitting(true)
     setFeedbackMessage(null)
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
+
     try {
       const payload = {
         comunicadoId,
@@ -182,7 +205,8 @@ export function EnqueteWidget({
       const res = await apiFetch('/api/agenda/enquetes/votar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       })
 
       const data = await res.json()
@@ -192,17 +216,32 @@ export function EnqueteWidget({
       }
 
       if (data.enquete) {
-        setEnquete(data.enquete)
+        let nextEnquete: EnqueteData = data.enquete
+        if (data.userVote && !getUserVote(nextEnquete, currentUserId, currentAlunoId)) {
+          const localVoterKey = getVoterKey(currentUserId, currentAlunoId) || data.userVote.usuarioId || 'own'
+          nextEnquete = {
+            ...nextEnquete,
+            votos: {
+              ...(nextEnquete.votos || {}),
+              [localVoterKey]: data.userVote
+            }
+          }
+        }
+        setEnquete(nextEnquete)
         setIsChangingVote(false)
         setFeedbackMessage({ type: 'success', text: 'Seu voto foi registrado com sucesso!' })
-        if (onVoteSuccess) onVoteSuccess(data.enquete)
-        broadcastUpdate(data.enquete, 'vote_update')
+        if (onVoteSuccess) onVoteSuccess(nextEnquete)
+        broadcastUpdate(nextEnquete, 'vote_update')
 
         setTimeout(() => setFeedbackMessage(null), 4000)
       }
     } catch (err: any) {
-      setFeedbackMessage({ type: 'error', text: err.message || 'Erro ao votar. Tente novamente.' })
+      const msg = err?.name === 'AbortError'
+        ? 'A conexão demorou mais que o esperado. Verifique sua internet e tente novamente.'
+        : (err?.message || 'Erro ao votar. Tente novamente.')
+      setFeedbackMessage({ type: 'error', text: msg })
     } finally {
+      clearTimeout(timeoutId)
       setIsSubmitting(false)
     }
   }

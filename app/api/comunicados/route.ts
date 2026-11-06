@@ -1452,6 +1452,52 @@ export async function GET(request: Request) {
   //   });
   // }
 
+  // Enriquecer nome da turma nas respostas de autorizações caso esteja gravado como código/ID da turma
+  const hasAutorizacaoRespostas = filtered.some(
+    (c: any) => (c.autorizacao?.respostas && Object.keys(c.autorizacao.respostas).length > 0) ||
+               (c.dados?.autorizacao?.respostas && Object.keys(c.dados.autorizacao.respostas).length > 0)
+  );
+  if (hasAutorizacaoRespostas) {
+    try {
+      const { allTurmas } = await getCachedTurmasAndGrupos();
+      if (allTurmas && allTurmas.length > 0) {
+        const turmaNameByIdOrCode = new Map<string, string>();
+        for (const t of allTurmas) {
+          const tNome = String(t?.nome || t?.dados?.nome || '').trim();
+          if (!tNome) continue;
+          if (t.id) turmaNameByIdOrCode.set(String(t.id).trim(), tNome);
+          if (t.codigo) turmaNameByIdOrCode.set(String(t.codigo).trim(), tNome);
+          if (t.dados?.codigo) turmaNameByIdOrCode.set(String(t.dados.codigo).trim(), tNome);
+        }
+        filtered = filtered.map((c: any) => {
+          const aut = c.autorizacao || c.dados?.autorizacao;
+          if (!aut?.respostas) return c;
+          let changed = false;
+          const nextRespostas: Record<string, any> = {};
+          for (const [k, resp] of Object.entries(aut.respostas as Record<string, any>)) {
+            if (resp && resp.alunoTurma) {
+              const rawT = String(resp.alunoTurma).trim();
+              const resolvedT = turmaNameByIdOrCode.get(rawT);
+              if (resolvedT && resolvedT !== rawT) {
+                nextRespostas[k] = { ...resp, alunoTurma: resolvedT };
+                changed = true;
+                continue;
+              }
+            }
+            nextRespostas[k] = resp;
+          }
+          if (!changed) return c;
+          const nextAut = { ...aut, respostas: nextRespostas };
+          return {
+            ...c,
+            autorizacao: nextAut,
+            dados: c.dados ? { ...c.dados, autorizacao: nextAut } : c.dados
+          };
+        });
+      }
+    } catch (_) {}
+  }
+
   return NextResponse.json(filtered, {
     headers: {
       'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',

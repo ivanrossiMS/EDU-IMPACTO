@@ -397,10 +397,10 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
           </div>
 
           {/* ENQUETE INTERATIVA */}
-          {(selectedCom.enquete || (selectedCom as any).dados?.enquete) && (
+          {((selectedCom as any).dados?.enquete || selectedCom.enquete) && (
             <div style={{ marginTop: 16 }}>
               <EnqueteWidget
-                enquete={selectedCom.enquete || (selectedCom as any).dados?.enquete}
+                enquete={(selectedCom as any).dados?.enquete || selectedCom.enquete}
                 comunicadoId={String(selectedCom.id)}
                 isAdminMode={true}
               />
@@ -408,10 +408,10 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
           )}
 
           {/* AUTORIZAÇÃO DIGITAL */}
-          {(selectedCom.autorizacao || (selectedCom as any).dados?.autorizacao) && (
+          {((selectedCom as any).dados?.autorizacao || selectedCom.autorizacao) && (
             <div style={{ marginTop: 16 }}>
               <AutorizacaoWidget
-                autorizacao={selectedCom.autorizacao || (selectedCom as any).dados?.autorizacao}
+                autorizacao={(selectedCom as any).dados?.autorizacao || selectedCom.autorizacao}
                 comunicadoId={String(selectedCom.id)}
                 isAdminMode={true}
               />

@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
 import {
   X,
   Search,
@@ -98,7 +99,7 @@ export function CobrancaDetailsModal({
       const info = resolveStudentInfo(d)
       if (info.turma && info.turma !== '--') set.add(info.turma)
     })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    return Array.from(set).sort(compareTurmasBySerie)
   }, [allDestinatarios, resolveStudentInfo])
 
   const filteredList = useMemo(() => {

@@ -241,15 +241,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
 
-    // Tenta atualizar também na tabela enquetes caso exista
-    try {
-      await adminClient.from('enquetes').upsert({
-        id: updatedEnquete.id,
-        titulo: updatedEnquete.pergunta,
-        dados: updatedEnquete
-      })
-    } catch (_) {}
-
     const viewerAllowedIds = [
       effectiveUserId,
       String(user.id),

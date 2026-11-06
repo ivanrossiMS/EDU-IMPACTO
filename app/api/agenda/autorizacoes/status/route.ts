@@ -55,13 +55,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
 
-    try {
-      await adminClient.from('autorizacoes').upsert({
-        id: updatedAutorizacao.id,
-        dados: updatedAutorizacao
-      })
-    } catch (_) {}
-
     return NextResponse.json({
       ok: true,
       autorizacao: updatedAutorizacao

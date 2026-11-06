@@ -543,10 +543,25 @@ function ColaboradorComunicadosContent() {
       if (rawItem && rawItem.id) {
         setComunicadosLocally?.((prev: any) => {
           const list = Array.isArray(prev) ? prev : []
-          return list.map((c: any) => String(c.id) === String(rawItem.id) ? { ...c, ...rawItem } : c)
+          return list.map((c: any) => {
+            if (String(c.id) !== String(rawItem.id)) return c
+            const merged = { ...c, ...rawItem }
+            if (rawItem.dados && typeof rawItem.dados === 'object') {
+              merged.dados = { ...(c?.dados || {}), ...rawItem.dados }
+            }
+            if (rawItem.dados?.autorizacao || rawItem.autorizacao) {
+              merged.autorizacao = rawItem.dados?.autorizacao || rawItem.autorizacao
+            }
+            if (rawItem.dados?.enquete || rawItem.enquete) {
+              merged.enquete = rawItem.dados?.enquete || rawItem.enquete
+            }
+            return merged
+          })
         })
       }
-      triggerDebouncedSync()
+      if (!payload?.source) {
+        triggerDebouncedSync()
+      }
     }
 
     const handleDelete = (e: any) => {

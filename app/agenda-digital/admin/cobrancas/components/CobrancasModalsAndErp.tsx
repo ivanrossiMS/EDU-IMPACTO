@@ -813,9 +813,10 @@ export function EditarCobrancaModal({ group, onClose, onSaved, apiFetchFn }: Edi
 interface ErpMensalidadesViewProps {
   titulos: any[]
   alunosDirectory: Record<string, any>
+  resolveTurmaName?: (rawTurma: any) => string
 }
 
-export function ErpMensalidadesView({ titulos, alunosDirectory }: ErpMensalidadesViewProps) {
+export function ErpMensalidadesView({ titulos, alunosDirectory, resolveTurmaName }: ErpMensalidadesViewProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'pago' | 'pendente' | 'atrasado'>('ALL')
 
@@ -824,7 +825,8 @@ export function ErpMensalidadesView({ titulos, alunosDirectory }: ErpMensalidade
       const rawAlunoId = String(t.aluno_id || t.alunoId || t.dados?.alunoId || '').replace(/^(a_|_ALU|ALU)/i, '').trim()
       const stu = alunosDirectory[rawAlunoId] || (t.aluno_nome ? alunosDirectory[String(t.aluno_nome).toLowerCase()] : null)
       const alunoNome = t.aluno_nome || t.alunoNome || t.dados?.alunoNome || stu?.nome || rawAlunoId || 'Aluno'
-      const turma = t.turma || t.dados?.turma || stu?.turma || '--'
+      const rawTurma = stu?.turma || t.turma || t.dados?.turma || '--'
+      const turma = resolveTurmaName ? resolveTurmaName(rawTurma) : rawTurma
       const descricao = t.descricao || t.titulo || t.competencia || t.dados?.descricao || 'Mensalidade Escolar'
       const valor = Number(t.valor || t.dados?.valor || 0)
       const vencimento = t.vencimento || t.data_vencimento || t.dados?.vencimento || ''

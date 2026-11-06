@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveUserRole, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 import { AutorizacaoData, AutorizacaoResposta } from '@/lib/autorizacoes/types'
 import { 
   getAutorizacaoVoterKey, 
@@ -181,7 +182,24 @@ export async function POST(request: Request) {
 
     let resolvedAlunoNome = alunoNome ? String(alunoNome).trim() : ''
     let resolvedAlunoTurma = alunoTurma ? String(alunoTurma).trim() : ''
-    if (cleanAlunoId && (!resolvedAlunoNome || !resolvedAlunoTurma || resolvedAlunoNome === 'Aluno')) {
+
+    let turmaNameByIdOrCode = new Map<string, string>()
+    try {
+      const { allTurmas } = await getCachedTurmasAndGrupos()
+      for (const t of allTurmas || []) {
+        const tNome = String(t?.nome || t?.dados?.nome || '').trim()
+        if (!tNome) continue
+        if (t.id) turmaNameByIdOrCode.set(String(t.id).trim(), tNome)
+        if (t.codigo) turmaNameByIdOrCode.set(String(t.codigo).trim(), tNome)
+        if (t.dados?.codigo) turmaNameByIdOrCode.set(String(t.dados.codigo).trim(), tNome)
+      }
+    } catch (_) {}
+
+    if (resolvedAlunoTurma && turmaNameByIdOrCode.has(resolvedAlunoTurma)) {
+      resolvedAlunoTurma = turmaNameByIdOrCode.get(resolvedAlunoTurma)!
+    }
+
+    if (cleanAlunoId && (!resolvedAlunoNome || !resolvedAlunoTurma || resolvedAlunoNome === 'Aluno' || /^\d+$/.test(resolvedAlunoTurma))) {
       try {
         const { data: stRow } = await adminClient
           .from('alunos')
@@ -192,16 +210,21 @@ export async function POST(request: Request) {
           if (!resolvedAlunoNome || resolvedAlunoNome === 'Aluno') {
             resolvedAlunoNome = String(stRow.nome || stRow.dados?.nome || '').trim()
           }
-          if (!resolvedAlunoTurma) {
-            const rawTurma = String(stRow.dados?.turma_nome || stRow.turma || stRow.dados?.turma || '').trim()
+          if (!resolvedAlunoTurma || /^\d+$/.test(resolvedAlunoTurma)) {
+            const rawTurma = String(stRow.dados?.turma_nome || stRow.turma || stRow.dados?.turma || resolvedAlunoTurma || '').trim()
             if (rawTurma) {
-              const { data: tRow } = await adminClient
-                .from('turmas')
-                .select('nome')
-                .or(`id.eq."${rawTurma.replace(/"/g, '')}",codigo.eq."${rawTurma.replace(/"/g, '')}"`)
-                .limit(1)
-                .maybeSingle()
-              resolvedAlunoTurma = tRow?.nome ? String(tRow.nome).trim() : rawTurma
+              const cachedName = turmaNameByIdOrCode.get(rawTurma)
+              if (cachedName) {
+                resolvedAlunoTurma = cachedName
+              } else {
+                const { data: tRow } = await adminClient
+                  .from('turmas')
+                  .select('nome')
+                  .or(`id.eq."${rawTurma.replace(/"/g, '')}",codigo.eq."${rawTurma.replace(/"/g, '')}"`)
+                  .limit(1)
+                  .maybeSingle()
+                resolvedAlunoTurma = tRow?.nome ? String(tRow.nome).trim() : rawTurma
+              }
             }
           }
         }
@@ -310,15 +333,21 @@ export async function POST(request: Request) {
     }
 
     const baseRespostas = { ...(autorizacao.respostas || {}) }
-    if (cleanAlunoId) {
-      for (const [k, r] of Object.entries(baseRespostas)) {
-        if (!r) continue
-        const rAlunoClean = String(r.alunoId || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
-        if (
-          (rAlunoClean && rAlunoClean === cleanAlunoId) ||
-          (!rAlunoClean && (k === cleanAlunoId || k.endsWith(`_${cleanAlunoId}`)))
-        ) {
-          delete baseRespostas[k]
+    for (const [k, r] of Object.entries(baseRespostas)) {
+      if (!r) continue
+      const rAlunoClean = String(r.alunoId || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
+      if (
+        cleanAlunoId &&
+        ((rAlunoClean && rAlunoClean === cleanAlunoId) ||
+          (!rAlunoClean && (k === cleanAlunoId || k.endsWith(`_${cleanAlunoId}`))))
+      ) {
+        delete baseRespostas[k]
+        continue
+      }
+      if (r.alunoTurma && turmaNameByIdOrCode.has(String(r.alunoTurma).trim())) {
+        baseRespostas[k] = {
+          ...r,
+          alunoTurma: turmaNameByIdOrCode.get(String(r.alunoTurma).trim())
         }
       }
     }
@@ -360,14 +389,6 @@ export async function POST(request: Request) {
       console.error('Erro ao atualizar autorização no comunicado:', updateErr)
       return NextResponse.json({ error: updateErr.message }, { status: 500 })
     }
-
-    // Tenta atualizar também na tabela autorizacoes se existir
-    try {
-      await adminClient.from('autorizacoes').upsert({
-        id: updatedAutorizacao.id,
-        dados: updatedAutorizacao
-      })
-    } catch (_) {}
 
     const viewerAllowedIds = [
       effectiveUserId,

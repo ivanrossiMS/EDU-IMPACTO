@@ -80,6 +80,7 @@ function normalizeId(raw: any): string {
 
 export default function ADAdminCobrancas() {
   const [titulos] = useSupabaseArray<any>('titulos')
+  const [turmasDb] = useSupabaseArray<any>('turmas')
   const [activeTab, setActiveTab] = useState<'app' | 'erp'>('app')
 
   const [cobrancasRows, setCobrancasRows] = useState<any[]>([])
@@ -87,6 +88,7 @@ export default function ADAdminCobrancas() {
   const [comunicadosMap, setComunicadosMap] = useState<Record<string, any>>({})
   const [alunosDirectory, setAlunosDirectory] = useState<Record<string, any>>({})
   const [turmasList, setTurmasList] = useState<string[]>([])
+  const [turmasMapApi, setTurmasMapApi] = useState<Record<string, string>>({})
   const [activeAlunosList, setActiveAlunosList] = useState<Array<{ id: string; nome: string; turma: string; matricula: string }>>([])
 
   const [loading, setLoading] = useState(true)
@@ -123,6 +125,7 @@ export default function ADAdminCobrancas() {
         setComunicadosMap(data.comunicadosMap || {})
         setAlunosDirectory(data.alunosDirectory || {})
         setTurmasList(data.turmasList || [])
+        setTurmasMapApi(data.turmasMap || {})
         setActiveAlunosList(data.activeAlunosList || [])
         if (silent) toast.success('Dados de cobranças sincronizados!')
       } else {
@@ -188,6 +191,37 @@ export default function ADAdminCobrancas() {
     }
   }, [selectedGroupId, showNovaModal, editingGroup, deletingGroup])
 
+  const resolveTurmaName = useCallback(
+    (rawTurma: any): string => {
+      const str = String(rawTurma || '').trim()
+      if (!str || str === '--') return '--'
+      const fromApi =
+        turmasMapApi[str] ||
+        turmasMapApi[str.toLowerCase()] ||
+        turmasMapApi[str.replace(/^(t_|turma_|sync-)/i, '').trim()]
+      if (fromApi) return fromApi
+
+      if (Array.isArray(turmasDb) && turmasDb.length > 0) {
+        const clean = str.replace(/^(t_|turma_|sync-)/i, '').trim()
+        const found = turmasDb.find(
+          (t: any) =>
+            t &&
+            (String(t.id).trim() === str ||
+              String(t.id).trim() === clean ||
+              String(t.codigo || '').trim() === str ||
+              String(t.codigo || '').trim() === clean ||
+              String(t.dados?.codigo || '').trim() === str ||
+              String(t.nome || '').trim().toLowerCase() === str.toLowerCase())
+        )
+        if (found?.nome || found?.dados?.nome) {
+          return String(found.nome || found.dados?.nome).trim()
+        }
+      }
+      return str
+    },
+    [turmasMapApi, turmasDb]
+  )
+
   const resolveStudentInfo = useCallback(
     (dest: any) => {
       const cleanId = normalizeId(dest?.destinatario_id || dest?.aluno_id)
@@ -198,13 +232,13 @@ export default function ADAdminCobrancas() {
 
       return {
         nome: rawName || entry?.nome || cleanId || 'Aluno',
-        turma: entry?.turma || '--',
+        turma: resolveTurmaName(entry?.turma || dest?.turma || '--'),
         matricula: entry?.matricula || '',
         responsavel: entry?.responsavel || '',
         telefone: entry?.telefone || ''
       }
     },
-    [alunosDirectory]
+    [alunosDirectory, resolveTurmaName]
   )
 
   // Agrupamento completo incluindo todas as agenda_cobrancas (mesmo com 0 destinatários) + todos os destinatários
@@ -2379,7 +2413,11 @@ export default function ADAdminCobrancas() {
             </div>
           </>
         ) : (
-          <ErpMensalidadesView titulos={titulos || []} alunosDirectory={alunosDirectory} />
+          <ErpMensalidadesView
+            titulos={titulos || []}
+            alunosDirectory={alunosDirectory}
+            resolveTurmaName={resolveTurmaName}
+          />
         )}
       </div>
 

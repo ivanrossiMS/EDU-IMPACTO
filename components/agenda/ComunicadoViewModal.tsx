@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2 } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2, Printer, Search, RefreshCw, Copy, Check, Phone, MessageCircle, UserCheck, RotateCcw, Clock, FileSpreadsheet, DollarSign, ShieldCheck } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -219,7 +220,28 @@ export function ComunicadoViewModal({
   
   useEffect(() => {
     if (initialComunicado) {
-      setComunicado(initialComunicado)
+      setComunicado((prev: any) => {
+        const next = { ...initialComunicado }
+        if (initialComunicado.dados?.autorizacao) {
+          next.autorizacao = initialComunicado.dados.autorizacao
+        }
+        if (initialComunicado.dados?.enquete) {
+          next.enquete = initialComunicado.dados.enquete
+        }
+        const prevAutTime = prev?.autorizacao?.atualizadoEm ? new Date(prev.autorizacao.atualizadoEm).getTime() : 0
+        const nextAutTime = next?.autorizacao?.atualizadoEm ? new Date(next.autorizacao.atualizadoEm).getTime() : 0
+        if (prev?.id === next?.id && prev?.autorizacao && prevAutTime > nextAutTime) {
+          next.autorizacao = prev.autorizacao
+          next.dados = { ...(next.dados || {}), autorizacao: prev.autorizacao }
+        }
+        const prevEnqTime = prev?.enquete?.atualizadoEm ? new Date(prev.enquete.atualizadoEm).getTime() : 0
+        const nextEnqTime = next?.enquete?.atualizadoEm ? new Date(next.enquete.atualizadoEm).getTime() : 0
+        if (prev?.id === next?.id && prev?.enquete && prevEnqTime > nextEnqTime) {
+          next.enquete = prev.enquete
+          next.dados = { ...(next.dados || {}), enquete: prev.enquete }
+        }
+        return next
+      })
     }
   }, [initialComunicado])
   
@@ -227,39 +249,103 @@ export function ComunicadoViewModal({
     ? (comunicado?.cobrancas || comunicado?.dados?.cobrancas)
     : (comunicado?.cobranca || comunicado?.dados?.cobranca ? [comunicado.cobranca || comunicado.dados.cobranca] : []);
   const [cobrancasList, setCobrancasList] = useState<any[]>(initialCobs)
+  const [cobrancasAlunosDir, setCobrancasAlunosDir] = useState<Record<string, any>>({})
   const [generatingPaymentIds, setGeneratingPaymentIds] = useState<Record<string, boolean>>({})
   const [paymentLinksMap, setPaymentLinksMap] = useState<Record<string, string>>({})
+  const [selectedCobrancaModalId, setSelectedCobrancaModalId] = useState<string | null>(null)
+  const [cobModalFilter, setCobModalFilter] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL')
+  const [cobModalSearch, setCobModalSearch] = useState<string>('')
+  const [cobModalTurmaFilter, setCobModalTurmaFilter] = useState<string>('ALL')
+  const [cobActionLoading, setCobActionLoading] = useState<Record<string, boolean>>({})
+  const [cobSyncingId, setCobSyncingId] = useState<string | null>(null)
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
+  const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string | null>>({});
+
+  const fetchCobrancas = useCallback(async () => {
+    if (!comunicado?.id) return;
+
+    // Em modo Admin ou Colaborador, utiliza a API enriquecida (que também faz auto-sync de destinatários)
+    if (isAdminMode || isStaff) {
+      try {
+        const res = await apiFetch(`/api/cobrancas?comunicado_id=${encodeURIComponent(String(comunicado.id))}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.alunosDirectory) {
+            setCobrancasAlunosDir(prev => ({ ...prev, ...json.alunosDirectory }));
+          }
+          if (Array.isArray(json.cobrancas) && json.cobrancas.length > 0) {
+            setCobrancasList(json.cobrancas);
+            const allDestIds = new Set<string>();
+            json.cobrancas.forEach((c: any) => {
+              (c.agenda_cobrancas_destinatarios || []).forEach((d: any) => {
+                if (d?.destinatario_id) {
+                  allDestIds.add(String(d.destinatario_id).replace(/^(a_|_ALU)/, ''));
+                }
+              });
+            });
+            if (allDestIds.size > 0) {
+              fetchStudentPhotos(Array.from(allDestIds)).then(photos => {
+                setStudentPhotosMap(prev => ({ ...prev, ...photos }));
+              }).catch(() => {});
+            }
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      const { data } = await supabase
+        .from('agenda_cobrancas')
+        .select('*, agenda_cobrancas_destinatarios(*)')
+        .eq('comunicado_id', String(comunicado.id))
+        .order('created_at', { ascending: true });
+
+      let finalCobs: any[] | null = data;
+      if (!finalCobs || finalCobs.length === 0) {
+        const { data: rawCobs } = await supabase
+          .from('agenda_cobrancas')
+          .select('*')
+          .eq('comunicado_id', String(comunicado.id))
+          .order('created_at', { ascending: true });
+        if (rawCobs && rawCobs.length > 0) {
+          const cobIds = rawCobs.map((c: any) => c.id);
+          const { data: rawDests } = await supabase
+            .from('agenda_cobrancas_destinatarios')
+            .select('*')
+            .in('cobranca_id', cobIds);
+          finalCobs = rawCobs.map((c: any) => ({
+            ...c,
+            agenda_cobrancas_destinatarios: (rawDests || []).filter((d: any) => String(d.cobranca_id) === String(c.id))
+          }));
+        }
+      }
+
+      if (finalCobs && finalCobs.length > 0) {
+        setCobrancasList(finalCobs);
+
+        if (currentUserSlug && !isAdminMode) {
+          const cleanSlug = currentUserSlug.replace(/^(a_|_ALU)/, '');
+          const newLinks: Record<string, string> = {};
+          finalCobs.forEach((cob: any) => {
+            if (cob.agenda_cobrancas_destinatarios) {
+              const dest = cob.agenda_cobrancas_destinatarios.find((d: any) =>
+                String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
+              );
+              if (dest && dest.url_pagamento) {
+                newLinks[cob.id] = dest.url_pagamento;
+              }
+            }
+          });
+          setPaymentLinksMap(prev => ({ ...prev, ...newLinks }));
+        }
+      }
+    } catch (_) {}
+  }, [comunicado?.id, currentUserSlug, isAdminMode, isStaff]);
 
   useEffect(() => {
     if (comunicado?.id) {
-      const fetchCobrancas = async () => {
-         const { supabase } = await import('@/lib/supabase');
-         const { data, error } = await supabase
-           .from('agenda_cobrancas')
-           .select('*, agenda_cobrancas_destinatarios(*)')
-           .eq('comunicado_id', String(comunicado.id))
-           .order('created_at', { ascending: true });
-           
-         if (data && data.length > 0) {
-            setCobrancasList(data);
-            
-            if (currentUserSlug && !isAdminMode) {
-               const cleanSlug = currentUserSlug.replace(/^(a_|_ALU)/, '');
-               const newLinks: Record<string, string> = {};
-               data.forEach((cob: any) => {
-                 if (cob.agenda_cobrancas_destinatarios) {
-                   const dest = cob.agenda_cobrancas_destinatarios.find((d: any) => 
-                      String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
-                   );
-                   if (dest && dest.url_pagamento) {
-                      newLinks[cob.id] = dest.url_pagamento;
-                   }
-                 }
-               });
-               setPaymentLinksMap(prev => ({ ...prev, ...newLinks }));
-            }
-         }
-      }
       fetchCobrancas();
       const handleVisibilityOrFocus = () => {
         if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
@@ -274,15 +360,39 @@ export function ComunicadoViewModal({
           fetchCobrancas();
         }
       }, 15000);
+
+      let realtimeChannel: any = null;
+      let isMounted = true;
+      import('@/lib/supabase').then(({ supabase }) => {
+        if (!isMounted) return;
+        realtimeChannel = supabase
+          .channel(`cvm_cobrancas_${comunicado.id}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'agenda_cobrancas_destinatarios' },
+            () => { fetchCobrancas(); }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'agenda_cobrancas', filter: `comunicado_id=eq.${String(comunicado.id)}` },
+            () => { fetchCobrancas(); }
+          )
+          .subscribe();
+      }).catch(() => {});
+
       return () => {
+        isMounted = false;
         document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
         window.removeEventListener('focus', handleVisibilityOrFocus);
         clearInterval(cobInterval);
+        if (realtimeChannel) {
+          import('@/lib/supabase').then(({ supabase }) => {
+            supabase.removeChannel(realtimeChannel);
+          }).catch(() => {});
+        }
       };
     }
-  }, [comunicado.id, currentUserSlug, isAdminMode])
-
-  const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string | null>>({});
+  }, [comunicado?.id, fetchCobrancas])
 
   // Pré-carrega fotos dos alunos caso o comunicado possua anexos de relatórios individuais
   useEffect(() => {
@@ -1017,6 +1127,609 @@ export function ComunicadoViewModal({
     }
   }
 
+  // =========================================================================
+  // HELPERS DE CONTROLE DE PAGANTES E APURAÇÃO DE COBRANÇA (MODO ADMIN)
+  // =========================================================================
+  const formatCobPercentLabel = (count: number, total: number) => {
+    if (total <= 0 || count <= 0) return { num: 0, label: '0%' };
+    const raw = (count / total) * 100;
+    if (raw > 0 && raw < 1) return { num: Math.max(2, Math.round(raw)), label: '< 1%' };
+    if (count >= total) return { num: 100, label: '100%' };
+    const rounded = Math.round(raw * 10) / 10;
+    const labelStr = Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1).replace('.', ',')}%`;
+    return { num: Math.min(99, Math.max(1, Math.round(raw))), label: labelStr };
+  };
+
+  const getEffectiveCobDestinatarios = useCallback((cob: any): any[] => {
+    const dbDests = Array.isArray(cob?.agenda_cobrancas_destinatarios) ? cob.agenda_cobrancas_destinatarios : [];
+    if (dbDests.length > 0) return dbDests;
+
+    // Fallback: se os destinatários ainda não sincronizaram no banco, calcula a partir do comunicado e da lista de alunos
+    const targetTurmas: string[] = Array.isArray(comunicado?.turmas) ? comunicado.turmas : (Array.isArray(comunicado?.dados?.turmas) ? comunicado.dados.turmas : []);
+    const targetGrupos: string[] = Array.isArray(comunicado?.grupos) ? comunicado.grupos : (Array.isArray(comunicado?.dados?.grupos) ? comunicado.dados.grupos : []);
+    const targetAlunos: string[] = Array.isArray(comunicado?.alunosIds) ? comunicado.alunosIds : (Array.isArray(comunicado?.dados?.alunosIds) ? comunicado.dados.alunosIds : []);
+    const isTodas = targetTurmas.includes('TODAS');
+
+    if (!Array.isArray(alunos) || alunos.length === 0) return [];
+    const matchedIds = new Set<string>();
+
+    alunos.forEach((a: any) => {
+      if (a.ativo === false || a?.dados?.ativo === false) return;
+      const rawId = String(a.id || '').replace(/^(a_|_ALU)/, '');
+      if (!rawId) return;
+      const aTurma = String(a.turma || a?.dados?.turma || '');
+      const aTurmaId = String(a.turma_id || a?.dados?.turma_id || a?.dados?.turmaId || '');
+      const aGrupos: string[] = Array.isArray(a.grupos) ? a.grupos : (Array.isArray(a?.dados?.grupos) ? a.dados.grupos : []);
+
+      let match = false;
+      if (isTodas) match = true;
+      if (!match && targetAlunos.some(id => String(id).replace(/^(a_|_ALU)/, '') === rawId)) match = true;
+      if (!match && targetTurmas.length > 0) {
+        if (targetTurmas.some(t => {
+          const tNorm = normalizeText(t);
+          if (tNorm && (normalizeText(aTurma) === tNorm || normalizeText(aTurmaId) === tNorm)) return true;
+          const turmaObj = (turmas || []).find((tm: any) => String(tm.id) === String(t) || normalizeText(tm.nome) === tNorm);
+          if (turmaObj) {
+            const tmNameNorm = normalizeText(turmaObj.nome);
+            if (tmNameNorm && normalizeText(aTurma) === tmNameNorm) return true;
+            if (String(turmaObj.id) === aTurmaId || String(turmaObj.id) === aTurma) return true;
+          }
+          return false;
+        })) {
+          match = true;
+        }
+      }
+      if (!match && targetGrupos.length > 0 && aGrupos.length > 0) {
+        if (targetGrupos.some(g => aGrupos.some(ag => normalizeText(ag) === normalizeText(g)))) {
+          match = true;
+        }
+      }
+      if (match) matchedIds.add(rawId);
+    });
+
+    return Array.from(matchedIds).map(cleanId => ({
+      id: `virtual_${cob?.id || 'cob'}_${cleanId}`,
+      cobranca_id: cob?.id,
+      destinatario_id: cleanId,
+      status: 'PENDING',
+      _isFallback: true
+    }));
+  }, [comunicado, alunos, turmas]);
+
+  const resolveCobDestInfo = useCallback((dest: any, cob?: any) => {
+    const rawDestId = String(dest?.destinatario_id || dest?.id || '');
+    const cleanId = rawDestId.replace(/^(a_|_ALU)/, '');
+    const dirEntry = cobrancasAlunosDir[cleanId] || cobrancasAlunosDir[rawDestId] || cobrancasAlunosDir[`a_${cleanId}`] || null;
+    const propStudent = (alunos || []).find((a: any) => {
+      const aClean = String(a.id || '').replace(/^(a_|_ALU)/, '');
+      return aClean === cleanId || String(a.id) === rawDestId;
+    }) || null;
+
+    const nome =
+      dirEntry?.nome ||
+      propStudent?.nome ||
+      propStudent?.dados?.nome ||
+      dest?.aluno_nome ||
+      `Aluno #${cleanId.substring(0, 8)}`;
+
+    // Resolve nome legível da turma
+    let rawTurma =
+      dirEntry?.turma ||
+      propStudent?.turma ||
+      propStudent?.dados?.turma ||
+      propStudent?.turma_id ||
+      propStudent?.dados?.turma_id ||
+      '';
+    if (rawTurma && Array.isArray(turmas) && turmas.length > 0) {
+      const foundT = turmas.find((t: any) => String(t.id) === String(rawTurma) || normalizeText(t.nome) === normalizeText(rawTurma));
+      if (foundT?.nome) rawTurma = foundT.nome;
+    }
+    const turma = rawTurma || 'Sem Turma';
+
+    const matricula =
+      dirEntry?.matricula ||
+      propStudent?.matricula ||
+      propStudent?.dados?.matricula ||
+      propStudent?.ra ||
+      propStudent?.dados?.ra ||
+      '';
+
+    // Extrai dados do responsável (priorizando responsável financeiro)
+    let propRespObj: any = null;
+    const propResps = Array.isArray(propStudent?.responsaveis)
+      ? propStudent.responsaveis
+      : (Array.isArray(propStudent?.dados?.responsaveis) ? propStudent.dados.responsaveis : []);
+    if (propResps.length > 0) {
+      propRespObj = propResps.find((r: any) => r?.isFinanceiro || r?.financeiro || r?.responsavel_financeiro) || propResps.find((r: any) => r?.nome || r?.telefone || r?.celular) || propResps[0];
+    }
+
+    let responsavel =
+      dirEntry?.responsavel ||
+      propRespObj?.nome ||
+      propRespObj?.nome_completo ||
+      propStudent?.responsavel ||
+      propStudent?.dados?.responsavel ||
+      propStudent?.dados?.nome_responsavel ||
+      propStudent?.dados?.responsavel_financeiro ||
+      propStudent?.dados?.mae ||
+      propStudent?.dados?.pai ||
+      '';
+
+    const parentesco =
+      dirEntry?.parentesco ||
+      propRespObj?.parentesco ||
+      propRespObj?.vinculo ||
+      propRespObj?.grau_parentesco ||
+      propStudent?.dados?.parentesco ||
+      '';
+
+    let cpfResponsavel =
+      dirEntry?.cpfResponsavel ||
+      propRespObj?.cpf ||
+      propRespObj?.documento ||
+      propStudent?.cpf_responsavel ||
+      propStudent?.dados?.cpf_responsavel ||
+      propStudent?.dados?.cpf_financeiro ||
+      propStudent?.dados?.cpf_mae ||
+      propStudent?.dados?.cpf_pai ||
+      '';
+
+    const telefone =
+      dirEntry?.telefone ||
+      propRespObj?.celular ||
+      propRespObj?.telefone ||
+      propRespObj?.whatsapp ||
+      propStudent?.telefone ||
+      propStudent?.celular ||
+      propStudent?.dados?.telefone_responsavel ||
+      propStudent?.dados?.celular_responsavel ||
+      propStudent?.dados?.whatsapp ||
+      propStudent?.dados?.telefone ||
+      propStudent?.dados?.celular ||
+      '';
+
+    const email =
+      dirEntry?.email ||
+      propRespObj?.email ||
+      propStudent?.email_responsavel ||
+      propStudent?.dados?.email_responsavel ||
+      propStudent?.dados?.email_financeiro ||
+      propStudent?.email ||
+      propStudent?.dados?.email ||
+      '';
+
+    const foto =
+      studentPhotosMap[cleanId] ||
+      studentPhotosMap[rawDestId] ||
+      getCachedStudentPhoto(cleanId) ||
+      dirEntry?.foto ||
+      propStudent?.foto ||
+      propStudent?.avatar ||
+      propStudent?.dados?.foto ||
+      null;
+
+    // Cruza com respostas da Autorização Digital (caso o comunicado tenha autorização acoplada)
+    const autRespostas = comunicado?.autorizacao?.respostas || comunicado?.dados?.autorizacao?.respostas || {};
+    const autResp = autRespostas[cleanId] || autRespostas[`a_${cleanId}`] || autRespostas[`_ALU${cleanId}`] || autRespostas[rawDestId] || null;
+    if (!responsavel && autResp?.responsavel_nome) {
+      responsavel = autResp.responsavel_nome;
+    }
+    if (!cpfResponsavel && autResp?.responsavel_cpf) {
+      cpfResponsavel = autResp.responsavel_cpf;
+    }
+
+    const statusStr = String(dest?.status || 'PENDING').toUpperCase();
+    const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED' || statusStr === 'PAID' || statusStr === 'PAGO';
+    const pagadorNome = dest?.pagador_nome || (isPaid ? (responsavel || 'Confirmado') : '');
+    const paidAt = dest?.paid_at || null;
+    const createdAt = dest?.created_at || cob?.created_at || null;
+    const asaasId = String(dest?.asaas_payment_id || '');
+    const origemPagamento = asaasId.startsWith('MP_')
+      ? 'Mercado Pago'
+      : asaasId
+      ? 'Asaas / Online'
+      : isPaid
+      ? 'Baixa Manual (Secretaria)'
+      : '';
+    const transactionId = asaasId ? asaasId.replace(/^MP_/, '') : '';
+    const urlPagamento = dest?.url_pagamento || '';
+
+    return {
+      cleanId,
+      rawDestId,
+      nome,
+      turma,
+      matricula,
+      responsavel,
+      parentesco,
+      cpfResponsavel,
+      telefone,
+      email,
+      foto,
+      statusStr,
+      isPaid,
+      pagadorNome,
+      paidAt,
+      createdAt,
+      origemPagamento,
+      transactionId,
+      urlPagamento,
+      autResp
+    };
+  }, [cobrancasAlunosDir, alunos, turmas, studentPhotosMap, comunicado]);
+
+  const handleSyncCobDestinatarios = async (cobrancaId: string) => {
+    if (!cobrancaId) return null;
+    setCobSyncingId(cobrancaId);
+    try {
+      const res = await apiFetch('/api/cobrancas', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_destinatarios', cobranca_id: cobrancaId })
+      });
+      const json = await res.json();
+      if (res.ok) {
+        if (Array.isArray(json.destinatarios)) {
+          setCobrancasList(prev => prev.map((c: any) =>
+            String(c.id) === String(cobrancaId)
+              ? { ...c, agenda_cobrancas_destinatarios: json.destinatarios }
+              : c
+          ));
+        }
+        await fetchCobrancas();
+        return json.destinatarios || null;
+      } else {
+        alert('Erro ao sincronizar destinatários: ' + (json.error || 'Falha desconhecida'));
+      }
+    } catch (e: any) {
+      alert('Erro ao sincronizar: ' + e.message);
+    } finally {
+      setCobSyncingId(null);
+    }
+    return null;
+  };
+
+  const handleToggleCobDestPaid = async (cob: any, dest: any) => {
+    if (!cob?.id) return;
+    const key = String(dest?.id || dest?.destinatario_id);
+    setCobActionLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      let targetRowId = dest?.id;
+      if (!targetRowId || String(targetRowId).startsWith('virtual_') || dest?._isFallback) {
+        const syncedDests = await handleSyncCobDestinatarios(String(cob.id));
+        const cleanTarget = String(dest?.destinatario_id || '').replace(/^(a_|_ALU)/, '');
+        const found = (syncedDests || []).find((d: any) => String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanTarget);
+        if (found?.id) {
+          targetRowId = found.id;
+        }
+      }
+
+      if (!targetRowId || String(targetRowId).startsWith('virtual_')) {
+        alert('Não foi possível localizar o registro do destinatário. Tente clicar em Sincronizar Alunos.');
+        return;
+      }
+
+      const res = await apiFetch('/api/cobrancas', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'toggle_destinatario_status',
+          destinatario_row_id: targetRowId
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert('Erro ao atualizar status do pagamento: ' + (json.error || 'Tente novamente'));
+        return;
+      }
+
+      setCobrancasList(prev => prev.map((c: any) => {
+        if (String(c.id) !== String(cob.id)) return c;
+        return {
+          ...c,
+          agenda_cobrancas_destinatarios: (c.agenda_cobrancas_destinatarios || []).map((d: any) => {
+            if (String(d.id) !== String(targetRowId)) return d;
+            return {
+              ...d,
+              status: json.status,
+              paid_at: json.status === 'PAID' ? new Date().toISOString() : null,
+              pagador_nome: json.status === 'PAID' ? (d.pagador_nome || 'Baixa Manual (Secretaria)') : null
+            };
+          })
+        };
+      }));
+    } catch (e: any) {
+      alert('Erro ao alterar status: ' + e.message);
+    } finally {
+      setCobActionLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleOpenOrCopyCobPaymentLink = async (cob: any, dest: any, mode: 'open' | 'copy' = 'open') => {
+    if (!cob?.id) return;
+    const key = `link_${dest?.id || dest?.destinatario_id}`;
+    const existingUrl = dest?.url_pagamento;
+
+    if (existingUrl) {
+      if (mode === 'copy') {
+        try {
+          await navigator.clipboard.writeText(existingUrl);
+          setCopiedLinkId(String(dest.id || dest.destinatario_id));
+          setTimeout(() => setCopiedLinkId(null), 2200);
+        } catch (_) {
+          prompt('Copie o link da fatura abaixo:', existingUrl);
+        }
+      } else {
+        window.open(existingUrl, '_blank');
+      }
+      return;
+    }
+
+    setCobActionLoading(prev => ({ ...prev, [key]: true }));
+    try {
+      let targetRowId = dest?.id;
+      if (!targetRowId || String(targetRowId).startsWith('virtual_') || dest?._isFallback) {
+        const syncedDests = await handleSyncCobDestinatarios(String(cob.id));
+        const cleanTarget = String(dest?.destinatario_id || '').replace(/^(a_|_ALU)/, '');
+        const found = (syncedDests || []).find((d: any) => String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanTarget);
+        if (found?.id) targetRowId = found.id;
+      }
+
+      const res = await apiFetch('/api/cobrancas/mercadopago-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cobranca_destinatario_id: targetRowId && !String(targetRowId).startsWith('virtual_') ? targetRowId : undefined,
+          cobranca_id: cob.id,
+          destinatario_id: dest.destinatario_id,
+          from_admin: true
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error || !data.invoiceUrl) {
+        alert('Não foi possível gerar a fatura: ' + (data.error || 'Verifique a configuração do Mercado Pago'));
+        return;
+      }
+
+      setCobrancasList(prev => prev.map((c: any) => {
+        if (String(c.id) !== String(cob.id)) return c;
+        return {
+          ...c,
+          agenda_cobrancas_destinatarios: (c.agenda_cobrancas_destinatarios || []).map((d: any) =>
+            (String(d.id) === String(targetRowId) || String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === String(dest.destinatario_id).replace(/^(a_|_ALU)/, ''))
+              ? { ...d, url_pagamento: data.invoiceUrl }
+              : d
+          )
+        };
+      }));
+
+      if (mode === 'copy') {
+        try {
+          await navigator.clipboard.writeText(data.invoiceUrl);
+          setCopiedLinkId(String(dest.id || dest.destinatario_id));
+          setTimeout(() => setCopiedLinkId(null), 2200);
+        } catch (_) {
+          prompt('Copie o link da fatura abaixo:', data.invoiceUrl);
+        }
+      } else {
+        window.open(data.invoiceUrl, '_blank');
+      }
+    } catch (e: any) {
+      alert('Erro ao obter fatura: ' + e.message);
+    } finally {
+      setCobActionLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const handleWhatsAppCobReminder = (cob: any, dest: any, info: ReturnType<typeof resolveCobDestInfo>) => {
+    let rawDigits = String(info.telefone || '').replace(/\D/g, '');
+    if (!rawDigits) {
+      const manual = prompt(`Nenhum telefone cadastrado para ${info.nome}.\nDigite o WhatsApp com DDD (ex: 11999999999) para enviar a mensagem:`);
+      if (!manual) return;
+      rawDigits = manual.replace(/\D/g, '');
+    }
+    if (!rawDigits) return;
+    const phoneDigits = (rawDigits.length === 10 || rawDigits.length === 11) ? `55${rawDigits}` : rawDigits;
+    const valorFmt = Number(cob.valor || 0).toFixed(2).replace('.', ',');
+    const vencFmt = cob.vencimento ? new Date(cob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem vencimento';
+    const saudacao = info.responsavel ? `Olá, *${info.responsavel}*!` : `Olá, família de *${info.nome}*!`;
+
+    let msg = '';
+    if (info.isPaid) {
+      msg = `${saudacao}\n\nConfirmamos o recebimento do pagamento referente a *${cob.titulo}* do(a) aluno(a) *${info.nome}* (${info.turma}) no valor de *R$ ${valorFmt}*.\n\nAgradecemos pela confirmação!`;
+    } else {
+      msg = `${saudacao}\n\nLembramos sobre a cobrança referente a *${cob.titulo}* do(a) aluno(a) *${info.nome}* (${info.turma}).\n💰 *Valor:* R$ ${valorFmt}\n📅 *Vencimento:* ${vencFmt}${info.urlPagamento ? `\n\n🔗 *Link para pagamento:* ${info.urlPagamento}` : '\n\nO pagamento também pode ser realizado diretamente pelo aplicativo da Agenda Digital.'}\n\nQualquer dúvida, estamos à disposição!`;
+    }
+    window.open(`https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const handleExportCobXlsx = (cob: any, resolvedRows: Array<{ dest: any; info: ReturnType<typeof resolveCobDestInfo> }>) => {
+    if (!cob || resolvedRows.length === 0) {
+      alert('Não há registros para exportar.');
+      return;
+    }
+    const valorUnit = Number(cob.valor || 0);
+    const vencFmt = cob.vencimento ? new Date(cob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '-';
+
+    const wsData = resolvedRows.map(({ info }) => ({
+      'Aluno': info.nome,
+      'Turma': info.turma,
+      'Matrícula': info.matricula || '-',
+      'Status Pagamento': info.isPaid ? 'PAGO' : 'PENDENTE',
+      'Pagador Confirmado': info.isPaid ? (info.pagadorNome || info.responsavel || 'Confirmado') : '-',
+      'Responsável Financeiro': info.responsavel || '-',
+      'Parentesco': info.parentesco || '-',
+      'CPF Responsável': info.cpfResponsavel || '-',
+      'Telefone / WhatsApp': info.telefone || '-',
+      'E-mail': info.email || '-',
+      'Valor (R$)': valorUnit,
+      'Vencimento': vencFmt,
+      'Data Confirmação': info.paidAt ? new Date(info.paidAt).toLocaleString('pt-BR') : '-',
+      'Origem / Meio': info.origemPagamento || '-',
+      'ID Transação': info.transactionId || '-',
+      'Status Autorização': info.autResp ? (info.autResp.status === 'AUTHORIZED' ? 'Autorizado' : 'Não Autorizado') : '-',
+      'Link Fatura': info.urlPagamento || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pagantes e Destinatários');
+    const safeTitle = String(cob.titulo || 'cobranca').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 35);
+    XLSX.writeFile(wb, `pagantes_${safeTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handlePrintCobPayers = (cob: any, filterToPrint: 'ALL' | 'PAID' | 'PENDING' = 'ALL') => {
+    if (!cob) return;
+    const rawDests = getEffectiveCobDestinatarios(cob);
+    const allResolved = rawDests
+      .map((dest: any) => ({ dest, info: resolveCobDestInfo(dest, cob) }))
+      .sort((a, b) => a.info.nome.localeCompare(b.info.nome, 'pt-BR'));
+
+    const totalEnviados = allResolved.length;
+    const totalPagos = allResolved.filter(r => r.info.isPaid).length;
+    const totalPendentes = totalEnviados - totalPagos;
+    const pct = formatCobPercentLabel(totalPagos, totalEnviados);
+    const valorUnit = Number(cob.valor || 0);
+    const totalRecebido = totalPagos * valorUnit;
+    const totalEsperado = totalEnviados * valorUnit;
+    const vencFmt = cob.vencimento ? new Date(cob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem vencimento';
+
+    const rowsToPrint = allResolved.filter(r => {
+      if (filterToPrint === 'PAID') return r.info.isPaid;
+      if (filterToPrint === 'PENDING') return !r.info.isPaid;
+      return true;
+    });
+
+    const filterLabel =
+      filterToPrint === 'PAID'
+        ? `SOMENTE PAGANTES CONFIRMADOS (${rowsToPrint.length})`
+        : filterToPrint === 'PENDING'
+        ? `SOMENTE PENDENTES (${rowsToPrint.length})`
+        : `LISTA COMPLETA (${rowsToPrint.length})`;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Por favor, permita pop-ups no navegador para imprimir a relação de pagantes.');
+      return;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Relatório de Pagantes - ${cob.titulo || 'Cobrança'}</title>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 16px; font-size: 12px; }
+          .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+          .title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; text-transform: uppercase; }
+          .subtitle { font-size: 12px; color: #475569; margin: 2px 0; }
+          .kpis { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+          .kpi { flex: 1; min-width: 140px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; background: #f8fafc; }
+          .kpi-paid { background: #f0fdf4; border-color: #86efac; }
+          .kpi-pending { background: #fffbeb; border-color: #fde68a; }
+          .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+          .kpi-val { font-size: 18px; font-weight: 800; color: #0f172a; }
+          .kpi-sub { font-size: 11px; color: #475569; margin-top: 2px; font-weight: 600; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #cbd5e1; padding: 7px 9px; text-align: left; font-size: 11px; vertical-align: top; }
+          th { background: #f1f5f9; font-weight: 800; text-transform: uppercase; font-size: 10px; color: #334155; }
+          tr:nth-child(even) { background: #f8fafc; }
+          .badge-paid { color: #15803d; font-weight: 800; background: #dcfce7; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+          .badge-pending { color: #b45309; font-weight: 800; background: #fef3c7; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+          .muted { color: #64748b; font-size: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="title">Relatório de Controle de Pagantes — ${cob.titulo || 'Cobrança'}</h1>
+            <div class="subtitle"><strong>Comunicado:</strong> ${comunicado?.titulo || 'Comunicado Escolar'} • <strong>Filtro:</strong> ${filterLabel}</div>
+            <div class="subtitle"><strong>Valor Unitário:</strong> R$ ${valorUnit.toFixed(2).replace('.', ',')} • <strong>Vencimento:</strong> ${vencFmt}</div>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: #64748b;">
+            <div>Emitido em: ${new Date().toLocaleString('pt-BR')}</div>
+            <div>Por: ${currentUserName || 'Administração'}</div>
+          </div>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi">
+            <div class="kpi-label">Total Destinatários</div>
+            <div class="kpi-val">${totalEnviados}</div>
+            <div class="kpi-sub">Previsto: R$ ${totalEsperado.toFixed(2).replace('.', ',')}</div>
+          </div>
+          <div class="kpi kpi-paid">
+            <div class="kpi-label">Pagantes Confirmados</div>
+            <div class="kpi-val" style="color: #15803d;">${totalPagos}/${totalEnviados} (${pct.label})</div>
+            <div class="kpi-sub" style="color: #166534;">Recebido: R$ ${totalRecebido.toFixed(2).replace('.', ',')}</div>
+          </div>
+          <div class="kpi kpi-pending">
+            <div class="kpi-label">Pendentes</div>
+            <div class="kpi-val" style="color: #b45309;">${totalPendentes}</div>
+            <div class="kpi-sub" style="color: #92400e;">Em aberto: R$ ${Math.max(0, totalEsperado - totalRecebido).toFixed(2).replace('.', ',')}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 28px;">#</th>
+              <th>Aluno(a)</th>
+              <th>Turma / Matrícula</th>
+              <th>Responsável Financeiro / Pagador</th>
+              <th>CPF</th>
+              <th>Contato (WhatsApp / E-mail)</th>
+              <th>Valor</th>
+              <th>Status</th>
+              <th>Confirmação / Origem</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsToPrint.map(({ info }, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td><strong>${info.nome}</strong></td>
+                <td>${info.turma}${info.matricula ? `<div class="muted">Mat: ${info.matricula}</div>` : ''}</td>
+                <td>
+                  <strong>${info.isPaid ? (info.pagadorNome || info.responsavel || 'Confirmado') : (info.responsavel || '-')}</strong>
+                  ${info.parentesco ? `<div class="muted">${info.parentesco}</div>` : ''}
+                  ${info.isPaid && info.responsavel && info.pagadorNome && info.pagadorNome !== info.responsavel ? `<div class="muted">Resp: ${info.responsavel}</div>` : ''}
+                </td>
+                <td>${info.cpfResponsavel || '-'}</td>
+                <td>
+                  ${info.telefone || '-'}
+                  ${info.email ? `<div class="muted">${info.email}</div>` : ''}
+                </td>
+                <td><strong>R$ ${valorUnit.toFixed(2).replace('.', ',')}</strong></td>
+                <td>
+                  <span class="${info.isPaid ? 'badge-paid' : 'badge-pending'}">
+                    ${info.isPaid ? '✓ PAGO' : '⏳ PENDENTE'}
+                  </span>
+                </td>
+                <td>
+                  ${info.paidAt ? `<div><strong>${new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</strong></div>` : '-'}
+                  ${info.origemPagamento ? `<div class="muted">${info.origemPagamento}${info.transactionId ? ` (#${info.transactionId.substring(0, 12)})` : ''}</div>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 250);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+  };
+
   const dateObj = new Date(comunicado.dataEnvio || comunicado.created_at || new Date())
   const formattedDate = dateObj.toLocaleDateString('pt-BR')
   const formattedTime = dateObj.toLocaleString('pt-BR', { timeStyle: 'short' })
@@ -1194,6 +1907,31 @@ export function ComunicadoViewModal({
           .cvm-input-area input::placeholder {
             color: #94a3b8;
             font-size: 14px;
+          }
+          progress.cvm-cob-progress {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            height: 12px;
+            background-color: #e2e8f0;
+            border: 0 solid;
+            border-radius: 999px;
+            overflow: clip;
+            display: block;
+          }
+          progress.cvm-cob-progress::-webkit-progress-bar {
+            background-color: #e2e8f0;
+            border-radius: 999px;
+          }
+          progress.cvm-cob-progress::-webkit-progress-value {
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+            border-radius: 999px;
+            transition: inline-size 0.35s ease;
+          }
+          progress.cvm-cob-progress::-moz-progress-bar {
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+            border-radius: 999px;
+            transition: inline-size 0.35s ease;
           }
         `}} />
 
@@ -1668,10 +2406,10 @@ export function ComunicadoViewModal({
             </div>
 
             {/* ENQUETE INTERATIVA */}
-            {(comunicado.enquete || comunicado.dados?.enquete) && (
+            {(comunicado.dados?.enquete || comunicado.enquete) && (
               <div style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 <EnqueteWidget
-                  enquete={comunicado.enquete || comunicado.dados?.enquete}
+                  enquete={comunicado.dados?.enquete || comunicado.enquete}
                   comunicadoId={String(comunicado.id)}
                   currentUser={{
                     ...(currentUserObj || {}),
@@ -1692,9 +2430,13 @@ export function ComunicadoViewModal({
                         }
                       }
                       if (typeof window !== 'undefined') {
-                        try {
-                          window.dispatchEvent(new CustomEvent('ad:comunicados-update', { detail: { item: updatedCom } }))
-                        } catch (_) {}
+                        setTimeout(() => {
+                          try {
+                            window.dispatchEvent(new CustomEvent('ad:comunicados-update', {
+                              detail: { item: updatedCom, source: 'enquete-widget' }
+                            }))
+                          } catch (_) {}
+                        }, 0)
                       }
                       return updatedCom
                     })
@@ -1704,10 +2446,10 @@ export function ComunicadoViewModal({
             )}
 
             {/* AUTORIZAÇÃO DIGITAL */}
-            {(comunicado.autorizacao || comunicado.dados?.autorizacao) && (
+            {(comunicado.dados?.autorizacao || comunicado.autorizacao) && (
               <div style={{ width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 <AutorizacaoWidget
-                  autorizacao={comunicado.autorizacao || comunicado.dados?.autorizacao}
+                  autorizacao={comunicado.dados?.autorizacao || comunicado.autorizacao}
                   comunicadoId={String(comunicado.id)}
                   currentUser={{
                     ...(currentUserObj || {}),
@@ -1716,6 +2458,8 @@ export function ComunicadoViewModal({
                     foto: currentUserAvatar
                   }}
                   currentAluno={alunos && alunos.length === 1 ? alunos[0] : (!isAdminMode && !isStaff && currentUserSlug ? { id: currentUserSlug } : null)}
+                  turmas={turmas}
+                  alunos={alunos}
                   isAdminMode={isAdminMode || isStaff}
                   isAlunoView={effectiveIsAlunoView}
                   onUpdateSuccess={(updatedAut) => {
@@ -1729,9 +2473,13 @@ export function ComunicadoViewModal({
                         }
                       }
                       if (typeof window !== 'undefined') {
-                        try {
-                          window.dispatchEvent(new CustomEvent('ad:comunicados-update', { detail: { item: updatedCom } }))
-                        } catch (_) {}
+                        setTimeout(() => {
+                          try {
+                            window.dispatchEvent(new CustomEvent('ad:comunicados-update', {
+                              detail: { item: updatedCom, source: 'autorizacao-widget' }
+                            }))
+                          } catch (_) {}
+                        }, 0)
                       }
                       return updatedCom
                     })
@@ -1775,18 +2523,18 @@ export function ComunicadoViewModal({
                         <span>Cobranças Anexadas ({relevantCobs.length})</span>
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
-                        Total: <span style={{ color: '#065F46', fontWeight: 800, fontSize: 15 }}>R$ {totalAmount.toFixed(2).replace('.', ',')}</span>
+                        Total Unitário: <span style={{ color: '#065F46', fontWeight: 800, fontSize: 15 }}>R$ {totalAmount.toFixed(2).replace('.', ',')}</span>
                       </div>
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {relevantCobs.map((cob: any, idx: number) => {
                       const cobDest = (cob.agenda_cobrancas_destinatarios || []).find((d: any) => 
                         String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
                       );
-                      const statusStr = cobDest?.status || 'PENDING';
-                      const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED';
+                      const statusStr = String(cobDest?.status || 'PENDING').toUpperCase();
+                      const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED' || statusStr === 'PAID' || statusStr === 'PAGO';
                       const vencDate = cob.vencimento
                         ? new Date(String(cob.vencimento).includes('T') ? cob.vencimento : `${cob.vencimento}T23:59:59`)
                         : null;
@@ -1794,6 +2542,415 @@ export function ComunicadoViewModal({
                       const curPaymentLink = paymentLinksMap[cob.id] || cobDest?.url_pagamento || '';
                       const isGenerating = !!generatingPaymentIds[cob.id];
 
+                      // =========================================================
+                      // VISÃO RESTRITA DO MODO ADMIN / COLABORADOR
+                      // =========================================================
+                      if (isAdminMode || isStaff) {
+                        const effectiveDests = getEffectiveCobDestinatarios(cob);
+                        const resolvedList = effectiveDests.map((d: any) => ({
+                          dest: d,
+                          info: resolveCobDestInfo(d, cob)
+                        }));
+                        const totalEnviados = resolvedList.length;
+                        const paidRows = resolvedList.filter(r => r.info.isPaid);
+                        const totalPagos = paidRows.length;
+                        const totalAguardando = Math.max(0, totalEnviados - totalPagos);
+                        const pctPaid = formatCobPercentLabel(totalPagos, totalEnviados);
+                        const pctPending = formatCobPercentLabel(totalAguardando, totalEnviados);
+                        const valorUnit = Number(cob.valor || 0);
+                        const valorRecebido = totalPagos * valorUnit;
+                        const valorTotalEsperado = totalEnviados * valorUnit;
+                        const valorPendente = Math.max(0, valorTotalEsperado - valorRecebido);
+                        const adminBadgeText = relevantCobs.length > 1 ? `COBRANÇA #${idx + 1} (ADMIN)` : 'COBRANÇA (ADMIN)';
+                        const isFullyPaid = totalEnviados > 0 && totalPagos >= totalEnviados;
+
+                        return (
+                          <div
+                            key={cob.id || idx}
+                            style={{
+                              background: '#ffffff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 20,
+                              padding: '20px 22px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 16,
+                              boxShadow: '0 8px 24px -6px rgba(15, 23, 42, 0.06)'
+                            }}
+                          >
+                            {/* Top Row: Charge Info + Restricted Admin Badge */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                              <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: '1 1 260px' }}>
+                                <div style={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: 14,
+                                  background: isFullyPaid ? '#ecfdf5' : '#f1f5f9',
+                                  color: isFullyPaid ? '#10b981' : '#475569',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  border: `1px solid ${isFullyPaid ? '#a7f3d0' : '#e2e8f0'}`
+                                }}>
+                                  {isFullyPaid ? <CheckCircle2 size={24} /> : <CreditCard size={22} />}
+                                </div>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', letterSpacing: 0.5 }}>{adminBadgeText}</span>
+                                    {cob.vencimento && (
+                                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                        • Venc: {new Date(cob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                                      </span>
+                                    )}
+                                    <span style={{
+                                      fontSize: 10,
+                                      fontWeight: 800,
+                                      padding: '2px 8px',
+                                      borderRadius: 999,
+                                      background: isFullyPaid ? '#dcfce7' : isOverdue ? '#fee2e2' : '#fef3c7',
+                                      color: isFullyPaid ? '#15803d' : isOverdue ? '#b91c1c' : '#b45309',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.4
+                                    }}>
+                                      {isFullyPaid ? 'Quitada' : isOverdue ? 'Vencida' : 'Em Aberto'}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>{cob.titulo}</div>
+                                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: -0.5 }}>
+                                      R$ {valorUnit.toFixed(2).replace('.', ',')}
+                                    </span>
+                                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                                      por aluno
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                                <div style={{
+                                  color: '#475569',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: '6px 12px',
+                                  background: '#f1f5f9',
+                                  borderRadius: 8,
+                                  border: '1px solid #e2e8f0',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6
+                                }}>
+                                  <Info size={13} color="#64748b" />
+                                  <span>Visualização restrita do modo Admin</span>
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', textAlign: 'right' }}>
+                                  Recebido: <span style={{ color: '#059669', fontWeight: 800 }}>R$ {valorRecebido.toFixed(2).replace('.', ',')}</span>
+                                  <span style={{ color: '#94a3b8', margin: '0 4px' }}>/</span>
+                                  <span style={{ color: '#64748b' }}>R$ {valorTotalEsperado.toFixed(2).replace('.', ',')}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Painel e Barra de Pagantes X/X */}
+                            <div style={{
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 14,
+                              padding: '14px 16px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 10
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                    PAINEL DE CONTROLE DE PAGANTES
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    color: totalPagos > 0 ? '#047857' : '#475569',
+                                    background: totalPagos > 0 ? '#d1fae5' : '#e2e8f0',
+                                    padding: '4px 10px',
+                                    borderRadius: 999
+                                  }}>
+                                    {totalPagos}/{totalEnviados} PAGANTES ({pctPaid.label})
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Semantic Progress Bar X/X */}
+                              <progress
+                                className="cvm-cob-progress"
+                                max={Math.max(totalEnviados, 1)}
+                                value={totalPagos}
+                                aria-label={`Progresso de pagantes: ${totalPagos} de ${totalEnviados} (${pctPaid.label})`}
+                              />
+
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#64748b', fontWeight: 600, flexWrap: 'wrap', gap: 8 }}>
+                                <span>
+                                  <strong style={{ color: '#0f172a' }}>{totalPagos}</strong> de <strong style={{ color: '#0f172a' }}>{totalEnviados}</strong> pagamentos confirmados
+                                </span>
+                                <span>
+                                  Pendentes: <strong style={{ color: totalAguardando > 0 ? '#d97706' : '#10b981' }}>{totalAguardando}</strong>
+                                  {valorPendente > 0 ? ` (R$ ${valorPendente.toFixed(2).replace('.', ',')})` : ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* 3 Interactive KPI Cards */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+                              <div
+                                onClick={() => {
+                                  setSelectedCobrancaModalId(String(cob.id));
+                                  setCobModalFilter('ALL');
+                                  setCobModalSearch('');
+                                  setCobModalTurmaFilter('ALL');
+                                }}
+                                style={{
+                                  background: '#f8fafc',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: 12,
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                                title="Clique para ver todos os destinatários"
+                              >
+                                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>
+                                  TOTAL DESTINATÁRIOS
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                  <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>{totalEnviados}</span>
+                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>alunos</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 600 }}>
+                                  Previsto: R$ {valorTotalEsperado.toFixed(2).replace('.', ',')}
+                                </div>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setSelectedCobrancaModalId(String(cob.id));
+                                  setCobModalFilter('PAID');
+                                  setCobModalSearch('');
+                                  setCobModalTurmaFilter('ALL');
+                                }}
+                                style={{
+                                  background: '#f0fdf4',
+                                  border: '1px solid #bbf7d0',
+                                  borderRadius: 12,
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                                title="Clique para ver somente os pagantes confirmados"
+                              >
+                                <div style={{ fontSize: 10, fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span>PAGANTES CONFIRMADOS</span>
+                                  <CheckCircle2 size={12} color="#16a34a" />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                  <span style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>
+                                    {totalPagos}/{totalEnviados}
+                                  </span>
+                                  <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 700 }}>({pctPaid.label})</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: '#166534', marginTop: 2, fontWeight: 700 }}>
+                                  Recebido: R$ {valorRecebido.toFixed(2).replace('.', ',')}
+                                </div>
+                              </div>
+
+                              <div
+                                onClick={() => {
+                                  setSelectedCobrancaModalId(String(cob.id));
+                                  setCobModalFilter('PENDING');
+                                  setCobModalSearch('');
+                                  setCobModalTurmaFilter('ALL');
+                                }}
+                                style={{
+                                  background: '#fffbeb',
+                                  border: '1px solid #fde68a',
+                                  borderRadius: 12,
+                                  padding: '12px 14px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s'
+                                }}
+                                title="Clique para ver os alunos com pagamento pendente"
+                              >
+                                <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span>PENDENTES</span>
+                                  <Clock size={12} color="#d97706" />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                  <span style={{ fontSize: 20, fontWeight: 800, color: '#b45309' }}>{totalAguardando}</span>
+                                  <span style={{ fontSize: 12, color: '#d97706', fontWeight: 700 }}>({pctPending.label})</span>
+                                </div>
+                                <div style={{ fontSize: 11, color: '#92400e', marginTop: 2, fontWeight: 600 }}>
+                                  Em aberto: R$ {valorPendente.toFixed(2).replace('.', ',')}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Preview Rápido dos Pagantes Confirmados */}
+                            {paidRows.length > 0 && (
+                              <div style={{
+                                background: '#f0fdf4',
+                                border: '1px solid #dcfce7',
+                                borderRadius: 12,
+                                padding: '10px 14px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: 0.4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <UserCheck size={14} color="#16a34a" />
+                                    Últimos Pagantes Confirmados ({totalPagos}/{totalEnviados})
+                                  </span>
+                                  {paidRows.length > 4 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedCobrancaModalId(String(cob.id));
+                                        setCobModalFilter('PAID');
+                                        setCobModalSearch('');
+                                        setCobModalTurmaFilter('ALL');
+                                      }}
+                                      style={{ background: 'none', border: 'none', color: '#15803d', fontSize: 11, fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                                    >
+                                      Ver todos ({paidRows.length}) →
+                                    </button>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                  {paidRows.slice(0, 5).map(({ dest: dItem, info }) => (
+                                    <div
+                                      key={dItem.id || info.cleanId}
+                                      onClick={() => {
+                                        setSelectedCobrancaModalId(String(cob.id));
+                                        setCobModalFilter('PAID');
+                                        setCobModalSearch('');
+                                        setCobModalTurmaFilter('ALL');
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        background: '#ffffff',
+                                        border: '1px solid #bbf7d0',
+                                        borderRadius: 999,
+                                        padding: '4px 10px 4px 5px',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                      }}
+                                    >
+                                      <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={22} />
+                                      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0f172a' }}>{formatShortName(info.nome)}</span>
+                                        <span style={{ fontSize: 9.5, color: '#15803d', fontWeight: 600 }}>
+                                          {info.turma}{info.pagadorNome ? ` • Pagador: ${formatShortName(info.pagadorNome)}` : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCobrancaModalId(String(cob.id));
+                                  setCobModalFilter('ALL');
+                                  setCobModalSearch('');
+                                  setCobModalTurmaFilter('ALL');
+                                }}
+                                style={{
+                                  flex: '1 1 220px',
+                                  background: '#10b981',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  padding: '12px 18px',
+                                  borderRadius: 12,
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 8,
+                                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                                  transition: 'all 0.2s'
+                                }}
+                              >
+                                <Users size={16} />
+                                <span>Visualizar Pagantes ({totalPagos}/{totalEnviados})</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCobrancaModalId(String(cob.id));
+                                  setCobModalFilter('PAID');
+                                  setCobModalSearch('');
+                                  setCobModalTurmaFilter('ALL');
+                                }}
+                                style={{
+                                  flex: '0 1 auto',
+                                  background: '#ecfdf5',
+                                  color: '#047857',
+                                  border: '1px solid #a7f3d0',
+                                  padding: '12px 16px',
+                                  borderRadius: 12,
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6
+                                }}
+                              >
+                                <UserCheck size={16} />
+                                <span>Somente Pagantes ({totalPagos})</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handlePrintCobPayers(cob, 'ALL')}
+                                style={{
+                                  flex: '0 1 auto',
+                                  background: '#ffffff',
+                                  color: '#334155',
+                                  border: '1px solid #cbd5e1',
+                                  padding: '12px 16px',
+                                  borderRadius: 12,
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6
+                                }}
+                              >
+                                <Printer size={16} />
+                                <span>Imprimir Lista</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // =========================================================
+                      // VISÃO DO RESPONSÁVEL / ALUNO
+                      // =========================================================
                       let colors = {
                         bg: '#ffffff',
                         border: 'rgba(0,0,0,0.08)',
@@ -1806,13 +2963,7 @@ export function ComunicadoViewModal({
                       let badgeText = relevantCobs.length > 1 ? `COBRANÇA #${idx + 1}` : "COBRANÇA DIGITAL";
                       let Icon = FileText;
 
-                      if (isAdminMode) {
-                        colors.bg = '#f8fafc';
-                        colors.accent = '#64748b';
-                        colors.accentBg = '#f1f5f9';
-                        badgeText = relevantCobs.length > 1 ? `COBRANÇA #${idx + 1} (ADMIN)` : "COBRANÇA (ADMIN)";
-                        Icon = Info;
-                      } else if (isPaid) {
+                      if (isPaid) {
                         colors.bg = '#f0fdf4';
                         colors.accent = '#10b981';
                         colors.accentBg = '#ecfdf5';
@@ -1871,11 +3022,7 @@ export function ComunicadoViewModal({
 
                           {/* Right Column: Actions */}
                           <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
-                             {isAdminMode || isStaff ? (
-                               <div style={{ color: '#64748b', fontSize: 12, fontWeight: 500, maxWidth: 160, textAlign: 'right', padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
-                                  Visualização restrita do modo Admin.
-                               </div>
-                             ) : isPaid ? (
+                             {isPaid ? (
                                <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
                                   <CheckCircle2 size={18} /> Pago
                                </div>
@@ -2652,6 +3799,731 @@ export function ComunicadoViewModal({
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Modal Detalhado de Pagantes e Controle de Cobrança (Admin / Staff) */}
+      <AnimatePresence>
+        {selectedCobrancaModalId && (() => {
+          const activeCob = (cobrancasList || []).find((c: any) => String(c.id) === String(selectedCobrancaModalId)) || cobrancasList?.[0];
+          if (!activeCob) return null;
+
+          const rawDests = getEffectiveCobDestinatarios(activeCob);
+          const allResolved = rawDests
+            .map((dest: any) => ({ dest, info: resolveCobDestInfo(dest, activeCob) }))
+            .sort((a, b) => {
+              // Em modo ALL, prioriza pagantes ou ordena alfabeticamente
+              if (cobModalFilter === 'PAID' && a.info.paidAt && b.info.paidAt) {
+                return new Date(b.info.paidAt).getTime() - new Date(a.info.paidAt).getTime();
+              }
+              return a.info.nome.localeCompare(b.info.nome, 'pt-BR');
+            });
+
+          const totalEnviados = allResolved.length;
+          const totalPagos = allResolved.filter(r => r.info.isPaid).length;
+          const totalPendentes = Math.max(0, totalEnviados - totalPagos);
+          const pctPaid = formatCobPercentLabel(totalPagos, totalEnviados);
+          const valorUnit = Number(activeCob.valor || 0);
+          const valorRecebido = totalPagos * valorUnit;
+          const valorEsperado = totalEnviados * valorUnit;
+          const valorPendente = Math.max(0, valorEsperado - valorRecebido);
+          const vencDate = activeCob.vencimento
+            ? new Date(String(activeCob.vencimento).includes('T') ? activeCob.vencimento : `${activeCob.vencimento}T23:59:59`)
+            : null;
+          const isCobOverdue = Boolean(vencDate && !isNaN(vencDate.getTime()) && vencDate < new Date());
+
+          const availableTurmas = Array.from(
+            new Set(allResolved.map(r => r.info.turma).filter(Boolean))
+          ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+          const qNorm = normalizeText(cobModalSearch);
+          const filteredRows = allResolved.filter(({ info }) => {
+            if (cobModalFilter === 'PAID' && !info.isPaid) return false;
+            if (cobModalFilter === 'PENDING' && info.isPaid) return false;
+            if (cobModalTurmaFilter !== 'ALL' && info.turma !== cobModalTurmaFilter) return false;
+            if (qNorm) {
+              const hay = normalizeText(
+                `${info.nome} ${info.turma} ${info.matricula} ${info.responsavel} ${info.pagadorNome} ${info.cpfResponsavel} ${info.telefone} ${info.email} ${info.transactionId}`
+              );
+              if (!hay.includes(qNorm)) return false;
+            }
+            return true;
+          });
+
+          const isSyncingThis = cobSyncingId === String(activeCob.id);
+
+          return (
+            <motion.div
+              key="cobranca-payers-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedCobrancaModalId(null)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.65)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                zIndex: 100050,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 16 }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  width: '100%',
+                  maxWidth: 980,
+                  maxHeight: '90vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.35)',
+                  overflow: 'hidden',
+                  border: '1px solid #e2e8f0'
+                }}
+              >
+                {/* Modal Header */}
+                <div style={{
+                  padding: '20px 24px',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 14,
+                  borderBottom: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 300px' }}>
+                    <div style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      background: 'rgba(16, 185, 129, 0.18)',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      color: '#34d399',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <CreditCard size={22} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.6,
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          color: '#6ee7b7',
+                          padding: '2px 8px',
+                          borderRadius: 999
+                        }}>
+                          CONTROLE DE PAGANTES • {totalPagos}/{totalEnviados} ({pctPaid.label})
+                        </span>
+                        {activeCob.vencimento && (
+                          <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 600 }}>
+                            Vencimento: {new Date(activeCob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                          </span>
+                        )}
+                      </div>
+                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {activeCob.titulo || 'Cobrança'} — R$ {valorUnit.toFixed(2).replace('.', ',')}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
+                      disabled={isSyncingThis}
+                      title="Sincronizar lista de alunos destinatários com as turmas do comunicado"
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#f8fafc',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: isSyncingThis ? 'wait' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <RefreshCw size={14} style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
+                      <span>{isSyncingThis ? 'Sincronizando...' : 'Sincronizar Alunos'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleExportCobXlsx(activeCob, filteredRows)}
+                      title="Exportar lista atual para planilha Excel (.xlsx)"
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.2)',
+                        color: '#6ee7b7',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <FileSpreadsheet size={14} />
+                      <span>Excel</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
+                      title="Imprimir lista de pagantes"
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#f8fafc',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Printer size={14} />
+                      <span>Imprimir</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCobrancaModalId(null)}
+                      aria-label="Fechar modal de pagantes"
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        color: '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Summary Progress & KPIs */}
+                <div style={{
+                  padding: '16px 24px',
+                  background: '#f8fafc',
+                  borderBottom: '1px solid #e2e8f0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 10 }}>
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Total Destinatários</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{totalEnviados} alunos</div>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Previsto: R$ {valorEsperado.toFixed(2).replace('.', ',')}</div>
+                    </div>
+
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>Pagantes Confirmados</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#15803d', marginTop: 2 }}>
+                        {totalPagos}/{totalEnviados} <span style={{ fontSize: 13, fontWeight: 700 }}>({pctPaid.label})</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 700 }}>Recebido: R$ {valorRecebido.toFixed(2).replace('.', ',')}</div>
+                    </div>
+
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>Pendentes</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#b45309', marginTop: 2 }}>{totalPendentes} alunos</div>
+                      <div style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>Falta receber: R$ {valorPendente.toFixed(2).replace('.', ',')}</div>
+                    </div>
+                  </div>
+
+                  {/* Barra de Pagantes X/X */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                      <span>Barra de Pagantes: <strong>{totalPagos}/{totalEnviados}</strong> ({pctPaid.label} concluído)</span>
+                      <span style={{ color: '#059669' }}>R$ {valorRecebido.toFixed(2).replace('.', ',')} / R$ {valorEsperado.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                    <progress
+                      className="cvm-cob-progress"
+                      max={Math.max(totalEnviados, 1)}
+                      value={totalPagos}
+                      aria-label={`Progresso de pagantes: ${totalPagos} de ${totalEnviados}`}
+                    />
+                  </div>
+
+                  {/* Filters + Search Row */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setCobModalFilter('ALL')}
+                        style={{
+                          padding: '7px 13px',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: cobModalFilter === 'ALL' ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                          background: cobModalFilter === 'ALL' ? '#0f172a' : '#ffffff',
+                          color: cobModalFilter === 'ALL' ? '#ffffff' : '#475569'
+                        }}
+                      >
+                        Todos ({totalEnviados})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCobModalFilter('PAID')}
+                        style={{
+                          padding: '7px 13px',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: cobModalFilter === 'PAID' ? '1px solid #16a34a' : '1px solid #bbf7d0',
+                          background: cobModalFilter === 'PAID' ? '#16a34a' : '#f0fdf4',
+                          color: cobModalFilter === 'PAID' ? '#ffffff' : '#15803d'
+                        }}
+                      >
+                        ✓ Pagantes ({totalPagos}/{totalEnviados})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCobModalFilter('PENDING')}
+                        style={{
+                          padding: '7px 13px',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: cobModalFilter === 'PENDING' ? '1px solid #d97706' : '1px solid #fde68a',
+                          background: cobModalFilter === 'PENDING' ? '#d97706' : '#fffbeb',
+                          color: cobModalFilter === 'PENDING' ? '#ffffff' : '#b45309'
+                        }}
+                      >
+                        ⏳ Pendentes ({totalPendentes})
+                      </button>
+
+                      {availableTurmas.length > 1 && (
+                        <select
+                          value={cobModalTurmaFilter}
+                          onChange={e => setCobModalTurmaFilter(e.target.value)}
+                          aria-label="Filtrar por turma"
+                          style={{
+                            padding: '7px 10px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#334155',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="ALL">Todas as Turmas ({availableTurmas.length})</option>
+                          {availableTurmas.map(tm => (
+                            <option key={tm} value={tm}>{tm}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    <div style={{
+                      flex: '1 1 250px',
+                      maxWidth: 380,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 10,
+                      padding: '6px 12px'
+                    }}>
+                      <Search size={15} color="#64748b" />
+                      <input
+                        type="text"
+                        value={cobModalSearch}
+                        onChange={e => setCobModalSearch(e.target.value)}
+                        placeholder="Buscar aluno, pagador, responsável, CPF, turma..."
+                        style={{
+                          border: 'none',
+                          outline: 'none',
+                          width: '100%',
+                          fontSize: 12.5,
+                          color: '#0f172a',
+                          background: 'transparent'
+                        }}
+                      />
+                      {cobModalSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setCobModalSearch('')}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payers & Recipients List Body */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 10, background: '#ffffff' }}>
+                  {filteredRows.length === 0 ? (
+                    <div style={{
+                      padding: '44px 20px',
+                      textAlign: 'center',
+                      color: '#64748b',
+                      background: '#f8fafc',
+                      borderRadius: 16,
+                      border: '1px dashed #cbd5e1'
+                    }}>
+                      <Users size={34} style={{ margin: '0 auto 10px', opacity: 0.45, display: 'block' }} />
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                        {cobModalFilter === 'PAID'
+                          ? 'Nenhum pagante confirmado encontrado para este filtro.'
+                          : cobModalFilter === 'PENDING'
+                          ? 'Nenhum aluno pendente encontrado para este filtro.'
+                          : 'Nenhum destinatário localizado.'}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 14 }}>
+                        {totalEnviados === 0
+                          ? 'Clique em "Sincronizar Alunos" para vincular os alunos das turmas deste comunicado.'
+                          : 'Tente alterar a aba de filtro ou limpar o campo de busca.'}
+                      </div>
+                      {totalEnviados === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
+                          disabled={isSyncingThis}
+                          style={{
+                            background: '#0f172a',
+                            color: '#ffffff',
+                            border: 'none',
+                            padding: '10px 16px',
+                            borderRadius: 10,
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isSyncingThis ? 'Sincronizando...' : 'Sincronizar Alunos Agora'}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    filteredRows.map(({ dest, info }) => {
+                      const rowKey = String(dest?.id || info.cleanId);
+                      const isRowLoading = !!cobActionLoading[rowKey];
+                      const isLinkLoading = !!cobActionLoading[`link_${rowKey}`];
+                      const isCopied = copiedLinkId === rowKey;
+
+                      return (
+                        <div
+                          key={rowKey}
+                          style={{
+                            border: `1px solid ${info.isPaid ? '#bbf7d0' : '#e2e8f0'}`,
+                            background: info.isPaid ? '#f0fdf4' : '#ffffff',
+                            borderRadius: 14,
+                            padding: '14px 16px',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 14,
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {/* Student + Payer + Guardian Details */}
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: '1 1 380px', minWidth: 0 }}>
+                            <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={44} />
+                            <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {/* Line 1: Student Name + Badges */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{info.nome}</span>
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                  background: info.isPaid ? '#16a34a' : isCobOverdue ? '#fee2e2' : '#fef3c7',
+                                  color: info.isPaid ? '#ffffff' : isCobOverdue ? '#b91c1c' : '#b45309',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.4
+                                }}>
+                                  {info.isPaid ? '✓ PAGO' : isCobOverdue ? 'VENCIDO' : '⏳ PENDENTE'}
+                                </span>
+                                <span style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: 6,
+                                  background: '#f1f5f9',
+                                  color: '#475569'
+                                }}>
+                                  {info.turma}
+                                </span>
+                                {info.matricula && (
+                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                    Mat: {info.matricula}
+                                  </span>
+                                )}
+                                {info.autResp && (
+                                  <span style={{
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: 6,
+                                    background: info.autResp.status === 'AUTHORIZED' ? '#dcfce7' : '#fee2e2',
+                                    color: info.autResp.status === 'AUTHORIZED' ? '#166534' : '#991b1b'
+                                  }}>
+                                    {info.autResp.status === 'AUTHORIZED' ? 'Autorização: Sim' : 'Autorização: Não'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Line 2: Payer / Financial Guardian Info */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: 12, color: '#334155' }}>
+                                {info.isPaid && (
+                                  <span>
+                                    <strong style={{ color: '#15803d' }}>Pagador:</strong>{' '}
+                                    <span style={{ fontWeight: 700 }}>{info.pagadorNome || info.responsavel || 'Confirmado'}</span>
+                                  </span>
+                                )}
+                                <span>
+                                  <strong style={{ color: '#475569' }}>Responsável:</strong>{' '}
+                                  <span>{info.responsavel || 'Não informado'}</span>
+                                  {info.parentesco ? <span style={{ color: '#64748b' }}> ({info.parentesco})</span> : null}
+                                </span>
+                                {info.cpfResponsavel && (
+                                  <span>
+                                    <strong style={{ color: '#475569' }}>CPF:</strong> {info.cpfResponsavel}
+                                  </span>
+                                )}
+                                {info.telefone && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <Phone size={11} color="#64748b" />
+                                    <span>{info.telefone}</span>
+                                  </span>
+                                )}
+                                {info.email && (
+                                  <span style={{ color: '#64748b' }}>
+                                    {info.email}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Line 3: Payment Timestamp, Amount & Origin */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
+                                <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                                  Valor: R$ {valorUnit.toFixed(2).replace('.', ',')}
+                                </span>
+                                {info.isPaid && info.paidAt && (
+                                  <span style={{ color: '#15803d', fontWeight: 700 }}>
+                                    • Pago em {new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                )}
+                                {info.origemPagamento && (
+                                  <span>
+                                    • Origem: <strong>{info.origemPagamento}</strong>
+                                    {info.transactionId ? ` (ID: ${info.transactionId.substring(0, 14)})` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Row Actions */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+                            {/* Toggle Paid / Manual Baixa */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCobDestPaid(activeCob, dest)}
+                              disabled={isRowLoading}
+                              title={info.isPaid ? 'Reabrir cobrança para pendente' : 'Confirmar pagamento manualmente (Dar Baixa)'}
+                              style={{
+                                padding: '7px 11px',
+                                borderRadius: 9,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: isRowLoading ? 'wait' : 'pointer',
+                                border: info.isPaid ? '1px solid #cbd5e1' : '1px solid #16a34a',
+                                background: info.isPaid ? '#ffffff' : '#16a34a',
+                                color: info.isPaid ? '#475569' : '#ffffff',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5
+                              }}
+                            >
+                              {isRowLoading ? (
+                                <Loader2 size={13} />
+                              ) : info.isPaid ? (
+                                <RotateCcw size={13} />
+                              ) : (
+                                <CheckCircle2 size={13} />
+                              )}
+                              <span>{info.isPaid ? 'Reabrir' : 'Dar Baixa'}</span>
+                            </button>
+
+                            {/* WhatsApp Reminder / Receipt */}
+                            <button
+                              type="button"
+                              onClick={() => handleWhatsAppCobReminder(activeCob, dest, info)}
+                              title={info.isPaid ? 'Enviar comprovante/confirmação por WhatsApp' : 'Enviar lembrete de pagamento por WhatsApp'}
+                              style={{
+                                padding: '7px 11px',
+                                borderRadius: 9,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                border: '1px solid #bbf7d0',
+                                background: '#ecfdf5',
+                                color: '#047857',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5
+                              }}
+                            >
+                              <MessageCircle size={13} />
+                              <span>WhatsApp</span>
+                            </button>
+
+                            {/* Open Invoice Link */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'open')}
+                              disabled={isLinkLoading}
+                              title="Abrir ou gerar link da fatura deste aluno"
+                              style={{
+                                padding: '7px 10px',
+                                borderRadius: 9,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: isLinkLoading ? 'wait' : 'pointer',
+                                border: '1px solid #cbd5e1',
+                                background: '#f8fafc',
+                                color: '#334155',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5
+                              }}
+                            >
+                              <ExternalLink size={13} />
+                              <span>{isLinkLoading ? 'Gerando...' : 'Fatura'}</span>
+                            </button>
+
+                            {/* Copy Invoice Link */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'copy')}
+                              disabled={isLinkLoading}
+                              title="Copiar link de pagamento"
+                              style={{
+                                padding: '7px 10px',
+                                borderRadius: 9,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: isLinkLoading ? 'wait' : 'pointer',
+                                border: isCopied ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                                background: isCopied ? '#dcfce7' : '#ffffff',
+                                color: isCopied ? '#15803d' : '#475569',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                              <span>{isCopied ? 'Copiado!' : 'Copiar Link'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div style={{
+                  padding: '14px 24px',
+                  background: '#f8fafc',
+                  borderTop: '1px solid #e2e8f0',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}>
+                  <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+                    Exibindo <strong>{filteredRows.length}</strong> de <strong>{totalEnviados}</strong> destinatários • Pagantes: <strong style={{ color: '#15803d' }}>{totalPagos}/{totalEnviados}</strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 10,
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#334155',
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                    >
+                      <Printer size={14} />
+                      <span>Imprimir Filtro Atual</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCobrancaModalId(null)}
+                      style={{
+                        padding: '8px 18px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: '#0f172a',
+                        color: '#ffffff',
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       <AnimatePresence>

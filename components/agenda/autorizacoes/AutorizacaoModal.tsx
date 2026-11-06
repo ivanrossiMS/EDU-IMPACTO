@@ -14,7 +14,10 @@ import {
   validarCPF, 
   formatarCPF, 
   formatAutorizacaoTermoHtml, 
-  getAutorizacaoTermoPlainText 
+  getAutorizacaoTermoPlainText,
+  formatDataEventoBR,
+  normalizeDateInputValue,
+  formatarMoedaBRL
 } from '@/lib/autorizacoes/autorizacaoUtils'
 
 interface AutorizacaoModalProps {
@@ -147,10 +150,10 @@ export function AutorizacaoModal({
         if (termoEditorRef.current) {
           termoEditorRef.current.innerHTML = formattedInitialTermo
         }
-        setDataEvento(initialData.dataEvento || '')
+        setDataEvento(normalizeDateInputValue(initialData.dataEvento))
         setLocalEvento(initialData.localEvento || '')
-        setValor(initialData.valor || '')
-        setDataLimite(initialData.dataLimite || '')
+        setValor(initialData.valor ? (formatarMoedaBRL(initialData.valor) || initialData.valor) : '')
+        setDataLimite(normalizeDateInputValue(initialData.dataLimite))
         setExigirObservacoes(initialData.exigirObservacoes ?? false)
         setObservacoesLabel(initialData.observacoesLabel || 'Alergias, restrições alimentares ou recomendações médicas')
         const reqCpf = initialData.exigirCpfResponsavel ?? initialData.exigirDocumentoResponsavel ?? false
@@ -222,8 +225,7 @@ export function AutorizacaoModal({
   const handleQuickPresetDate = (days: number) => {
     const date = new Date()
     date.setDate(date.getDate() + days)
-    date.setHours(18, 0, 0, 0)
-    const localString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T18:00`
+    const localString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     setDataLimite(localString)
   }
 
@@ -582,10 +584,12 @@ export function AutorizacaoModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* TÍTULO */}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'block', marginBottom: 6 }}>
+                <label htmlFor="autorizacao-titulo" style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'block', marginBottom: 6 }}>
                   Título da Autorização <span style={{ color: '#EF4444' }}>*</span>
                 </label>
                 <input
+                  id="autorizacao-titulo"
+                  name="titulo"
                   type="text"
                   placeholder="Ex: Autorização de saída de passeio"
                   value={titulo}
@@ -618,10 +622,12 @@ export function AutorizacaoModal({
                 gap: 12
               }}>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <label htmlFor="autorizacao-local-evento" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                     <MapPin size={12} color="#059669" /> Local / Destino
                   </label>
                   <input
+                    id="autorizacao-local-evento"
+                    name="localEvento"
                     type="text"
                     placeholder="Ex: Teatro Municipal"
                     value={localEvento}
@@ -633,18 +639,20 @@ export function AutorizacaoModal({
                       border: '1px solid #CBD5E1',
                       fontSize: 13,
                       color: '#0F172A',
+                      background: '#FFFFFF',
                       boxSizing: 'border-box'
                     }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <label htmlFor="autorizacao-data-evento" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                     <Calendar size={12} color="#059669" /> Data do Evento / Saída
                   </label>
                   <input
-                    type="text"
-                    placeholder="Ex: 15/10/2026 às 08:30"
+                    id="autorizacao-data-evento"
+                    name="dataEvento"
+                    type="date"
                     value={dataEvento}
                     onChange={e => setDataEvento(e.target.value)}
                     style={{
@@ -654,27 +662,33 @@ export function AutorizacaoModal({
                       border: '1px solid #CBD5E1',
                       fontSize: 13,
                       color: '#0F172A',
+                      background: '#FFFFFF',
                       boxSizing: 'border-box'
                     }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  <label htmlFor="autorizacao-valor-evento" style={{ fontSize: 11, fontWeight: 700, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                     <DollarSign size={12} color="#059669" /> Custo / Valor
                   </label>
                   <input
+                    id="autorizacao-valor-evento"
+                    name="valor"
                     type="text"
-                    placeholder="Ex: Gratuito ou R$ 45,00"
+                    inputMode="numeric"
+                    placeholder="R$ 0,00"
                     value={valor}
-                    onChange={e => setValor(e.target.value)}
+                    onChange={e => setValor(formatarMoedaBRL(e.target.value))}
                     style={{
                       width: '100%',
                       padding: '8px 10px',
                       borderRadius: 10,
                       border: '1px solid #CBD5E1',
                       fontSize: 13,
+                      fontWeight: 600,
                       color: '#0F172A',
+                      background: '#FFFFFF',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -1090,7 +1104,7 @@ export function AutorizacaoModal({
                 padding: '14px 16px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label htmlFor="autorizacao-data-limite" style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Clock size={15} color="#059669" /> Prazo Limite para Resposta dos Pais
                   </label>
                   {dataLimite && (
@@ -1113,7 +1127,9 @@ export function AutorizacaoModal({
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                   <input
-                    type="datetime-local"
+                    id="autorizacao-data-limite"
+                    name="dataLimite"
+                    type="date"
                     value={dataLimite}
                     onChange={e => setDataLimite(e.target.value)}
                     style={{
@@ -1338,7 +1354,7 @@ export function AutorizacaoModal({
 
                   {dataLimite && (
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#D97706', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Clock size={12} /> Prazo: {dataLimite.replace('T', ' ')}
+                      <Clock size={12} /> Prazo: {formatDataEventoBR(normalizeDateInputValue(dataLimite) || dataLimite)}
                     </span>
                   )}
                 </div>
@@ -1358,7 +1374,7 @@ export function AutorizacaoModal({
                     )}
                     {dataEvento && (
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', background: '#F1F5F9', padding: '4px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Calendar size={12} color="#059669" /> {dataEvento}
+                        <Calendar size={12} color="#059669" /> {formatDataEventoBR(dataEvento)}
                       </span>
                     )}
                     {valor && (
