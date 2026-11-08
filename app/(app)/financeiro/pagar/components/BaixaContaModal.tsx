@@ -1,15 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import {
-  X, CheckCircle2, Check, Split, QrCode, Barcode
+  X, CheckCircle2, Check, Split, QrCode, Barcode, Receipt
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatCurrencyInput, handleCurrencyInputChange } from '@/lib/utils'
+import { apiFetch } from '@/lib/api/apiClient'
 import {
   type ContaPagarRecord,
   type AnexoContaPagarItem,
-  FORMAS_PAGAMENTO_CONTAS_PAGAR,
-  CAIXAS_BANCOS_ESCOLARES,
+  type MetodoPagamentoEscolarOption,
+  type CaixaEscolarOption,
+  resolveMetodosPagamentoEscolares,
+  resolveCaixasEscolares,
   calcularValorLiquido,
 } from '../types'
 import { AnexosInlineSection } from './AnexosLancamentoModal'
@@ -18,6 +22,8 @@ interface BaixaContaModalProps {
   isOpen: boolean
   onClose: () => void
   targetContas: ContaPagarRecord[]
+  metodosPagamento?: MetodoPagamentoEscolarOption[]
+  caixasEscolares?: CaixaEscolarOption[]
   onConfirmBaixaIndividual: (payload: {
     id: string
     dataPagamento: string
@@ -32,6 +38,7 @@ interface BaixaContaModalProps {
     observacao: string
     registrarNoCaixa: boolean
     anexosNovos?: AnexoContaPagarItem[]
+    emitirRecibo?: boolean
   }) => Promise<void>
   onConfirmBaixaLote: (payload: {
     ids: string[]
@@ -39,6 +46,7 @@ interface BaixaContaModalProps {
     formaPagamento: string
     caixaOrigem: string
     observacao: string
+    emitirRecibo?: boolean
   }) => Promise<void>
 }
 
@@ -46,6 +54,8 @@ export function BaixaContaModal({
   isOpen,
   onClose,
   targetContas,
+  metodosPagamento,
+  caixasEscolares,
   onConfirmBaixaIndividual,
   onConfirmBaixaLote,
 }: BaixaContaModalProps) {
@@ -53,9 +63,38 @@ export function BaixaContaModal({
   const isLote = targetContas.length > 1
   const single = targetContas[0] || null
 
+  const metodosAtivos = useMemo(
+    () => resolveMetodosPagamentoEscolares(metodosPagamento, false),
+    [metodosPagamento]
+  )
+
+  const [dbCaixasRaw, setDbCaixasRaw] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    let active = true
+    apiFetch('/api/configuracoes?chave=cfgCaixas', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json) return
+        if (Array.isArray(json.valor)) {
+          setDbCaixasRaw(json.valor)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [isOpen])
+
+  const caixasAbertos = useMemo(
+    () => resolveCaixasEscolares(dbCaixasRaw !== null ? dbCaixasRaw : caixasEscolares, true),
+    [dbCaixasRaw, caixasEscolares]
+  )
+
   const [dataPagamento, setDataPagamento] = useState(hojeStr)
-  const [formaPagamento, setFormaPagamento] = useState('PIX')
-  const [caixaOrigem, setCaixaOrigem] = useState(CAIXAS_BANCOS_ESCOLARES[0])
+  const [formaPagamento, setFormaPagamento] = useState('')
+  const [caixaOrigem, setCaixaOrigem] = useState('')
   const [desconto, setDesconto] = useState('0')
   const [juros, setJuros] = useState('0')
   const [multa, setMulta] = useState('0')
@@ -64,9 +103,11 @@ export function BaixaContaModal({
   const [comprovanteRef, setComprovanteRef] = useState('')
   const [observacao, setObservacao] = useState('')
   const [registrarNoCaixa, setRegistrarNoCaixa] = useState(true)
+  const [emitirRecibo, setEmitirRecibo] = useState(false)
   const [anexosBaixa, setAnexosBaixa] = useState<AnexoContaPagarItem[]>([])
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [validationError, setValidationError] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
@@ -75,19 +116,26 @@ export function BaixaContaModal({
     setComprovanteRef('')
     setObservacao('')
     setRegistrarNoCaixa(true)
+    setEmitirRecibo(false)
     setAnexosBaixa([])
+    setValidationError('')
+
+    // Inicia sem caixa e sem método pré-selecionados para obrigar seleção explícita na baixa
+    setCaixaOrigem('')
+    setFormaPagamento('')
+
     if (single && !isLote) {
-      setFormaPagamento(single.formaPagamento || 'PIX')
-      setCaixaOrigem(single.caixaOrigem || CAIXAS_BANCOS_ESCOLARES[0])
       setDesconto(String(single.desconto ?? 0))
       setJuros(String(single.juros ?? 0))
       setMulta(String(single.multa ?? 0))
       setValorPagoParcial(String(single.valor ?? 0))
-    } else {
-      setFormaPagamento('PIX')
-      setCaixaOrigem(CAIXAS_BANCOS_ESCOLARES[0])
     }
   }, [isOpen, single, isLote, hojeStr])
+
+  const selectedMetodoObj = useMemo(
+    () => metodosAtivos.find((m) => m.nome === formaPagamento) || null,
+    [metodosAtivos, formaPagamento]
+  )
 
   const numDesconto = Math.max(0, Number(String(desconto).replace(',', '.')) || 0)
   const numJuros = Math.max(0, Number(String(juros).replace(',', '.')) || 0)
@@ -125,6 +173,15 @@ export function BaixaContaModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (targetContas.length === 0) return
+    if (!caixaOrigem.trim()) {
+      setValidationError('Selecione obrigatoriamente a Conta Bancária / Caixa para realizar a baixa.')
+      return
+    }
+    if (!formaPagamento.trim()) {
+      setValidationError('Selecione obrigatoriamente o Método de Pagamento abaixo.')
+      return
+    }
+    setValidationError('')
     setSubmitting(true)
     try {
       if (isLote) {
@@ -134,6 +191,7 @@ export function BaixaContaModal({
           formaPagamento,
           caixaOrigem,
           observacao,
+          emitirRecibo,
         })
       } else if (single) {
         await onConfirmBaixaIndividual({
@@ -150,6 +208,7 @@ export function BaixaContaModal({
           observacao,
           registrarNoCaixa,
           anexosNovos: anexosBaixa,
+          emitirRecibo,
         })
       }
       onClose()
@@ -373,44 +432,182 @@ export function BaixaContaModal({
               </div>
             )}
 
-            {/* Campos de Pagamento */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr', gap: 12 }}>
+            {validationError && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#dc2626',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                }}
+              >
+                ⚠ {validationError}
+              </div>
+            )}
+
+            {/* Linha 1: Data do Pagamento + Conta Bancária / Caixa (2 colunas amplas e organizadas) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '185px 1fr', gap: 14, alignItems: 'start' }}>
               <div>
-                <label htmlFor="bx-data-pagto" style={labelStyle}>Data do Pagamento *</label>
+                <label htmlFor="bx-data-pagto" style={labelStyle}>
+                  Data do Pagamento <span style={{ color: '#dc2626' }}>*</span>
+                </label>
                 <input
                   id="bx-data-pagto"
                   type="date"
                   required
                   value={dataPagamento}
                   onChange={(e) => setDataPagamento(e.target.value)}
-                  style={inputStyle}
+                  style={{ ...inputStyle, height: 42 }}
                 />
               </div>
+
               <div>
-                <label htmlFor="bx-forma-pagto" style={labelStyle}>Meio de Pagamento</label>
-                <select
-                  id="bx-forma-pagto"
-                  value={formaPagamento}
-                  onChange={(e) => setFormaPagamento(e.target.value)}
-                  style={inputStyle}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 6,
+                    flexWrap: 'nowrap',
+                  }}
                 >
-                  {FORMAS_PAGAMENTO_CONTAS_PAGAR.map((fp) => (
-                    <option key={fp} value={fp}>{fp}</option>
+                  <label htmlFor="bx-caixa-origem" style={{ ...labelStyle, marginBottom: 0 }}>
+                    Conta Bancária / Caixa <span style={{ color: '#dc2626' }}>*</span>
+                  </label>
+                  <Link
+                    href="/configuracoes/financeiro/caixas"
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: '#0284c7',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    + Configurar Caixas
+                  </Link>
+                </div>
+                <select
+                  id="bx-caixa-origem"
+                  required
+                  value={caixaOrigem}
+                  onChange={(e) => {
+                    setCaixaOrigem(e.target.value)
+                    setValidationError('')
+                  }}
+                  style={{
+                    ...inputStyle,
+                    height: 42,
+                    borderColor: !caixaOrigem ? '#f59e0b' : '#cbd5e1',
+                    background: !caixaOrigem ? '#fffbeb' : '#ffffff',
+                    fontWeight: caixaOrigem ? 700 : 500,
+                  }}
+                >
+                  <option value="">
+                    {caixasAbertos.length === 0
+                      ? 'Nenhum caixa aberto cadastrado — clique em + Configurar Caixas'
+                      : 'Selecione obrigatoriamente o caixa...'}
+                  </option>
+                  {caixasAbertos.map((cx) => (
+                    <option key={cx.id} value={cx.value}>
+                      {cx.label}
+                      {cx.operador ? ` (${cx.operador})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="bx-caixa-origem" style={labelStyle}>Conta Bancária / Caixa</label>
-                <select
-                  id="bx-caixa-origem"
-                  value={caixaOrigem}
-                  onChange={(e) => setCaixaOrigem(e.target.value)}
-                  style={inputStyle}
-                >
-                  {CAIXAS_BANCOS_ESCOLARES.map((cx) => (
-                    <option key={cx} value={cx}>{cx}</option>
-                  ))}
-                </select>
+            </div>
+
+            {/* Seleção Única e Obrigatória do Método de Pagamento */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 12,
+                background: formaPagamento ? '#f8fafc' : '#fffbeb',
+                border: formaPagamento ? '1px solid #e2e8f0' : '1px solid #fde68a',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 9,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#334155', textTransform: 'uppercase' }}>
+                    Método de Pagamento <span style={{ color: '#dc2626' }}>*</span> ({metodosAtivos.length} ativos)
+                  </span>
+                  {!formaPagamento && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        color: '#b45309',
+                        background: '#fef3c7',
+                        border: '1px solid #fcd34d',
+                        padding: '1px 7px',
+                        borderRadius: 999,
+                      }}
+                    >
+                      Obrigatório selecionar
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {selectedMetodoObj && (
+                    <span style={{ fontSize: 11, color: '#047857', fontWeight: 700 }}>
+                      {selectedMetodoObj.codigo} •{' '}
+                      {selectedMetodoObj.diasCompensacao === 0
+                        ? 'Compensação Imediata'
+                        : `${selectedMetodoObj.diasCompensacao}d úteis`}{' '}
+                      {selectedMetodoObj.taxaPercentual > 0
+                        ? `• Taxa ${selectedMetodoObj.taxaPercentual}%`
+                        : '• Isento de Taxa'}
+                    </span>
+                  )}
+                  <Link
+                    href="/configuracoes/financeiro/metodos-pagamento"
+                    style={{ fontSize: 11, fontWeight: 800, color: '#0284c7', textDecoration: 'none' }}
+                  >
+                    + Configurar
+                  </Link>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                {metodosAtivos.map((mp) => {
+                  const active = formaPagamento === mp.nome
+                  return (
+                    <button
+                      key={mp.id}
+                      type="button"
+                      onClick={() => {
+                        setFormaPagamento(mp.nome)
+                        setValidationError('')
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        border: active ? '1.5px solid #059669' : '1px solid #cbd5e1',
+                        background: active ? '#ecfdf5' : '#ffffff',
+                        color: active ? '#047857' : '#334155',
+                        fontSize: 12,
+                        fontWeight: active ? 800 : 600,
+                        cursor: 'pointer',
+                        boxShadow: active ? '0 2px 6px rgba(5, 150, 105, 0.12)' : 'none',
+                      }}
+                    >
+                      {mp.nome}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -422,36 +619,33 @@ export function BaixaContaModal({
                     <label htmlFor="bx-desconto" style={labelStyle}>Desconto Obtido (R$)</label>
                     <input
                       id="bx-desconto"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={desconto}
-                      onChange={(e) => setDesconto(e.target.value)}
-                      style={inputStyle}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatCurrencyInput(desconto, false)}
+                      onChange={(e) => setDesconto(handleCurrencyInputChange(e.target.value, false))}
+                      style={{ ...inputStyle, textAlign: 'right' }}
                     />
                   </div>
                   <div>
                     <label htmlFor="bx-juros" style={labelStyle}>Juros por Atraso (R$)</label>
                     <input
                       id="bx-juros"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={juros}
-                      onChange={(e) => setJuros(e.target.value)}
-                      style={inputStyle}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatCurrencyInput(juros, false)}
+                      onChange={(e) => setJuros(handleCurrencyInputChange(e.target.value, false))}
+                      style={{ ...inputStyle, textAlign: 'right' }}
                     />
                   </div>
                   <div>
                     <label htmlFor="bx-multa" style={labelStyle}>Multa (R$)</label>
                     <input
                       id="bx-multa"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={multa}
-                      onChange={(e) => setMulta(e.target.value)}
-                      style={inputStyle}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatCurrencyInput(multa, false)}
+                      onChange={(e) => setMulta(handleCurrencyInputChange(e.target.value, false))}
+                      style={{ ...inputStyle, textAlign: 'right' }}
                     />
                   </div>
                 </div>
@@ -490,13 +684,12 @@ export function BaixaContaModal({
                         <label htmlFor="bx-valor-parcial" style={labelStyle}>Valor Pago Agora (R$)</label>
                         <input
                           id="bx-valor-parcial"
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          max={valorLiquidoSingle}
-                          value={valorPagoParcial}
-                          onChange={(e) => setValorPagoParcial(e.target.value)}
-                          style={{ ...inputStyle, borderColor: '#f59e0b', fontWeight: 800 }}
+                          type="text"
+                          inputMode="numeric"
+                          value={formatCurrencyInput(valorPagoParcial)}
+                          onChange={(e) => setValorPagoParcial(handleCurrencyInputChange(e.target.value))}
+                          placeholder="R$ 0,00"
+                          style={{ ...inputStyle, borderColor: '#f59e0b', fontWeight: 800, textAlign: 'right' }}
                         />
                       </div>
                       <div
@@ -555,6 +748,42 @@ export function BaixaContaModal({
                 />
               </>
             )}
+
+            {/* Opção de Emitir Recibo Oficial Automaticamente */}
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 12,
+                background: emitirRecibo ? '#f0fdf4' : '#f8fafc',
+                border: emitirRecibo ? '1px solid #86efac' : '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <label
+                htmlFor="bx-emitir-recibo"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  cursor: 'pointer',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: '#064e3b',
+                }}
+              >
+                <input
+                  id="bx-emitir-recibo"
+                  type="checkbox"
+                  checked={emitirRecibo}
+                  onChange={(e) => setEmitirRecibo(e.target.checked)}
+                />
+                <Receipt size={15} color="#059669" />
+                Emitir Recibo de Pagamento & Quitação automaticamente após confirmar a baixa
+              </label>
+            </div>
           </div>
 
           {/* Footer com Valor Exato no Botão de Submissão */}

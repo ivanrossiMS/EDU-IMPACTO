@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@/lib/api/apiClient'
+import { invalidateCache } from '@/lib/useSupabaseCollection'
 
 export interface ApiQueryOptions {
   /** Tiempo en ms que los datos se consideran "frescos" (sin re-fetch). Default: 30s */
@@ -90,6 +91,10 @@ export function useApiMutation<TVariables = any, TData = any>(
       return res.json()
     },
     onSuccess: () => {
+      const cleanEndpoint = url.replace(/^\/api\//, '').split('?')[0]
+      if (cleanEndpoint) {
+        invalidateCache(cleanEndpoint)
+      }
       if (invalidateKeys) {
         invalidateKeys.forEach(key => {
           queryClient.invalidateQueries({ queryKey: key })

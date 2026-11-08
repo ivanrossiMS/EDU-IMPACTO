@@ -40,9 +40,10 @@ const ALL_CONFIG_CHAVES = [
   // Esquema de Notas — was missing from bulk fetch (data lost on reload/cross-browser)
   'esquemaNota',
   'cfgFormulasNotas',
-  'cfgCentrosCusto', 'cfgMetodosPagamento', 'cfgCartoes', 'cfgEventos',
+  'cfgCentrosCusto', 'cfgCaixas', 'cfgMetodosPagamento', 'cfgCartoes', 'cfgEventos',
   'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas', 'cfgTiposDocumento',
-  'cfgConvenios', 'cfgCalendarioLetivo', 'cfgWhatsAppMatriculas', 'cfgWhatsAppValores'
+  'cfgConvenios', 'cfgCalendarioLetivo', 'cfgWhatsAppMatriculas', 'cfgWhatsAppValores',
+  'fin_acordos_renegociacao'
 ]
 
 /**
@@ -71,7 +72,7 @@ function fetchAllConfigs(): Promise<Record<string, any[]>> {
       return r.json()
     })
     .then((result: Record<string, any>) => {
-      configCache.data = {}
+      configCache.data = { ...configCache.data }
       for (const key of ALL_CONFIG_CHAVES) {
         if (result[key] !== undefined && result[key] !== null) {
           let arr = Array.isArray(result[key]) ? result[key] : []
@@ -129,7 +130,9 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
   // Start with cached value if available — avoids any loading flash
   const getCachedOrDefault = (): T[] => {
     const cached = configCache.data[chave]
-    if (cached && cached.length > 0) return cached as T[]
+    if (Array.isArray(cached) && (cached.length > 0 || defaultValue.length === 0)) {
+      return cached as T[]
+    }
     return defaultValue
   }
 
@@ -148,20 +151,41 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
     let cancelled = false
 
     const loadConfigs = () => {
-      if (isConfigCacheFresh()) {
+      if (isConfigCacheFresh() && Array.isArray(configCache.data[chave])) {
         const cachedVal = configCache.data[chave]
-        if (cachedVal && cachedVal.length > 0 && isMounted.current) {
+        if ((cachedVal.length > 0 || defaultValue.length === 0) && isMounted.current) {
           setDataState(cachedVal as T[])
         }
         setLoading(false)
         return
       }
 
-      fetchAllConfigs().then(allConfigs => {
+      fetchAllConfigs().then(async allConfigs => {
         if (cancelled || !isMounted.current) return
 
-        const val = allConfigs[chave]
-        if (val && Array.isArray(val) && val.length > 0) {
+        let val = allConfigs[chave]
+        if (val === undefined) {
+          try {
+            const singleRes = await apiFetch(`/api/configuracoes?chave=${encodeURIComponent(chave)}`)
+            if (singleRes.ok) {
+              const singleJson = await singleRes.json()
+              const extracted = Array.isArray(singleJson)
+                ? singleJson
+                : Array.isArray(singleJson?.valor)
+                  ? singleJson.valor
+                  : undefined
+              if (extracted !== undefined) {
+                val = extracted
+                configCache.data[chave] = extracted
+              }
+            }
+          } catch {
+            // ignore fallback error
+          }
+        }
+        if (cancelled || !isMounted.current) return
+
+        if (Array.isArray(val) && (val.length > 0 || defaultValue.length === 0)) {
           setDataState(val as T[])
         } else if (defaultValue.length > 0) {
           setDataState(defaultValue)
@@ -174,6 +198,8 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
             }).catch(() => {})
             configCache.data[chave] = defaultValue as any[]
           }
+        } else {
+          setDataState([])
         }
         setLoading(false)
       }).catch(() => {

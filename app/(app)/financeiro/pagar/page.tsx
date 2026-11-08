@@ -12,24 +12,29 @@ import {
   Building2, Repeat, Eye, Edit3, Trash2, Check,
   LayoutList, LayoutGrid, FileSpreadsheet, RotateCcw,
   QrCode, MoreVertical, Barcode, Copy, X, ChevronLeft, ChevronRight,
-  Paperclip, Camera
+  Paperclip, Camera, FileText
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import { apiFetch } from '@/lib/api/apiClient'
 import { formatCurrency } from '@/lib/utils'
+import { ReceiptModal, buildContaPagarReceiptData } from '@/components/financeiro/ReceiptModal'
 import {
   type ContaPagarRecord,
   type FornecedorEscolar,
   type OrcamentoCategoriaItem,
   type PlanoContasEscolarOption,
   type AnexoContaPagarItem,
+  type RecorrenciaFixaEscolar,
   CATEGORIAS_ESCOLARES,
   CENTROS_CUSTO_ESCOLARES,
   resolveCentrosCustoEscolares,
   resolvePlanoContasEscolares,
+  resolveUnidadesEscolares,
+  resolveMetodosPagamentoEscolares,
+  resolveCaixasEscolares,
   matchContaPlanoContas,
   STATUS_CONTA_PAGAR_CONFIG,
   PRIORIDADE_CONTA_PAGAR_CONFIG,
-  TEMPLATES_DESPESAS_ESCOLARES,
   normalizarContaPagar,
   openPrintOrdemPagamento,
   openPrintBorderoPagamentos,
@@ -71,21 +76,11 @@ type MainTab =
 const PAGE_SIZE = 20
 
 export default function ContasPagarPage() {
-  const { alunos, titulos, cfgPlanoContas, cfgEventos, cfgCentrosCusto } = useData()
+  const { alunos, titulos, cfgPlanoContas, cfgEventos, cfgCentrosCusto, cfgMetodosPagamento, cfgCaixas, mantenedores } = useData()
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     if (type === 'error') toast.error(msg)
     else toast.success(msg)
   }, [])
-
-  const centrosCustoAtivos = useMemo(
-    () => resolveCentrosCustoEscolares(cfgCentrosCusto, 'despesa', false),
-    [cfgCentrosCusto]
-  )
-
-  const todosCentrosCusto = useMemo(
-    () => resolveCentrosCustoEscolares(cfgCentrosCusto, 'todos', true),
-    [cfgCentrosCusto]
-  )
 
   const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
   const mesAtualStr = useMemo(() => hojeStr.slice(0, 7), [hojeStr])
@@ -94,15 +89,63 @@ export default function ContasPagarPage() {
   const [contas, setContas] = useState<ContaPagarRecord[]>([])
   const [fornecedores, setFornecedores] = useState<FornecedorEscolar[]>([])
   const [orcamentos, setOrcamentos] = useState<OrcamentoCategoriaItem[]>([])
+  const [recorrencias, setRecorrencias] = useState<RecorrenciaFixaEscolar[]>([])
   const [planoContasApi, setPlanoContasApi] = useState<any[]>([])
+  const [centrosCustoApi, setCentrosCustoApi] = useState<any[]>([])
+  const [mantenedoresApi, setMantenedoresApi] = useState<any[]>([])
+  const [metodosPagamentoApi, setMetodosPagamentoApi] = useState<any[]>([])
+  const [caixasApi, setCaixasApi] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<MainTab>('lancamentos')
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
   const [currentPage, setCurrentPage] = useState(1)
 
+  const rawCentrosCusto = useMemo(
+    () => (Array.isArray(cfgCentrosCusto) && cfgCentrosCusto.length > 0 ? cfgCentrosCusto : centrosCustoApi),
+    [cfgCentrosCusto, centrosCustoApi]
+  )
+
+  const centrosCustoAtivos = useMemo(
+    () => resolveCentrosCustoEscolares(rawCentrosCusto, 'despesa', false),
+    [rawCentrosCusto]
+  )
+
+  const todosCentrosCusto = useMemo(
+    () => resolveCentrosCustoEscolares(rawCentrosCusto, 'todos', true),
+    [rawCentrosCusto]
+  )
+
   const rawPlanoContas = useMemo(
     () => (Array.isArray(cfgPlanoContas) && cfgPlanoContas.length > 0 ? cfgPlanoContas : planoContasApi),
     [cfgPlanoContas, planoContasApi]
+  )
+
+  const unidadesEscolares = useMemo(
+    () =>
+      resolveUnidadesEscolares(
+        Array.isArray(mantenedores) && mantenedores.length > 0 ? mantenedores : mantenedoresApi
+      ),
+    [mantenedores, mantenedoresApi]
+  )
+
+  const metodosPagamentoAtivos = useMemo(
+    () =>
+      resolveMetodosPagamentoEscolares(
+        Array.isArray(cfgMetodosPagamento) && cfgMetodosPagamento.length > 0
+          ? cfgMetodosPagamento
+          : metodosPagamentoApi,
+        false
+      ),
+    [cfgMetodosPagamento, metodosPagamentoApi]
+  )
+
+  const caixasEscolaresAtivos = useMemo(
+    () =>
+      resolveCaixasEscolares(
+        Array.isArray(cfgCaixas) && cfgCaixas.length > 0 ? cfgCaixas : caixasApi,
+        true
+      ),
+    [cfgCaixas, caixasApi]
   )
 
   const planosContasAtivos = useMemo(
@@ -136,28 +179,41 @@ export default function ContasPagarPage() {
   const [editingRecord, setEditingRecord] = useState<ContaPagarRecord | null>(null)
   const [baixaTargets, setBaixaTargets] = useState<ContaPagarRecord[]>([])
   const [fichaConta, setFichaConta] = useState<ContaPagarRecord | null>(null)
+  const [receiptContas, setReceiptContas] = useState<ContaPagarRecord[] | null>(null)
   const [anexosModalTarget, setAnexosModalTarget] = useState<{
     conta: ContaPagarRecord
     mode: 'arquivos' | 'camera'
   } | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [openMenuPos, setOpenMenuPos] = useState<{
+    top?: number
+    bottom?: number
+    right: number
+  } | null>(null)
   const [copiedPixId, setCopiedPixId] = useState<string | null>(null)
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<string[] | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Fecha menu de 3 pontinhos ao clicar fora ou pressionar Escape
+  // Fecha menu de 3 pontinhos ao clicar fora, rolar ou pressionar Escape
   useEffect(() => {
     if (!openMenuId) return
-    const handleClickOutside = () => setOpenMenuId(null)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenuId(null)
+    const handleClose = () => {
+      setOpenMenuId(null)
+      setOpenMenuPos(null)
     }
-    window.addEventListener('click', handleClickOutside)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    window.addEventListener('click', handleClose)
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('scroll', handleClose, true)
+    window.addEventListener('resize', handleClose)
     return () => {
-      window.removeEventListener('click', handleClickOutside)
+      window.removeEventListener('click', handleClose)
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('scroll', handleClose, true)
+      window.removeEventListener('resize', handleClose)
     }
   }, [openMenuId])
 
@@ -165,14 +221,19 @@ export default function ContasPagarPage() {
   const fetchContasPagar = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/contas-pagar?includeMeta=true', { cache: 'no-store' })
+      const res = await apiFetch('/api/contas-pagar?includeMeta=true', { cache: 'no-store' })
       if (!res.ok) throw new Error('Falha ao carregar Contas a Pagar')
       const json = await res.json()
       const rawList = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : []
       setContas(rawList.map((c: any, idx: number) => normalizarContaPagar(c, idx, hojeStr)))
       if (Array.isArray(json?.fornecedores)) setFornecedores(json.fornecedores)
       if (Array.isArray(json?.orcamentos)) setOrcamentos(json.orcamentos)
+      if (Array.isArray(json?.recorrencias)) setRecorrencias(json.recorrencias)
       if (Array.isArray(json?.planoContas)) setPlanoContasApi(json.planoContas)
+      if (Array.isArray(json?.centrosCusto)) setCentrosCustoApi(json.centrosCusto)
+      if (Array.isArray(json?.mantenedores)) setMantenedoresApi(json.mantenedores)
+      if (Array.isArray(json?.metodosPagamento)) setMetodosPagamentoApi(json.metodosPagamento)
+      if (Array.isArray(json?.caixas)) setCaixasApi(json.caixas)
     } catch (err: any) {
       showToast(err?.message || 'Erro ao carregar Contas a Pagar', 'error')
     } finally {
@@ -187,7 +248,7 @@ export default function ContasPagarPage() {
   // Total de alunos ativos para cálculo de Custo por Aluno
   const totalAlunosAtivos = useMemo(() => {
     const ativos = (alunos || []).filter((a: any) => !a.status || a.status === 'matriculado' || a.status === 'ativo')
-    return Math.max(1, ativos.length || 420)
+    return Math.max(1, ativos.length)
   }, [alunos])
 
   // Receita prevista do mês atual (para indicador de Comprometimento da Receita)
@@ -195,7 +256,7 @@ export default function ContasPagarPage() {
     const somaTitulosMes = (titulos || [])
       .filter((t: any) => (t.vencimento || '').startsWith(mesAtualStr) && t.status !== 'cancelado')
       .reduce((acc: number, t: any) => acc + (Number(t.valor) || 0), 0)
-    return somaTitulosMes > 10000 ? somaTitulosMes : 245000
+    return somaTitulosMes
   }, [titulos, mesAtualStr])
 
   // Competências disponíveis para filtro
@@ -345,12 +406,13 @@ export default function ContasPagarPage() {
 
   // Handlers de Persistência na API
   const handleSaveContas = async (records: Partial<ContaPagarRecord>[]) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: records }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(json?.error || 'Erro ao salvar lançamento')
     if (Array.isArray(json.data)) setContas(json.data)
     showToast(
@@ -364,16 +426,18 @@ export default function ContasPagarPage() {
   }
 
   const handleConfirmBaixaIndividual = async (payload: any) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'baixa', ...payload }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (!res.ok) {
       showToast(json?.error || 'Erro ao efetuar baixa', 'error')
       return
     }
+    const nextList: ContaPagarRecord[] = Array.isArray(json.data) ? json.data : contas
     if (Array.isArray(json.data)) setContas(json.data)
     setSelectedIds(new Set())
     showToast(
@@ -382,6 +446,27 @@ export default function ContasPagarPage() {
         : 'Pagamento liquidado com sucesso!',
       'success'
     )
+    if (payload.emitirRecibo !== false) {
+      const updated =
+        nextList.find((c) => c.id === payload.id) ||
+        (baixaTargets[0]
+          ? {
+              ...baixaTargets[0],
+              status: 'pago' as const,
+              dataPagamento: payload.dataPagamento,
+              valorPago: payload.valorPago,
+              formaPagamento: payload.formaPagamento,
+              caixaOrigem: payload.caixaOrigem,
+              juros: payload.juros,
+              multa: payload.multa,
+              desconto: payload.desconto,
+              observacao: payload.observacao,
+            }
+          : null)
+      if (updated) {
+        setReceiptContas([updated])
+      }
+    }
   }
 
   const handleConfirmBaixaLote = async (payload: {
@@ -390,46 +475,62 @@ export default function ContasPagarPage() {
     formaPagamento: string
     caixaOrigem: string
     observacao: string
+    emitirRecibo?: boolean
   }) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'baixa_lote', ...payload }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (!res.ok) {
       showToast(json?.error || 'Erro na baixa em lote', 'error')
       return
     }
+    const nextList: ContaPagarRecord[] = Array.isArray(json.data) ? json.data : contas
     if (Array.isArray(json.data)) setContas(json.data)
     setSelectedIds(new Set())
     showToast(`${payload.ids.length} títulos liquidados em lote com sucesso!`, 'success')
+    if (payload.emitirRecibo !== false) {
+      const idSet = new Set(payload.ids)
+      const updatedBatch = nextList.filter((c) => idSet.has(c.id))
+      if (updatedBatch.length > 0) {
+        setReceiptContas(updatedBatch)
+      }
+    }
   }
 
   const handleAprovarLote = async (ids: string[]) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'aprovar_lote', ids }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (res.ok && Array.isArray(json.data)) {
       setContas(json.data)
       setSelectedIds(new Set())
       showToast(`${ids.length} título(s) aprovados pela controladoria!`, 'success')
+    } else {
+      showToast(json?.error || 'Erro ao aprovar títulos', 'error')
     }
   }
 
   const handleReverterBaixa = async (conta: ContaPagarRecord) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'reverter_baixa', id: conta.id }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (res.ok && Array.isArray(json.data)) {
       setContas(json.data)
       showToast('Baixa estornada. O título voltou para aberto.', 'success')
+    } else {
+      showToast(json?.error || 'Erro ao estornar baixa', 'error')
     }
   }
 
@@ -439,7 +540,7 @@ export default function ContasPagarPage() {
     acaoHistorico?: string,
     detalhesHistorico?: string
   ) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -449,8 +550,9 @@ export default function ContasPagarPage() {
         acaoHistorico,
         detalhesHistorico,
       }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (!res.ok) {
       showToast(json?.error || 'Erro ao atualizar anexos do lançamento', 'error')
       return
@@ -468,24 +570,37 @@ export default function ContasPagarPage() {
 
   const handleDeleteIds = async (ids: string[]) => {
     if (ids.length === 0) return
-    const res = await fetch(`/api/contas-pagar?ids=${encodeURIComponent(ids.join(','))}`, {
-      method: 'DELETE',
-    })
-    const json = await res.json()
-    if (res.ok && Array.isArray(json.data)) {
-      setContas(json.data)
-      setSelectedIds(new Set())
-      showToast(`${ids.length} registro(s) excluído(s).`, 'success')
+    const prevContas = contas
+    const idSet = new Set(ids)
+    setContas((prev) => prev.filter((c) => !idSet.has(c.id)))
+    try {
+      const res = await apiFetch(`/api/contas-pagar?ids=${encodeURIComponent(ids.join(','))}`, {
+        method: 'DELETE',
+        skipRetry: true,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(json.data)) {
+        setContas(json.data)
+        setSelectedIds(new Set())
+        showToast(`${ids.length} registro(s) excluído(s).`, 'success')
+      } else {
+        setContas(prevContas)
+        showToast(json?.error || 'Erro ao excluir lançamento(s)', 'error')
+      }
+    } catch (err: any) {
+      setContas(prevContas)
+      showToast(err?.message || 'Erro ao excluir lançamento(s)', 'error')
     }
   }
 
   const handleSaveFornecedor = async (f: Partial<FornecedorEscolar>): Promise<FornecedorEscolar | null> => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'save_fornecedor', fornecedor: f }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (res.ok) {
       if (Array.isArray(json.fornecedores)) setFornecedores(json.fornecedores)
       showToast('Fornecedor salvo com sucesso!', 'success')
@@ -496,34 +611,90 @@ export default function ContasPagarPage() {
   }
 
   const handleDeleteFornecedor = async (id: string) => {
-    const res = await fetch('/api/contas-pagar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete_fornecedor', id }),
-    })
-    const json = await res.json()
-    if (res.ok && Array.isArray(json.fornecedores)) {
-      setFornecedores(json.fornecedores)
-      showToast('Fornecedor removido.', 'success')
+    const prevFornecedores = fornecedores
+    const targetForn = fornecedores.find((f) => f.id === id)
+    setFornecedores((prev) => prev.filter((f) => f.id !== id))
+    try {
+      const res = await apiFetch('/api/contas-pagar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_fornecedor', id, nome: targetForn?.nome }),
+        skipRetry: true,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(json.fornecedores)) {
+        setFornecedores(json.fornecedores)
+        showToast('Fornecedor removido.', 'success')
+      } else {
+        setFornecedores(prevFornecedores)
+        showToast(json?.error || 'Erro ao excluir fornecedor', 'error')
+      }
+    } catch (err: any) {
+      setFornecedores(prevFornecedores)
+      showToast(err?.message || 'Erro ao excluir fornecedor', 'error')
     }
   }
 
   const handleSaveOrcamentos = async (novos: OrcamentoCategoriaItem[]) => {
-    const res = await fetch('/api/contas-pagar', {
+    const res = await apiFetch('/api/contas-pagar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'save_orcamentos', orcamentos: novos }),
+      skipRetry: true,
     })
-    const json = await res.json()
+    const json = await res.json().catch(() => ({}))
     if (res.ok && Array.isArray(json.orcamentos)) {
       setOrcamentos(json.orcamentos)
       showToast('Metas orçamentárias atualizadas!', 'success')
+    } else {
+      showToast(json?.error || 'Erro ao atualizar metas orçamentárias', 'error')
     }
   }
 
-  // Gerar Despesa Recorrente a partir de Template Escolar
+  const handleSaveRecorrencia = async (rec: Partial<RecorrenciaFixaEscolar>): Promise<RecorrenciaFixaEscolar | null> => {
+    const res = await apiFetch('/api/contas-pagar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_recorrencia', recorrencia: rec }),
+      skipRetry: true,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (res.ok) {
+      if (Array.isArray(json.recorrencias)) setRecorrencias(json.recorrencias)
+      showToast('Recorrência fixa salva com sucesso!', 'success')
+      return json.recorrencia || null
+    }
+    showToast(json?.error || 'Erro ao salvar recorrência fixa', 'error')
+    return null
+  }
+
+  const handleDeleteRecorrencia = async (id: string) => {
+    const prevRecs = recorrencias
+    setRecorrencias((prev) => prev.filter((r) => r.id !== id))
+    try {
+      const res = await apiFetch('/api/contas-pagar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_recorrencia', id }),
+        skipRetry: true,
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(json.recorrencias)) {
+        setRecorrencias(json.recorrencias)
+        showToast('Recorrência fixa removida.', 'success')
+      } else {
+        setRecorrencias(prevRecs)
+        showToast(json?.error || 'Erro ao excluir recorrência fixa', 'error')
+      }
+    } catch (err: any) {
+      setRecorrencias(prevRecs)
+      showToast(err?.message || 'Erro ao excluir recorrência fixa', 'error')
+    }
+  }
+
+  // Gerar Despesa Recorrente a partir de Recorrência Fixa Cadastrada
   const handleGerarDespesaTemplate = async (
-    tpl: (typeof TEMPLATES_DESPESAS_ESCOLARES)[number],
+    tpl: RecorrenciaFixaEscolar,
     comp: string
   ) => {
     const [y, m] = comp.split('-').map(Number)
@@ -535,8 +706,12 @@ export default function ContasPagarPage() {
       {
         codigo: `REC-${comp.replace('-', '')}-${tpl.id.slice(-3).toUpperCase()}`,
         descricao: `${tpl.titulo} (${comp})`,
-        fornecedorNome: tpl.titulo.split('—')[0].trim(),
+        fornecedorId: tpl.fornecedorId,
+        fornecedorNome: tpl.fornecedorNome || tpl.titulo.split('—')[0].trim(),
+        fornecedorDocumento: tpl.fornecedorDocumento,
         categoria: tpl.categoria,
+        planoContasId: tpl.planoContasId,
+        subcategoria: tpl.unidadePadrao,
         centroCusto: tpl.centroCusto,
         tipoCusto: tpl.tipoCusto,
         prioridade: tpl.prioridade,
@@ -545,6 +720,7 @@ export default function ContasPagarPage() {
         valorBase: tpl.valorEstimado,
         valor: tpl.valorEstimado,
         formaPagamento: tpl.formaPagamento,
+        chavePix: tpl.chavePix,
         recorrente: true,
         frequenciaRecorrencia: 'mensal',
         aprovacaoStatus: 'aprovado',
@@ -554,15 +730,23 @@ export default function ContasPagarPage() {
   }
 
   const handleGerarLoteMensalFixo = async (comp: string) => {
+    if (recorrencias.length === 0) {
+      showToast('Cadastre ao menos uma recorrência fixa para gerar em lote.', 'error')
+      return
+    }
     const [y, m] = comp.split('-').map(Number)
     const maxDay = new Date(y, m, 0).getDate()
-    const novos: Partial<ContaPagarRecord>[] = TEMPLATES_DESPESAS_ESCOLARES.map((tpl, i) => {
+    const novos: Partial<ContaPagarRecord>[] = recorrencias.map((tpl, i) => {
       const safeDay = Math.min(tpl.diaVencimento, maxDay)
       return {
         codigo: `FIX-${comp.replace('-', '')}-0${i + 1}`,
         descricao: `${tpl.titulo} (${comp})`,
-        fornecedorNome: tpl.titulo.split('—')[0].trim(),
+        fornecedorId: tpl.fornecedorId,
+        fornecedorNome: tpl.fornecedorNome || tpl.titulo.split('—')[0].trim(),
+        fornecedorDocumento: tpl.fornecedorDocumento,
         categoria: tpl.categoria,
+        planoContasId: tpl.planoContasId,
+        subcategoria: tpl.unidadePadrao,
         centroCusto: tpl.centroCusto,
         tipoCusto: tpl.tipoCusto,
         prioridade: tpl.prioridade,
@@ -571,6 +755,7 @@ export default function ContasPagarPage() {
         valorBase: tpl.valorEstimado,
         valor: tpl.valorEstimado,
         formaPagamento: tpl.formaPagamento,
+        chavePix: tpl.chavePix,
         recorrente: true,
         frequenciaRecorrencia: 'mensal',
         aprovacaoStatus: 'aprovado',
@@ -748,11 +933,10 @@ export default function ContasPagarPage() {
         dangerouslySetInnerHTML={{
           __html: `
           .table-wrapper.cp-table-region {
-            container-type: inline-size;
-            content-visibility: auto;
-            contain-intrinsic-size: auto 600px;
             width: 100%;
-            overflow: visible;
+            max-inline-size: 100%;
+            container-type: inline-size;
+            overflow: visible !important;
             border-radius: 14px;
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -774,18 +958,17 @@ export default function ContasPagarPage() {
           .cp-data-table thead th {
             background: #f8fafc;
             color: #475569 !important;
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            padding: 11px 12px;
+            letter-spacing: 0.03em;
+            padding: 10px 10px;
             text-align: left;
             border-bottom: 1.5px solid #cbd5e1;
             border-inline-end: 1px solid rgba(203, 213, 225, 0.65);
-            white-space: normal !important;
-            overflow-wrap: break-word;
-            word-break: break-word;
+            white-space: nowrap !important;
             overflow: hidden;
+            text-overflow: ellipsis;
           }
           .cp-data-table thead th:last-child {
             border-inline-end: none;
@@ -795,34 +978,33 @@ export default function ContasPagarPage() {
             inset-inline-start: 0;
             background: inherit;
             text-align: left;
-            padding: 11px 12px;
+            padding: 9px 10px;
             font-weight: 700;
             color: #0f172a !important;
             border-top: 1px solid rgba(203, 213, 225, 0.55);
             border-inline-end: 1px solid rgba(203, 213, 225, 0.5);
             vertical-align: middle;
-            white-space: normal !important;
-            overflow-wrap: break-word;
-            word-break: break-word;
+            white-space: nowrap !important;
             overflow: hidden;
+            text-overflow: ellipsis;
           }
           .cp-data-table tbody td {
-            padding: 11px 12px;
+            padding: 9px 10px;
             border-top: 1px solid rgba(203, 213, 225, 0.55);
             border-inline-end: 1px solid rgba(203, 213, 225, 0.5);
             vertical-align: middle;
             color: #1e293b;
             background: inherit;
-            white-space: normal !important;
-            overflow-wrap: break-word;
-            word-break: break-word;
+            white-space: nowrap !important;
             overflow: hidden;
+            text-overflow: ellipsis;
           }
           .cp-data-table tbody td:last-child {
             border-inline-end: none;
           }
           .cp-data-table tbody td.cp-actions-cell {
             overflow: visible !important;
+            padding: 7px 8px;
           }
           /* Cores das linhas de acordo com o status do pagamento */
           .cp-data-table tbody tr.cp-row-pago {
@@ -1075,7 +1257,7 @@ export default function ContasPagarPage() {
             { id: 'calendario', label: 'Calendário', icon: <Calendar size={14} /> },
             { id: 'orcamento', label: 'Orçamento', icon: <Target size={14} /> },
             { id: 'fornecedores', label: `Fornecedores (${fornecedores.length})`, icon: <Building2 size={14} /> },
-            { id: 'recorrentes', label: 'Recorrências Fixas', icon: <Repeat size={14} /> },
+            { id: 'recorrentes', label: `Recorrências Fixas (${recorrencias.length})`, icon: <Repeat size={14} /> },
           ].map((tab) => {
             const active = activeTab === tab.id
             return (
@@ -1124,91 +1306,6 @@ export default function ContasPagarPage() {
          ═════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'lancamentos' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Pills Rápidas de Status + Limpar Filtros */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {[
-                { id: 'todos', label: 'Todos', count: contas.length, dot: '#64748b' },
-                {
-                  id: 'pendente',
-                  label: 'A Vencer / Em Aberto',
-                  count: contas.filter((c) => c.status === 'pendente' || c.status === 'agendado').length,
-                  dot: '#0284c7',
-                },
-                { id: 'vencido', label: 'Vencidos', count: kpis.qtdVencido, dot: '#e11d48' },
-                { id: 'hoje', label: 'Vencem Hoje', count: kpis.venceHojeQtd, dot: '#d97706' },
-                { id: '7dias', label: 'Próx. 7 Dias', count: kpis.vence7DiasQtd, dot: '#7c3aed' },
-                { id: 'pago', label: 'Pagos', count: contas.filter((c) => c.status === 'pago').length, dot: '#10b981' },
-              ].map((pill) => {
-                const active = statusFilter === pill.id
-                return (
-                  <button
-                    key={pill.id}
-                    type="button"
-                    onClick={() => setStatusFilter(pill.id)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '5px 11px',
-                      borderRadius: 99,
-                      background: active ? '#0f172a' : '#ffffff',
-                      border: active ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                      color: active ? '#ffffff' : '#334155',
-                      fontSize: 11.5,
-                      fontWeight: active ? 700 : 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: 99,
-                        background: active ? '#ffffff' : pill.dot,
-                      }}
-                    />
-                    <span>{pill.label}</span>
-                    <span
-                      style={{
-                        padding: '1px 6px',
-                        borderRadius: 99,
-                        background: active ? 'rgba(255,255,255,0.2)' : '#f1f5f9',
-                        color: active ? '#ffffff' : '#475569',
-                        fontSize: 10,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {pill.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '5px 11px',
-                  borderRadius: 8,
-                  background: '#fff1f2',
-                  border: '1px solid #fecdd3',
-                  color: '#be123c',
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <X size={13} /> Limpar Filtros
-              </button>
-            )}
-          </div>
-
           {/* Barra de Filtros Organizada (Com Vencimento Inicial e Vencimento Final) */}
           <div
             style={{
@@ -1476,6 +1573,22 @@ export default function ContasPagarPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setReceiptContas(contasSelecionadasObj)}
+                  style={{
+                    padding: '7px 13px',
+                    borderRadius: 8,
+                    background: '#eff6ff',
+                    border: '1px solid #93c5fd',
+                    color: '#1d4ed8',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Emitir Recibo ({selectedIds.size})
+                </button>
+                <button
+                  type="button"
                   onClick={() => openPrintBorderoPagamentos(contasSelecionadasObj, 'Seleção Personalizada')}
                   style={{
                     padding: '7px 13px',
@@ -1517,25 +1630,146 @@ export default function ContasPagarPage() {
             aria-labelledby="contas-pagar-table-caption"
             className="table-wrapper cp-table-region"
           >
-            <table className="cp-data-table">
-              <caption
+            {/* Cabeçalho Integrado da Tabela: Resumo à esquerda + Segmented Control de Status à direita */}
+            <div
+              style={{
+                padding: '8px 14px',
+                background: '#f8fafc',
+                borderBottom: '1px solid #e2e8f0',
+                borderTopLeftRadius: 14,
+                borderTopRightRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 10,
+              }}
+            >
+              <div
                 id="contas-pagar-table-caption"
                 style={{
-                  padding: '10px 16px',
-                  textAlign: 'left',
                   fontSize: 12,
                   fontWeight: 700,
                   color: '#475569',
-                  background: '#f8fafc',
-                  borderBottom: '1px solid #e2e8f0',
                 }}
               >
                 Relação de Contas a Pagar ({contasFiltradas.length} registros • Soma Filtrada:{' '}
                 <strong style={{ color: '#0f172a' }}>{formatCurrency(resumoFiltrado.total)}</strong>)
-              </caption>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div
+                  role="tablist"
+                  aria-label="Filtrar contas por situação"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    padding: 3,
+                    borderRadius: 9,
+                    background: '#eef2f6',
+                    border: '1px solid #e2e8f0',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {[
+                    { id: 'todos', label: 'Todos', count: contas.length, dot: '#475569' },
+                    {
+                      id: 'pendente',
+                      label: 'Em Aberto',
+                      count: contas.filter((c) => c.status === 'pendente' || c.status === 'agendado').length,
+                      dot: '#0284c7',
+                    },
+                    { id: 'vencido', label: 'Vencidos', count: kpis.qtdVencido, dot: '#e11d48' },
+                    { id: 'hoje', label: 'Hoje', count: kpis.venceHojeQtd, dot: '#d97706' },
+                    { id: '7dias', label: 'Próx. 7d', count: kpis.vence7DiasQtd, dot: '#7c3aed' },
+                    { id: 'pago', label: 'Pagos', count: contas.filter((c) => c.status === 'pago').length, dot: '#10b981' },
+                  ].map((pill) => {
+                    const active = statusFilter === pill.id
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setStatusFilter(pill.id)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: active ? '#ffffff' : 'transparent',
+                          border: 'none',
+                          boxShadow: active ? '0 1px 2px rgba(15, 23, 42, 0.08)' : 'none',
+                          color: active ? '#0f172a' : pill.count > 0 ? '#475569' : '#94a3b8',
+                          fontSize: 11,
+                          fontWeight: active ? 700 : 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {active && (
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 99,
+                              background: pill.dot,
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                        <span>{pill.label}</span>
+                        {pill.count > 0 && (
+                          <span
+                            style={{
+                              padding: '0px 5px',
+                              borderRadius: 99,
+                              background: active ? '#f1f5f9' : 'rgba(148, 163, 184, 0.16)',
+                              color: active ? '#0f172a' : '#475569',
+                              fontSize: 10,
+                              fontWeight: 800,
+                            }}
+                          >
+                            {pill.count}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 9px',
+                      borderRadius: 7,
+                      background: '#fff1f2',
+                      border: '1px solid #fecdd3',
+                      color: '#be123c',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <X size={12} /> Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <table className="cp-data-table">
               <thead>
                 <tr>
-                  <th style={{ width: 42, textAlign: 'center', padding: '11px 6px' }}>
+                  <th style={{ width: '2.8%', textAlign: 'center', padding: '10px 4px' }}>
                     <input
                       aria-label="Selecionar todas as contas visíveis"
                       type="checkbox"
@@ -1554,26 +1788,27 @@ export default function ContasPagarPage() {
                       }}
                     />
                   </th>
-                  <th style={{ width: '21%' }}>Fornecedor / Credor</th>
-                  <th style={{ width: '12%' }}>Nº do Doc</th>
-                  <th style={{ width: '19%' }}>Plano de Contas & Centro de Custo</th>
-                  <th style={{ width: '8.5%', textAlign: 'center' }}>Emissão</th>
-                  <th style={{ width: '8.5%', textAlign: 'center' }}>Vencimento</th>
-                  <th style={{ width: '10.5%', textAlign: 'center' }}>Status</th>
-                  <th style={{ width: '10.5%', textAlign: 'right' }}>Valor Líquido</th>
-                  <th style={{ width: 176, textAlign: 'center' }}>Ações</th>
+                  <th style={{ width: '6.7%', textAlign: 'center' }}>ID</th>
+                  <th style={{ width: '16%' }}>Fornecedor / Credor</th>
+                  <th style={{ width: '10.5%' }}>Nº do Doc</th>
+                  <th style={{ width: '17.5%' }}>Plano de Contas & Centro de Custo</th>
+                  <th style={{ width: '7.2%', textAlign: 'center' }}>Emissão</th>
+                  <th style={{ width: '7.2%', textAlign: 'center' }}>Vencimento</th>
+                  <th style={{ width: '9.6%', textAlign: 'center' }}>Status</th>
+                  <th style={{ width: '8.5%', textAlign: 'right' }}>Valor Líquido</th>
+                  <th style={{ width: '14%', textAlign: 'center' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
+                    <td colSpan={10} style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
                       Carregando lançamentos financeiros...
                     </td>
                   </tr>
                 ) : contasPaginadas.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
+                    <td colSpan={10} style={{ padding: 36, textAlign: 'center', color: '#64748b' }}>
                       Nenhuma conta a pagar encontrada para os filtros selecionados.
                     </td>
                   </tr>
@@ -1629,55 +1864,102 @@ export default function ContasPagarPage() {
                           />
                         </td>
 
+                        {/* ID / CÓDIGO DO LANÇAMENTO */}
+                        <td
+                          onClick={() => setFichaConta(c)}
+                          title={`Código do lançamento: ${c.codigo || c.id}`}
+                          style={
+                            {
+                              '--label': 'ID',
+                              textAlign: 'center',
+                              padding: '9px 6px',
+                              cursor: 'pointer',
+                            } as React.CSSProperties
+                          }
+                        >
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                              letterSpacing: '-0.02em',
+                              color: '#64748b',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {c.codigo || c.id}
+                          </span>
+                        </td>
+
                         {/* FORNECEDOR / CREDOR */}
                         <th scope="row">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div
+                            onClick={() => setFichaConta(c)}
+                            title={`${c.fornecedorNome}${c.fornecedorDocumento ? ` (${c.fornecedorDocumento})` : ''}${c.formaPagamento ? ` • ${c.formaPagamento}` : ''}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              minWidth: 0,
+                            }}
+                          >
                             <span
                               style={{
-                                fontSize: 10,
-                                color: '#475569',
-                                background: 'rgba(255,255,255,0.75)',
-                                border: '1px solid #cbd5e1',
-                                padding: '1px 5px',
-                                borderRadius: 4,
-                                fontWeight: 700,
+                                fontSize: 12.5,
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                minWidth: 0,
                               }}
                             >
-                              {c.codigo || c.id}
+                              {c.fornecedorNome}
                             </span>
                             {c.formaPagamento && (
-                              <span style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  color: '#64748b',
+                                  fontWeight: 600,
+                                  flexShrink: 0,
+                                }}
+                              >
                                 • {c.formaPagamento}
                               </span>
                             )}
                           </div>
-                          <div
-                            onClick={() => setFichaConta(c)}
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 800,
-                              color: '#0f172a',
-                              marginTop: 3,
-                              cursor: 'pointer',
-                              lineHeight: 1.3,
-                            }}
-                          >
-                            {c.fornecedorNome}
-                          </div>
-                          {c.fornecedorDocumento && (
-                            <div style={{ fontSize: 10.5, color: '#64748b', fontFamily: 'monospace', marginTop: 1 }}>
-                              {c.fornecedorDocumento}
-                            </div>
-                          )}
                         </th>
 
                         {/* Nº DO DOC */}
                         <td style={{ '--label': 'Nº do Doc' } as React.CSSProperties}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 12 }}>
-                            {c.numeroDocumento || 'S/N'}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>
+                          <div
+                            title={`${c.numeroDocumento || 'S/N'} (${c.tipoDocumento || 'Doc'})${c.parcelaAtual && c.totalParcelas ? ` • ${String(c.parcelaAtual).padStart(2, '0')}/${String(c.totalParcelas).padStart(2, '0')}` : ''}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                fontSize: 12,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                minWidth: 0,
+                              }}
+                            >
+                              {c.numeroDocumento || 'S/N'}
+                            </span>
+                            <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
                               {c.tipoDocumento || 'Doc'}
                             </span>
                             {c.parcelaAtual && c.totalParcelas && (
@@ -1689,6 +1971,7 @@ export default function ContasPagarPage() {
                                   color: '#6d28d9',
                                   fontSize: 10,
                                   fontWeight: 800,
+                                  flexShrink: 0,
                                 }}
                               >
                                 {String(c.parcelaAtual).padStart(2, '0')}/{String(c.totalParcelas).padStart(2, '0')}
@@ -1703,7 +1986,7 @@ export default function ContasPagarPage() {
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: 3,
-                                  padding: '1px 6px',
+                                  padding: '1px 5px',
                                   borderRadius: 99,
                                   background: '#eff6ff',
                                   border: '1px solid #93c5fd',
@@ -1711,6 +1994,7 @@ export default function ContasPagarPage() {
                                   fontSize: 10,
                                   fontWeight: 800,
                                   cursor: 'pointer',
+                                  flexShrink: 0,
                                 }}
                               >
                                 <Paperclip size={10} />
@@ -1722,11 +2006,45 @@ export default function ContasPagarPage() {
 
                         {/* PLANO DE CONTAS & CENTRO DE CUSTO */}
                         <td style={{ '--label': 'Plano de Contas' } as React.CSSProperties}>
-                          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, lineHeight: 1.3 }}>
-                            {c.categoria}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, color: '#64748b' }}>{c.centroCusto}</span>
+                          <div
+                            title={`${c.categoria}${c.centroCusto ? ` • ${c.centroCusto}` : ''}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: '#1e293b',
+                                fontSize: 12,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                minWidth: 0,
+                              }}
+                            >
+                              {c.categoria}
+                            </span>
+                            {c.centroCusto && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  color: '#475569',
+                                  background: 'rgba(255,255,255,0.75)',
+                                  border: '1px solid #cbd5e1',
+                                  padding: '1px 5px',
+                                  borderRadius: 4,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {c.centroCusto}
+                              </span>
+                            )}
                             {c.rateio && c.rateio.length > 0 && (
                               <span
                                 style={{
@@ -1737,6 +2055,7 @@ export default function ContasPagarPage() {
                                   color: '#0e7490',
                                   fontSize: 9.5,
                                   fontWeight: 800,
+                                  flexShrink: 0,
                                 }}
                               >
                                 Rateio ({c.rateio.length})
@@ -1747,7 +2066,7 @@ export default function ContasPagarPage() {
 
                         {/* EMISSÃO */}
                         <td style={{ '--label': 'Emissão', textAlign: 'center' } as React.CSSProperties}>
-                          <div style={{ fontWeight: 600, fontSize: 12, color: '#334155' }}>
+                          <div style={{ fontWeight: 600, fontSize: 12, color: '#334155', whiteSpace: 'nowrap' }}>
                             {(c.dataEmissao || c.vencimento)?.split('-').reverse().join('/') || '—'}
                           </div>
                         </td>
@@ -1758,6 +2077,7 @@ export default function ContasPagarPage() {
                             style={{
                               fontWeight: 800,
                               fontSize: 12,
+                              whiteSpace: 'nowrap',
                               color:
                                 c.status === 'vencido'
                                   ? '#be123c'
@@ -1774,7 +2094,14 @@ export default function ContasPagarPage() {
 
                         {/* STATUS */}
                         <td style={{ '--label': 'Status', textAlign: 'center' } as React.CSSProperties}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                          <div
+                            title={
+                              c.status === 'pago' && c.dataPagamento
+                                ? `${stCfg.label} em ${c.dataPagamento.split('-').reverse().join('/')}`
+                                : stCfg.label
+                            }
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                          >
                             <span
                               style={{
                                 padding: '3px 8px',
@@ -1787,21 +2114,25 @@ export default function ContasPagarPage() {
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {isVenceHoje ? 'Vence Hoje' : stCfg.label}
+                              {isVenceHoje
+                                ? 'Vence Hoje'
+                                : c.status === 'pago' && c.dataPagamento
+                                  ? `Pago ${c.dataPagamento.split('-').reverse().join('/')}`
+                                  : stCfg.label}
                             </span>
-                            {c.status === 'pago' && c.dataPagamento && (
-                              <span style={{ fontSize: 10, color: '#047857', fontWeight: 700 }}>
-                                Pago {c.dataPagamento.split('-').reverse().join('/')}
-                              </span>
-                            )}
                           </div>
                         </td>
 
                         {/* VALOR LÍQUIDO */}
                         <td style={{ '--label': 'Valor Líquido', textAlign: 'right' } as React.CSSProperties}>
                           <div
+                            title={
+                              c.retencaoImpostos > 0 || c.desconto > 0 || c.juros > 0 || c.multa > 0
+                                ? `Valor Bruto: ${formatCurrency(c.valorBase)}`
+                                : undefined
+                            }
                             style={{
-                              fontSize: 13.5,
+                              fontSize: 13,
                               fontWeight: 900,
                               color:
                                 c.status === 'pago'
@@ -1814,11 +2145,6 @@ export default function ContasPagarPage() {
                           >
                             {formatCurrency(c.valor)}
                           </div>
-                          {(c.retencaoImpostos > 0 || c.desconto > 0 || c.juros > 0 || c.multa > 0) && (
-                            <div style={{ fontSize: 10, color: '#64748b', marginTop: 1, fontWeight: 600 }}>
-                              Bruto: {formatCurrency(c.valorBase)}
-                            </div>
-                          )}
                         </td>
 
                         {/* AÇÕES */}
@@ -1827,7 +2153,7 @@ export default function ContasPagarPage() {
                           style={{ '--label': 'Ações', textAlign: 'right', position: 'relative' } as React.CSSProperties}
                         >
                           <div
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', flexWrap: 'nowrap' }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             {/* Botão Rápido: Anexar Arquivo */}
@@ -1838,8 +2164,8 @@ export default function ContasPagarPage() {
                               aria-label={`Anexar arquivo em ${c.fornecedorNome}`}
                               style={{
                                 position: 'relative',
-                                width: 29,
-                                height: 29,
+                                width: 27,
+                                height: 27,
                                 borderRadius: 7,
                                 background: c.anexos && c.anexos.length > 0 ? '#eff6ff' : '#ffffff',
                                 border:
@@ -1854,7 +2180,7 @@ export default function ContasPagarPage() {
                                 flexShrink: 0,
                               }}
                             >
-                              <Paperclip size={13.5} />
+                              <Paperclip size={13} />
                               {c.anexos && c.anexos.length > 0 && (
                                 <span
                                   style={{
@@ -1880,76 +2206,99 @@ export default function ContasPagarPage() {
                               )}
                             </button>
 
-                            {/* Botão Rápido: Tirar Foto (Câmera) */}
-                            <button
-                              type="button"
-                              onClick={() => setAnexosModalTarget({ conta: c, mode: 'camera' })}
-                              title="Tirar foto de comprovante / documento com a câmera"
-                              aria-label={`Tirar foto para ${c.fornecedorNome}`}
-                              style={{
-                                width: 29,
-                                height: 29,
-                                borderRadius: 7,
-                                background: '#f5f3ff',
-                                border: '1px solid #c4b5fd',
-                                color: '#6d28d9',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Camera size={13.5} />
-                            </button>
-
                             {c.status !== 'pago' && c.status !== 'cancelado' ? (
                               <button
                                 type="button"
                                 onClick={() => setBaixaTargets([c])}
                                 title="Dar Baixa / Liquidar Título"
                                 style={{
-                                  padding: '6px 10px',
+                                  padding: '5px 9px',
                                   borderRadius: 7,
                                   background: '#059669',
                                   border: 'none',
                                   color: '#ffffff',
-                                  fontSize: 11.5,
+                                  fontSize: 11,
                                   fontWeight: 800,
                                   cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  flexShrink: 0,
                                 }}
                               >
                                 Baixar
                               </button>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => setFichaConta(c)}
-                                title="Ver Dossiê Completo"
-                                style={{
-                                  padding: '6px 10px',
-                                  borderRadius: 7,
-                                  background: '#ffffff',
-                                  border: '1px solid #cbd5e1',
-                                  color: '#334155',
-                                  fontSize: 11.5,
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                Ficha
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptContas([c])}
+                                  title="Emitir Recibo de Pagamento & Quitação com QR Code"
+                                  style={{
+                                    padding: '5px 7px',
+                                    borderRadius: 7,
+                                    background: '#eff6ff',
+                                    border: '1px solid #93c5fd',
+                                    color: '#1d4ed8',
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                  }}
+                                >
+                                  <FileText size={11.5} />
+                                  Recibo
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFichaConta(c)}
+                                  title="Ver Dossiê Completo"
+                                  style={{
+                                    padding: '5px 8px',
+                                    borderRadius: 7,
+                                    background: '#ffffff',
+                                    border: '1px solid #cbd5e1',
+                                    color: '#334155',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  Ficha
+                                </button>
+                              </>
                             )}
 
-                            <div style={{ position: 'relative' }}>
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
                               <button
                                 type="button"
                                 aria-label={`Mais ações para ${c.fornecedorNome}`}
                                 aria-expanded={isMenuOpen}
-                                onClick={() => setOpenMenuId(isMenuOpen ? null : c.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (isMenuOpen) {
+                                    setOpenMenuId(null)
+                                    setOpenMenuPos(null)
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    const estimatedMenuHeight = 310
+                                    const spaceBelow = window.innerHeight - rect.bottom
+                                    const openUp = spaceBelow < estimatedMenuHeight && rect.top > spaceBelow
+                                    setOpenMenuPos({
+                                      top: openUp ? undefined : rect.bottom + 6,
+                                      bottom: openUp ? window.innerHeight - rect.top + 6 : undefined,
+                                      right: Math.max(12, window.innerWidth - rect.right),
+                                    })
+                                    setOpenMenuId(c.id)
+                                  }
+                                }}
                                 style={{
-                                  width: 29,
-                                  height: 29,
+                                  width: 27,
+                                  height: 27,
                                   borderRadius: 7,
                                   background: '#ffffff',
                                   border: '1px solid #cbd5e1',
@@ -1960,22 +2309,23 @@ export default function ContasPagarPage() {
                                   cursor: 'pointer',
                                 }}
                               >
-                                <MoreVertical size={14} />
+                                <MoreVertical size={13.5} />
                               </button>
 
                               {isMenuOpen && (
                                 <div
                                   role="menu"
                                   style={{
-                                    position: 'absolute',
-                                    right: 0,
-                                    top: 33,
-                                    zIndex: 60,
+                                    position: openMenuPos ? 'fixed' : 'absolute',
+                                    top: openMenuPos ? openMenuPos.top : 33,
+                                    bottom: openMenuPos ? openMenuPos.bottom : undefined,
+                                    right: openMenuPos ? openMenuPos.right : 0,
+                                    zIndex: 9999,
                                     width: 235,
                                     background: '#ffffff',
                                     border: '1px solid #cbd5e1',
                                     borderRadius: 11,
-                                    boxShadow: '0 12px 28px rgba(15, 23, 42, 0.14)',
+                                    boxShadow: '0 16px 36px rgba(15, 23, 42, 0.22)',
                                     padding: 5,
                                     textAlign: 'left',
                                     display: 'flex',
@@ -2188,6 +2538,33 @@ export default function ContasPagarPage() {
                                     role="menuitem"
                                     onClick={() => {
                                       setOpenMenuId(null)
+                                      setReceiptContas([c])
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      width: '100%',
+                                      padding: '8px 10px',
+                                      borderRadius: 7,
+                                      background: 'transparent',
+                                      border: 'none',
+                                      color: '#0369a1',
+                                      fontSize: 12,
+                                      fontWeight: 800,
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                    }}
+                                  >
+                                    <FileText size={14} color="#0284c7" />
+                                    Emitir Recibo Oficial
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setOpenMenuId(null)
                                       openPrintOrdemPagamento(c)
                                     }}
                                     style={{
@@ -2315,57 +2692,40 @@ export default function ContasPagarPage() {
               </span>
             </div>
 
-            {/* Legenda de Cores das Linhas + Paginação */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span
-                  style={{
-                    padding: '3px 9px',
-                    borderRadius: 6,
-                    background: '#10b981',
-                    color: '#ffffff',
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                  }}
-                >
-                  Pago
-                </span>
-                <span
-                  style={{
-                    padding: '3px 9px',
-                    borderRadius: 6,
-                    background: '#f43f5e',
-                    color: '#ffffff',
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                  }}
-                >
-                  Vencido
-                </span>
-                <span
-                  style={{
-                    padding: '3px 9px',
-                    borderRadius: 6,
-                    background: '#f59e0b',
-                    color: '#ffffff',
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                  }}
-                >
-                  Vence Hoje
-                </span>
-                <span
-                  style={{
-                    padding: '3px 9px',
-                    borderRadius: 6,
-                    background: '#0f172a',
-                    color: '#ffffff',
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                  }}
-                >
-                  A Vencer
-                </span>
+            {/* Legenda Discreta de Cores das Linhas + Paginação */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                {[
+                  { id: 'pago', label: 'Pago', color: '#10b981' },
+                  { id: 'vencido', label: 'Vencido', color: '#f43f5e' },
+                  { id: 'hoje', label: 'Vence Hoje', color: '#f59e0b' },
+                  { id: 'pendente', label: 'A Vencer', color: '#0284c7' },
+                ].map((leg) => (
+                  <span
+                    key={leg.id}
+                    onClick={() => setStatusFilter((prev) => (prev === leg.id ? 'todos' : leg.id))}
+                    title={`Filtrar por ${leg.label}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      cursor: 'pointer',
+                      color: statusFilter === leg.id ? '#0f172a' : '#64748b',
+                      fontWeight: statusFilter === leg.id ? 800 : 600,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: 99,
+                        background: leg.color,
+                        display: 'inline-block',
+                      }}
+                    />
+                    {leg.label}
+                  </span>
+                ))}
               </div>
 
               {totalPages > 1 && (
@@ -2465,6 +2825,7 @@ export default function ContasPagarPage() {
           contas={contas}
           centrosCusto={centrosCustoAtivos}
           planoContas={planosContasAtivos}
+          unidades={unidadesEscolares}
           onSaveFornecedor={handleSaveFornecedor}
           onDeleteFornecedor={handleDeleteFornecedor}
         />
@@ -2475,6 +2836,15 @@ export default function ContasPagarPage() {
          ═════════════════════════════════════════════════════════════════════════ */}
       {activeTab === 'recorrentes' && (
         <RecorrentesTemplatesTab
+          recorrencias={recorrencias}
+          contas={contas}
+          fornecedores={fornecedores}
+          centrosCusto={centrosCustoAtivos}
+          planoContas={planosContasAtivos}
+          unidades={unidadesEscolares}
+          metodosPagamento={metodosPagamentoAtivos}
+          onSaveRecorrencia={handleSaveRecorrencia}
+          onDeleteRecorrencia={handleDeleteRecorrencia}
           onGerarDespesaTemplate={handleGerarDespesaTemplate}
           onGerarLoteMensalFixo={handleGerarLoteMensalFixo}
         />
@@ -2492,6 +2862,7 @@ export default function ContasPagarPage() {
         planoContas={rawPlanoContas}
         eventosFinanceiros={cfgEventos || []}
         centrosCusto={centrosCustoAtivos}
+        unidades={unidadesEscolares}
         onSave={handleSaveContas}
         onQuickCreateFornecedor={handleSaveFornecedor}
       />
@@ -2500,6 +2871,8 @@ export default function ContasPagarPage() {
         isOpen={baixaTargets.length > 0}
         onClose={() => setBaixaTargets([])}
         targetContas={baixaTargets}
+        metodosPagamento={metodosPagamentoAtivos}
+        caixasEscolares={caixasEscolaresAtivos}
         onConfirmBaixaIndividual={handleConfirmBaixaIndividual}
         onConfirmBaixaLote={handleConfirmBaixaLote}
       />
@@ -2514,7 +2887,24 @@ export default function ContasPagarPage() {
         onBaixar={(c) => setBaixaTargets([c])}
         onReverterBaixa={handleReverterBaixa}
         onUpdateAnexos={handleUpdateAnexos}
+        onEmitirRecibo={(c) => {
+          setFichaConta(null)
+          setReceiptContas([c])
+        }}
       />
+
+      {receiptContas && receiptContas.length > 0 && (() => {
+        const rData = buildContaPagarReceiptData(receiptContas)
+        return (
+          <ReceiptModal
+            aluno={rData.aluno}
+            parcelas={rData.parcelas}
+            natureza={rData.natureza}
+            turmaUnidade={rData.turmaUnidade}
+            onClose={() => setReceiptContas(null)}
+          />
+        )
+      })()}
 
       <AnexosLancamentoModal
         conta={anexosModalTarget?.conta || null}

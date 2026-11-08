@@ -953,6 +953,102 @@ export const CENTROS_CUSTO_DEFAULT: ConfigCentroCusto[] = [
   },
 ]
 
+export type TipoCaixaConfig =
+  | 'Caixa – Movimento Diário'
+  | 'Conta Corrente Bancária'
+  | 'Conta Digital / PIX'
+  | 'Caixa Fundo Fixo'
+  | 'Cofre / Reserva'
+  | 'Conta Poupança / Aplicação'
+  | 'movimento_diario'
+  | 'conta_bancaria'
+  | 'conta_digital_pix'
+  | 'fundo_fixo'
+  | 'cofre_reserva'
+  | 'poupanca_aplicacao'
+  | (string & {})
+
+export const TIPOS_CAIXA_PADRAO: string[] = [
+  'Caixa – Movimento Diário',
+  'Conta Corrente Bancária',
+  'Conta Digital / PIX',
+  'Caixa Fundo Fixo',
+  'Cofre / Reserva',
+  'Conta Poupança / Aplicação',
+]
+
+export type SituacaoCaixaConfig = 'Aberto' | 'Fechado' | 'Vistoriado'
+
+export interface HistoricoCaixaConfigItem {
+  id: string
+  dataHora: string
+  acao: 'Abertura' | 'Edição' | 'Fechamento' | 'Reabertura' | 'Vistoria' | 'Transferência' | string
+  usuario: string
+  observacao?: string
+  detalhes?: string
+}
+
+export interface ConfigCaixa {
+  id: string
+  codigo: string                 // ex: '108', '102', '98'
+  descricao: string              // ex: 'IVAN-2025', 'CAIXA-IVAN2023'
+  dataAbertura: string           // YYYY-MM-DD
+  dataFechamento?: string        // YYYY-MM-DD
+  dataVistoria?: string          // YYYY-MM-DD
+  tipoCaixa: TipoCaixaConfig     // 'Caixa – Movimento Diário'
+  operador: string               // ex: '11 - Ivan Rossi'
+  operadorCodigo?: string
+  operadorId?: string
+  abertoPor: string              // ex: '11 - Ivan Rossi'
+  fechadoPor?: string
+  vistoriadoPor: string          // ex: '11 - Ivan Rossi'
+  contaPlanoId?: string          // vínculo com cfgPlanoContas
+  contaPlanoLabel?: string       // ex: '1.1.01 - Caixa Tesouraria'
+  contaPlano?: string
+  unidadeId?: string             // vínculo com mantenedores/unidades
+  unidadeEmpresa: string         // ex: '1 - Colégio Impacto Centro de Ensino - ME'
+  // Informações Extras
+  banco?: string
+  agencia: string
+  conta: string
+  chavePix?: string
+  saldoInicial?: number
+  totalEntradas?: number
+  totalSaidas?: number
+  aceitaTransferenciaOutrosCaixas: boolean
+  aceitaBaixaContasPagarOutroUsuario: boolean
+  aceitaTransferencias?: 'Sim' | 'Não'
+  aceitaBaixaOutroUsuario?: 'Sim' | 'Não'
+  situacao: SituacaoCaixaConfig
+  observacoes?: string
+  historico?: HistoricoCaixaConfigItem[]
+  createdAt: string
+  updatedAt?: string
+}
+
+// Sem dados simulados — todos os caixas são carregados e salvos exclusivamente no banco de dados (tabela `configuracoes`, chave `cfgCaixas`)
+export const CAIXAS_DEFAULT: ConfigCaixa[] = []
+
+export const SIMULATED_CAIXA_IDS = new Set([
+  'CX-108',
+  'CX-102',
+  'CX-98',
+  'CX-94',
+  'CX-19',
+  'CX-11',
+  'CX-1',
+])
+
+export function isSimulatedCaixaRecord(c: any): boolean {
+  if (!c || typeof c !== 'object') return false
+  const id = String(c.id || '').trim()
+  if (!SIMULATED_CAIXA_IDS.has(id)) return false
+  // Os registros simulados originais tinham exatamente IDs estáticos CX-108..CX-1 e histórico HCX-*-1
+  const firstHistId = String(c.historico?.[0]?.id || '')
+  if (/^HCX-\d+-1$/.test(firstHistId)) return true
+  return true
+}
+
 
 // ─── MOVIMENTAÇÕES FINANCEIRAS ─────────────────────────────────────
 export type TipoMovimentacao = 'receita' | 'despesa'
@@ -1393,6 +1489,7 @@ interface DataState {
   cfgPadroesPagamento: ConfigPadraoPagamento[]; setCfgPadroesPagamento: Setter<ConfigPadraoPagamento[]>
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
   cfgCentrosCusto: ConfigCentroCusto[]; setCfgCentrosCusto: Setter<ConfigCentroCusto[]>
+  cfgCaixas: ConfigCaixa[]; setCfgCaixas: Setter<ConfigCaixa[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
   cfgCalendarioLetivo: ConfigCalendarioLetivo[]; setCfgCalendarioLetivo: Setter<ConfigCalendarioLetivo[]>
@@ -1411,14 +1508,14 @@ interface DataState {
 }
 
 export const DEFAULT_PERFIS: Perfil[] = [
-  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/anunciar','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/administrativo/declaracao-irpf','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda','simulados','/simulados','provas-online','/provas-online','credimpacto','/credimpacto'] },
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/anunciar','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/administrativo/declaracao-irpf','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/caixas','/configuracoes/financeiro/caixa','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda','simulados','/simulados','provas-online','/provas-online','credimpacto','/credimpacto'] },
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','agenda-digital','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/administrativo/declaracao-irpf','agenda-digital','/agenda-digital','provas-online','/provas-online','credimpacto','/credimpacto'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade','agenda-digital','/agenda-digital','simulados','/simulados','provas-online','/provas-online','credimpacto','/credimpacto'] },
-  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/eventos','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/padrao-pagamento','/administrativo/declaracao-irpf','relatorios','/bi','/relatorios/mec','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
+  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/configuracoes/financeiro/caixas','/configuracoes/financeiro/caixa','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/eventos','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/padrao-pagamento','/administrativo/declaracao-irpf','relatorios','/bi','/relatorios/mec','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
   { id: 'P6', nome: 'Portaria & Segurança', cor: '#64748b', descricao: 'Controle de acesso e saída', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','portaria','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/anunciar','/saida-alunos/relatorios','/saida-alunos/configuracoes','agenda-digital','/agenda-digital','credimpacto','/credimpacto'] },
-  { id: 'P7', nome: 'Administrador', cor: '#4b5563', descricao: 'Acesso administrativo completo', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
-  { id: 'P8', nome: 'TI', cor: '#1e3a8a', descricao: 'Suporte e gerenciamento de TI', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
+  { id: 'P7', nome: 'Administrador', cor: '#4b5563', descricao: 'Acesso administrativo completo', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/caixas','/configuracoes/financeiro/caixa','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
+  { id: 'P8', nome: 'TI', cor: '#1e3a8a', descricao: 'Suporte e gerenciamento de TI', permissoes: ['principal','matriculas','/matriculas/digital','/matriculas/valores','/matriculas/negociacoes','/matriculas/conciliacao-isaac','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','/administrativo/declaracao-irpf','bi','relatorios','multiUnidades','configuracoes','/configuracoes/financeiro/caixas','/configuracoes/financeiro/caixa','/configuracoes/financeiro/centro-custo','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','simulados','/simulados','/saida-alunos/anunciar','provas-online','/provas-online','credimpacto','/credimpacto'] },
 ]
 
 const NOOP = () => {}
@@ -1457,6 +1554,7 @@ export interface FinanceiroDataState {
   cfgPadroesPagamento: ConfigPadraoPagamento[]; setCfgPadroesPagamento: Setter<ConfigPadraoPagamento[]>
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
   cfgCentrosCusto: ConfigCentroCusto[]; setCfgCentrosCusto: Setter<ConfigCentroCusto[]>
+  cfgCaixas: ConfigCaixa[]; setCfgCaixas: Setter<ConfigCaixa[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
@@ -1520,6 +1618,7 @@ const DataContext = createContext<DataState>({
   cfgPadroesPagamento: [], setCfgPadroesPagamento: NOOP,
   cfgPlanoContas: [], setCfgPlanoContas: NOOP,
   cfgCentrosCusto: [], setCfgCentrosCusto: NOOP,
+  cfgCaixas: [], setCfgCaixas: NOOP,
   cfgTiposDocumento: [], setCfgTiposDocumento: NOOP,
   cfgConvenios: [], setCfgConvenios: NOOP,
   cfgCalendarioLetivo: [], setCfgCalendarioLetivo: NOOP,
@@ -1619,13 +1718,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: esquemaNota, setData: setEsquemaNota } = useConfigDb<EsquemaNota>('esquemaNota')
   const { data: cfgFormulasNotas, setData: setCfgFormulasNotas } = useConfigDb<FormulaNotas>('cfgFormulasNotas')
   // ── CONFIGURAÇÕES FINANCEIRAS — persistidas em Supabase (tabela configuracoes) ──
-  const { data: cfgMetodosPagamento, setData: setCfgMetodosPagamento } = useConfigDb<MetodoPagamento>('cfgMetodosPagamento')
+  const METODOS_PAGAMENTO_DEFAULT: MetodoPagamento[] = [
+    { id: 'MP001', codigo: 'MP001', nome: 'PIX',               tipo: 'pix',              taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Transferência instantânea via Banco Central', createdAt: new Date().toISOString() },
+    { id: 'MP002', codigo: 'MP002', nome: 'Dinheiro',          tipo: 'dinheiro',         taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: '', createdAt: new Date().toISOString() },
+    { id: 'MP003', codigo: 'MP003', nome: 'Boleto Bancário',   tipo: 'boleto',           taxaPercentual: 0,   diasCompensacao: 2, situacao: 'ativo', obs: 'Compensação em até 2 dias úteis', createdAt: new Date().toISOString() },
+    { id: 'MP004', codigo: 'MP004', nome: 'Cartão de Crédito', tipo: 'cartao_credito',   taxaPercentual: 2.5, diasCompensacao: 30, situacao: 'ativo', obs: '', createdAt: new Date().toISOString() },
+    { id: 'MP005', codigo: 'MP005', nome: 'Cartão de Débito',  tipo: 'cartao_debito',    taxaPercentual: 1.5, diasCompensacao: 2, situacao: 'ativo', obs: '', createdAt: new Date().toISOString() },
+    { id: 'MP006', codigo: 'MP006', nome: 'Débito Automático', tipo: 'debito_automatico',taxaPercentual: 0,   diasCompensacao: 1, situacao: 'ativo', obs: '', createdAt: new Date().toISOString() },
+    { id: 'MP007', codigo: 'MP007', nome: 'Cheque',            tipo: 'cheque',           taxaPercentual: 0,   diasCompensacao: 3, situacao: 'ativo', obs: 'Sujeito a compensação bancária', createdAt: new Date().toISOString() },
+    { id: 'MP008', codigo: 'MP008', nome: 'Transferência',     tipo: 'transferencia',    taxaPercentual: 0,   diasCompensacao: 1, situacao: 'ativo', obs: 'TED/DOC/Wire', createdAt: new Date().toISOString() },
+    { id: 'MP009', codigo: 'MP009', nome: 'Bolsa',             tipo: 'bolsa',            taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Bolsa integral ou parcial', createdAt: new Date().toISOString() },
+    { id: 'MP010', codigo: 'MP010', nome: 'Permuta',           tipo: 'permuta',          taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Troca de serviços ou bens', createdAt: new Date().toISOString() },
+  ]
+  const { data: cfgMetodosPagamento, setData: setCfgMetodosPagamento } = useConfigDb<MetodoPagamento>('cfgMetodosPagamento', METODOS_PAGAMENTO_DEFAULT)
   const { data: cfgCartoes, setData: setCfgCartoes } = useConfigDb<ConfigCartao>('cfgCartoes')
   const { data: cfgEventos, setData: setCfgEventos } = useConfigDb<ConfigEvento>('cfgEventos')
   const { data: cfgGruposDesconto, setData: setCfgGruposDesconto } = useConfigDb<ConfigGrupoDesconto>('cfgGruposDesconto')
   const { data: cfgPadroesPagamento, setData: setCfgPadroesPagamento } = useConfigDb<ConfigPadraoPagamento>('cfgPadroesPagamento')
   const { data: cfgPlanoContas, setData: setCfgPlanoContas } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
   const { data: cfgCentrosCusto, setData: setCfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto', CENTROS_CUSTO_DEFAULT)
+  const { data: cfgCaixas, setData: setCfgCaixas } = useConfigDb<ConfigCaixa>('cfgCaixas')
   const { data: cfgTiposDocumento, setData: setCfgTiposDocumento } = useConfigDb<ConfigTipoDocumento>('cfgTiposDocumento')
   const CONVENIO_ITAU_SEED: ConfigConvenio[] = [{
     id: 'CONV-ITAU-6492-34022',
@@ -1837,6 +1949,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgPadroesPagamento: createTrackedSetter('Configurações', 'Padrões de Pagamento', setCfgPadroesPagamento),
     setCfgPlanoContas: createTrackedSetter('Configurações', 'Plano de Contas', setCfgPlanoContas),
     setCfgCentrosCusto: createTrackedSetter('Configurações', 'Centros de Custo', setCfgCentrosCusto),
+    setCfgCaixas: createTrackedSetter('Configurações', 'Caixas e Abertura', setCfgCaixas),
     setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
     setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
     setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
@@ -1889,10 +2002,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     cfgPadroesPagamento, setCfgPadroesPagamento: trackedSetters.setCfgPadroesPagamento,
     cfgPlanoContas, setCfgPlanoContas: trackedSetters.setCfgPlanoContas,
     cfgCentrosCusto, setCfgCentrosCusto: trackedSetters.setCfgCentrosCusto,
+    cfgCaixas, setCfgCaixas: trackedSetters.setCfgCaixas,
     cfgTiposDocumento, setCfgTiposDocumento: trackedSetters.setCfgTiposDocumento,
     cfgConvenios, setCfgConvenios: trackedSetters.setCfgConvenios,
     movimentacoesManuais, setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais,
-  }), [mantenedores, cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto, cfgPadroesPagamento, cfgPlanoContas, cfgCentrosCusto, cfgTiposDocumento, cfgConvenios, movimentacoesManuais, trackedSetters]);
+  }), [mantenedores, cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto, cfgPadroesPagamento, cfgPlanoContas, cfgCentrosCusto, cfgCaixas, cfgTiposDocumento, cfgConvenios, movimentacoesManuais, trackedSetters]);
 
   const operacionalValue = useMemo(() => ({
     eventosAgenda, setEventosAgenda: trackedSetters.setEventosAgenda, setLocalEventosAgenda,

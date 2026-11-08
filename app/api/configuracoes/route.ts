@@ -42,6 +42,28 @@ const SENSITIVE_STAFF_ONLY_CONFIG_KEYS = new Set([
   'ocorrencias_push_config',
 ]);
 
+// IDs de caixas simulados que não devem permanecer no banco de dados
+const SIMULATED_CAIXA_IDS = new Set([
+  'CX-108',
+  'CX-102',
+  'CX-98',
+  'CX-94',
+  'CX-19',
+  'CX-11',
+  'CX-1',
+])
+
+function filterOutSimulatedCaixas(list: any): { cleaned: any[]; removed: boolean } {
+  if (!Array.isArray(list)) return { cleaned: [], removed: false }
+  const cleaned = list.filter((c: any) => {
+    if (!c || typeof c !== 'object') return false
+    const id = String(c.id || '').trim()
+    if (SIMULATED_CAIXA_IDS.has(id)) return false
+    return true
+  })
+  return { cleaned, removed: cleaned.length !== list.length }
+}
+
 function isSensitiveConfigKey(k: string): boolean {
   const clean = String(k || '').trim()
   return SENSITIVE_STAFF_ONLY_CONFIG_KEYS.has(clean) || clean.startsWith('import_batch_')
@@ -108,7 +130,18 @@ export async function GET(request: Request) {
     // Return as { chave: valor } map
     const result: Record<string, any> = {}
     for (const row of data || []) {
-      result[row.chave] = row.valor
+      if (row.chave === 'cfgCaixas') {
+        const { cleaned, removed } = filterOutSimulatedCaixas(row.valor)
+        result[row.chave] = cleaned
+        if (removed) {
+          await supabase
+            .from('configuracoes')
+            .upsert({ chave: 'cfgCaixas', valor: cleaned, updated_at: new Date().toISOString() }, { onConflict: 'chave' })
+            .then(() => {}, () => {})
+        }
+      } else {
+        result[row.chave] = row.valor
+      }
     }
 
     globalCache.set(cacheKey, { value: result, timestamp: Date.now() });
@@ -131,8 +164,20 @@ export async function GET(request: Request) {
       .single()
     if (error) return NextResponse.json({ valor: null }, { headers: cacheHeaders })
 
-    globalCache.set(cacheKey, { value: data?.valor ?? null, timestamp: Date.now() });
-    return NextResponse.json({ valor: data?.valor ?? null }, { headers: cacheHeaders })
+    let resolvedVal = data?.valor ?? null
+    if (chave === 'cfgCaixas' && Array.isArray(resolvedVal)) {
+      const { cleaned, removed } = filterOutSimulatedCaixas(resolvedVal)
+      resolvedVal = cleaned
+      if (removed) {
+        await supabase
+          .from('configuracoes')
+          .upsert({ chave: 'cfgCaixas', valor: cleaned, updated_at: new Date().toISOString() }, { onConflict: 'chave' })
+          .then(() => {}, () => {})
+      }
+    }
+
+    globalCache.set(cacheKey, { value: resolvedVal, timestamp: Date.now() });
+    return NextResponse.json({ valor: resolvedVal }, { headers: cacheHeaders })
   }
 
 
@@ -175,7 +220,7 @@ export async function POST(request: Request) {
 
       const { data, error } = await supabase
         .from('configuracoes')
-        .upsert(rows)
+        .upsert(rows, { onConflict: 'chave' })
         .select()
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -188,9 +233,13 @@ export async function POST(request: Request) {
     const { chave, valor } = body
     if (!chave) return NextResponse.json({ error: 'chave required' }, { status: 400 })
 
+    const finalValor = chave === 'cfgCaixas' && Array.isArray(valor)
+      ? filterOutSimulatedCaixas(valor).cleaned
+      : valor
+
     const { data, error } = await supabase
       .from('configuracoes')
-      .upsert({ chave, valor, updated_at: new Date().toISOString() })
+      .upsert({ chave, valor: finalValor, updated_at: new Date().toISOString() }, { onConflict: 'chave' })
       .select().single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })

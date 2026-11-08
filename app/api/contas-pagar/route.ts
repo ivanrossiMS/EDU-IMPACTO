@@ -5,6 +5,7 @@ import {
   type ContaPagarRecord,
   type FornecedorEscolar,
   type OrcamentoCategoriaItem,
+  type RecorrenciaFixaEscolar,
   CATEGORIAS_ESCOLARES,
   calcularValorLiquido,
   normalizarContaPagar,
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic'
 const CFG_KEY_CONTAS = 'fin_contas_pagar_v1'
 const CFG_KEY_FORNECEDORES = 'fin_fornecedores_pagar_v1'
 const CFG_KEY_ORCAMENTOS = 'fin_orcamento_pagar_v1'
+const CFG_KEY_RECORRENTES = 'fin_recorrentes_pagar_v1'
 
 function offsetDateISO(base: Date, daysOffset: number): string {
   const d = new Date(base.getTime() + daysOffset * 86400000)
@@ -729,19 +731,55 @@ function buildDefaultSeedContas(now = new Date()): ContaPagarRecord[] {
   return raw.map((r, i) => normalizarContaPagar(r, i, hojeStr))
 }
 
+const DEMO_FORNECEDOR_IDS = new Set([
+  'forn-folha-docente',
+  'forn-editora-sistema',
+  'forn-energia',
+  'forn-seguranca-limpeza',
+  'forn-tecnologia-erp',
+  'forn-climatizacao',
+  'forn-marketing',
+  'forn-nutricao',
+])
+
+const DEMO_RECORRENTES_IDS = new Set([
+  'tpl-folha-docente',
+  'tpl-fgts-inss',
+  'tpl-sistema-ensino',
+  'tpl-energia-campus',
+  'tpl-portaria-limpeza',
+  'tpl-erp-fibra',
+  'tpl-issqn-municipal',
+  'tpl-merenda-infantil',
+])
+
 async function loadStateFromDb(admin: any) {
   const hojeStr = new Date().toISOString().split('T')[0]
 
-  const [cfgRes, tableRes] = await Promise.all([
+  const [cfgRes, tableRes, mantRes] = await Promise.all([
     admin
       .from('configuracoes')
       .select('chave, valor')
-      .in('chave', [CFG_KEY_CONTAS, CFG_KEY_FORNECEDORES, CFG_KEY_ORCAMENTOS, 'cfgPlanoContas']),
+      .in('chave', [
+        CFG_KEY_CONTAS,
+        CFG_KEY_FORNECEDORES,
+        CFG_KEY_ORCAMENTOS,
+        CFG_KEY_RECORRENTES,
+        'cfgPlanoContas',
+        'cfgCentrosCusto',
+        'cfgMetodosPagamento',
+        'cfgCaixas',
+      ]),
     admin
       .from('contas_pagar')
       .select('*')
       .order('vencimento', { ascending: false })
       .limit(5000)
+      .then((r: any) => r, () => ({ data: null, error: { message: 'table_unavailable' } })),
+    admin
+      .from('mantenedores')
+      .select('*')
+      .order('nome')
       .then((r: any) => r, () => ({ data: null, error: { message: 'table_unavailable' } })),
   ])
 
@@ -750,58 +788,60 @@ async function loadStateFromDb(admin: any) {
     cfgMap.set(row.chave, row.valor)
   }
 
-  let fornecedores: FornecedorEscolar[] = Array.isArray(cfgMap.get(CFG_KEY_FORNECEDORES))
+  const rawFornecedores: FornecedorEscolar[] = Array.isArray(cfgMap.get(CFG_KEY_FORNECEDORES))
     ? cfgMap.get(CFG_KEY_FORNECEDORES)
     : []
 
-  if (fornecedores.length === 0) {
-    fornecedores = buildDefaultFornecedores()
+  // Remove fornecedores demonstrativos legados que haviam sido reinseridos automaticamente
+  const fornecedores = rawFornecedores.filter((f) => f && f.id && !DEMO_FORNECEDOR_IDS.has(String(f.id)))
+  if (fornecedores.length !== rawFornecedores.length) {
     await admin
       .from('configuracoes')
-      .upsert({ chave: CFG_KEY_FORNECEDORES, valor: fornecedores }, { onConflict: 'chave' })
+      .upsert(
+        { chave: CFG_KEY_FORNECEDORES, valor: fornecedores, updated_at: new Date().toISOString() },
+        { onConflict: 'chave' }
+      )
       .then(() => {}, () => {})
+    ;(globalThis as any).configCache?.clear?.()
   }
 
-  let orcamentos: OrcamentoCategoriaItem[] = Array.isArray(cfgMap.get(CFG_KEY_ORCAMENTOS))
-    ? cfgMap.get(CFG_KEY_ORCAMENTOS)
+  const rawRecorrencias: RecorrenciaFixaEscolar[] = Array.isArray(cfgMap.get(CFG_KEY_RECORRENTES))
+    ? cfgMap.get(CFG_KEY_RECORRENTES)
     : []
 
-  if (orcamentos.length === 0) {
-    orcamentos = buildDefaultOrcamentos()
+  const recorrencias = rawRecorrencias.filter((r) => r && r.id && !DEMO_RECORRENTES_IDS.has(String(r.id)))
+  if (recorrencias.length !== rawRecorrencias.length) {
     await admin
       .from('configuracoes')
-      .upsert({ chave: CFG_KEY_ORCAMENTOS, valor: orcamentos }, { onConflict: 'chave' })
+      .upsert(
+        { chave: CFG_KEY_RECORRENTES, valor: recorrencias, updated_at: new Date().toISOString() },
+        { onConflict: 'chave' }
+      )
       .then(() => {}, () => {})
+    ;(globalThis as any).configCache?.clear?.()
   }
+
+  const orcamentos: OrcamentoCategoriaItem[] = Array.isArray(cfgMap.get(CFG_KEY_ORCAMENTOS))
+    ? cfgMap.get(CFG_KEY_ORCAMENTOS)
+    : []
 
   const hasCfgContas = cfgMap.has(CFG_KEY_CONTAS) && Array.isArray(cfgMap.get(CFG_KEY_CONTAS))
   const cfgContasRaw: any[] = hasCfgContas ? cfgMap.get(CFG_KEY_CONTAS) : []
   const tableContasRaw: any[] = Array.isArray(tableRes?.data) ? tableRes.data : []
 
-  // Merge records by ID (prioritizing configuracoes for rich fields, plus any legacy rows from contas_pagar table)
   const mergedMap = new Map<string, ContaPagarRecord>()
 
-  for (const row of tableContasRaw) {
-    const unpacked = { ...row, ...(row.dados || {}) }
-    const norm = normalizarContaPagar(unpacked, mergedMap.size, hojeStr)
-    mergedMap.set(norm.id, norm)
-  }
-
-  for (const item of cfgContasRaw) {
-    const norm = normalizarContaPagar(item, mergedMap.size, hojeStr)
-    mergedMap.set(norm.id, norm)
-  }
-
-  // If neither configuracoes nor contas_pagar table has been initialized yet, seed rich school dataset
-  if (!hasCfgContas && mergedMap.size === 0) {
-    const seeded = buildDefaultSeedContas(new Date())
-    for (const s of seeded) {
-      mergedMap.set(s.id, s)
+  if (hasCfgContas) {
+    for (const item of cfgContasRaw) {
+      const norm = normalizarContaPagar(item, mergedMap.size, hojeStr)
+      mergedMap.set(norm.id, norm)
     }
-    await admin
-      .from('configuracoes')
-      .upsert({ chave: CFG_KEY_CONTAS, valor: seeded }, { onConflict: 'chave' })
-      .then(() => {}, () => {})
+  } else {
+    for (const row of tableContasRaw) {
+      const unpacked = { ...row, ...(row.dados || {}) }
+      const norm = normalizarContaPagar(unpacked, mergedMap.size, hojeStr)
+      mergedMap.set(norm.id, norm)
+    }
   }
 
   const contas = Array.from(mergedMap.values()).sort((a, b) =>
@@ -812,7 +852,47 @@ async function loadStateFromDb(admin: any) {
     ? cfgMap.get('cfgPlanoContas')
     : []
 
-  return { contas, fornecedores, orcamentos, planoContas }
+  const centrosCusto: any[] = Array.isArray(cfgMap.get('cfgCentrosCusto'))
+    ? cfgMap.get('cfgCentrosCusto')
+    : []
+
+  const metodosPagamento: any[] = Array.isArray(cfgMap.get('cfgMetodosPagamento'))
+    ? cfgMap.get('cfgMetodosPagamento')
+    : []
+
+  const SIMULATED_CAIXAS = new Set(['CX-108', 'CX-102', 'CX-98', 'CX-94', 'CX-19', 'CX-11', 'CX-1'])
+  const rawCaixas: any[] = Array.isArray(cfgMap.get('cfgCaixas')) ? cfgMap.get('cfgCaixas') : []
+  const caixas = rawCaixas.filter((c: any) => c && typeof c === 'object' && !SIMULATED_CAIXAS.has(String(c.id || '').trim()))
+  if (caixas.length !== rawCaixas.length) {
+    await admin
+      .from('configuracoes')
+      .upsert(
+        { chave: 'cfgCaixas', valor: caixas, updated_at: new Date().toISOString() },
+        { onConflict: 'chave' }
+      )
+      .then(() => {}, () => {})
+    ;(globalThis as any).configCache?.clear?.()
+  }
+
+  const mantenedores: any[] = Array.isArray(mantRes?.data)
+    ? mantRes.data.map((row: any) => ({
+        ...row,
+        unidades: row.unidades ?? [],
+        ...(row.dados || {}),
+      }))
+    : []
+
+  return {
+    contas,
+    fornecedores,
+    orcamentos,
+    recorrencias,
+    planoContas,
+    centrosCusto,
+    mantenedores,
+    metodosPagamento,
+    caixas,
+  }
 }
 
 async function persistContas(admin: any, contas: ContaPagarRecord[], touchedRecords?: ContaPagarRecord[]) {
@@ -821,11 +901,15 @@ async function persistContas(admin: any, contas: ContaPagarRecord[], touchedReco
 
   const { error: cfgErr } = await admin
     .from('configuracoes')
-    .upsert({ chave: CFG_KEY_CONTAS, valor: normalized }, { onConflict: 'chave' })
+    .upsert(
+      { chave: CFG_KEY_CONTAS, valor: normalized, updated_at: new Date().toISOString() },
+      { onConflict: 'chave' }
+    )
 
   if (cfgErr) {
     throw new Error(cfgErr.message)
   }
+  ;(globalThis as any).configCache?.clear?.()
 
   // Best-effort sync to public.contas_pagar table if it exists in this database
   const toSync = touchedRecords && touchedRecords.length > 0 ? touchedRecords : normalized.slice(0, 100)
@@ -859,7 +943,17 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '10000', 10)
 
     const admin = getAdminClient()
-    const { contas, fornecedores, orcamentos, planoContas } = await loadStateFromDb(admin)
+    const {
+      contas,
+      fornecedores,
+      orcamentos,
+      recorrencias,
+      planoContas,
+      centrosCusto,
+      mantenedores,
+      metodosPagamento,
+      caixas,
+    } = await loadStateFromDb(admin)
     const sliced = contas.slice(0, limit)
 
     if (includeMeta) {
@@ -867,7 +961,12 @@ export async function GET(request: Request) {
         data: sliced,
         fornecedores,
         orcamentos,
+        recorrencias,
         planoContas,
+        centrosCusto,
+        mantenedores,
+        metodosPagamento,
+        caixas,
       })
     }
 
@@ -892,6 +991,7 @@ export async function POST(request: Request) {
     let contas = [...state.contas]
     let fornecedores = [...state.fornecedores]
     let orcamentos = [...state.orcamentos]
+    let recorrencias = [...state.recorrencias]
 
     const action = body?.action as string | undefined
 
@@ -905,6 +1005,68 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, data: saved, fornecedores, orcamentos })
     }
 
+    // 1.1 Salvar Recorrência Fixa Escolar
+    if (action === 'save_recorrencia') {
+      const r = body.recorrencia as Partial<RecorrenciaFixaEscolar>
+      if (!r || !r.titulo?.trim()) {
+        return NextResponse.json({ error: 'Descrição da recorrência fixa é obrigatória' }, { status: 400 })
+      }
+      const novaRec: RecorrenciaFixaEscolar = {
+        id: r.id || `rec-${Date.now().toString(36)}`,
+        titulo: r.titulo.trim(),
+        fornecedorId: r.fornecedorId || undefined,
+        fornecedorNome: r.fornecedorNome?.trim() || r.titulo.trim(),
+        fornecedorDocumento: r.fornecedorDocumento?.trim() || undefined,
+        categoria: r.categoria?.trim() || '',
+        planoContasId: r.planoContasId || undefined,
+        unidadePadrao: r.unidadePadrao?.trim() || undefined,
+        centroCusto: r.centroCusto?.trim() || '',
+        tipoCusto: r.tipoCusto || 'fixo',
+        prioridade: r.prioridade || 'alta',
+        diaVencimento: Math.min(31, Math.max(1, Number(r.diaVencimento) || 10)),
+        valorEstimado: Math.max(0, Number(r.valorEstimado) || 0),
+        formaPagamento: r.formaPagamento?.trim() || 'PIX',
+        chavePix: r.chavePix?.trim() || undefined,
+        ativo: r.ativo !== false,
+      }
+      const idx = recorrencias.findIndex((x) => x.id === novaRec.id)
+      if (idx >= 0) recorrencias[idx] = novaRec
+      else recorrencias.unshift(novaRec)
+
+      const { error: saveRecErr } = await admin
+        .from('configuracoes')
+        .upsert(
+          { chave: CFG_KEY_RECORRENTES, valor: recorrencias, updated_at: nowISO },
+          { onConflict: 'chave' }
+        )
+
+      if (saveRecErr) {
+        throw new Error(saveRecErr.message)
+      }
+      ;(globalThis as any).configCache?.clear?.()
+
+      return NextResponse.json({ ok: true, recorrencia: novaRec, recorrencias })
+    }
+
+    // 1.2 Excluir Recorrência Fixa Escolar
+    if (action === 'delete_recorrencia') {
+      const recId = String(body.id || '').trim()
+      recorrencias = recorrencias.filter((r) => String(r.id) !== recId)
+      const { error: delRecErr } = await admin
+        .from('configuracoes')
+        .upsert(
+          { chave: CFG_KEY_RECORRENTES, valor: recorrencias, updated_at: nowISO },
+          { onConflict: 'chave' }
+        )
+
+      if (delRecErr) {
+        throw new Error(delRecErr.message)
+      }
+      ;(globalThis as any).configCache?.clear?.()
+
+      return NextResponse.json({ ok: true, recorrencias })
+    }
+
     // 2. Salvar Fornecedor Escolar
     if (action === 'save_fornecedor') {
       const f = body.fornecedor as Partial<FornecedorEscolar>
@@ -916,8 +1078,10 @@ export async function POST(request: Request) {
         nome: f.nome.trim(),
         nomeFantasia: f.nomeFantasia?.trim() || f.nome.trim(),
         documento: f.documento?.trim() || '',
-        categoriaPadrao: f.categoriaPadrao || 'Outros Custos Operacionais',
+        categoriaPadrao: f.categoriaPadrao || '',
         centroCustoPadrao: f.centroCustoPadrao ?? '',
+        unidadePadrao: f.unidadePadrao ?? '',
+        tipoCustoPadrao: f.tipoCustoPadrao || 'fixo',
         formaPagamentoPadrao: f.formaPagamentoPadrao || 'PIX',
         banco: f.banco || '',
         agencia: f.agencia || '',
@@ -935,20 +1099,42 @@ export async function POST(request: Request) {
       if (idx >= 0) fornecedores[idx] = novoForn
       else fornecedores.unshift(novoForn)
 
-      await admin
+      const { error: saveErr } = await admin
         .from('configuracoes')
-        .upsert({ chave: CFG_KEY_FORNECEDORES, valor: fornecedores }, { onConflict: 'chave' })
+        .upsert(
+          { chave: CFG_KEY_FORNECEDORES, valor: fornecedores, updated_at: nowISO },
+          { onConflict: 'chave' }
+        )
+
+      if (saveErr) {
+        throw new Error(saveErr.message)
+      }
+      ;(globalThis as any).configCache?.clear?.()
 
       return NextResponse.json({ ok: true, fornecedor: novoForn, fornecedores })
     }
 
     // 3. Excluir Fornecedor Escolar
     if (action === 'delete_fornecedor') {
-      const fornId = String(body.id || '')
-      fornecedores = fornecedores.filter((f) => f.id !== fornId)
-      await admin
+      const fornId = String(body.id || '').trim()
+      const fornNome = String(body.nome || '').trim().toLowerCase()
+      fornecedores = fornecedores.filter((f) => {
+        if (fornId && String(f.id) === fornId) return false
+        if (!fornId && fornNome && String(f.nome || '').trim().toLowerCase() === fornNome) return false
+        return true
+      })
+      const { error: delErr } = await admin
         .from('configuracoes')
-        .upsert({ chave: CFG_KEY_FORNECEDORES, valor: fornecedores }, { onConflict: 'chave' })
+        .upsert(
+          { chave: CFG_KEY_FORNECEDORES, valor: fornecedores, updated_at: nowISO },
+          { onConflict: 'chave' }
+        )
+
+      if (delErr) {
+        throw new Error(delErr.message)
+      }
+      ;(globalThis as any).configCache?.clear?.()
+
       return NextResponse.json({ ok: true, fornecedores })
     }
 
@@ -960,9 +1146,16 @@ export async function POST(request: Request) {
           metaMensal: Math.max(0, Number(o.metaMensal) || 0),
           alertaPercentual: Math.min(100, Math.max(10, Number(o.alertaPercentual) || 85)),
         }))
-        await admin
+        const { error: orcErr } = await admin
           .from('configuracoes')
-          .upsert({ chave: CFG_KEY_ORCAMENTOS, valor: orcamentos }, { onConflict: 'chave' })
+          .upsert(
+            { chave: CFG_KEY_ORCAMENTOS, valor: orcamentos, updated_at: nowISO },
+            { onConflict: 'chave' }
+          )
+        if (orcErr) {
+          throw new Error(orcErr.message)
+        }
+        ;(globalThis as any).configCache?.clear?.()
       }
       return NextResponse.json({ ok: true, orcamentos })
     }
@@ -1250,6 +1443,34 @@ export async function POST(request: Request) {
       })
 
       const saved = await persistContas(admin, contas, touched)
+      try {
+        await admin.from('movimentacoes').delete().like('id', `mov-cp-${id}%`)
+        const { data: cfgRows } = await admin
+          .from('configuracoes_sistema')
+          .select('chave, dados')
+          .in('chave', ['fin_movimentacoes_caixa_v1', 'fin_movimentacoes_overrides_v1'])
+        const mapCfg = new Map<string, any>()
+        ;(cfgRows || []).forEach((r: any) => mapCfg.set(r.chave, r.dados))
+        const movsCaixa = Array.isArray(mapCfg.get('fin_movimentacoes_caixa_v1'))
+          ? mapCfg.get('fin_movimentacoes_caixa_v1')
+          : []
+        const filteredCaixa = movsCaixa.filter(
+          (m: any) => m.id !== id && m.id !== `CP-${id}` && !String(m.id || '').startsWith(`mov-cp-${id}`)
+        )
+        if (filteredCaixa.length !== movsCaixa.length) {
+          await admin
+            .from('configuracoes_sistema')
+            .upsert({ chave: 'fin_movimentacoes_caixa_v1', dados: filteredCaixa }, { onConflict: 'chave' })
+        }
+        const overrides = (mapCfg.get('fin_movimentacoes_overrides_v1') && typeof mapCfg.get('fin_movimentacoes_overrides_v1') === 'object')
+          ? { ...mapCfg.get('fin_movimentacoes_overrides_v1') }
+          : {}
+        overrides[`CP-${id}`] = { ...(overrides[`CP-${id}`] || {}), estornado: true, estornadoEm: nowISO, motivoEstorno: body.motivo || 'Baixa revertida' }
+        overrides[id] = { ...(overrides[id] || {}), estornado: true, estornadoEm: nowISO, motivoEstorno: body.motivo || 'Baixa revertida' }
+        await admin
+          .from('configuracoes_sistema')
+          .upsert({ chave: 'fin_movimentacoes_overrides_v1', dados: overrides }, { onConflict: 'chave' })
+      } catch {}
       return NextResponse.json({ ok: true, data: saved })
     }
 

@@ -86,6 +86,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'CONTAS A RECEBER', href: '/financeiro/receber', icon: <CreditCard size={16} /> },
       { label: 'CONTAS A PAGAR', href: '/financeiro/pagar', icon: <TrendingDown size={16} />, badge: 'NOVO', badgeColor: 'green' },
+      { label: 'MOVIMENTAÇÃO FINANCEIRA', href: '/financeiro/movimentacoes', icon: <Wallet size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'RENEGOCIAÇÃO', href: '/financeiro/renegociacao', icon: <Handshake size={16} /> },
       { label: 'DRE', href: '/financeiro/dre', icon: <BarChart3 size={16} />, badge: 'IA', badgeColor: 'purple' },
     ],
@@ -151,6 +152,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       {
         label: 'CONFIG. FINANCEIRO', icon: <Landmark size={16} />,
         children: [
+          { label: 'CAIXAS & ABERTURA', href: '/configuracoes/financeiro/caixas', icon: <Wallet size={11} />, badge: 'NOVO', badgeColor: 'green' },
           { label: 'CENTRO DE CUSTO', href: '/configuracoes/financeiro/centro-custo', icon: <TargetIcon size={11} /> },
           { label: 'PLANO DE CONTAS', href: '/configuracoes/financeiro/plano-contas', icon: <CandlestickChart size={11} /> },
           { label: 'CARTÕES', href: '/configuracoes/financeiro/cartoes', icon: <CardIcon size={11} /> },

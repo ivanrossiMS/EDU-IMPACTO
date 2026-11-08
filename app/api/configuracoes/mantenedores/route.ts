@@ -22,6 +22,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const result = (data || []).map(row => ({
     ...row,
+    razaoSocial: row.razao_social || row.dados?.razaoSocial || '',
     unidades: row.unidades ?? [],
     ...(row.dados || {}),
   }))

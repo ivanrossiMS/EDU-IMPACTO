@@ -25,9 +25,6 @@ import {
   Layers,
   GraduationCap,
   Building2,
-  Wrench,
-  Megaphone,
-  Rocket,
   ArrowUpRight,
   RotateCcw,
   Copy,
@@ -35,7 +32,8 @@ import {
   PieChart,
   TrendingDown,
   TrendingUp,
-  SlidersHorizontal,
+  Wallet,
+  Activity,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -45,37 +43,37 @@ const TIPO_META: Record<
 > = {
   pedagogico: {
     label: 'Pedagógico / Ensino',
-    badgeBg: 'rgba(56, 189, 248, 0.12)',
-    badgeBorder: 'rgba(56, 189, 248, 0.28)',
-    badgeColor: '#38bdf8',
+    badgeBg: 'rgba(37, 99, 235, 0.08)',
+    badgeBorder: 'rgba(37, 99, 235, 0.22)',
+    badgeColor: '#2563eb',
     icon: '🎓',
   },
   administrativo: {
     label: 'Administrativo & Gestão',
-    badgeBg: 'rgba(245, 158, 11, 0.12)',
-    badgeBorder: 'rgba(245, 158, 11, 0.28)',
-    badgeColor: '#f59e0b',
+    badgeBg: 'rgba(217, 119, 6, 0.08)',
+    badgeBorder: 'rgba(217, 119, 6, 0.24)',
+    badgeColor: '#d97706',
     icon: '🏢',
   },
   operacional: {
     label: 'Operacional & Infra',
-    badgeBg: 'rgba(6, 182, 212, 0.12)',
-    badgeBorder: 'rgba(6, 182, 212, 0.28)',
-    badgeColor: '#06b6d4',
+    badgeBg: 'rgba(13, 148, 136, 0.08)',
+    badgeBorder: 'rgba(13, 148, 136, 0.24)',
+    badgeColor: '#0d9488',
     icon: '⚙️',
   },
   comercial: {
     label: 'Comercial & Captação',
-    badgeBg: 'rgba(244, 63, 94, 0.12)',
-    badgeBorder: 'rgba(244, 63, 94, 0.28)',
-    badgeColor: '#f43f5e',
+    badgeBg: 'rgba(225, 29, 72, 0.08)',
+    badgeBorder: 'rgba(225, 29, 72, 0.22)',
+    badgeColor: '#e11d48',
     icon: '📣',
   },
   projetos: {
     label: 'Projetos, Eventos & Extra',
-    badgeBg: 'rgba(168, 85, 247, 0.12)',
-    badgeBorder: 'rgba(168, 85, 247, 0.28)',
-    badgeColor: '#a855f7',
+    badgeBg: 'rgba(124, 58, 237, 0.08)',
+    badgeBorder: 'rgba(124, 58, 237, 0.22)',
+    badgeColor: '#7c3aed',
     icon: '🚀',
   },
 }
@@ -87,39 +85,39 @@ const NATUREZA_META: Record<
   ambos: {
     label: 'Contas a Pagar & Receber',
     short: 'Pagar & Receber',
-    color: '#60a5fa',
-    bg: 'rgba(59, 130, 246, 0.12)',
-    border: 'rgba(59, 130, 246, 0.28)',
+    color: '#4f46e5',
+    bg: 'rgba(79, 70, 229, 0.08)',
+    border: 'rgba(79, 70, 229, 0.22)',
   },
   despesa: {
     label: 'Somente Contas a Pagar (Saídas)',
     short: 'Contas a Pagar',
-    color: '#f87171',
-    bg: 'rgba(239, 68, 68, 0.12)',
-    border: 'rgba(239, 68, 68, 0.28)',
+    color: '#dc2626',
+    bg: 'rgba(220, 38, 38, 0.08)',
+    border: 'rgba(220, 38, 38, 0.22)',
   },
   receita: {
     label: 'Somente Contas a Receber (Entradas)',
     short: 'Contas a Receber',
-    color: '#34d399',
-    bg: 'rgba(16, 185, 129, 0.12)',
-    border: 'rgba(16, 185, 129, 0.28)',
+    color: '#059669',
+    bg: 'rgba(5, 150, 105, 0.08)',
+    border: 'rgba(5, 150, 105, 0.22)',
   },
 }
 
 const PALETA_CORES = [
-  '#ec4899',
-  '#38bdf8',
-  '#6366f1',
-  '#a855f7',
-  '#10b981',
-  '#f59e0b',
-  '#06b6d4',
-  '#f43f5e',
-  '#84cc16',
-  '#f97316',
-  '#14b8a6',
-  '#3b82f6',
+  '#2563eb',
+  '#7c3aed',
+  '#db2777',
+  '#0d9488',
+  '#059669',
+  '#d97706',
+  '#e11d48',
+  '#4f46e5',
+  '#0284c7',
+  '#ea580c',
+  '#65a30d',
+  '#475569',
 ]
 
 const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'createdAt'>> = [
@@ -129,7 +127,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Primeira Infância — Berçário I/II e Maternal',
     tipo: 'pedagogico',
     natureza: 'ambos',
-    cor: '#f472b6',
+    cor: '#db2777',
     responsavel: 'Coordenação Educação Infantil',
     orcamentoMensal: 35000,
     pesoRateioPadrao: 0,
@@ -142,7 +140,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Escolinhas Esportivas, Dança, Música, Robótica e Olimpíadas',
     tipo: 'projetos',
     natureza: 'ambos',
-    cor: '#f97316',
+    cor: '#ea580c',
     responsavel: 'Coordenação de Esportes & Cultura',
     orcamentoMensal: 22000,
     pesoRateioPadrao: 0,
@@ -155,7 +153,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Alimentação Escolar, Merenda, Nutrição e Cantina',
     tipo: 'operacional',
     natureza: 'ambos',
-    cor: '#84cc16',
+    cor: '#65a30d',
     responsavel: 'Nutricionista Responsável',
     orcamentoMensal: 28000,
     pesoRateioPadrao: 0,
@@ -168,7 +166,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Laboratórios de Informática, Rede, Sistemas, ERP e Lousas Digitais',
     tipo: 'operacional',
     natureza: 'despesa',
-    cor: '#3b82f6',
+    cor: '#2563eb',
     responsavel: 'Coordenação de TI',
     orcamentoMensal: 18000,
     pesoRateioPadrao: 0,
@@ -181,7 +179,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Acervo Bibliográfico, Laboratórios de Física/Química/Biologia e Maker',
     tipo: 'pedagogico',
     natureza: 'despesa',
-    cor: '#14b8a6',
+    cor: '#0d9488',
     responsavel: 'Coordenação Pedagógica Geral',
     orcamentoMensal: 12000,
     pesoRateioPadrao: 0,
@@ -194,7 +192,7 @@ const SUGESTOES_ESCOLARES: Array<Omit<ConfigCentroCusto, 'id' | 'codigo' | 'crea
     descricao: 'Frota Escolar, Fretamento de Ônibus e Estudos do Meio',
     tipo: 'operacional',
     natureza: 'ambos',
-    cor: '#eab308',
+    cor: '#d97706',
     responsavel: 'Logística & Operações',
     orcamentoMensal: 15000,
     pesoRateioPadrao: 0,
@@ -210,12 +208,125 @@ const EMPTY_FORM: Omit<ConfigCentroCusto, 'id' | 'createdAt'> = {
   descricao: '',
   tipo: 'pedagogico',
   natureza: 'ambos',
-  cor: '#38bdf8',
+  cor: '#2563eb',
   responsavel: '',
   orcamentoMensal: 0,
   pesoRateioPadrao: 0,
   unidadeId: '',
   situacao: 'ativo',
+}
+
+function inferTipoFromName(nome: string): ConfigCentroCusto['tipo'] {
+  const n = nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (
+    /infra|manuten|limpez|seguranc|operac|cantin|refeit|transp|frota|\bti\b|tecnolog|patrim|almoxarif|portari/.test(
+      n
+    )
+  ) {
+    return 'operacional'
+  }
+  if (/admin|diretor|secretar|financ|contab|\brh\b|recursos humanos|jurid|gestao|tesourar/.test(n)) {
+    return 'administrativo'
+  }
+  if (/comerc|market|\bmkt\b|captac|matricul|venda|publicid|comunicac/.test(n)) {
+    return 'comercial'
+  }
+  if (/projet|event|esport|cultur|extracurr|olimpiad|viagen|excurs|festiv/.test(n)) {
+    return 'projetos'
+  }
+  return 'pedagogico'
+}
+
+function inferSmartSigla(nome: string, presetSigla?: string): string {
+  if (presetSigla) return presetSigla.toUpperCase()
+  const clean = nome
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  const knownMap: Record<string, string> = {
+    ACADEMICO: 'ACAD',
+    INFRAESTRUTURA: 'INFRA',
+    ADMINISTRATIVO: 'ADM',
+    ADMINISTRACAO: 'ADM',
+    FINANCEIRO: 'FIN',
+    COMERCIAL: 'COM',
+    MARKETING: 'MKT',
+    OPERACIONAL: 'OPER',
+    PEDAGOGICO: 'PED',
+    DIRETORIA: 'DIR',
+    SECRETARIA: 'SEC',
+    TECNOLOGIA: 'TI',
+    TRANSPORTE: 'TRANSP',
+    CANTINA: 'CANT',
+    BIBLIOTECA: 'BIB',
+    ESPORTES: 'ESP',
+    EVENTOS: 'EVEN',
+    PROJETOS: 'PROJ',
+    MATRICULAS: 'MATR',
+    RH: 'RH',
+  }
+  if (knownMap[clean]) return knownMap[clean]
+
+  const words = clean
+    .split(/[\s/&,-]+/)
+    .filter(w => w.length > 0 && !['DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM', 'PARA', 'A', 'O'].includes(w))
+
+  if (words.length === 1) {
+    return words[0].slice(0, 4)
+  }
+  if (words.length >= 2) {
+    const initials = words.map(w => w[0]).join('')
+    if (initials.length >= 2) return initials.slice(0, 5)
+  }
+  return clean.replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'CC'
+}
+
+function inferSmartDescricao(nome: string, rawDesc: string, tipo: ConfigCentroCusto['tipo']): string {
+  const nTrim = nome.trim()
+  const dTrim = rawDesc.trim()
+  if (dTrim && dTrim.toLowerCase() !== nTrim.toLowerCase()) {
+    return dTrim
+  }
+  const clean = nTrim
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (clean === 'academico' || clean === 'pedagogico') {
+    return 'Ensino, Coordenação Pedagógica & Atividades Acadêmicas'
+  }
+  if (clean === 'infraestrutura') {
+    return 'Manutenção Predial, Limpeza, Segurança & Facilities'
+  }
+  if (clean === 'administrativo' || clean === 'administracao') {
+    return 'Gestão Administrativa, Secretaria, RH & Controladoria'
+  }
+  if (clean === 'comercial' || clean === 'marketing') {
+    return 'Captação de Alunos, Campanhas & Matrículas'
+  }
+  if (clean === 'operacional') {
+    return 'Operações Escolares, Logística & Serviços de Apoio'
+  }
+  if (clean === 'financeiro') {
+    return 'Tesouraria, Faturamento & Gestão Financeira'
+  }
+  if (clean === 'projetos' || clean === 'eventos') {
+    return 'Projetos Educacionais, Eventos Escolares & Extracurriculares'
+  }
+
+  const fallbackByTipo: Record<ConfigCentroCusto['tipo'], string> = {
+    pedagogico: 'Segmento de Ensino & Atividades Pedagógicas',
+    administrativo: 'Departamento Administrativo & Gestão Institucional',
+    operacional: 'Operações, Infraestrutura & Serviços de Apoio',
+    comercial: 'Captação, Relacionamento & Matrículas',
+    projetos: 'Projetos Especiais, Cultura & Eventos',
+  }
+  return fallbackByTipo[tipo] || dTrim || nTrim
 }
 
 function normalizeCentroCustoItem(raw: any, idx: number): ConfigCentroCusto {
@@ -225,35 +336,32 @@ function normalizeCentroCustoItem(raw: any, idx: number): ConfigCentroCusto {
     d =>
       d.nome.toLowerCase() === rawNome.toLowerCase() ||
       d.descricao.toLowerCase() === rawDesc.toLowerCase() ||
-      (raw?.sigla && d.sigla.toLowerCase() === String(raw.sigla).toLowerCase())
+      (raw?.sigla && String(raw.sigla).length >= 2 && d.sigla.toLowerCase() === String(raw.sigla).toLowerCase())
   )
 
   const codigo = String(raw?.codigo || preset?.codigo || `CC${String(idx + 1).padStart(3, '0')}`)
     .trim()
     .toUpperCase()
 
-  const defaultSigla =
-    preset?.sigla ||
-    rawNome
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(w => w[0])
-      .join('')
-      .slice(0, 4)
-      .toUpperCase() ||
-    rawNome.slice(0, 4).toUpperCase() ||
-    'CC'
+  const rawSigla = String(raw?.sigla || '').trim().toUpperCase()
+  // Se a sigla salva anteriormente tinha apenas 1 letra (ex: "A", "I" gerada de palavra única), corrige para sigla inteligente
+  const sigla =
+    rawSigla.length >= 2
+      ? rawSigla.slice(0, 8)
+      : inferSmartSigla(rawNome, preset?.sigla).slice(0, 8)
 
-  const sigla = String(raw?.sigla || defaultSigla)
-    .trim()
-    .toUpperCase()
-    .slice(0, 8)
+  const inferredTipo = preset?.tipo || inferTipoFromName(rawNome)
+  const rawTipo = String(raw?.tipo || '').toLowerCase()
+  const isLegacyUnclassified =
+    (!raw?.responsavel || String(raw.responsavel).trim() === '') &&
+    (rawSigla.length <= 1 || rawNome.toLowerCase() === rawDesc.toLowerCase()) &&
+    (!rawTipo || rawTipo === 'pedagogico')
 
-  const rawTipo = String(raw?.tipo || preset?.tipo || 'pedagogico').toLowerCase()
   const tipo: ConfigCentroCusto['tipo'] = (
+    !isLegacyUnclassified &&
     ['pedagogico', 'administrativo', 'operacional', 'comercial', 'projetos'].includes(rawTipo)
       ? rawTipo
-      : preset?.tipo || 'pedagogico'
+      : inferredTipo
   ) as ConfigCentroCusto['tipo']
 
   const rawNat = String(raw?.natureza || preset?.natureza || 'ambos').toLowerCase()
@@ -271,12 +379,14 @@ function normalizeCentroCustoItem(raw: any, idx: number): ConfigCentroCusto {
   const situacao: 'ativo' | 'inativo' =
     String(raw?.situacao || 'ativo').toLowerCase() === 'inativo' ? 'inativo' : 'ativo'
 
+  const descricao = inferSmartDescricao(rawNome, preset?.descricao || rawDesc, tipo)
+
   return {
     id: String(raw?.id || preset?.id || `CC-${idx + 1}`),
     codigo,
     sigla,
     nome: rawNome,
-    descricao: rawDesc,
+    descricao,
     tipo,
     natureza,
     cor,
@@ -312,16 +422,26 @@ export default function CentroCustoPage() {
     return CENTROS_CUSTO_DEFAULT
   }, [cfgCentrosCusto])
 
-  // Normaliza automaticamente registros legados que não possuíam campo `nome` ou `sigla`
+  // Normaliza automaticamente registros legados que não possuíam campo `nome`, sigla curta ou descrição enriquecida
   useEffect(() => {
-    if (
-      Array.isArray(cfgCentrosCusto) &&
-      cfgCentrosCusto.length > 0 &&
-      cfgCentrosCusto.some((c: any) => !c || typeof c.nome !== 'string' || !c.nome.trim() || !c.sigla)
-    ) {
-      setCfgCentrosCusto(
-        cfgCentrosCusto.filter(Boolean).map((item, idx) => normalizeCentroCustoItem(item, idx))
-      )
+    if (!Array.isArray(cfgCentrosCusto) || cfgCentrosCusto.length === 0) return
+    const normalized = cfgCentrosCusto
+      .filter(Boolean)
+      .map((item, idx) => normalizeCentroCustoItem(item, idx))
+    const changed =
+      normalized.length !== cfgCentrosCusto.length ||
+      normalized.some((n, idx) => {
+        const orig: any = cfgCentrosCusto[idx]
+        return (
+          !orig ||
+          orig.nome !== n.nome ||
+          orig.sigla !== n.sigla ||
+          orig.tipo !== n.tipo ||
+          orig.descricao !== n.descricao
+        )
+      })
+    if (changed) {
+      setCfgCentrosCusto(normalized)
     }
   }, [cfgCentrosCusto, setCfgCentrosCusto])
 
@@ -419,7 +539,7 @@ export default function CentroCustoPage() {
   // Modal de Exclusão
   const [deleteTarget, setDeleteTarget] = useState<ConfigCentroCusto | null>(null)
 
-  // Modal de Rateio Pedagógico
+  // Painel de Rateio Pedagógico
   const [showRateioConfig, setShowRateioConfig] = useState(false)
 
   // Feedback Toast
@@ -466,7 +586,7 @@ export default function CentroCustoPage() {
       descricao: cc.descricao || '',
       tipo: cc.tipo || 'pedagogico',
       natureza: cc.natureza || 'ambos',
-      cor: cc.cor || '#38bdf8',
+      cor: cc.cor || '#2563eb',
       responsavel: cc.responsavel || '',
       orcamentoMensal: Number(cc.orcamentoMensal || 0),
       pesoRateioPadrao: Number(cc.pesoRateioPadrao || 0),
@@ -496,7 +616,7 @@ export default function CentroCustoPage() {
     setFormError(null)
 
     const nomeTrim = form.nome.trim()
-    const siglaTrim = (form.sigla.trim() || nomeTrim.slice(0, 4)).toUpperCase()
+    const siglaTrim = (form.sigla.trim() || inferSmartSigla(nomeTrim)).toUpperCase()
     const codigoTrim = (form.codigo.trim() || getNextCode()).toUpperCase()
 
     if (!nomeTrim) {
@@ -525,7 +645,7 @@ export default function CentroCustoPage() {
       codigo: codigoTrim,
       sigla: siglaTrim,
       nome: nomeTrim,
-      descricao: form.descricao.trim() || nomeTrim,
+      descricao: form.descricao.trim() || inferSmartDescricao(nomeTrim, '', form.tipo),
       responsavel: form.responsavel?.trim() || '',
       orcamentoMensal: Math.max(0, Number(form.orcamentoMensal || 0)),
       pesoRateioPadrao: Math.min(100, Math.max(0, Number(form.pesoRateioPadrao || 0))),
@@ -611,7 +731,7 @@ export default function CentroCustoPage() {
       )
       return [...base, novo]
     })
-    showToast('success', `Centro de Custo "${novo.nome}" adicionado com 1 clique!`)
+    showToast('success', `Centro de Custo "${novo.nome}" adicionado!`)
   }
 
   const handleRestaurarPadroes = () => {
@@ -639,22 +759,32 @@ export default function CentroCustoPage() {
 
   const handleNormalizarRateio100 = () => {
     setCfgCentrosCusto(prev => {
-      const base = prev.length > 0 ? prev : CENTROS_CUSTO_DEFAULT
+      const base = (prev.length > 0 ? prev : CENTROS_CUSTO_DEFAULT).map((item, idx) =>
+        normalizeCentroCustoItem(item, idx)
+      )
       const comPeso = base.filter(c => c.situacao === 'ativo' && (c.pesoRateioPadrao || 0) > 0)
       if (comPeso.length === 0) {
-        // Aplica nos 4 segmentos pedagógicos clássicos
+        const pedagogicosAtivos = base.filter(
+          c => c.situacao === 'ativo' && c.tipo === 'pedagogico' && (c.natureza === 'ambos' || c.natureza === 'despesa')
+        )
+        const alvos = pedagogicosAtivos.length > 0 ? pedagogicosAtivos : base.filter(c => c.situacao === 'ativo')
+        if (alvos.length === 0) return base
+        const quota = Math.floor((100 / alvos.length) * 10) / 10
+        let acum = 0
         return base.map(c => {
-          if (c.sigla === 'INF') return { ...c, pesoRateioPadrao: 20 }
-          if (c.sigla === 'EF1') return { ...c, pesoRateioPadrao: 30 }
-          if (c.sigla === 'EF2') return { ...c, pesoRateioPadrao: 30 }
-          if (c.sigla === 'EM') return { ...c, pesoRateioPadrao: 20 }
-          return c
+          const idxAlvo = alvos.findIndex(a => a.id === c.id)
+          if (idxAlvo === -1) return c
+          if (idxAlvo === alvos.length - 1) {
+            return { ...c, pesoRateioPadrao: Math.max(0, Math.round((100 - acum) * 10) / 10) }
+          }
+          acum += quota
+          return { ...c, pesoRateioPadrao: quota }
         })
       }
       const soma = comPeso.reduce((acc, c) => acc + (c.pesoRateioPadrao || 0), 0)
       if (soma === 0) return base
       let acumulado = 0
-      return base.map((c, idx) => {
+      return base.map(c => {
         if (c.situacao !== 'ativo' || !(c.pesoRateioPadrao && c.pesoRateioPadrao > 0)) return c
         const isLast = c.id === comPeso[comPeso.length - 1].id
         if (isLast) {
@@ -700,9 +830,8 @@ export default function CentroCustoPage() {
     const ativos = centrosCusto.filter(c => c.situacao === 'ativo')
     const pedagogicos = ativos.filter(c => c.tipo === 'pedagogico')
     const orcamentoTotal = ativos.reduce((acc, c) => acc + Number(c.orcamentoMensal || 0), 0)
-    const somaRateio = Math.round(
-      ativos.reduce((acc, c) => acc + Number(c.pesoRateioPadrao || 0), 0) * 10
-    ) / 10
+    const somaRateio =
+      Math.round(ativos.reduce((acc, c) => acc + Number(c.pesoRateioPadrao || 0), 0) * 10) / 10
 
     let totalLancamentos = 0
     let volumeMovimentado = 0
@@ -737,7 +866,7 @@ export default function CentroCustoPage() {
         RESPONSAVEL: 'Coordenação Educação Infantil',
         ORCAMENTO_MENSAL: 35000,
         PESO_RATEIO_PADRAO: 0,
-        COR_HEX: '#f472b6',
+        COR_HEX: '#db2777',
         SITUACAO: 'ativo',
       },
       {
@@ -750,7 +879,7 @@ export default function CentroCustoPage() {
         RESPONSAVEL: 'Coordenação de TI',
         ORCAMENTO_MENSAL: 18000,
         PESO_RATEIO_PADRAO: 0,
-        COR_HEX: '#3b82f6',
+        COR_HEX: '#2563eb',
         SITUACAO: 'ativo',
       },
     ]
@@ -867,17 +996,17 @@ export default function CentroCustoPage() {
             String(norm['CODIGO'] || '').trim().toUpperCase() ||
             `CC${String(centrosCusto.length + novos.length + 1).padStart(3, '0')}`
           const sigla =
-            String(norm['SIGLA'] || nome.slice(0, 4))
+            String(norm['SIGLA'] || inferSmartSigla(nome))
               .trim()
               .toUpperCase()
               .slice(0, 8)
-          const descricao = String(norm['DESCRICAO'] || nome).trim()
-          const rawTipo = String(norm['TIPO'] || 'pedagogico').trim().toLowerCase()
+          const rawTipo = String(norm['TIPO'] || '').trim().toLowerCase()
           const tipo: ConfigCentroCusto['tipo'] = (
             ['pedagogico', 'administrativo', 'operacional', 'comercial', 'projetos'].includes(rawTipo)
               ? rawTipo
-              : 'pedagogico'
+              : inferTipoFromName(nome)
           ) as ConfigCentroCusto['tipo']
+          const descricao = inferSmartDescricao(nome, String(norm['DESCRICAO'] || '').trim(), tipo)
 
           const rawNat = String(norm['APLICABILIDADE'] || norm['NATUREZA'] || 'ambos')
             .trim()
@@ -886,7 +1015,7 @@ export default function CentroCustoPage() {
             ['ambos', 'despesa', 'receita'].includes(rawNat) ? rawNat : 'ambos'
           ) as ConfigCentroCusto['natureza']
 
-          const cor = String(norm['COR_HEX'] || norm['COR'] || '#38bdf8').trim()
+          const cor = String(norm['COR_HEX'] || norm['COR'] || '#2563eb').trim()
           const situacao: 'ativo' | 'inativo' =
             String(norm['SITUACAO'] || 'ativo').trim().toLowerCase() === 'inativo'
               ? 'inativo'
@@ -900,7 +1029,7 @@ export default function CentroCustoPage() {
             descricao,
             tipo,
             natureza,
-            cor: cor.startsWith('#') ? cor : '#38bdf8',
+            cor: cor.startsWith('#') ? cor : '#2563eb',
             responsavel: String(norm['RESPONSAVEL'] || '').trim(),
             orcamentoMensal: Math.max(0, Number(norm['ORCAMENTO_MENSAL'] || 0)),
             pesoRateioPadrao: Math.min(100, Math.max(0, Number(norm['PESO_RATEIO_PADRAO'] || 0))),
@@ -935,8 +1064,14 @@ export default function CentroCustoPage() {
     reader.readAsArrayBuffer(file)
   }
 
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    filtroTipo !== 'todos' ||
+    filtroNatureza !== 'todos' ||
+    filtroSituacao !== 'todos'
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Toast Notification */}
       {toast && (
         <div
@@ -952,20 +1087,20 @@ export default function CentroCustoPage() {
             gap: 10,
             padding: '12px 18px',
             borderRadius: 12,
-            background: toast.type === 'success' ? 'rgba(6, 78, 59, 0.96)' : 'rgba(127, 29, 29, 0.96)',
+            background: 'hsl(var(--bg-surface))',
             border: `1px solid ${
               toast.type === 'success' ? 'rgba(16, 185, 129, 0.45)' : 'rgba(239, 68, 68, 0.45)'
             }`,
-            color: '#fff',
-            boxShadow: '0 16px 40px rgba(0,0,0,0.45)',
+            color: 'hsl(var(--text-primary))',
+            boxShadow: 'var(--shadow-lg)',
             fontSize: '0.84rem',
             fontWeight: 600,
           }}
         >
           {toast.type === 'success' ? (
-            <CheckCircle2 size={18} color="#34d399" />
+            <CheckCircle2 size={18} color="#059669" />
           ) : (
-            <AlertCircle size={18} color="#f87171" />
+            <AlertCircle size={18} color="#dc2626" />
           )}
           <span>{toast.text}</span>
           <button
@@ -975,7 +1110,7 @@ export default function CentroCustoPage() {
             style={{
               background: 'none',
               border: 'none',
-              color: 'rgba(255,255,255,0.7)',
+              color: 'hsl(var(--text-muted))',
               cursor: 'pointer',
               padding: 2,
             }}
@@ -985,21 +1120,21 @@ export default function CentroCustoPage() {
         </div>
       )}
 
-      {/* Cabeçalho Principal */}
+      {/* Cabeçalho Principal Limpo e Adaptável ao Tema */}
       <div
         className="card"
         style={{
-          padding: '22px 24px',
-          background:
-            'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.85) 100%)',
-          border: '1px solid rgba(56, 189, 248, 0.18)',
+          padding: '20px 24px',
+          background: 'hsl(var(--bg-surface))',
+          border: '1px solid hsl(var(--border-subtle))',
+          boxShadow: 'var(--shadow-sm)',
         }}
       >
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             flexWrap: 'wrap',
             gap: 16,
           }}
@@ -1007,33 +1142,34 @@ export default function CentroCustoPage() {
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
             <div
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 14,
-                background: 'linear-gradient(135deg, rgba(56,189,248,0.2), rgba(99,102,241,0.2))',
-                border: '1px solid rgba(56,189,248,0.35)',
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: 'rgba(37, 99, 235, 0.08)',
+                border: '1px solid rgba(37, 99, 235, 0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#38bdf8',
+                color: '#2563eb',
                 flexShrink: 0,
+                marginTop: 2,
               }}
             >
-              <Target size={24} />
+              <Target size={22} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                 <span
                   style={{
                     fontSize: '0.68rem',
-                    fontWeight: 800,
+                    fontWeight: 700,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    padding: '3px 9px',
+                    letterSpacing: '0.06em',
+                    padding: '2px 9px',
                     borderRadius: 999,
-                    background: 'rgba(56, 189, 248, 0.14)',
-                    color: '#38bdf8',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    background: 'rgba(37, 99, 235, 0.08)',
+                    color: '#2563eb',
+                    border: '1px solid rgba(37, 99, 235, 0.2)',
                   }}
                 >
                   Config. Financeiro • Contabilidade Gerencial
@@ -1045,12 +1181,12 @@ export default function CentroCustoPage() {
                     alignItems: 'center',
                     gap: 4,
                     fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '3px 10px',
+                    fontWeight: 600,
+                    padding: '2px 10px',
                     borderRadius: 999,
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    color: '#f87171',
-                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    background: 'rgba(220, 38, 38, 0.07)',
+                    color: '#dc2626',
+                    border: '1px solid rgba(220, 38, 38, 0.2)',
                     textDecoration: 'none',
                   }}
                 >
@@ -1063,26 +1199,42 @@ export default function CentroCustoPage() {
                     alignItems: 'center',
                     gap: 4,
                     fontSize: '0.72rem',
-                    fontWeight: 700,
-                    padding: '3px 10px',
+                    fontWeight: 600,
+                    padding: '2px 10px',
                     borderRadius: 999,
-                    background: 'rgba(16, 185, 129, 0.12)',
-                    color: '#34d399',
-                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    background: 'rgba(5, 150, 105, 0.07)',
+                    color: '#059669',
+                    border: '1px solid rgba(5, 150, 105, 0.2)',
                     textDecoration: 'none',
                   }}
                 >
                   <TrendingUp size={12} /> Contas a Receber <ArrowUpRight size={11} />
                 </Link>
               </div>
-              <h1 style={{ fontSize: '1.35rem', fontWeight: 800, marginTop: 6, marginBottom: 4 }}>
-                Centros de Custo & Unidades de Negócio Escolares
+              <h1
+                className="page-title"
+                style={{
+                  fontSize: '1.35rem',
+                  fontWeight: 800,
+                  margin: 0,
+                  color: 'hsl(var(--text-primary))',
+                }}
+              >
+                Centros de Custo & Unidades de Negócio
               </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.83rem', maxWidth: 760, margin: 0 }}>
+              <p
+                style={{
+                  color: 'hsl(var(--text-secondary))',
+                  fontSize: '0.82rem',
+                  maxWidth: 720,
+                  margin: '4px 0 0',
+                  lineHeight: 1.45,
+                }}
+              >
                 Estruture segmentos pedagógicos, departamentos administrativos, infraestrutura e projetos
-                para classificar despesas, receitas, orçamentos mensais e rateios multicentro em{' '}
-                <strong style={{ color: 'var(--text-secondary)' }}>Contas a Pagar</strong> e{' '}
-                <strong style={{ color: 'var(--text-secondary)' }}>Contas a Receber</strong>.
+                para classificar despesas, receitas, metas de orçamento e rateios em{' '}
+                <strong style={{ color: 'hsl(var(--text-primary))', fontWeight: 600 }}>Contas a Pagar</strong> e{' '}
+                <strong style={{ color: 'hsl(var(--text-primary))', fontWeight: 600 }}>Contas a Receber</strong>.
               </p>
             </div>
           </div>
@@ -1105,9 +1257,10 @@ export default function CentroCustoPage() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                borderColor: showRateioConfig ? 'rgba(168,85,247,0.5)' : undefined,
-                background: showRateioConfig ? 'rgba(168,85,247,0.14)' : undefined,
-                color: showRateioConfig ? '#c084fc' : undefined,
+                borderColor: showRateioConfig ? '#7c3aed' : undefined,
+                background: showRateioConfig ? 'rgba(124, 58, 237, 0.08)' : undefined,
+                color: showRateioConfig ? '#7c3aed' : undefined,
+                fontWeight: 600,
               }}
             >
               <PieChart size={14} /> Rateio Padrão ({kpis.somaRateio}%)
@@ -1141,11 +1294,17 @@ export default function CentroCustoPage() {
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-primary btn-sm"
               onClick={openNew}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontWeight: 700,
+                padding: '8px 14px',
+              }}
             >
-              <Plus size={16} /> Novo Centro de Custo
+              <Plus size={15} /> Novo Centro de Custo
             </button>
           </div>
         </div>
@@ -1159,31 +1318,33 @@ export default function CentroCustoPage() {
             padding: '14px 18px',
             background:
               importFeedback.type === 'success'
-                ? 'rgba(16, 185, 129, 0.08)'
-                : 'rgba(239, 68, 68, 0.08)',
+                ? 'rgba(5, 150, 105, 0.06)'
+                : 'rgba(220, 38, 38, 0.06)',
             border: `1px solid ${
               importFeedback.type === 'success'
-                ? 'rgba(16, 185, 129, 0.3)'
-                : 'rgba(239, 68, 68, 0.3)'
+                ? 'rgba(5, 150, 105, 0.25)'
+                : 'rgba(220, 38, 38, 0.25)'
             }`,
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               {importFeedback.type === 'success' ? (
-                <CheckCircle2 size={18} color="#10b981" />
+                <CheckCircle2 size={18} color="#059669" />
               ) : (
-                <AlertCircle size={18} color="#ef4444" />
+                <AlertCircle size={18} color="#dc2626" />
               )}
               <div>
-                <div style={{ fontWeight: 700, fontSize: '0.86rem' }}>{importFeedback.message}</div>
+                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: 'hsl(var(--text-primary))' }}>
+                  {importFeedback.message}
+                </div>
                 {importFeedback.details && importFeedback.details.length > 0 && (
                   <ul
                     style={{
                       margin: '6px 0 0',
                       paddingLeft: 18,
                       fontSize: '0.76rem',
-                      color: 'var(--text-secondary)',
+                      color: 'hsl(var(--text-secondary))',
                     }}
                   >
                     {importFeedback.details.slice(0, 6).map((d, i) => (
@@ -1197,7 +1358,12 @@ export default function CentroCustoPage() {
               type="button"
               onClick={() => setImportFeedback(null)}
               aria-label="Fechar aviso de importação"
-              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'hsl(var(--text-muted))',
+                cursor: 'pointer',
+              }}
             >
               <X size={15} />
             </button>
@@ -1205,121 +1371,294 @@ export default function CentroCustoPage() {
         </div>
       )}
 
-      {/* Cards de Indicadores (KPIs) */}
+      {/* Cards de Indicadores (KPIs) Limpos e Modernos */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: 14,
         }}
       >
-        <div className="card" style={{ padding: '16px 18px' }}>
+        <div
+          className="card"
+          style={{
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.69rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'hsl(var(--text-muted))',
+              }}
+            >
+              Total Cadastrados
+            </span>
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background: 'rgba(37, 99, 235, 0.08)',
+                color: '#2563eb',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Layers size={15} />
+            </span>
+          </div>
           <div
             style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: 'var(--text-muted)',
+              fontSize: '1.6rem',
+              fontWeight: 800,
+              marginTop: 6,
+              color: 'hsl(var(--text-primary))',
+              fontFamily: 'Outfit, Inter, sans-serif',
+              lineHeight: 1.15,
             }}
           >
-            Total Cadastrados
-          </div>
-          <div style={{ fontSize: '1.55rem', fontWeight: 800, marginTop: 6 }}>
             {kpis.total}
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            <span style={{ color: '#10b981', fontWeight: 700 }}>{kpis.ativos} ativos</span> •{' '}
-            {kpis.inativos} inativos
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', marginTop: 6 }}>
+            <span style={{ color: '#059669', fontWeight: 700 }}>{kpis.ativos} ativos</span>
+            {' • '}
+            <span>{kpis.inativos} inativos</span>
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 18px' }}>
+        <div
+          className="card"
+          style={{
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.69rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'hsl(var(--text-muted))',
+              }}
+            >
+              Estrutura Escolar
+            </span>
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background: 'rgba(2, 132, 199, 0.08)',
+                color: '#0284c7',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <GraduationCap size={16} />
+            </span>
+          </div>
           <div
             style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: '#38bdf8',
+              fontSize: '1.5rem',
+              fontWeight: 800,
+              marginTop: 6,
+              color: 'hsl(var(--text-primary))',
+              fontFamily: 'Outfit, Inter, sans-serif',
+              lineHeight: 1.15,
             }}
           >
-            Estrutura Escolar
+            {kpis.pedagogicos}{' '}
+            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0284c7' }}>
+              Pedagógicos
+            </span>
           </div>
-          <div style={{ fontSize: '1.55rem', fontWeight: 800, marginTop: 6, color: '#38bdf8' }}>
-            {kpis.pedagogicos} Pedagógicos
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', marginTop: 6 }}>
             +{kpis.naoPedagogicos} centros adm / infra / comercial
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 18px' }}>
+        <div
+          className="card"
+          style={{
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.69rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'hsl(var(--text-muted))',
+              }}
+            >
+              Orçamento Previsto
+            </span>
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background: 'rgba(217, 119, 6, 0.08)',
+                color: '#d97706',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Wallet size={15} />
+            </span>
+          </div>
           <div
             style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: '#f59e0b',
+              fontSize: '1.45rem',
+              fontWeight: 800,
+              marginTop: 6,
+              color: 'hsl(var(--text-primary))',
+              fontFamily: 'Outfit, Inter, sans-serif',
+              lineHeight: 1.15,
             }}
           >
-            Orçamento Mensal Previsto
-          </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: 6, color: '#f59e0b' }}>
             {formatCurrency(kpis.orcamentoTotal)}
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Soma das metas dos centros ativos
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', marginTop: 6 }}>
+            Soma das metas mensais ativas
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div
-            style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: kpis.somaRateio === 100 ? '#10b981' : '#a855f7',
-            }}
-          >
-            Rateio Pedagógico Padrão
+        <div
+          className="card"
+          style={{
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+          }}
+          onClick={() => setShowRateioConfig(v => !v)}
+          title="Clique para abrir o configurador de rateio"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.69rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'hsl(var(--text-muted))',
+              }}
+            >
+              Rateio Pedagógico
+            </span>
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background:
+                  kpis.somaRateio === 100
+                    ? 'rgba(5, 150, 105, 0.08)'
+                    : 'rgba(124, 58, 237, 0.08)',
+                color: kpis.somaRateio === 100 ? '#059669' : '#7c3aed',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PieChart size={15} />
+            </span>
           </div>
           <div
             style={{
-              fontSize: '1.55rem',
+              fontSize: '1.6rem',
               fontWeight: 800,
               marginTop: 6,
-              color: kpis.somaRateio === 100 ? '#10b981' : '#a855f7',
+              color: kpis.somaRateio === 100 ? '#059669' : 'hsl(var(--text-primary))',
+              fontFamily: 'Outfit, Inter, sans-serif',
+              lineHeight: 1.15,
             }}
           >
             {kpis.somaRateio}%
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            {kpis.somaRateio === 100
-              ? '100% calibrado para Contas a Pagar'
-              : 'Clique em "Rateio Padrão" para calibrar'}
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', marginTop: 6 }}>
+            {kpis.somaRateio === 100 ? (
+              <span style={{ color: '#059669', fontWeight: 600 }}>✓ Calibrado para Contas a Pagar</span>
+            ) : (
+              <span style={{ color: '#7c3aed', fontWeight: 600 }}>Configurar rateio padrão →</span>
+            )}
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 18px' }}>
+        <div
+          className="card"
+          style={{
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span
+              style={{
+                fontSize: '0.69rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: 'hsl(var(--text-muted))',
+              }}
+            >
+              Títulos Classificados
+            </span>
+            <span
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 8,
+                background: 'rgba(5, 150, 105, 0.08)',
+                color: '#059669',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Activity size={15} />
+            </span>
+          </div>
           <div
             style={{
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              color: '#10b981',
+              fontSize: '1.5rem',
+              fontWeight: 800,
+              marginTop: 6,
+              color: 'hsl(var(--text-primary))',
+              fontFamily: 'Outfit, Inter, sans-serif',
+              lineHeight: 1.15,
             }}
           >
-            Títulos Classificados
+            {kpis.totalLancamentos}{' '}
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>
+              {kpis.totalLancamentos === 1 ? 'registro' : 'registros'}
+            </span>
           </div>
-          <div style={{ fontSize: '1.45rem', fontWeight: 800, marginTop: 6, color: '#10b981' }}>
-            {kpis.totalLancamentos} registros
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Volume: {formatCurrency(kpis.volumeMovimentado)}
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', marginTop: 6 }}>
+            Volume: <strong style={{ color: '#059669' }}>{formatCurrency(kpis.volumeMovimentado)}</strong>
           </div>
         </div>
       </div>
@@ -1330,8 +1669,8 @@ export default function CentroCustoPage() {
           className="card"
           style={{
             padding: 20,
-            border: '1px solid rgba(168, 85, 247, 0.35)',
-            background: 'rgba(168, 85, 247, 0.04)',
+            border: '1px solid rgba(124, 58, 237, 0.28)',
+            background: 'hsl(var(--bg-surface))',
           }}
         >
           <div
@@ -1341,37 +1680,46 @@ export default function CentroCustoPage() {
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 12,
-              marginBottom: 14,
+              marginBottom: 16,
+              paddingBottom: 12,
+              borderBottom: '1px solid hsl(var(--border-subtle))',
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <PieChart size={18} color="#c084fc" />
-                <h2 style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0 }}>
+                <PieChart size={18} color="#7c3aed" />
+                <h2
+                  style={{
+                    fontSize: '0.96rem',
+                    fontWeight: 800,
+                    margin: 0,
+                    color: 'hsl(var(--text-primary))',
+                  }}
+                >
                   Matriz de Rateio Pedagógico Automático (Contas a Pagar)
                 </h2>
               </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                Defina o percentual padrão de cada segmento ao clicar em{' '}
-                <strong>&ldquo;Aplicar Rateio Pedagógico&rdquo;</strong> no lançamento de Contas a Pagar.
+              <p style={{ fontSize: '0.78rem', color: 'hsl(var(--text-secondary))', margin: '4px 0 0' }}>
+                Defina o percentual padrão de cada centro ao utilizar o{' '}
+                <strong>Rateio Automático</strong> nos lançamentos de Contas a Pagar.
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span
                 style={{
-                  fontSize: '0.8rem',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   padding: '5px 12px',
                   borderRadius: 999,
                   background:
                     kpis.somaRateio === 100
-                      ? 'rgba(16, 185, 129, 0.15)'
-                      : 'rgba(245, 158, 11, 0.15)',
-                  color: kpis.somaRateio === 100 ? '#34d399' : '#fbbf24',
+                      ? 'rgba(5, 150, 105, 0.1)'
+                      : 'rgba(217, 119, 6, 0.1)',
+                  color: kpis.somaRateio === 100 ? '#059669' : '#d97706',
                   border: `1px solid ${
                     kpis.somaRateio === 100
-                      ? 'rgba(16, 185, 129, 0.35)'
-                      : 'rgba(245, 158, 11, 0.35)'
+                      ? 'rgba(5, 150, 105, 0.3)'
+                      : 'rgba(217, 119, 6, 0.3)'
                   }`,
                 }}
               >
@@ -1379,10 +1727,17 @@ export default function CentroCustoPage() {
               </span>
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
+                className="btn btn-primary btn-sm"
                 onClick={handleNormalizarRateio100}
               >
-                Calibrar para 100%
+                Distribuir / Calibrar 100%
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowRateioConfig(false)}
+              >
+                Fechar
               </button>
             </div>
           </div>
@@ -1390,7 +1745,7 @@ export default function CentroCustoPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
               gap: 10,
             }}
           >
@@ -1402,8 +1757,8 @@ export default function CentroCustoPage() {
                   style={{
                     padding: '10px 12px',
                     borderRadius: 10,
-                    background: 'rgba(15, 23, 42, 0.65)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'hsl(var(--bg-elevated))',
+                    border: '1px solid hsl(var(--border-subtle))',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -1425,6 +1780,7 @@ export default function CentroCustoPage() {
                         style={{
                           fontSize: '0.78rem',
                           fontWeight: 700,
+                          color: 'hsl(var(--text-primary))',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -1432,7 +1788,7 @@ export default function CentroCustoPage() {
                       >
                         {c.sigla} • {c.nome}
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'hsl(var(--text-muted))' }}>
                         {TIPO_META[c.tipo]?.label || c.tipo}
                       </div>
                     </div>
@@ -1450,7 +1806,7 @@ export default function CentroCustoPage() {
                       className="form-input"
                       style={{ width: 68, padding: '4px 8px', textAlign: 'right', fontSize: '0.8rem' }}
                     />
-                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.76rem', color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
                       %
                     </span>
                   </div>
@@ -1460,21 +1816,22 @@ export default function CentroCustoPage() {
         </div>
       )}
 
-      {/* Barra de Sugestões Rápidas Escolares */}
+      {/* Barra de Sugestões Rápidas Escolares — Leve e Clara */}
       {sugestoesDisponiveis.length > 0 && (
         <div
           className="card"
           style={{
-            padding: '12px 16px',
+            padding: '12px 18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 10,
-            background: 'rgba(30, 41, 59, 0.45)',
+            gap: 12,
+            background: 'hsl(var(--bg-surface))',
+            border: '1px dashed hsl(var(--border-default))',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
             <span
               style={{
                 display: 'inline-flex',
@@ -1482,10 +1839,13 @@ export default function CentroCustoPage() {
                 gap: 5,
                 fontSize: '0.74rem',
                 fontWeight: 700,
-                color: '#38bdf8',
+                color: '#2563eb',
+                background: 'rgba(37, 99, 235, 0.08)',
+                padding: '4px 10px',
+                borderRadius: 999,
               }}
             >
-              <Sparkles size={14} /> Adicionar Sugestão Escolar (1 clique):
+              <Sparkles size={13} /> Sugestões Escolares (1 clique):
             </span>
             {sugestoesDisponiveis.map(sug => (
               <button
@@ -1496,13 +1856,13 @@ export default function CentroCustoPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  padding: '4px 10px',
+                  padding: '5px 11px',
                   borderRadius: 999,
-                  fontSize: '0.73rem',
+                  fontSize: '0.74rem',
                   fontWeight: 600,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: 'var(--text-secondary)',
+                  background: 'hsl(var(--bg-elevated))',
+                  border: '1px solid hsl(var(--border-default))',
+                  color: 'hsl(var(--text-primary))',
                   cursor: 'pointer',
                 }}
               >
@@ -1512,9 +1872,13 @@ export default function CentroCustoPage() {
                     height: 8,
                     borderRadius: '50%',
                     background: sug.cor,
+                    flexShrink: 0,
                   }}
                 />
-                + {sug.sigla} • {sug.nome}
+                <span>+ {sug.sigla}</span>
+                <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
+                  • {sug.nome}
+                </span>
               </button>
             ))}
           </div>
@@ -1523,7 +1887,7 @@ export default function CentroCustoPage() {
             type="button"
             onClick={handleRestaurarPadroes}
             className="btn btn-secondary btn-sm"
-            style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 5 }}
+            style={{ fontSize: '0.73rem', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
           >
             <RotateCcw size={12} /> Restaurar Padrões
           </button>
@@ -1531,7 +1895,7 @@ export default function CentroCustoPage() {
       )}
 
       {/* Filtros e Pesquisa */}
-      <div className="card" style={{ padding: 16 }}>
+      <div className="card" style={{ padding: '16px 18px' }}>
         <div
           style={{
             display: 'grid',
@@ -1541,17 +1905,7 @@ export default function CentroCustoPage() {
           }}
         >
           <div>
-            <label
-              htmlFor="cc-search-input"
-              style={{
-                display: 'block',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-                marginBottom: 6,
-              }}
-            >
+            <label htmlFor="cc-search-input" className="form-label">
               Pesquisar Centro de Custo
             </label>
             <div style={{ position: 'relative' }}>
@@ -1562,7 +1916,8 @@ export default function CentroCustoPage() {
                   left: 12,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
+                  color: 'hsl(var(--text-muted))',
+                  pointerEvents: 'none',
                 }}
               />
               <input
@@ -1581,17 +1936,7 @@ export default function CentroCustoPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="cc-filter-tipo"
-              style={{
-                display: 'block',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-                marginBottom: 6,
-              }}
-            >
+            <label htmlFor="cc-filter-tipo" className="form-label">
               Classificação / Área
             </label>
             <select
@@ -1610,17 +1955,7 @@ export default function CentroCustoPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="cc-filter-natureza"
-              style={{
-                display: 'block',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-                marginBottom: 6,
-              }}
-            >
+            <label htmlFor="cc-filter-natureza" className="form-label">
               Uso (Pagar / Receber)
             </label>
             <select
@@ -1637,17 +1972,7 @@ export default function CentroCustoPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="cc-filter-situacao"
-              style={{
-                display: 'block',
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-                marginBottom: 6,
-              }}
-            >
+            <label htmlFor="cc-filter-situacao" className="form-label">
               Situação
             </label>
             <select
@@ -1669,7 +1994,7 @@ export default function CentroCustoPage() {
         <div
           style={{
             padding: '14px 20px',
-            borderBottom: '1px solid var(--border)',
+            borderBottom: '1px solid hsl(var(--border-subtle))',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -1677,10 +2002,25 @@ export default function CentroCustoPage() {
             gap: 10,
           }}
         >
-          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-            Relação de Centros de Custo ({filtered.length} registro{filtered.length !== 1 ? 's' : ''})
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+              Relação de Centros de Custo
+            </span>
+            <span
+              style={{
+                fontSize: '0.73rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: 'hsl(var(--bg-elevated))',
+                border: '1px solid hsl(var(--border-subtle))',
+                color: 'hsl(var(--text-secondary))',
+              }}
+            >
+              {filtered.length} {filtered.length === 1 ? 'registro' : 'registros'}
+            </span>
           </div>
-          {(search || filtroTipo !== 'todos' || filtroNatureza !== 'todos' || filtroSituacao !== 'todos') && (
+          {hasActiveFilters && (
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -1697,12 +2037,13 @@ export default function CentroCustoPage() {
         </div>
 
         <div
+          className="table-container"
           tabIndex={0}
           role="region"
           aria-labelledby="cc-table-caption"
-          style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+          style={{ border: 'none', borderRadius: 0 }}
         >
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table>
             <caption
               id="cc-table-caption"
               style={{
@@ -1721,7 +2062,7 @@ export default function CentroCustoPage() {
             </caption>
             <thead>
               <tr>
-                <th scope="col" style={{ width: 90 }}>Código</th>
+                <th scope="col" style={{ width: 92 }}>Código</th>
                 <th scope="col">Centro de Custo / Identificação</th>
                 <th scope="col">Classificação & Gestor</th>
                 <th scope="col">Uso no Financeiro</th>
@@ -1734,7 +2075,14 @@ export default function CentroCustoPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '42px 20px', color: 'var(--text-muted)' }}>
+                  <td
+                    colSpan={8}
+                    style={{
+                      textAlign: 'center',
+                      padding: '44px 20px',
+                      color: 'hsl(var(--text-muted))',
+                    }}
+                  >
                     Nenhum Centro de Custo encontrado para os filtros selecionados.
                   </td>
                 </tr>
@@ -1748,6 +2096,7 @@ export default function CentroCustoPage() {
                     qtdReceber: 0,
                     valorReceber: 0,
                   }
+                  const hasMovimento = uso.qtdPagar > 0 || uso.qtdReceber > 0
                   const unidadeNome = cc.unidadeId
                     ? todasUnidades.find(u => u.id === cc.unidadeId)?.nome || 'Unidade específica'
                     : 'Todas as Unidades'
@@ -1760,48 +2109,68 @@ export default function CentroCustoPage() {
                       }}
                     >
                       <td>
-                        <span
+                        <code
                           style={{
-                            fontFamily: 'monospace',
-                            fontSize: '0.78rem',
+                            fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+                            fontSize: '0.76rem',
                             fontWeight: 700,
-                            padding: '3px 8px',
+                            padding: '4px 8px',
                             borderRadius: 6,
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.09)',
+                            background: 'hsl(var(--bg-elevated))',
+                            border: '1px solid hsl(var(--border-default))',
+                            color: 'hsl(var(--text-primary))',
                           }}
                         >
                           {cc.codigo}
-                        </span>
+                        </code>
                       </td>
 
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <span
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              minWidth: 46,
-                              padding: '4px 8px',
+                              minWidth: 52,
+                              height: 32,
+                              padding: '0 8px',
                               borderRadius: 8,
                               fontSize: '0.72rem',
                               fontWeight: 800,
-                              background: `${cc.cor}22`,
-                              color: cc.cor,
-                              border: `1px solid ${cc.cor}55`,
-                              letterSpacing: '0.04em',
+                              background: `color-mix(in oklab, ${cc.cor} 12%, transparent)`,
+                              color: `color-mix(in oklab, ${cc.cor} 82%, black)`,
+                              border: `1px solid color-mix(in oklab, ${cc.cor} 30%, transparent)`,
+                              letterSpacing: '0.03em',
+                              flexShrink: 0,
                             }}
                           >
                             {cc.sigla}
                           </span>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                fontSize: '0.88rem',
+                                color: 'hsl(var(--text-primary))',
+                                lineHeight: 1.25,
+                              }}
+                            >
                               {cc.nome}
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                              {cc.descricao}
-                            </div>
+                            {cc.descricao &&
+                              cc.descricao.trim().toLowerCase() !== cc.nome.trim().toLowerCase() && (
+                                <div
+                                  style={{
+                                    fontSize: '0.75rem',
+                                    color: 'hsl(var(--text-muted))',
+                                    marginTop: 2,
+                                    lineHeight: 1.3,
+                                  }}
+                                >
+                                  {cc.descricao}
+                                </div>
+                              )}
                           </div>
                         </div>
                       </td>
@@ -1815,7 +2184,7 @@ export default function CentroCustoPage() {
                               gap: 5,
                               fontSize: '0.72rem',
                               fontWeight: 700,
-                              padding: '2px 9px',
+                              padding: '3px 10px',
                               borderRadius: 999,
                               background: tipoInfo.badgeBg,
                               color: tipoInfo.badgeColor,
@@ -1824,7 +2193,7 @@ export default function CentroCustoPage() {
                           >
                             <span>{tipoInfo.icon}</span> {tipoInfo.label}
                           </span>
-                          <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                          <span style={{ fontSize: '0.73rem', color: 'hsl(var(--text-muted))' }}>
                             {cc.responsavel ? `👤 ${cc.responsavel}` : `🏫 ${unidadeNome}`}
                           </span>
                         </div>
@@ -1850,14 +2219,23 @@ export default function CentroCustoPage() {
                       </td>
 
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.84rem' }}>
+                        <div
+                          style={{
+                            fontWeight: cc.orcamentoMensal && cc.orcamentoMensal > 0 ? 700 : 500,
+                            fontSize: '0.83rem',
+                            color:
+                              cc.orcamentoMensal && cc.orcamentoMensal > 0
+                                ? 'hsl(var(--text-primary))'
+                                : 'hsl(var(--text-muted))',
+                          }}
+                        >
                           {cc.orcamentoMensal && cc.orcamentoMensal > 0
                             ? `${formatCurrency(cc.orcamentoMensal)}/mês`
                             : 'Sem teto fixo'}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                        <div style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', marginTop: 2 }}>
                           {cc.pesoRateioPadrao && cc.pesoRateioPadrao > 0 ? (
-                            <span style={{ color: '#c084fc', fontWeight: 600 }}>
+                            <span style={{ color: '#7c3aed', fontWeight: 600 }}>
                               Rateio padrão: {cc.pesoRateioPadrao}%
                             </span>
                           ) : (
@@ -1867,14 +2245,37 @@ export default function CentroCustoPage() {
                       </td>
 
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
-                          <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 600 }}>
-                            Saídas ({uso.qtdPagar}): {formatCurrency(uso.valorPagar)}
-                          </span>
-                          <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 600 }}>
-                            Entradas ({uso.qtdReceber}): {formatCurrency(uso.valorReceber)}
-                          </span>
-                        </div>
+                        {hasMovimento ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                color: uso.qtdPagar > 0 ? '#dc2626' : 'hsl(var(--text-muted))',
+                                fontWeight: uso.qtdPagar > 0 ? 600 : 400,
+                              }}
+                            >
+                              Saídas ({uso.qtdPagar}): {formatCurrency(uso.valorPagar)}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                color: uso.qtdReceber > 0 ? '#059669' : 'hsl(var(--text-muted))',
+                                fontWeight: uso.qtdReceber > 0 ? 600 : 400,
+                              }}
+                            >
+                              Entradas ({uso.qtdReceber}): {formatCurrency(uso.valorReceber)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end' }}>
+                            <span style={{ fontSize: '0.76rem', color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
+                              Sem movimentação
+                            </span>
+                            <span style={{ fontSize: '0.69rem', color: 'hsl(var(--text-muted))', opacity: 0.8 }}>
+                              R$ 0,00
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       <td style={{ textAlign: 'center' }}>
@@ -1890,16 +2291,16 @@ export default function CentroCustoPage() {
                             fontWeight: 700,
                             border:
                               cc.situacao === 'ativo'
-                                ? '1px solid rgba(16, 185, 129, 0.35)'
-                                : '1px solid rgba(148, 163, 184, 0.3)',
+                                ? '1px solid rgba(5, 150, 105, 0.28)'
+                                : '1px solid hsl(var(--border-default))',
                             background:
                               cc.situacao === 'ativo'
-                                ? 'rgba(16, 185, 129, 0.14)'
-                                : 'rgba(148, 163, 184, 0.12)',
-                            color: cc.situacao === 'ativo' ? '#34d399' : '#94a3b8',
+                                ? 'rgba(5, 150, 105, 0.1)'
+                                : 'hsl(var(--bg-elevated))',
+                            color: cc.situacao === 'ativo' ? '#059669' : 'hsl(var(--text-muted))',
                           }}
                         >
-                          {cc.situacao === 'ativo' ? 'Ativo' : 'Inativo'}
+                          {cc.situacao === 'ativo' ? '● Ativo' : '○ Inativo'}
                         </button>
                       </td>
 
@@ -1931,7 +2332,7 @@ export default function CentroCustoPage() {
                             onClick={() => setDeleteTarget(cc)}
                             title={`Excluir ${cc.nome}`}
                             aria-label={`Excluir ${cc.nome}`}
-                            style={{ padding: '5px 8px', color: '#f87171' }}
+                            style={{ padding: '5px 8px', color: '#dc2626' }}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1955,7 +2356,7 @@ export default function CentroCustoPage() {
             position: 'fixed',
             inset: 0,
             zIndex: 1000,
-            background: 'rgba(2, 6, 23, 0.78)',
+            background: 'rgba(15, 23, 42, 0.55)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
@@ -1975,8 +2376,9 @@ export default function CentroCustoPage() {
               maxHeight: '92vh',
               overflowY: 'auto',
               padding: 24,
-              border: '1px solid rgba(56, 189, 248, 0.28)',
-              boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+              background: 'hsl(var(--bg-surface))',
+              border: '1px solid hsl(var(--border-default))',
+              boxShadow: 'var(--shadow-xl)',
             }}
           >
             <div
@@ -1985,7 +2387,7 @@ export default function CentroCustoPage() {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 paddingBottom: 14,
-                borderBottom: '1px solid var(--border)',
+                borderBottom: '1px solid hsl(var(--border-subtle))',
                 marginBottom: 18,
               }}
             >
@@ -1995,8 +2397,8 @@ export default function CentroCustoPage() {
                     width: 38,
                     height: 38,
                     borderRadius: 10,
-                    background: `${form.cor}22`,
-                    border: `1px solid ${form.cor}55`,
+                    background: `color-mix(in oklab, ${form.cor} 14%, transparent)`,
+                    border: `1px solid color-mix(in oklab, ${form.cor} 35%, transparent)`,
                     color: form.cor,
                     display: 'flex',
                     alignItems: 'center',
@@ -2006,10 +2408,18 @@ export default function CentroCustoPage() {
                   <Target size={18} />
                 </div>
                 <div>
-                  <h2 id="modal-cc-title" style={{ fontSize: '1.08rem', fontWeight: 800, margin: 0 }}>
+                  <h2
+                    id="modal-cc-title"
+                    style={{
+                      fontSize: '1.08rem',
+                      fontWeight: 800,
+                      margin: 0,
+                      color: 'hsl(var(--text-primary))',
+                    }}
+                  >
                     {editId ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}
                   </h2>
-                  <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0 }}>
+                  <p style={{ fontSize: '0.76rem', color: 'hsl(var(--text-muted))', margin: 0 }}>
                     Disponível imediatamente em Contas a Pagar e Contas a Receber
                   </p>
                 </div>
@@ -2021,7 +2431,7 @@ export default function CentroCustoPage() {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--text-muted)',
+                  color: 'hsl(var(--text-muted))',
                   cursor: 'pointer',
                   padding: 4,
                 }}
@@ -2036,9 +2446,9 @@ export default function CentroCustoPage() {
                 style={{
                   padding: '10px 14px',
                   borderRadius: 10,
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  color: '#fca5a5',
+                  background: 'rgba(220, 38, 38, 0.08)',
+                  border: '1px solid rgba(220, 38, 38, 0.28)',
+                  color: '#dc2626',
                   fontSize: '0.8rem',
                   fontWeight: 600,
                   marginBottom: 16,
@@ -2061,10 +2471,7 @@ export default function CentroCustoPage() {
                 }}
               >
                 <div>
-                  <label
-                    htmlFor="cc-form-codigo"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-codigo" className="form-label">
                     Código *
                   </label>
                   <input
@@ -2081,10 +2488,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-sigla"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-sigla" className="form-label">
                     Sigla Curta *
                   </label>
                   <input
@@ -2103,10 +2507,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-nome"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-nome" className="form-label">
                     Nome do Centro de Custo *
                   </label>
                   <input
@@ -2122,10 +2523,7 @@ export default function CentroCustoPage() {
               </div>
 
               <div>
-                <label
-                  htmlFor="cc-form-descricao"
-                  style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                >
+                <label htmlFor="cc-form-descricao" className="form-label">
                   Descrição Detalhada / Subtítulo
                 </label>
                 <input
@@ -2140,10 +2538,7 @@ export default function CentroCustoPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label
-                    htmlFor="cc-form-tipo"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-tipo" className="form-label">
                     Classificação / Área *
                   </label>
                   <select
@@ -2161,10 +2556,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-natureza"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-natureza" className="form-label">
                     Onde será utilizado? (Aplicabilidade) *
                   </label>
                   <select
@@ -2182,10 +2574,7 @@ export default function CentroCustoPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label
-                    htmlFor="cc-form-responsavel"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-responsavel" className="form-label">
                     Gestor / Coordenador Responsável
                   </label>
                   <input
@@ -2199,10 +2588,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-unidade"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-unidade" className="form-label">
                     Unidade Escolar Vinculada
                   </label>
                   <select
@@ -2223,10 +2609,7 @@ export default function CentroCustoPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 140px', gap: 12 }}>
                 <div>
-                  <label
-                    htmlFor="cc-form-orcamento"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-orcamento" className="form-label">
                     Meta / Teto Orçamento Mensal (R$)
                   </label>
                   <input
@@ -2244,10 +2627,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-rateio"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-rateio" className="form-label">
                     Peso no Rateio Automático (%)
                   </label>
                   <input
@@ -2266,10 +2646,7 @@ export default function CentroCustoPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="cc-form-situacao"
-                    style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, marginBottom: 5 }}
-                  >
+                  <label htmlFor="cc-form-situacao" className="form-label">
                     Status
                   </label>
                   <select
@@ -2289,19 +2666,27 @@ export default function CentroCustoPage() {
                 style={{
                   padding: 14,
                   borderRadius: 12,
-                  background: 'rgba(15, 23, 42, 0.65)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'hsl(var(--bg-elevated))',
+                  border: '1px solid hsl(var(--border-subtle))',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 10,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'hsl(var(--text-secondary))' }}>
                     Cor de Identificação nos Relatórios e Tabelas:
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Preview:</span>
+                    <span style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))' }}>Preview:</span>
                     <span
                       style={{
                         display: 'inline-flex',
@@ -2311,9 +2696,9 @@ export default function CentroCustoPage() {
                         borderRadius: 8,
                         fontSize: '0.74rem',
                         fontWeight: 800,
-                        background: `${form.cor}22`,
-                        color: form.cor,
-                        border: `1px solid ${form.cor}55`,
+                        background: `color-mix(in oklab, ${form.cor} 12%, transparent)`,
+                        color: `color-mix(in oklab, ${form.cor} 82%, black)`,
+                        border: `1px solid color-mix(in oklab, ${form.cor} 30%, transparent)`,
                       }}
                     >
                       <span
@@ -2341,7 +2726,10 @@ export default function CentroCustoPage() {
                         height: 26,
                         borderRadius: 8,
                         background: c,
-                        border: form.cor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                        border:
+                          form.cor === c
+                            ? '2px solid hsl(var(--text-primary))'
+                            : '1px solid rgba(0,0,0,0.15)',
                         cursor: 'pointer',
                         transform: form.cor === c ? 'scale(1.12)' : 'scale(1)',
                         transition: 'all 0.15s ease',
@@ -2371,7 +2759,7 @@ export default function CentroCustoPage() {
                   justifyContent: 'flex-end',
                   gap: 10,
                   paddingTop: 12,
-                  borderTop: '1px solid var(--border)',
+                  borderTop: '1px solid hsl(var(--border-subtle))',
                 }}
               >
                 <button
@@ -2404,7 +2792,7 @@ export default function CentroCustoPage() {
             position: 'fixed',
             inset: 0,
             zIndex: 1000,
-            background: 'rgba(2, 6, 23, 0.78)',
+            background: 'rgba(15, 23, 42, 0.55)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
@@ -2422,15 +2810,31 @@ export default function CentroCustoPage() {
               width: '100%',
               maxWidth: 460,
               padding: 24,
-              border: '1px solid rgba(239, 68, 68, 0.35)',
+              background: 'hsl(var(--bg-surface))',
+              border: '1px solid rgba(220, 38, 38, 0.3)',
+              boxShadow: 'var(--shadow-xl)',
             }}
           >
-            <h3 id="delete-cc-title" style={{ fontSize: '1.02rem', fontWeight: 800, marginTop: 0 }}>
+            <h3
+              id="delete-cc-title"
+              style={{
+                fontSize: '1.05rem',
+                fontWeight: 800,
+                marginTop: 0,
+                color: 'hsl(var(--text-primary))',
+              }}
+            >
               Confirmar Exclusão
             </h3>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            <p
+              style={{
+                fontSize: '0.84rem',
+                color: 'hsl(var(--text-secondary))',
+                lineHeight: 1.5,
+              }}
+            >
               Deseja realmente remover o Centro de Custo{' '}
-              <strong>
+              <strong style={{ color: 'hsl(var(--text-primary))' }}>
                 {deleteTarget.sigla} — {deleteTarget.nome}
               </strong>
               ?
@@ -2441,9 +2845,9 @@ export default function CentroCustoPage() {
                 style={{
                   padding: '10px 12px',
                   borderRadius: 8,
-                  background: 'rgba(245, 158, 11, 0.12)',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
-                  color: '#fbbf24',
+                  background: 'rgba(217, 119, 6, 0.08)',
+                  border: '1px solid rgba(217, 119, 6, 0.28)',
+                  color: '#b45309',
                   fontSize: '0.76rem',
                   marginBottom: 14,
                 }}
@@ -2475,7 +2879,7 @@ export default function CentroCustoPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={confirmDelete}
-                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                style={{ background: '#dc2626', borderColor: '#dc2626' }}
               >
                 Excluir
               </button>

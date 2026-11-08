@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { requireAuth, requireStaff } from '@/lib/server/authGuard'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
+  const supabase = getAdminClient()
   const { id } = await context.params
   const { data, error } = await supabase.from('titulos').select('*').eq('id', id).single()
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
@@ -16,10 +16,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
+  const supabase = getAdminClient()
   const { id: paramId } = await context.params
   try {
     const body = await request.json()
@@ -41,18 +41,21 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       ...(typeof dados === 'object' && dados !== null ? dados : {}),
       ...rest,
     }
+    delete (mergedDados as any).dados
 
     const row = {
       id: paramId,
       aluno: aluno || '', responsavel: responsavel || '',
       descricao: descricao || '', valor: Number(valor) || 0,
-      vencimento: vencimento || '', pagamento: pagamento || null,
+      vencimento: String(vencimento || '').slice(0, 10),
+      pagamento: pagamento ? String(pagamento).slice(0, 10) : null,
       status: status || 'pendente', metodo: metodo || null, parcela: parcela || '',
-      evento_id: eventoId || null, evento_descricao: eventoDescricao || null,
+      evento_id: eventoId || evento_id || null,
+      evento_descricao: eventoDescricao || evento_descricao || null,
       dados: mergedDados,
       updated_at: new Date().toISOString(),
     }
-    const { data, error } = await supabase.from('titulos').upsert(row).select().single()
+    const { data, error } = await supabase.from('titulos').upsert(row, { onConflict: 'id' }).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) })
   } catch (e: any) {
@@ -60,11 +63,11 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(_req: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth()
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
+  const supabase = getAdminClient()
   const { id } = await context.params
   const { error } = await supabase.from('titulos').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })

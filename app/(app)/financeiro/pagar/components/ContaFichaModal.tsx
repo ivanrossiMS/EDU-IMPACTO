@@ -2,7 +2,7 @@
 
 import React from 'react'
 import {
-  X, Printer, CheckCircle2, Edit3, RotateCcw, Split, Clock
+  X, Printer, CheckCircle2, Edit3, RotateCcw, Split, Clock, Receipt
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import {
@@ -20,6 +20,7 @@ interface ContaFichaModalProps {
   onEdit: (conta: ContaPagarRecord) => void
   onBaixar: (conta: ContaPagarRecord) => void
   onReverterBaixa: (conta: ContaPagarRecord) => void
+  onEmitirRecibo?: (conta: ContaPagarRecord) => void
   onUpdateAnexos?: (
     contaId: string,
     novosAnexos: AnexoContaPagarItem[],
@@ -34,6 +35,7 @@ export function ContaFichaModal({
   onEdit,
   onBaixar,
   onReverterBaixa,
+  onEmitirRecibo,
   onUpdateAnexos,
 }: ContaFichaModalProps) {
   if (!conta) return null
@@ -276,26 +278,51 @@ export function ContaFichaModal({
             gap: 10,
           }}
         >
-          <button
-            type="button"
-            onClick={() => openPrintOrdemPagamento(conta)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '9px 14px',
-              borderRadius: 10,
-              background: '#f0f9ff',
-              border: '1px solid #bae6fd',
-              color: '#0369a1',
-              fontSize: 12,
-              fontWeight: 800,
-              cursor: 'pointer',
-            }}
-          >
-            <Printer size={14} />
-            Imprimir Ordem de Pagamento (OP)
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {onEmitirRecibo && (
+              <button
+                type="button"
+                onClick={() => onEmitirRecibo(conta)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '9px 14px',
+                  borderRadius: 10,
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  color: '#047857',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                <Receipt size={14} />
+                Emitir Recibo Oficial
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => openPrintOrdemPagamento(conta)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '9px 14px',
+                borderRadius: 10,
+                background: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                color: '#0369a1',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              <Printer size={14} />
+              Imprimir Ordem (OP)
+            </button>
+          </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button

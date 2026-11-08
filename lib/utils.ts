@@ -15,6 +15,56 @@ export function formatCurrency(value: number, currency = 'BRL'): string {
   }).format(value)
 }
 
+/**
+ * Converte qualquer representação numérica ou monetária (number, "1234.56", "R$ 1.234,56")
+ * em um número de ponto flutuante seguro.
+ */
+export function parseCurrencyNumeric(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (value === null || value === undefined) return 0
+  const s = String(value).trim()
+  if (!s) return 0
+  if (s.includes(',')) {
+    const normalized = s.replace(/[R$\s.]/g, '').replace(',', '.')
+    const n = parseFloat(normalized)
+    return Number.isFinite(n) ? n : 0
+  }
+  const clean = s.replace(/[^0-9.-]/g, '')
+  const n = parseFloat(clean)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Formata um valor (number ou string decimal) para exibição em inputs de moeda BRL ("R$ 1.234,56").
+ * Se emptyWhenZero=true e o valor for vazio/zero, retorna '' para exibir o placeholder "R$ 0,00".
+ */
+export function formatCurrencyInput(
+  value: string | number | null | undefined,
+  emptyWhenZero = false
+): string {
+  if (emptyWhenZero && (value === '' || value === null || value === undefined)) return ''
+  const num = parseCurrencyNumeric(value)
+  if (emptyWhenZero && num === 0) return ''
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)
+}
+
+/**
+ * Processa o evento onChange de um input de moeda (máscara centavos da direita para a esquerda).
+ * Retorna string decimal padrão (ex: "1234.56") pronta para armazenar no state ou converter com Number().
+ */
+export function handleCurrencyInputChange(rawValue: string, emptyWhenZero = false): string {
+  const digits = String(rawValue || '').replace(/\D/g, '')
+  if (!digits) return emptyWhenZero ? '' : '0'
+  const cents = parseInt(digits, 10)
+  if (!Number.isFinite(cents) || cents === 0) return emptyWhenZero ? '' : '0'
+  return (cents / 100).toFixed(2)
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value)
 }

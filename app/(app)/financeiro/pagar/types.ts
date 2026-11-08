@@ -139,6 +139,8 @@ export interface FornecedorEscolar {
   documento: string
   categoriaPadrao: string
   centroCustoPadrao: string
+  unidadePadrao?: string
+  tipoCustoPadrao?: ContaPagarTipoCusto
   formaPagamentoPadrao: string
   banco?: string
   agencia?: string
@@ -243,7 +245,7 @@ export function resolvePlanoContasEscolares(
       parentId: String(p.parentId || ''),
       situacao: p.situacao === 'inativo' ? 'inativo' : 'ativo',
       cor,
-      orcamentoSugeridoMensal: typeof p.orcamentoSugeridoMensal === 'number' ? p.orcamentoSugeridoMensal : 10000,
+      orcamentoSugeridoMensal: typeof p.orcamentoSugeridoMensal === 'number' ? p.orcamentoSugeridoMensal : 0,
       tipoCustoPadrao: grupoConta === 'investimentos' ? 'investimento' : 'fixo',
     }
   })
@@ -393,9 +395,90 @@ export interface CentroCustoEscolarOption {
   tipo?: 'pedagogico' | 'administrativo' | 'operacional' | 'comercial' | 'projetos'
   natureza?: 'ambos' | 'despesa' | 'receita'
   responsavel?: string
+  unidadeId?: string
   orcamentoMensal?: number
   pesoRateioPadrao?: number
   situacao?: 'ativo' | 'inativo'
+}
+
+export interface UnidadeEmpresaEscolarOption {
+  id: string
+  nome: string
+  label: string
+  cnpj?: string
+  codigo?: string
+  mantenedorNome?: string
+}
+
+/**
+ * Converte a lista de `mantenedores` (/configuracoes/unidades)
+ * nas empresas/unidades escolares disponíveis para vínculo em Contas a Pagar e Fornecedores.
+ */
+export function resolveUnidadesEscolares(mantenedoresRaw?: any): UnidadeEmpresaEscolarOption[] {
+  const list: any[] = Array.isArray(mantenedoresRaw)
+    ? mantenedoresRaw
+    : Array.isArray(mantenedoresRaw?.data)
+      ? mantenedoresRaw.data
+      : []
+
+  const result: UnidadeEmpresaEscolarOption[] = []
+  const seen = new Set<string>()
+
+  for (const m of list) {
+    if (!m || typeof m !== 'object') continue
+    const mantNome = String(m.nome || m.razaoSocial || m.razao_social || '').trim()
+    const mantRazao = String(m.razaoSocial || m.razao_social || '').trim()
+    const unidades = Array.isArray(m.unidades) ? m.unidades : []
+
+    // 1. Inclui sempre a própria Matriz / Mantenedora cadastrada em Multi-Unidades
+    if (mantNome) {
+      const labelMatriz =
+        mantRazao && mantRazao.toLowerCase() !== mantNome.toLowerCase()
+          ? `MATRIZ - ${mantNome} (${mantRazao})`
+          : `MATRIZ - ${mantNome}`
+      const key = labelMatriz.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push({
+          id: String(m.id || labelMatriz),
+          nome: mantNome,
+          label: labelMatriz,
+          cnpj: m.cnpj ? String(m.cnpj).trim() : undefined,
+          codigo: 'MATRIZ',
+          mantenedorNome: mantNome,
+        })
+      }
+    }
+
+    // 2. Inclui todas as Unidades vinculadas à Matriz
+    for (const u of unidades) {
+      if (!u || typeof u !== 'object') continue
+      const nomeFantasia = String(u.nomeFantasia || u.nome || '').trim()
+      const razaoSocial = String(u.razaoSocial || u.razao_social || '').trim()
+      const codigo = String(u.codigo || '').trim()
+      const nomePrincipal = nomeFantasia || razaoSocial || codigo
+      if (!nomePrincipal) continue
+
+      const nomeCompleto =
+        nomeFantasia && razaoSocial && nomeFantasia.toLowerCase() !== razaoSocial.toLowerCase()
+          ? `${nomeFantasia} (${razaoSocial})`
+          : razaoSocial || nomeFantasia
+      const labelUnidade = codigo ? `${codigo} - ${nomeCompleto}` : nomeCompleto
+      const key = labelUnidade.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      result.push({
+        id: String(u.id || labelUnidade),
+        nome: nomePrincipal,
+        label: labelUnidade,
+        cnpj: u.cnpj ? String(u.cnpj).trim() : undefined,
+        codigo: codigo || undefined,
+        mantenedorNome: mantNome || undefined,
+      })
+    }
+  }
+
+  return result
 }
 
 export const CENTROS_CUSTO_ESCOLARES: CentroCustoEscolarOption[] = [
@@ -476,6 +559,7 @@ export function resolveCentrosCustoEscolares(
       tipo: cc?.tipo,
       natureza: cc?.natureza || 'ambos',
       responsavel: cc?.responsavel,
+      unidadeId: cc?.unidadeId ? String(cc.unidadeId) : undefined,
       orcamentoMensal: typeof cc?.orcamentoMensal === 'number' ? cc.orcamentoMensal : undefined,
       pesoRateioPadrao: typeof cc?.pesoRateioPadrao === 'number' ? cc.pesoRateioPadrao : undefined,
       situacao: cc?.situacao === 'inativo' ? 'inativo' : 'ativo',
@@ -483,23 +567,139 @@ export function resolveCentrosCustoEscolares(
   })
 }
 
-export const FORMAS_PAGAMENTO_CONTAS_PAGAR = [
-  'PIX',
-  'Boleto Bancário',
-  'Transferência / TED',
-  'Débito Automático',
-  'Cartão Corporativo',
-  'Espécie / Caixa Físico',
-  'Cheque Administrativo',
+export interface MetodoPagamentoEscolarOption {
+  id: string
+  codigo: string
+  nome: string
+  tipo: 'dinheiro' | 'pix' | 'boleto' | 'cartao_credito' | 'cartao_debito' | 'debito_automatico' | 'cheque' | 'transferencia' | 'bolsa' | 'permuta'
+  taxaPercentual: number
+  diasCompensacao: number
+  situacao: 'ativo' | 'inativo'
+  obs?: string
+}
+
+export const METODOS_PAGAMENTO_ESCOLARES_DEFAULT: MetodoPagamentoEscolarOption[] = [
+  { id: 'MP001', codigo: 'MP001', nome: 'PIX',               tipo: 'pix',              taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Transferência instantânea via Banco Central' },
+  { id: 'MP002', codigo: 'MP002', nome: 'Dinheiro',          tipo: 'dinheiro',         taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: '' },
+  { id: 'MP003', codigo: 'MP003', nome: 'Boleto Bancário',   tipo: 'boleto',           taxaPercentual: 0,   diasCompensacao: 2, situacao: 'ativo', obs: 'Compensação em até 2 dias úteis' },
+  { id: 'MP004', codigo: 'MP004', nome: 'Cartão de Crédito', tipo: 'cartao_credito',   taxaPercentual: 2.5, diasCompensacao: 30, situacao: 'ativo', obs: '' },
+  { id: 'MP005', codigo: 'MP005', nome: 'Cartão de Débito',  tipo: 'cartao_debito',    taxaPercentual: 1.5, diasCompensacao: 2, situacao: 'ativo', obs: '' },
+  { id: 'MP006', codigo: 'MP006', nome: 'Débito Automático', tipo: 'debito_automatico',taxaPercentual: 0,   diasCompensacao: 1, situacao: 'ativo', obs: '' },
+  { id: 'MP007', codigo: 'MP007', nome: 'Cheque',            tipo: 'cheque',           taxaPercentual: 0,   diasCompensacao: 3, situacao: 'ativo', obs: 'Sujeito a compensação bancária' },
+  { id: 'MP008', codigo: 'MP008', nome: 'Transferência',     tipo: 'transferencia',    taxaPercentual: 0,   diasCompensacao: 1, situacao: 'ativo', obs: 'TED/DOC/Wire' },
+  { id: 'MP009', codigo: 'MP009', nome: 'Bolsa',             tipo: 'bolsa',            taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Bolsa integral ou parcial' },
+  { id: 'MP010', codigo: 'MP010', nome: 'Permuta',           tipo: 'permuta',          taxaPercentual: 0,   diasCompensacao: 0, situacao: 'ativo', obs: 'Troca de serviços ou bens' },
 ]
 
-export const CAIXAS_BANCOS_ESCOLARES = [
-  'Banco do Brasil — Conta Movimento',
-  'Itaú — Conta Operacional',
-  'Santander — Conta Arrecadação',
-  'Caixa Econômica — Conta Escolar',
-  'Caixa Físico — Tesouraria Escolar',
-]
+/**
+ * Converte a lista de `cfgMetodosPagamento` (/configuracoes/financeiro/metodos-pagamento)
+ * nas opções de métodos de pagamento utilizadas na baixa de Contas a Pagar e Contas a Receber.
+ */
+export function resolveMetodosPagamentoEscolares(
+  cfgMetodosPagamento?: any[],
+  incluirInativos = false
+): MetodoPagamentoEscolarOption[] {
+  const source: any[] =
+    Array.isArray(cfgMetodosPagamento) && cfgMetodosPagamento.length > 0
+      ? cfgMetodosPagamento
+      : METODOS_PAGAMENTO_ESCOLARES_DEFAULT
+
+  const filtered = source.filter((m) => {
+    if (!m || typeof m !== 'object') return false
+    if (!incluirInativos && m.situacao === 'inativo') return false
+    return Boolean(String(m.nome || '').trim())
+  })
+
+  if (filtered.length === 0 && !incluirInativos) {
+    return METODOS_PAGAMENTO_ESCOLARES_DEFAULT
+  }
+
+  return filtered.map((m, idx) => ({
+    id: String(m.id || `MP${String(idx + 1).padStart(3, '0')}`),
+    codigo: String(m.codigo || `MP${String(idx + 1).padStart(3, '0')}`),
+    nome: String(m.nome).trim(),
+    tipo: m.tipo || 'pix',
+    taxaPercentual: Number(m.taxaPercentual) || 0,
+    diasCompensacao: Number(m.diasCompensacao) || 0,
+    situacao: m.situacao === 'inativo' ? 'inativo' : 'ativo',
+    obs: m.obs ? String(m.obs) : '',
+  }))
+}
+
+export const FORMAS_PAGAMENTO_CONTAS_PAGAR = METODOS_PAGAMENTO_ESCOLARES_DEFAULT.map((m) => m.nome)
+
+export interface CaixaEscolarOption {
+  id: string
+  codigo: string
+  descricao: string
+  label: string
+  value: string
+  situacao: 'Aberto' | 'Fechado' | 'Vistoriado'
+  operador: string
+  abertoPor: string
+  agencia: string
+  conta: string
+  tipoCaixa: string
+  unidadeEmpresa: string
+  aceitaTransferenciaOutrosCaixas: boolean
+  aceitaBaixaContasPagarOutroUsuario: boolean
+}
+
+export const CAIXAS_ESCOLARES_DEFAULT: CaixaEscolarOption[] = []
+
+const SIMULATED_CAIXA_IDS = new Set([
+  'CX-108',
+  'CX-102',
+  'CX-98',
+  'CX-94',
+  'CX-19',
+  'CX-11',
+  'CX-1',
+])
+
+/**
+ * Converte a lista de `cfgCaixas` (/configuracoes/financeiro/caixas)
+ * nas opções de caixas abertos utilizadas na baixa de Contas a Pagar e Contas a Receber.
+ * Usa exclusivamente os caixas reais cadastrados no banco de dados.
+ */
+export function resolveCaixasEscolares(
+  cfgCaixas?: any[],
+  apenasAbertos = true
+): CaixaEscolarOption[] {
+  const source: any[] = Array.isArray(cfgCaixas) ? cfgCaixas : []
+
+  const filtered = source.filter((c) => {
+    if (!c || typeof c !== 'object') return false
+    const id = String(c.id || '').trim()
+    if (SIMULATED_CAIXA_IDS.has(id)) return false
+    if (apenasAbertos && c.situacao && c.situacao !== 'Aberto') return false
+    return Boolean(String(c.descricao || c.nome || c.label || '').trim())
+  })
+
+  return filtered.map((c, idx) => {
+    const codigo = String(c.codigo || idx + 1).trim()
+    const descricao = String(c.descricao || c.nome || c.label || `Caixa ${codigo}`).trim()
+    const label = /^\d+\s*-/.test(descricao) ? descricao : `${codigo} - ${descricao}`
+    return {
+      id: String(c.id || `CX-${codigo}`),
+      codigo,
+      descricao,
+      label,
+      value: label,
+      situacao: c.situacao === 'Fechado' || c.situacao === 'Vistoriado' ? c.situacao : 'Aberto',
+      operador: String(c.operador || ''),
+      abertoPor: String(c.abertoPor || ''),
+      agencia: String(c.agencia || ''),
+      conta: String(c.conta || ''),
+      tipoCaixa: String(c.tipoCaixa || 'Caixa – Movimento Diário'),
+      unidadeEmpresa: String(c.unidadeEmpresa || '1 - Colégio Impacto Centro de Ensino - ME'),
+      aceitaTransferenciaOutrosCaixas: Boolean(c.aceitaTransferenciaOutrosCaixas),
+      aceitaBaixaContasPagarOutroUsuario: Boolean(c.aceitaBaixaContasPagarOutroUsuario),
+    }
+  })
+}
+
+export const CAIXAS_BANCOS_ESCOLARES: string[] = []
 
 export const STATUS_CONTA_PAGAR_CONFIG: Record<
   ContaPagarStatus,
@@ -557,96 +757,26 @@ export const TIPO_CUSTO_CONFIG: Record<
   extraordinario: { label: 'Extraordinário', color: '#f43f5e' },
 }
 
-export const TEMPLATES_DESPESAS_ESCOLARES = [
-  {
-    id: 'tpl-folha-docente',
-    titulo: 'Folha de Pagamento — Corpo Docente & Coordenação',
-    categoria: 'Pessoal & Corpo Docente',
-    centroCusto: 'Fundamental Anos Finais',
-    tipoCusto: 'fixo' as ContaPagarTipoCusto,
-    prioridade: 'critica' as ContaPagarPrioridade,
-    diaVencimento: 5,
-    valorEstimado: 85000,
-    formaPagamento: 'Transferência / TED',
-  },
-  {
-    id: 'tpl-fgts-inss',
-    titulo: 'Guia FGTS Digital e DARF Previdenciário (INSS Patronal)',
-    categoria: 'Encargos Sociais & Trabalhistas',
-    centroCusto: 'Administração & Diretoria Geral',
-    tipoCusto: 'fixo' as ContaPagarTipoCusto,
-    prioridade: 'critica' as ContaPagarPrioridade,
-    diaVencimento: 20,
-    valorEstimado: 24850,
-    formaPagamento: 'PIX',
-  },
-  {
-    id: 'tpl-sistema-ensino',
-    titulo: 'Sistema de Ensino — Royalties & Plataforma de Material Didático',
-    categoria: 'Material Didático & Pedagógico',
-    centroCusto: 'Ensino Médio & Pré-Vestibular',
-    tipoCusto: 'variavel' as ContaPagarTipoCusto,
-    prioridade: 'alta' as ContaPagarPrioridade,
-    diaVencimento: 15,
-    valorEstimado: 18800,
-    formaPagamento: 'Boleto Bancário',
-  },
-  {
-    id: 'tpl-energia-campus',
-    titulo: 'Concessionária de Energia Elétrica — Campus Principal',
-    categoria: 'Utilidades (Energia, Água, Internet)',
-    centroCusto: 'Infraestrutura, Limpeza & Segurança',
-    tipoCusto: 'variavel' as ContaPagarTipoCusto,
-    prioridade: 'critica' as ContaPagarPrioridade,
-    diaVencimento: 10,
-    valorEstimado: 7600,
-    formaPagamento: 'Débito Automático',
-  },
-  {
-    id: 'tpl-portaria-limpeza',
-    titulo: 'Protege Facilities — Portaria Controlada, Vigilância e Limpeza',
-    categoria: 'Segurança, Portaria & Limpeza',
-    centroCusto: 'Infraestrutura, Limpeza & Segurança',
-    tipoCusto: 'fixo' as ContaPagarTipoCusto,
-    prioridade: 'alta' as ContaPagarPrioridade,
-    diaVencimento: 15,
-    valorEstimado: 10235,
-    formaPagamento: 'PIX',
-  },
-  {
-    id: 'tpl-erp-fibra',
-    titulo: 'CloudEdu Tech — Licenciamento ERP Escolar & Link Fibra Dedicado',
-    categoria: 'Tecnologia, Sistemas & Licenças',
-    centroCusto: 'Administração & Diretoria Geral',
-    tipoCusto: 'fixo' as ContaPagarTipoCusto,
-    prioridade: 'alta' as ContaPagarPrioridade,
-    diaVencimento: 10,
-    valorEstimado: 3500,
-    formaPagamento: 'PIX',
-  },
-  {
-    id: 'tpl-issqn-municipal',
-    titulo: 'Prefeitura Municipal — Guia DAM ISSQN Sobre Mensalidades',
-    categoria: 'Impostos, Taxas & Tributos',
-    centroCusto: 'Administração & Diretoria Geral',
-    tipoCusto: 'variavel' as ContaPagarTipoCusto,
-    prioridade: 'alta' as ContaPagarPrioridade,
-    diaVencimento: 10,
-    valorEstimado: 8420,
-    formaPagamento: 'PIX',
-  },
-  {
-    id: 'tpl-merenda-infantil',
-    titulo: 'Sabor & Saúde — Nutrição Escolar e Lanches Educação Infantil',
-    categoria: 'Alimentação & Cantina Escolar',
-    centroCusto: 'Educação Infantil',
-    tipoCusto: 'variavel' as ContaPagarTipoCusto,
-    prioridade: 'alta' as ContaPagarPrioridade,
-    diaVencimento: 12,
-    valorEstimado: 6200,
-    formaPagamento: 'Boleto Bancário',
-  },
-]
+export interface RecorrenciaFixaEscolar {
+  id: string
+  titulo: string
+  fornecedorId?: string
+  fornecedorNome?: string
+  fornecedorDocumento?: string
+  categoria: string
+  planoContasId?: string
+  unidadePadrao?: string
+  centroCusto: string
+  tipoCusto: ContaPagarTipoCusto
+  prioridade: ContaPagarPrioridade
+  diaVencimento: number
+  valorEstimado: number
+  formaPagamento: string
+  chavePix?: string
+  ativo?: boolean
+}
+
+export const TEMPLATES_DESPESAS_ESCOLARES: RecorrenciaFixaEscolar[] = []
 
 export function calcularValorLiquido(
   valorBase: number,

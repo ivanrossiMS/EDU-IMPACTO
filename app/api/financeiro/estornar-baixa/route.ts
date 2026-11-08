@@ -158,6 +158,56 @@ export async function POST(request: NextRequest) {
       console.warn('[estornar-baixa] Aviso ao atualizar financial_receipts:', recEx)
     }
 
+    // ── 6. Sincronizar overrides e movimentações manuais de caixa ────────────
+    try {
+      const { data: cfgRows } = await supabase
+        .from('configuracoes_sistema')
+        .select('chave, dados')
+        .in('chave', ['fin_movimentacoes_caixa_v1', 'fin_movimentacoes_overrides_v1', 'cfgMovimentacoesManuais'])
+
+      const mapCfg = new Map<string, any>()
+      ;(cfgRows || []).forEach((r: any) => mapCfg.set(r.chave, r.dados))
+
+      const movsCaixa = Array.isArray(mapCfg.get('fin_movimentacoes_caixa_v1'))
+        ? mapCfg.get('fin_movimentacoes_caixa_v1')
+        : []
+      const filteredCaixa = movsCaixa.filter((m: any) => {
+        if (parcela_id && (m.id === parcela_id || m.id === `REC-${parcela_id}`)) return false
+        return !cod_baixa_codes.some((code: string) => String(m.id || '').startsWith(code))
+      })
+      if (filteredCaixa.length !== movsCaixa.length) {
+        await supabase
+          .from('configuracoes_sistema')
+          .upsert({ chave: 'fin_movimentacoes_caixa_v1', dados: filteredCaixa }, { onConflict: 'chave' })
+      }
+
+      const cfgManuais = Array.isArray(mapCfg.get('cfgMovimentacoesManuais'))
+        ? mapCfg.get('cfgMovimentacoesManuais')
+        : []
+      const filteredManuais = cfgManuais.filter((m: any) => {
+        if (parcela_id && (m.id === parcela_id || m.id === `REC-${parcela_id}`)) return false
+        return !cod_baixa_codes.some((code: string) => String(m.id || '').startsWith(code))
+      })
+      if (filteredManuais.length !== cfgManuais.length) {
+        await supabase
+          .from('configuracoes_sistema')
+          .upsert({ chave: 'cfgMovimentacoesManuais', dados: filteredManuais }, { onConflict: 'chave' })
+      }
+
+      if (parcela_id) {
+        const overrides = (mapCfg.get('fin_movimentacoes_overrides_v1') && typeof mapCfg.get('fin_movimentacoes_overrides_v1') === 'object')
+          ? { ...mapCfg.get('fin_movimentacoes_overrides_v1') }
+          : {}
+        overrides[`REC-${parcela_id}`] = { ...(overrides[`REC-${parcela_id}`] || {}), estornado: true, estornadoEm: reversedAt, motivoEstorno: motivo }
+        overrides[parcela_id] = { ...(overrides[parcela_id] || {}), estornado: true, estornadoEm: reversedAt, motivoEstorno: motivo }
+        await supabase
+          .from('configuracoes_sistema')
+          .upsert({ chave: 'fin_movimentacoes_overrides_v1', dados: overrides }, { onConflict: 'chave' })
+      }
+    } catch (syncEx) {
+      console.warn('[estornar-baixa] Aviso ao sincronizar configuracoes_sistema:', syncEx)
+    }
+
     return NextResponse.json({
       ok:                      true,
       message:                 `${parcelasEstornadas} parcela(s) estornada(s), ${movimentacoesDeleted} movimentação(ões) removida(s)`,

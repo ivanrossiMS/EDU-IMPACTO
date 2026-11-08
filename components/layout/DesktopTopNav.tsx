@@ -12,7 +12,7 @@ import {
   CalendarDays, Banknote, AlertTriangle, DoorOpen, Scan,
   Monitor, ListChecks, ShieldCheck, LogOut, UserCircle, Laptop,
   ShieldAlert, History, Landmark, Coins, FileSpreadsheet, Building, Building2,
-  Tablet, FileStack, FileCheck2, Calculator, Library, Check, X, Clock3, FileText
+  Tablet, FileStack, FileCheck2, Calculator, Library, Check, X, Clock3, FileText, Wallet
 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
@@ -109,10 +109,10 @@ export function DesktopTopNav() {
       if ((href === '/matriculas/negociacoes' || href === '/matriculas/conciliacao-isaac') && (userPerms.includes('/matriculas/negociacoes') || userPerms.includes('/matriculas/conciliacao-isaac') || userPerms.includes('matriculas') || userPerms.includes('/matriculas/valores') || userPerms.includes('/matriculas/digital') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber'))) {
         return true
       }
-      if ((href === '/financeiro/pagar' || href === '/financeiro/contas-a-pagar') && (userPerms.includes('/financeiro/pagar') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber') || userPerms.includes('/financeiro/dre') || userPerms.includes('/financeiro/renegociacao'))) {
+      if ((href === '/financeiro/pagar' || href === '/financeiro/contas-a-pagar' || href === '/financeiro/movimentacoes' || href === '/financeiro/movimentacao') && (userPerms.includes('/financeiro/pagar') || userPerms.includes('/financeiro/movimentacoes') || userPerms.includes('/financeiro/movimentacao') || userPerms.includes('financeiro') || userPerms.includes('/financeiro/receber') || userPerms.includes('/financeiro/dre') || userPerms.includes('/financeiro/renegociacao'))) {
         return true
       }
-      if (href === '/configuracoes/financeiro/centro-custo' && (userPerms.includes('/configuracoes/financeiro/centro-custo') || userPerms.includes('configuracoes') || userPerms.includes('financeiro') || userPerms.includes('/configuracoes/financeiro/plano-contas'))) {
+      if ((href === '/configuracoes/financeiro/centro-custo' || href === '/configuracoes/financeiro/caixas' || href === '/configuracoes/financeiro/caixa') && (userPerms.includes('/configuracoes/financeiro/centro-custo') || userPerms.includes('/configuracoes/financeiro/caixas') || userPerms.includes('/configuracoes/financeiro/caixa') || userPerms.includes('configuracoes') || userPerms.includes('financeiro') || userPerms.includes('/configuracoes/financeiro/plano-contas'))) {
         return true
       }
       return userPerms.some(perm => href === perm || href.startsWith(perm + '/'))
@@ -181,6 +181,7 @@ export function DesktopTopNav() {
       items: [
         { id: 'fin-rec', label: 'Contas a Receber', href: '/financeiro/receber', icon: <CreditCard size={15} /> },
         { id: 'fin-pagar', label: 'Contas a Pagar', href: '/financeiro/pagar', icon: <TrendingDown size={15} />, badge: 'NOVO', badgeColor: 'green' },
+        { id: 'fin-mov', label: 'Movimentação Financeira', href: '/financeiro/movimentacoes', icon: <Wallet size={15} />, badge: 'NOVO', badgeColor: 'green' },
         { id: 'fin-reneg', label: 'Renegociação', href: '/financeiro/renegociacao', icon: <Handshake size={15} /> },
         { id: 'fin-dre', label: 'DRE', href: '/financeiro/dre', icon: <BarChart3 size={15} />, badge: 'IA', badgeColor: 'purple' }
       ],
@@ -271,7 +272,8 @@ export function DesktopTopNav() {
           title: 'Config. Financeiro',
           icon: <Landmark size={14} />,
           items: [
-            { id: 'cfg-cc', label: 'Centro de Custo', href: '/configuracoes/financeiro/centro-custo', icon: <TargetIcon size={14} />, badge: 'NOVO', badgeColor: 'green' },
+            { id: 'cfg-caixas', label: 'Caixas & Abertura', href: '/configuracoes/financeiro/caixas', icon: <Wallet size={14} />, badge: 'NOVO', badgeColor: 'green' },
+            { id: 'cfg-cc', label: 'Centro de Custo', href: '/configuracoes/financeiro/centro-custo', icon: <TargetIcon size={14} /> },
             { id: 'cfg-pc', label: 'Plano de Contas', href: '/configuracoes/financeiro/plano-contas', icon: <Landmark size={14} /> },
             { id: 'cfg-card', label: 'Cartões', href: '/configuracoes/financeiro/cartoes', icon: <CreditCard size={14} /> },
             { id: 'cfg-met', label: 'Métodos Pagamento', href: '/configuracoes/financeiro/metodos-pagamento', icon: <Coins size={14} /> },

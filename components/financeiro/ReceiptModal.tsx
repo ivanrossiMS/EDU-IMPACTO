@@ -1,8 +1,29 @@
 'use client'
 
-import React, { useMemo, useEffect, useRef } from 'react'
-import { X, Printer, Download, Mail, MessageCircle, ShieldCheck } from 'lucide-react'
+import React, { useMemo, useEffect, useRef, useState } from 'react'
+import {
+  X,
+  Printer,
+  Download,
+  Mail,
+  MessageCircle,
+  ShieldCheck,
+  Copy,
+  Check,
+  SlidersHorizontal,
+  Scissors,
+  FileText,
+  Receipt,
+  Building2,
+  CreditCard,
+  CheckCircle2,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { useData } from '@/lib/dataContext'
+import {
+  resolveMetodosPagamentoEscolares,
+  resolveUnidadesEscolares,
+} from '@/app/(app)/financeiro/pagar/types'
 import QRCode from 'qrcode'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -17,10 +38,15 @@ export interface ReceiptParcela {
   valorFinal: number
   juros?: number
   multa?: number
+  retencao?: number
   dtPagto?: string
   formaPagto?: string
+  caixaOrigem?: string
   codBaixa?: string
   comprovante?: string
+  documentoFiscal?: string
+  centroCusto?: string
+  categoria?: string
   obs?: string
   status?: string
   formasPagto?: Array<{ id: string; forma: string; valor: string; cartao?: any }>
@@ -39,504 +65,1937 @@ export interface ReceiptProps {
     telResponsavelFinanceiro?: string
     responsavel?: string
     cpf?: string
+    documento?: string
+    semVinculoAluno?: boolean
   }
-  /** Unidade da turma do aluno (para resolver nomeEscola/CNPJ correto) */
+  /** Natureza do recibo: 'receber' (entrada/mensalidade) ou 'pagar' (saída/fornecedor) */
+  natureza?: 'receber' | 'pagar'
+  /** Unidade da turma do aluno ou unidade do lançamento (para resolver nomeEscola/CNPJ correto) */
   turmaUnidade?: string
   onClose: () => void
   onBack?: () => void
 }
 
-// ─── Core Helpers ─────────────────────────────────────────────────────────────
+export type ReceiptLayoutMode = 'a4_1via' | 'a4_2vias' | 'bobina_80mm'
+
+// ─── Conversor para Recibo de Contas a Pagar ──────────────────────────────────
+
+export function buildContaPagarReceiptData(
+  input: any | any[]
+): Omit<ReceiptProps, 'onClose' | 'onBack'> {
+  const list = (Array.isArray(input) ? input : [input]).filter(Boolean)
+  const first = list[0] || {}
+
+  const parcelas: ReceiptParcela[] = list.map((c: any, idx: number) => {
+    const valorBruto = Number(c.valorBase ?? c.valor ?? 0)
+    const desconto = Number(c.desconto ?? 0) + Number(c.retencaoImpostos ?? 0)
+    const juros = Number(c.juros ?? 0)
+    const multa = Number(c.multa ?? 0)
+    const valorLiquido =
+      c.status === 'pago' && Number(c.valorPago) > 0
+        ? Number(c.valorPago)
+        : Number(c.valor ?? valorBruto)
+
+    return {
+      num: Number(c.parcelaAtual || idx + 1),
+      evento: c.descricao || c.categoria || 'Despesa Escolar',
+      competencia: c.competencia || (c.vencimento || '').slice(0, 7),
+      vencimento: c.vencimento || new Date().toISOString().split('T')[0],
+      valor: valorBruto,
+      desconto,
+      juros,
+      multa,
+      retencao: Number(c.retencaoImpostos ?? 0),
+      valorFinal: valorLiquido,
+      dtPagto: c.dataPagamento || new Date().toISOString().split('T')[0],
+      formaPagto: c.formaPagamento || 'PIX',
+      caixaOrigem: c.caixaOrigem || '',
+      codBaixa: c.codigo || c.id,
+      comprovante: c.comprovanteUrl || c.numeroDocumento || '',
+      documentoFiscal: [c.tipoDocumento, c.numeroDocumento].filter(Boolean).join(' '),
+      centroCusto: c.centroCusto || '',
+      categoria: c.categoria || '',
+      obs: c.observacoes || '',
+      status: c.status || 'pago',
+    }
+  })
+
+  return {
+    natureza: 'pagar',
+    turmaUnidade: first.subcategoria || undefined,
+    aluno: {
+      id: first.fornecedorId || first.id,
+      nome: first.fornecedorNome || first.fornecedor || 'Fornecedor / Credor',
+      responsavelFinanceiro: first.fornecedorNome || first.fornecedor || 'Favorecido / Credor',
+      cpf: first.fornecedorDocumento || '',
+      documento: first.fornecedorDocumento || '',
+      codigo: first.codigo || first.id,
+      unidade: first.subcategoria || first.centroCusto || '',
+    },
+    parcelas,
+  }
+}
+
+// ─── Core Helpers & Valor por Extenso (PT-BR) ─────────────────────────────────
 
 const fmt = (v: number) =>
-  v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  (Number(v) || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+const fmtDateBR = (dateStr?: string) => {
+  if (!dateStr) return new Date().toLocaleDateString('pt-BR')
+  const clean = String(dateStr).slice(0, 10)
+  const parts = clean.split('-')
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+  return dateStr
+}
 
 const dateByExt = (dateStr: string) => {
-  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']
+  const meses = [
+    'janeiro',
+    'fevereiro',
+    'março',
+    'abril',
+    'maio',
+    'junho',
+    'julho',
+    'agosto',
+    'setembro',
+    'outubro',
+    'novembro',
+    'dezembro',
+  ]
   try {
-    const d = new Date(dateStr + 'T12:00')
+    const clean = String(dateStr).slice(0, 10)
+    const d = new Date(`${clean}T12:00:00`)
+    if (isNaN(d.getTime())) return dateStr
     return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`
-  } catch { return dateStr }
+  } catch {
+    return dateStr
+  }
 }
 
 const today = () => new Date().toLocaleDateString('pt-BR')
 const todayISO = () => new Date().toISOString().split('T')[0]
-const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16).toUpperCase();
-  });
-}
+
+const generateUUID = () =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16).toUpperCase()
+  })
 
 const receiptNumber = (ref: ReceiptParcela) => {
-  if (ref.codBaixa) return ref.codBaixa.replace(/\D/g, '').slice(-8).padStart(8, '0')
+  if (ref.codBaixa) {
+    const digits = ref.codBaixa.replace(/\D/g, '')
+    if (digits.length >= 3) return digits.slice(-8).padStart(8, '0')
+  }
   return String(Date.now()).slice(-8)
 }
 
-// ─── Print HTML Generator (Nível Fintech) ───────────────────────────────────
+/**
+ * Converte um valor numérico em Reais (R$) para sua representação por extenso em português.
+ */
+export function valorPorExtenso(valor: number): string {
+  const safeVal = Math.max(0, Math.round((Number(valor) || 0) * 100) / 100)
+  if (safeVal === 0) return 'zero reais'
 
-function buildReceiptHTML(
+  const unidades = [
+    '',
+    'um',
+    'dois',
+    'três',
+    'quatro',
+    'cinco',
+    'seis',
+    'sete',
+    'oito',
+    'nove',
+    'dez',
+    'onze',
+    'doze',
+    'treze',
+    'quatorze',
+    'quinze',
+    'dezesseis',
+    'dezessete',
+    'dezoito',
+    'dezenove',
+  ]
+  const dezenas = [
+    '',
+    '',
+    'vinte',
+    'trinta',
+    'quarenta',
+    'cinquenta',
+    'sessenta',
+    'setenta',
+    'oitenta',
+    'noventa',
+  ]
+  const centenas = [
+    '',
+    'cento',
+    'duzentos',
+    'trezentos',
+    'quatrocentos',
+    'quinhentos',
+    'seiscentos',
+    'setecentos',
+    'oitocentos',
+    'novecentos',
+  ]
+
+  const trioParaExtenso = (n: number): string => {
+    if (n === 0) return ''
+    if (n === 100) return 'cem'
+    const c = Math.floor(n / 100)
+    const r = n % 100
+    const d = Math.floor(r / 10)
+    const u = r % 10
+
+    const partes: string[] = []
+    if (c > 0) partes.push(centenas[c])
+    if (r > 0) {
+      if (r < 20) {
+        partes.push(unidades[r])
+      } else {
+        partes.push(dezenas[d])
+        if (u > 0) partes.push(unidades[u])
+      }
+    }
+    return partes.join(' e ')
+  }
+
+  const inteiro = Math.floor(safeVal)
+  const centavos = Math.round((safeVal - inteiro) * 100)
+
+  const partesInteiro: string[] = []
+  if (inteiro > 0) {
+    const milhoes = Math.floor(inteiro / 1_000_000)
+    const milhares = Math.floor((inteiro % 1_000_000) / 1_000)
+    const resto = inteiro % 1_000
+
+    if (milhoes > 0) {
+      partesInteiro.push(
+        `${trioParaExtenso(milhoes)} ${milhoes === 1 ? 'milhão' : 'milhões'}`
+      )
+    }
+    if (milhares > 0) {
+      partesInteiro.push(
+        milhares === 1 ? 'mil' : `${trioParaExtenso(milhares)} mil`
+      )
+    }
+    if (resto > 0) {
+      partesInteiro.push(trioParaExtenso(resto))
+    }
+  }
+
+  let resultado = ''
+  if (inteiro > 0) {
+    const juncoes =
+      partesInteiro.length > 1
+        ? `${partesInteiro.slice(0, -1).join(', ')} e ${partesInteiro[partesInteiro.length - 1]}`
+        : partesInteiro[0]
+    resultado = `${juncoes} ${inteiro === 1 ? 'real' : 'reais'}`
+  }
+
+  if (centavos > 0) {
+    const extCent = `${trioParaExtenso(centavos)} ${centavos === 1 ? 'centavo' : 'centavos'}`
+    resultado = resultado ? `${resultado} e ${extCent}` : extCent
+  }
+
+  return resultado
+}
+
+// ─── Print HTML Generator (A4 1 Via, A4 2 Vias & Bobina Térmica 80mm) ────────
+
+interface PrintRenderOptions {
+  natureza: 'receber' | 'pagar'
+  layoutMode: ReceiptLayoutMode
+  rNum: string
+  emissao: string
+  nomeEscola: string
+  razaoSocial?: string
+  cnpjEscola: string
+  logo: string | null
+  endereco?: string
+  cidade: string
+  parteNome: string
+  parteDocumento: string
+  vinculoLabel: string
+  formaPagto: string
+  caixaOrigem: string
+  dtPagtoBR: string
+  idFatura: string
+  observacao: string
+  issuerName: string
+  issuerCargo: string
+  hash: string
+  qrCodeDataUrl: string
+  totalBruto: number
+  totalDescontos: number
+  totalEncargos: number
+  totalPago: number
+  extensoStr: string
+  declaracaoTexto: string
+  mostrarCarimbo: boolean
+  mostrarExtenso: boolean
+  mostrarAssinaturaDupla: boolean
+  mostrarQrCode: boolean
+  semVinculoAluno?: boolean
+}
+
+function buildSingleViaCardHTML(
   parcelas: ReceiptParcela[],
-  rawParcelas: ReceiptParcela[],
-  aluno: ReceiptProps['aluno'],
-  opts: { nomeEscola: string; cnpj: string; logo: string | null; cidade: string; issuerName: string; issuerCargo: string; hash: string; qrCodeUrl?: string }
+  opts: PrintRenderOptions,
+  viaLabel: string,
+  compact = false
 ) {
-  const { nomeEscola, cnpj, logo, cidade, issuerName, issuerCargo, hash } = opts
-  const ref = rawParcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0), 0)
-  const rNum = receiptNumber(ref)
-  const emissao = today()
-  
-  const validationUrl = `https://impacto-edu.com/validar/${hash}`
-  const qrCodeUrl = opts.qrCodeUrl || `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(validationUrl)}&chld=M|1`
+  const accentPrimary = opts.natureza === 'pagar' ? '#0f172a' : '#0284c7'
+  const accentBadgeBg = opts.natureza === 'pagar' ? '#f1f5f9' : '#e0f2fe'
+  const accentBadgeColor = opts.natureza === 'pagar' ? '#0f172a' : '#0369a1'
+  const tituloRecibo =
+    opts.natureza === 'pagar'
+      ? 'RECIBO DE PAGAMENTO & QUITAÇÃO'
+      : 'RECIBO OFICIAL DE RECEBIMENTO'
+  const parteTitulo =
+    opts.natureza === 'pagar' ? 'Favorecido / Credor' : 'Pagador / Responsável Financeiro'
+  const secundarioTitulo =
+    opts.natureza === 'pagar' || opts.semVinculoAluno
+      ? 'Classificação / Centro de Custo'
+      : 'Aluno / Vínculo Escolar'
 
-  const respNome = aluno.responsavelFinanceiro || aluno.responsavel || aluno.nome || '—'
-  const cpf = (aluno as any).cpfResponsavel || aluno.cpf || (aluno as any).cpfRespFin || '—'
-  const dtPagto = ref.dtPagto ? new Date(ref.dtPagto + 'T12:00').toLocaleDateString('pt-BR') : today()
-  const formaPagto = ref.formaPagto || (ref.formasPagto?.map((f: any) => f.forma).join(', ')) || '—'
-  const idFatura = ref.codBaixa || ref.comprovante || String(ref.num ?? '') || '—'
+  const logoHTML = opts.logo
+    ? `<img src="${opts.logo}" alt="${opts.nomeEscola}" style="max-height:${compact ? '42px' : '54px'};max-width:170px;object-fit:contain;" />`
+    : `<div style="font-size:${compact ? '17px' : '21px'};font-weight:900;color:#0f172a;letter-spacing:-0.03em;">${opts.nomeEscola}</div>`
 
-  const infoRow = (label: string, value: string, bold = false) => `
-    <div style="margin-bottom:12px;">
-      <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${label}</div>
-      <div style="font-size:13px;color:#1e293b;${bold ? 'font-weight:700;' : ''}">${value}</div>
+  const rowsHtml = parcelas
+    .map((p, i) => {
+      const enc = (Number(p.juros) || 0) + (Number(p.multa) || 0)
+      const desc = Number(p.desconto) || 0
+      const liq = Number(p.valorFinal ?? p.valor ?? 0)
+      const subMeta = [
+        p.competencia ? `Comp: ${p.competencia}` : '',
+        p.vencimento ? `Venc: ${fmtDateBR(p.vencimento)}` : '',
+        p.documentoFiscal ? `Doc: ${p.documentoFiscal}` : '',
+        p.centroCusto ? `CC: ${p.centroCusto}` : '',
+      ]
+        .filter(Boolean)
+        .join(' • ')
+
+      return `
+        <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+          <td style="width:44%;white-space:normal !important;word-break:break-word;overflow-wrap:anywhere;padding:${compact ? '7px 10px' : '10px 12px'};border-bottom:1px solid #e2e8f0;vertical-align:top;">
+            <div style="font-weight:700;color:#0f172a;font-size:${compact ? '11px' : '12px'};white-space:normal !important;word-break:break-word;line-height:1.35;">${p.evento || 'Lançamento Financeiro'}</div>
+            <div style="font-size:${compact ? '9.5px' : '10.5px'};color:#64748b;margin-top:3px;white-space:normal !important;word-break:break-word;line-height:1.4;">Parc. ${String(p.num || i + 1).padStart(2, '0')}${subMeta ? ` • ${subMeta}` : ''}</div>
+          </td>
+          <td style="width:15%;white-space:nowrap !important;text-align:right;font-family:monospace;font-size:${compact ? '11px' : '12px'};color:#334155;padding:${compact ? '7px 8px' : '10px 10px'};border-bottom:1px solid #e2e8f0;vertical-align:middle;">R$ ${fmt(p.valor)}</td>
+          <td style="width:13%;white-space:nowrap !important;text-align:right;font-family:monospace;font-size:${compact ? '11px' : '12px'};color:${desc > 0 ? '#b45309' : '#94a3b8'};padding:${compact ? '7px 8px' : '10px 10px'};border-bottom:1px solid #e2e8f0;vertical-align:middle;">${desc > 0 ? `- R$ ${fmt(desc)}` : '—'}</td>
+          <td style="width:12%;white-space:nowrap !important;text-align:right;font-family:monospace;font-size:${compact ? '11px' : '12px'};color:${enc > 0 ? '#be123c' : '#94a3b8'};padding:${compact ? '7px 8px' : '10px 10px'};border-bottom:1px solid #e2e8f0;vertical-align:middle;">${enc > 0 ? `+ R$ ${fmt(enc)}` : '—'}</td>
+          <td style="width:16%;white-space:nowrap !important;text-align:right;font-family:monospace;font-weight:800;font-size:${compact ? '11.5px' : '12.5px'};color:#047857;padding:${compact ? '7px 10px' : '10px 12px'};border-bottom:1px solid #e2e8f0;vertical-align:middle;">R$ ${fmt(liq)}</td>
+        </tr>`
+    })
+    .join('')
+
+  return `
+    <div class="via-card" style="background:#ffffff;border:1.5px solid #cbd5e1;border-radius:16px;overflow:hidden;position:relative;">
+      <div style="height:6px;background:linear-gradient(90deg,${accentPrimary} 0%,#059669 100%);"></div>
+      <div style="padding:${compact ? '18px 22px' : '28px 34px'};">
+        <!-- CABEÇALHO -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:${compact ? '12px' : '18px'};border-bottom:1px solid #e2e8f0;margin-bottom:${compact ? '12px' : '18px'};">
+          <div>
+            ${logoHTML}
+            <div style="font-size:11px;color:#475569;margin-top:4px;font-weight:700;">
+              ${opts.razaoSocial && opts.razaoSocial.toLowerCase() !== opts.nomeEscola.toLowerCase() ? `${opts.nomeEscola} — ${opts.razaoSocial}` : opts.nomeEscola} ${opts.cnpjEscola && opts.cnpjEscola !== '—' ? `• CNPJ: ${opts.cnpjEscola}` : ''}
+            </div>
+            ${opts.endereco || opts.cidade ? `<div style="font-size:10.5px;color:#64748b;margin-top:1px;">${[opts.endereco, opts.cidade].filter(Boolean).join(' • ')}</div>` : ''}
+            <div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;">
+              <span style="background:${accentBadgeBg};color:${accentBadgeColor};font-size:9.5px;font-weight:800;padding:3px 10px;border-radius:99px;letter-spacing:0.06em;text-transform:uppercase;">${viaLabel}</span>
+              ${
+                opts.mostrarCarimbo
+                  ? `<span style="background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;font-size:9.5px;font-weight:900;padding:3px 10px;border-radius:99px;letter-spacing:0.06em;text-transform:uppercase;">✓ LIQUIDADO / QUITADO</span>`
+                  : ''
+              }
+            </div>
+          </div>
+
+          <div style="text-align:right;">
+            <div style="font-size:${compact ? '16px' : '20px'};font-weight:900;color:#0f172a;letter-spacing:-0.03em;">${tituloRecibo}</div>
+            <div style="font-size:12px;font-weight:700;color:#334155;margin-top:4px;">Nº <span style="font-family:monospace;color:#0f172a;font-size:13px;">#${opts.rNum}</span></div>
+            <div style="font-size:10.5px;color:#64748b;margin-top:2px;">Emissão: ${opts.emissao}</div>
+            <div style="margin-top:8px;display:inline-block;background:#ecfdf5;border:1.5px solid #10b981;border-radius:10px;padding:${compact ? '5px 12px' : '7px 14px'};">
+              <div style="font-size:8.5px;font-weight:800;text-transform:uppercase;color:#047857;letter-spacing:0.06em;">Valor Líquido Quitado</div>
+              <div style="font-size:${compact ? '17px' : '21px'};font-weight:900;color:#047857;letter-spacing:-0.03em;">R$ ${fmt(opts.totalPago)}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- QUADRO DE IDENTIFICAÇÃO -->
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:${compact ? '10px 14px' : '14px 18px'};margin-bottom:${compact ? '12px' : '16px'};font-size:${compact ? '11px' : '12px'};">
+          <div>
+            <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#64748b;letter-spacing:0.05em;">${parteTitulo}</div>
+            <div style="font-size:${compact ? '12.5px' : '14px'};font-weight:800;color:#0f172a;margin-top:2px;">${opts.parteNome}</div>
+            <div style="color:#475569;margin-top:2px;">CPF / CNPJ: <strong>${opts.parteDocumento || 'Não informado'}</strong></div>
+            <div style="color:#475569;margin-top:2px;">${secundarioTitulo}: <strong>${opts.vinculoLabel || '—'}</strong></div>
+          </div>
+          <div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div>
+                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#64748b;">Data da Baixa</div>
+                <div style="font-weight:800;color:#0f172a;margin-top:2px;">${opts.dtPagtoBR}</div>
+              </div>
+              <div>
+                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#64748b;">Meio de Pagamento</div>
+                <div style="font-weight:800;color:#0369a1;margin-top:2px;">${opts.formaPagto}</div>
+              </div>
+              <div>
+                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#64748b;">Referência / Cód.</div>
+                <div style="font-weight:700;color:#334155;font-family:monospace;margin-top:2px;">${opts.idFatura}</div>
+              </div>
+              <div>
+                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#64748b;">Conta / Caixa</div>
+                <div style="font-weight:700;color:#334155;margin-top:2px;">${opts.caixaOrigem || 'Tesouraria Escolar'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DECLARAÇÃO DE QUITAÇÃO POR EXTENSO -->
+        ${
+          opts.mostrarExtenso
+            ? `
+        <div style="padding:${compact ? '9px 13px' : '12px 16px'};border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#14532d;font-size:${compact ? '11px' : '12px'};line-height:1.5;margin-bottom:${compact ? '12px' : '16px'};">
+          ${opts.declaracaoTexto}
+          <div style="margin-top:4px;font-size:${compact ? '10px' : '11px'};color:#166534;">
+            <strong>Importância por extenso:</strong> <span style="text-transform:uppercase;font-weight:800;">(${opts.extensoStr})</span>
+          </div>
+        </div>`
+            : ''
+        }
+
+        <!-- TABELA DE LANÇAMENTOS -->
+        <table style="width:100%;table-layout:fixed;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:${compact ? '12px' : '18px'};">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="width:44%;white-space:normal !important;text-align:left;padding:${compact ? '7px 10px' : '10px 12px'};font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;border-bottom:1px solid #cbd5e1;">Descrição do Lançamento / Competência</th>
+              <th style="width:15%;white-space:nowrap !important;text-align:right;padding:${compact ? '7px 8px' : '10px 10px'};font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;border-bottom:1px solid #cbd5e1;">Valor Bruto</th>
+              <th style="width:13%;white-space:nowrap !important;text-align:right;padding:${compact ? '7px 8px' : '10px 10px'};font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;border-bottom:1px solid #cbd5e1;">Desc./Ret.</th>
+              <th style="width:12%;white-space:nowrap !important;text-align:right;padding:${compact ? '7px 8px' : '10px 10px'};font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;border-bottom:1px solid #cbd5e1;">Encargos</th>
+              <th style="width:16%;white-space:nowrap !important;text-align:right;padding:${compact ? '7px 10px' : '10px 12px'};font-size:9.5px;font-weight:800;color:#475569;text-transform:uppercase;border-bottom:1px solid #cbd5e1;">Líquido Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        ${
+          opts.observacao
+            ? `<div style="padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:11px;color:#334155;margin-bottom:${compact ? '12px' : '16px'};"><strong>Observações / Autenticação:</strong> ${opts.observacao}</div>`
+            : ''
+        }
+
+        <!-- RODAPÉ DE ASSINATURAS E AUTENTICAÇÃO -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-top:${compact ? '18px' : '28px'};padding-top:${compact ? '10px' : '14px'};border-top:1px dashed #cbd5e1;">
+          <div style="flex:1;display:grid;grid-template-columns:${opts.mostrarAssinaturaDupla ? '1fr 1fr' : '1fr'};gap:20px;">
+            <div style="text-align:center;">
+              <div style="border-bottom:1px solid #334155;height:${compact ? '22px' : '32px'};margin-bottom:6px;"></div>
+              <div style="font-size:11px;font-weight:800;color:#0f172a;">${opts.issuerName}</div>
+              <div style="font-size:9.5px;color:#64748b;">${opts.issuerCargo} • ${opts.nomeEscola}</div>
+            </div>
+            ${
+              opts.mostrarAssinaturaDupla
+                ? `
+            <div style="text-align:center;">
+              <div style="border-bottom:1px solid #334155;height:${compact ? '22px' : '32px'};margin-bottom:6px;"></div>
+              <div style="font-size:11px;font-weight:800;color:#0f172a;">${opts.parteNome}</div>
+              <div style="font-size:9.5px;color:#64748b;">${opts.natureza === 'pagar' ? 'Assinatura do Favorecido / Credor' : 'Assinatura do Responsável / Pagador'}</div>
+            </div>`
+                : ''
+            }
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;text-align:right;">
+            <div>
+              <div style="font-size:10.5px;font-weight:700;color:#334155;">${opts.cidade ? `${opts.cidade}, ` : ''}${dateByExt(todayISO())}</div>
+              <div style="font-size:8.5px;color:#64748b;font-family:monospace;margin-top:3px;">AUTENTICAÇÃO: ${opts.hash}</div>
+            </div>
+            ${
+              opts.mostrarQrCode && opts.qrCodeDataUrl
+                ? `<img src="${opts.qrCodeDataUrl}" width="${compact ? '56' : '68'}" height="${compact ? '56' : '68'}" alt="QR Code de Autenticidade" style="border:1px solid #cbd5e1;border-radius:8px;padding:2px;background:#fff;" />`
+                : ''
+            }
+          </div>
+        </div>
+      </div>
     </div>
   `
+}
 
-  const tableRows = parcelas.map((p, i) => `
-    <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding:14px;border-bottom:1px solid #e2e8f0;">
-        <div style="font-weight:700;color:#0f172a;font-size:12px">${(p as any).alunoNome ? (p as any).alunoNome + ' — ' : ''}${p.evento || 'Mensalidade'}</div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px">Competência: ${p.competencia || '—'} · Parc: ${String(p.num).padStart(2,'0')}</div>
-      </td>
-      <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:#475569;padding:14px;border-bottom:1px solid #e2e8f0;">R$ ${fmt(p.valor)}</td>
-      <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:${p.desconto>0?'#ca8a04':'#94a3b8'};padding:14px;border-bottom:1px solid #e2e8f0;">${p.desconto>0?`- R$ ${fmt(p.desconto)}`:'—'}</td>
-      <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:${((p.juros||0)+(p.multa||0))>0?'#dc2626':'#94a3b8'};padding:14px;border-bottom:1px solid #e2e8f0;">${((p.juros||0)+(p.multa||0))>0?`+ R$ ${fmt((p.juros||0)+(p.multa||0))}`:'—'}</td>
-      <td style="text-align:right;font-family:'Courier New',monospace;font-weight:800;font-size:13px;color:#16a34a;padding:14px;border-bottom:1px solid #e2e8f0;">R$ ${fmt((p.valorFinal || p.valor || 0) + (p.juros||0) + (p.multa||0))}</td>
-    </tr>`).join('')
+function buildReceiptHTML(parcelas: ReceiptParcela[], opts: PrintRenderOptions) {
+  if (opts.layoutMode === 'bobina_80mm') {
+    const itemsHtml = parcelas
+      .map(
+        (p, i) => `
+        <div style="padding:6px 0;border-bottom:1px dashed #94a3b8;">
+          <div style="font-weight:700;font-size:11px;">${i + 1}. ${p.evento || 'Lançamento'}</div>
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#334155;margin-top:2px;">
+            <span>Venc: ${fmtDateBR(p.vencimento)} (${p.formaPagto || opts.formaPagto})</span>
+            <strong>R$ ${fmt(p.valorFinal ?? p.valor ?? 0)}</strong>
+          </div>
+        </div>`
+      )
+      .join('')
 
-  const logoHTML = logo 
-    ? `<img src="${logo}" style="max-height:60px;max-width:180px;object-fit:contain;"/>`
-    : `<div style="font-size:24px;font-weight:900;color:#0f172a;letter-spacing:-1px;">${nomeEscola}</div>`
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Recibo_${opts.rNum}</title>
+  <style>
+    @page { size: 80mm auto; margin: 4mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0 auto; padding: 8px; color: #000; background: #fff; font-size: 11px; }
+    .sep { border-top: 1px dashed #000; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div style="text-align:center;">
+    <div style="font-size:14px;font-weight:900;">${opts.nomeEscola}</div>
+    <div style="font-size:10px;">CNPJ: ${opts.cnpjEscola}</div>
+    <div class="sep"></div>
+    <div style="font-size:12px;font-weight:900;">${opts.natureza === 'pagar' ? 'RECIBO DE PAGAMENTO' : 'RECIBO DE RECEBIMENTO'}</div>
+    <div style="font-size:11px;font-weight:700;">Nº #${opts.rNum} • ${opts.emissao}</div>
+  </div>
+  <div class="sep"></div>
+  <div><strong>${opts.natureza === 'pagar' ? 'FAVORECIDO:' : 'PAGADOR:'}</strong> ${opts.parteNome}</div>
+  <div><strong>DOC:</strong> ${opts.parteDocumento || '—'}</div>
+  <div><strong>VÍNCULO:</strong> ${opts.vinculoLabel || '—'}</div>
+  <div><strong>DATA BAIXA:</strong> ${opts.dtPagtoBR}</div>
+  <div><strong>MEIO PGTO:</strong> ${opts.formaPagto}</div>
+  <div class="sep"></div>
+  <div style="font-weight:900;margin-bottom:4px;">ITENS LIQUIDADOS:</div>
+  ${itemsHtml}
+  <div style="padding:8px 0;font-size:13px;font-weight:900;display:flex;justify-content:space-between;">
+    <span>TOTAL QUITADO:</span>
+    <span>R$ ${fmt(opts.totalPago)}</span>
+  </div>
+  <div style="font-size:9.5px;line-height:1.35;">(${opts.extensoStr})</div>
+  ${opts.observacao ? `<div class="sep"></div><div style="font-size:10px;">OBS: ${opts.observacao}</div>` : ''}
+  <div class="sep"></div>
+  <div style="text-align:center;margin-top:16px;">
+    <div style="border-top:1px solid #000;padding-top:4px;margin-top:18px;font-weight:700;">${opts.issuerName} (${opts.issuerCargo})</div>
+    ${
+      opts.mostrarQrCode && opts.qrCodeDataUrl
+        ? `<img src="${opts.qrCodeDataUrl}" width="84" height="84" style="margin:10px auto 4px;display:block;" />`
+        : ''
+    }
+    <div style="font-size:8.5px;word-break:break-all;margin-top:4px;">HASH: ${opts.hash}</div>
+  </div>
+</body>
+</html>`
+  }
+
+  const is2Vias = opts.layoutMode === 'a4_2vias'
+  const via1Title =
+    opts.natureza === 'pagar'
+      ? '1ª Via — Favorecido / Credor'
+      : '1ª Via — Responsável / Pagador'
+  const via2Title = '2ª Via — Contabilidade & Arquivo Tesouraria'
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Recibo #${rNum}</title>
+  <title>Recibo_${opts.rNum}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Inter',sans-serif;background:#f8fafc;color:#0f172a;print-color-adjust:exact;-webkit-print-color-adjust:exact;}
-    .container {max-width:880px;margin:40px auto;background:#fff;border-radius:24px;box-shadow:0 20px 40px -10px rgba(0,0,0,0.05);overflow:hidden;position:relative;border:1px solid #e2e8f0;}
-    .header-border {height:8px;background:linear-gradient(90deg,#0ea5e9 0%,#3b82f6 50%,#8b5cf6 100%);}
-    @media print { body{background:#fff;} .container{margin:0;box-shadow:none;border:none;border-radius:0;max-width:100%;} }
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 20px;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .sheet { max-width: 820px; margin: 0 auto; }
+    .cut-line {
+      margin: 14px 0;
+      border-top: 1.5px dashed #94a3b8;
+      text-align: center;
+      position: relative;
+      height: 10px;
+    }
+    .cut-line span {
+      background: #f1f5f9;
+      padding: 0 10px;
+      font-size: 10px;
+      color: #64748b;
+      position: relative;
+      top: -8px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    @media print {
+      body { background: #ffffff; padding: 0; }
+      .sheet { max-width: 100%; }
+      .cut-line span { background: #ffffff; }
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header-border"></div>
-    <div style="padding:48px;">
-      
-      <!-- HEADER -->
-      <table width="100%" style="margin-bottom:48px;">
-        <tr>
-          <td valign="top">
-            ${logoHTML}
-            <div style="margin-top:16px;">
-              <span style="background:#f1f5f9;color:#475569;font-size:10px;font-weight:700;padding:6px 12px;border-radius:20px;letter-spacing:1px;text-transform:uppercase;">Via Destinada ao Sacado</span>
-            </div>
-          </td>
-          <td align="right" valign="top">
-            <div style="font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#0f172a;line-height:1.1;">RECIBO OFICIAL</div>
-            <div style="font-size:14px;font-weight:600;color:#64748b;margin-top:8px;">Documento Nº: <span style="color:#0f172a;">#${rNum}</span></div>
-            <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Emissão: ${emissao}</div>
-          </td>
-        </tr>
-      </table>
-
-      <!-- INFORMAÇÕES FINANCEIRAS -->
-      <table width="100%" style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:16px;padding:24px;margin-bottom:40px;">
-        <tr>
-          <td width="50%" valign="top">
-            ${infoRow('Responsável Financeiro', respNome, true)}
-            ${infoRow('CPF / CNPJ', cpf)}
-            ${infoRow('Forma de Pagamento', formaPagto)}
-          </td>
-          <td width="30%" valign="top">
-            ${infoRow('Referência / ID', idFatura)}
-            ${infoRow('Data do Pagamento', dtPagto)}
-            <div style="margin-bottom:8px;">
-              <div style="font-size:9px;color:#16a34a;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:4px;">Valor Total Pago</div>
-              <div style="font-size:28px;color:#16a34a;font-weight:900;letter-spacing:-1px;">R$ ${fmt(totalPago)}</div>
-            </div>
-          </td>
-          <td width="20%" align="right" valign="top">
-            <img src="${qrCodeUrl}" width="100" height="100" style="border-radius:12px;mix-blend-mode:multiply;" alt="QR Code" />
-            <div style="font-size:9px;color:#64748b;margin-top:8px;font-family:monospace;line-height:1.4;">Validação digital via QR<br/>Autenticidade Garantida</div>
-          </td>
-        </tr>
-      </table>
-
-      <!-- ALUNO & ESCOLA -->
-      <table width="100%" style="border-spacing:0;margin-bottom:40px;">
-        <tr>
-          <td width="50%" valign="top" style="padding-right:24px;border-right:1px solid #e2e8f0;">
-            <div style="font-size:11px;color:#0ea5e9;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;">Dados do Aluno</div>
-            <div style="font-size:15px;font-weight:800;color:#0f172a;">${aluno.nome}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:4px;">Matrícula: ${aluno.codigo||aluno.matricula||'Não informada'}</div>
-          </td>
-          <td width="50%" valign="top" style="padding-left:24px;">
-            <div style="font-size:11px;color:#8b5cf6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;">Instituição de Ensino</div>
-            <div style="font-size:14px;font-weight:700;color:#0f172a;">${nomeEscola}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:4px;">CNPJ: ${cnpj}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px;">${cidade}</div>
-          </td>
-        </tr>
-      </table>
-
-      <!-- DETALHAMENTO -->
-      <div style="font-size:11px;color:#0f172a;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;">Detalhamento das Parcelas</div>
-      <table width="100%" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:48px;">
-        <thead>
-          <tr style="background:#f1f5f9;">
-            <th align="left" style="padding:14px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;">Ref / Serviço</th>
-            <th align="right" style="padding:14px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;">Bruto</th>
-            <th align="right" style="padding:14px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;">Descontos</th>
-            <th align="right" style="padding:14px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;">Encargos</th>
-            <th align="right" style="padding:14px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e2e8f0;">Total Líquido</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-
-      <!-- RODAPÉ & ASSINATURAS -->
-      <table width="100%" style="margin-top:60px;">
-        <tr>
-          <td width="33%" valign="bottom">
-            <div style="width:100%;height:14px;border-bottom:1px solid #cbd5e1;margin-bottom:8px;">&nbsp;</div>
-            <div style="font-size:11px;font-weight:700;color:#0f172a;">${issuerName}</div>
-            <div style="font-size:10px;color:#64748b;">${issuerCargo}</div>
-          </td>
-          <td width="34%"></td>
-          <td width="33%" align="right" valign="bottom">
-            <div style="font-size:12px;font-weight:600;color:#64748b;">${cidade}, ${dateByExt(todayISO())}</div>
-            <div style="font-size:9px;color:#94a3b8;margin-top:6px;font-family:monospace;">${hash}</div>
-          </td>
-        </tr>
-      </table>
-
-    </div>
+  <div class="sheet">
+    ${buildSingleViaCardHTML(parcelas, opts, via1Title, is2Vias)}
+    ${
+      is2Vias
+        ? `
+      <div class="cut-line"><span>✂ Destacar 2ª Via da Tesouraria</span></div>
+      ${buildSingleViaCardHTML(parcelas, opts, via2Title, true)}
+    `
+        : ''
+    }
   </div>
-  <script>window.onload = function() { window.focus(); }</script>
 </body>
 </html>`
 }
 
-// ─── Sub-Components (Premium Preview Module) ──────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
-const GlassContainer = ({ children, className = '' }: any) => (
-  <div className={className} style={{
-    background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255,255,255,0.9)', boxShadow: '0 8px 32px rgba(0,0,0,0.02)',
-    borderRadius: 20, padding: 24, marginBottom: 24
-  }}>{children}</div>
-)
-
-const DataField = ({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) => (
-  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-    <span style={{ fontSize:10, color:'#64748b', fontWeight:700, textTransform:'uppercase', letterSpacing:0.8 }}>{label}</span>
-    <span style={{ fontSize:14, color: highlight ? '#0f172a' : '#334155', fontWeight: highlight ? 800 : 600 }}>{value}</span>
-  </div>
-)
-
-export function ReceiptModal({ parcelas: rawParcelas, aluno, turmaUnidade, onClose, onBack }: ReceiptProps) {
-  const { mantenedores } = useData()
+export function ReceiptModal({
+  parcelas: rawParcelas,
+  aluno,
+  natureza: propNatureza = 'receber',
+  turmaUnidade,
+  onClose,
+}: ReceiptProps) {
+  const { mantenedores, cfgMetodosPagamento, cfgCaixas } = useData()
   const qrCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  // ── Flatten if Baixa por Responsável ──
+  // Carrega dados reais de Multi-Unidades e Caixas do banco como garantia caso o contexto ainda esteja hidratando
+  const [mantenedoresDb, setMantenedoresDb] = useState<any[]>([])
+  const [caixasDb, setCaixasDb] = useState<any[]>([])
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/configuracoes/mantenedores')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json) return
+        const lista = Array.isArray(json.data) ? json.data : Array.isArray(json) ? json : []
+        if (lista.length > 0) setMantenedoresDb(lista)
+      })
+      .catch(() => {})
+
+    fetch('/api/configuracoes?chave=cfgCaixas')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json) return
+        const valor = json?.valor ?? json?.data?.valor ?? json?.data ?? json
+        if (Array.isArray(valor) && valor.length > 0) setCaixasDb(valor)
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const sourceMantenedores = useMemo(
+    () =>
+      Array.isArray(mantenedoresDb) && mantenedoresDb.length > 0
+        ? mantenedoresDb
+        : Array.isArray(mantenedores)
+        ? mantenedores
+        : [],
+    [mantenedoresDb, mantenedores]
+  )
+
+  const sourceCaixas = useMemo(
+    () =>
+      Array.isArray(caixasDb) && caixasDb.length > 0
+        ? caixasDb
+        : Array.isArray(cfgCaixas)
+        ? cfgCaixas
+        : [],
+    [caixasDb, cfgCaixas]
+  )
+
+  const metodosDisponiveis = useMemo(
+    () => resolveMetodosPagamentoEscolares(cfgMetodosPagamento, false),
+    [cfgMetodosPagamento]
+  )
+
+  // ── Flatten e Deduplica Parcelas ──
   const parcelas = useMemo(() => {
-    // Expande parcelasVinculadas (baixa por responsável) e deduplica por num+codBaixa
-    // para evitar duplicação quando parcelas antigas ainda têm vinculadas após estorno
     const expanded = rawParcelas.flatMap((p: any) => {
       if (p.parcelasVinculadas && p.parcelasVinculadas.length > 0) return p.parcelasVinculadas
       return [p]
     })
-    // Deduplicar: manter apenas a primeira ocorrência de cada (num + codBaixa)
     const seen = new Set<string>()
-    return expanded.filter((p: any) => {
-      const key = `${p.num}-${p.codBaixa || 'sem-cod'}`
+    return expanded.filter((p: any, idx: number) => {
+      const key = `${p.num || idx}-${p.codBaixa || p.evento || idx}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
   }, [rawParcelas])
 
-  // ── Resolve institution data — prioriza unidade da turma ──
-  const mantenedor = (mantenedores as any)?.[0]
-  const unidades: any[] = mantenedor?.unidades || []
-  // Ordem de prioridade: turmaUnidade → aluno.unidade → primeira unidade
-  const unidade = (
-    (turmaUnidade ? unidades.find((u: any) => u.id === turmaUnidade || u.nome === turmaUnidade || u.nomeFantasia === turmaUnidade) : null) ||
-    (aluno.unidade ? unidades.find((u: any) => u.id === aluno.unidade || u.nome === aluno.unidade || u.nomeFantasia === aluno.unidade) : null) ||
-    unidades[0]
+  const ref = rawParcelas[0] || ({} as ReceiptParcela)
+
+  // ── Lista completa de Entidades reais de Multi-Unidades (Matriz + Unidades) ──
+  const entidadesMultiUnidades = useMemo(() => {
+    const list: Array<{
+      id: string
+      codigo: string
+      tipo: 'Matriz' | 'Unidade'
+      nome: string
+      nomeEscola: string
+      razaoSocial: string
+      cnpj: string
+      logo: string | null
+      endereco: string
+      cidade: string
+      searchTokens: string[]
+    }> = []
+
+    for (const m of sourceMantenedores) {
+      if (!m || typeof m !== 'object') continue
+      const mantNome = String(m.nome || m.razaoSocial || m.razao_social || '').trim()
+      const mantRazao = String(m.razaoSocial || m.razao_social || mantNome).trim()
+      const mantCnpj = String(m.cnpj || '').trim()
+      const mantLogo: string | null = m.logo || null
+      const mantEndereco = [m.endereco, m.numero, m.bairro].filter(Boolean).join(', ')
+      const mantCidade = [m.cidade, m.estado].filter(Boolean).join(' - ')
+
+      if (mantNome) {
+        const labelMatriz =
+          mantRazao && mantRazao.toLowerCase() !== mantNome.toLowerCase()
+            ? `MATRIZ - ${mantNome} (${mantRazao})`
+            : `MATRIZ - ${mantNome}`
+
+        list.push({
+          id: String(m.id || labelMatriz),
+          codigo: 'MATRIZ',
+          tipo: 'Matriz',
+          nome: labelMatriz,
+          nomeEscola: mantNome,
+          razaoSocial: mantRazao,
+          cnpj: mantCnpj,
+          logo: mantLogo,
+          endereco: mantEndereco,
+          cidade: mantCidade,
+          searchTokens: [
+            String(m.id || ''),
+            'MATRIZ',
+            mantNome,
+            mantRazao,
+            labelMatriz,
+            `MATRIZ - ${mantNome}`,
+          ]
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean),
+        })
+      }
+
+      const unidades = Array.isArray(m.unidades) ? m.unidades : []
+      for (const u of unidades) {
+        if (!u || typeof u !== 'object') continue
+        const uCodigo = String(u.codigo || '').trim()
+        const uFantasia = String(u.nomeFantasia || u.nome || '').trim()
+        const uRazao = String(u.razaoSocial || u.razao_social || '').trim()
+        const uNomeEscola = uFantasia || uRazao || mantNome
+        if (!uNomeEscola) continue
+
+        const labelUnidade = uCodigo
+          ? `${uCodigo} - ${uFantasia && uRazao && uFantasia.toLowerCase() !== uRazao.toLowerCase() ? `${uFantasia} (${uRazao})` : uRazao || uFantasia}`
+          : uNomeEscola
+
+        const uEndereco = [
+          u.endereco || m.endereco,
+          u.numero || m.numero,
+          u.bairro || m.bairro,
+        ]
+          .filter(Boolean)
+          .join(', ')
+
+        const uCidade = [u.cidade || m.cidade, u.estado || m.estado]
+          .filter(Boolean)
+          .join(' - ')
+
+        list.push({
+          id: String(u.id || labelUnidade),
+          codigo: uCodigo,
+          tipo: 'Unidade',
+          nome: labelUnidade,
+          nomeEscola: uNomeEscola,
+          razaoSocial: uRazao || uFantasia,
+          cnpj: String(u.cnpj || mantCnpj || '').trim(),
+          logo: u.cabecalhoLogo || u.logo || mantLogo || null,
+          endereco: uEndereco,
+          cidade: uCidade,
+          searchTokens: [
+            String(u.id || ''),
+            uCodigo,
+            uFantasia,
+            uRazao,
+            labelUnidade,
+            uCodigo && uFantasia ? `${uCodigo} - ${uFantasia}` : '',
+            uCodigo && uRazao ? `${uCodigo} - ${uRazao}` : '',
+            uCodigo && uFantasia && uRazao ? `${uCodigo} - ${uFantasia} — ${uRazao}` : '',
+          ]
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean),
+        })
+      }
+    }
+
+    return list
+  }, [sourceMantenedores])
+
+  const unidadesDisponiveis = useMemo(
+    () =>
+      entidadesMultiUnidades.length > 0
+        ? entidadesMultiUnidades.map((e) => ({
+            id: e.id,
+            nome: e.nome,
+            label: e.nome,
+            cnpj: e.cnpj || undefined,
+            codigo: e.codigo || undefined,
+          }))
+        : resolveUnidadesEscolares(sourceMantenedores),
+    [entidadesMultiUnidades, sourceMantenedores]
   )
 
-  const nomeEscola = unidade?.nomeFantasia || unidade?.razaoSocial || mantenedor?.nome || 'Impacto Edu'
-  const cnpj = unidade?.cnpj || mantenedor?.cnpj || '—'
-  const logo: string | null = unidade?.cabecalhoLogo || mantenedor?.logo || null
-  const cidade = [unidade?.cidade, unidade?.estado].filter(Boolean).join(' - ') || ''
+  // ── Encontra o Caixa selecionado na baixa (pelo ID, código ou descrição) ──
+  const matchedCaixaFromRef = useMemo(() => {
+    const rawCaixaRef = String(ref.caixaOrigem || '').trim()
+    if (!rawCaixaRef || sourceCaixas.length === 0) return null
+    const lowerRef = rawCaixaRef.toLowerCase()
 
-  // ── Issuer ──
-  const issuer = (() => {
-    if (typeof window === 'undefined') return { nome: 'Secretaria', cargo: 'Administrativo' }
+    return (
+      sourceCaixas.find((cx: any) => {
+        if (!cx || typeof cx !== 'object') return false
+        const id = String(cx.id || '').trim().toLowerCase()
+        const cod = String(cx.codigo || '').trim().toLowerCase()
+        const desc = String(cx.descricao || '').trim().toLowerCase()
+        const combo = `${cod} - ${desc}`
+        const hashCombo = `#${cod} - ${desc}`
+        return (
+          id === lowerRef ||
+          cod === lowerRef ||
+          desc === lowerRef ||
+          combo === lowerRef ||
+          hashCombo === lowerRef ||
+          (cod && desc && (lowerRef.includes(combo) || lowerRef.includes(hashCombo)))
+        )
+      }) || null
+    )
+  }, [ref.caixaOrigem, sourceCaixas])
+
+  // Helper para casar uma string de unidadeEmpresa (vinda do caixa ou do lançamento) com Multi-Unidades
+  const matchEntidadeByString = (candidateRaw?: string) => {
+    const cand = String(candidateRaw || '').trim().toLowerCase()
+    if (!cand || entidadesMultiUnidades.length === 0) return null
+
+    // 1. Match exato por qualquer token (código, razão social, nome fantasia, label)
+    const exact = entidadesMultiUnidades.find((e) => e.searchTokens.includes(cand))
+    if (exact) return exact
+
+    // 2. Match pelo código da unidade (ex: UNI-2026-ZV5C, UNI-2026-1VY4, MATRIZ)
+    const byCode = entidadesMultiUnidades.find((e) => {
+      const cod = e.codigo.trim().toLowerCase()
+      if (!cod) return false
+      return (
+        cand === cod ||
+        cand.startsWith(`${cod} -`) ||
+        cand.startsWith(`${cod} —`) ||
+        (cod !== 'matriz' && cand.includes(cod))
+      )
+    })
+    if (byCode) return byCode
+
+    // 3. Match parcial pela Razão Social ou Nome Fantasia
+    return (
+      entidadesMultiUnidades.find((e) => {
+        const rs = e.razaoSocial.trim().toLowerCase()
+        const nf = e.nomeEscola.trim().toLowerCase()
+        return (rs && cand.includes(rs)) || (nf && cand.includes(nf))
+      }) || null
+    )
+  }
+
+  // ── Resolução de Unidade/Matriz Inicial (Prioridade 1: Caixa Selecionado na Baixa!) ──
+  const resolvedEntidadeDoCaixa = useMemo(() => {
+    // Prioridade 1: Unidade/Empresa vinculada ao Caixa selecionado na baixa
+    if (matchedCaixaFromRef) {
+      const fromCaixaUnidade =
+        matchEntidadeByString(matchedCaixaFromRef.unidadeEmpresa) ||
+        matchEntidadeByString(matchedCaixaFromRef.unidadeId)
+      if (fromCaixaUnidade) return fromCaixaUnidade
+    }
+    // Prioridade 2: turmaUnidade ou aluno.unidade passado pelo lançamento
+    if (turmaUnidade) {
+      const fromTurma = matchEntidadeByString(turmaUnidade)
+      if (fromTurma) return fromTurma
+    }
+    if (aluno.unidade) {
+      const fromAluno = matchEntidadeByString(aluno.unidade)
+      if (fromAluno) return fromAluno
+    }
+    // Fallback: primeira entidade cadastrada em Multi-Unidades
+    return entidadesMultiUnidades[0] || null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedCaixaFromRef, turmaUnidade, aluno.unidade, entidadesMultiUnidades])
+
+  // ── Emissor Padrão ──
+  const defaultIssuer = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { nome: 'Tesouraria Escolar', cargo: 'Controladoria Financeira' }
+    }
     try {
       const u = JSON.parse(window.localStorage.getItem('edu-current-user') || 'null')
-      if (u && u.nome) return { nome: u.nome, cargo: u.cargo || u.perfil || 'Administrativo' }
+      if (u && u.nome) {
+        return {
+          nome: u.nome,
+          cargo: u.cargo || u.perfil || 'Tesouraria & Controladoria',
+        }
+      }
     } catch {}
-    return { nome: 'Secretaria', cargo: 'Administrativo' }
-  })()
+    return { nome: 'Tesouraria Escolar', cargo: 'Controladoria Financeira' }
+  }, [])
 
-  // ── Hashes & Dynamics ──
-  const emissao = today()
-  const ref = rawParcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0), 0)
-  const rNum = receiptNumber(ref)
-  const hashVal = useMemo(generateUUID, [])
-  const validationUrl = `https://impacto-edu.com/validar/${hashVal}`
-  // Usa Google Charts API como URL para o QR no HTML impresso (mais estável que api.qrserver)
-  const qrCodeUrlForPrint = `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(validationUrl)}&chld=M|1`
+  // ── Estados Interativos do Gerador de Recibo ──
+  const [natureza, setNatureza] = useState<'receber' | 'pagar'>(propNatureza)
+  const [layoutMode, setLayoutMode] = useState<ReceiptLayoutMode>('a4_1via')
+  const [showCustomize, setShowCustomize] = useState(false)
+  const [selectedUnidadeNome, setSelectedUnidadeNome] = useState(
+    resolvedEntidadeDoCaixa?.nome || 'Colégio Impacto'
+  )
 
-  const respNome = aluno.responsavelFinanceiro || aluno.responsavel || aluno.nome || '—'
-  const cpf = (aluno as any).cpfResponsavel || aluno.cpf || (aluno as any).cpfRespFin || '—'
-  const dtPagto = ref.dtPagto ? new Date(ref.dtPagto + 'T12:00').toLocaleDateString('pt-BR') : today()
-  const formaPagto = ref.formaPagto || (ref.formasPagto?.map((f:any)=>f.forma).join(', ')) || '—'
-  const idFatura = ref.codBaixa || ref.comprovante || String(ref.num ?? '') || '—'
-
-  // ── Gera QR Code local via canvas (sem serviço externo) ──
+  // Atualiza automaticamente quando os dados de Multi-Unidades e Caixas terminam de carregar do banco
   useEffect(() => {
-    if (!qrCanvasRef.current) return
-    QRCode.toCanvas(qrCanvasRef.current, validationUrl, {
-      width: 80,
+    if (resolvedEntidadeDoCaixa?.nome) {
+      setSelectedUnidadeNome(resolvedEntidadeDoCaixa.nome)
+    }
+  }, [resolvedEntidadeDoCaixa])
+
+  const [parteNome, setParteNome] = useState(
+    aluno.responsavelFinanceiro || aluno.responsavel || aluno.nome || '—'
+  )
+  const [parteDocumento, setParteDocumento] = useState(
+    aluno.documento || (aluno as any).cpfResponsavel || aluno.cpf || (aluno as any).cpfRespFin || ''
+  )
+  const semVinculoAluno = Boolean(aluno.semVinculoAluno)
+  const [vinculoLabel, setVinculoLabel] = useState(
+    propNatureza === 'pagar'
+      ? [ref.categoria, ref.centroCusto].filter(Boolean).join(' • ') || aluno.unidade || 'Despesa Operacional'
+      : semVinculoAluno
+        ? [ref.categoria, ref.centroCusto].filter(Boolean).join(' • ') || 'Recebimento (Sem vínculo de aluno)'
+        : `${aluno.nome}${aluno.codigo || aluno.matricula ? ` (Matrícula: ${aluno.codigo || aluno.matricula})` : ''}`
+  )
+  const [formaPagto, setFormaPagto] = useState(
+    ref.formaPagto || ref.formasPagto?.map((f: any) => f.forma).join(', ') || 'PIX'
+  )
+  const [caixaOrigem, setCaixaOrigem] = useState(
+    matchedCaixaFromRef
+      ? `#${matchedCaixaFromRef.codigo} - ${matchedCaixaFromRef.descricao}`
+      : ref.caixaOrigem || 'Tesouraria / Conta Movimento'
+  )
+
+  useEffect(() => {
+    if (matchedCaixaFromRef) {
+      setCaixaOrigem(`#${matchedCaixaFromRef.codigo} - ${matchedCaixaFromRef.descricao}`)
+    }
+  }, [matchedCaixaFromRef])
+
+  const [dtPagtoISO, setDtPagtoISO] = useState(
+    ref.dtPagto ? String(ref.dtPagto).slice(0, 10) : todayISO()
+  )
+  const [observacao, setObservacao] = useState(
+    ref.obs || (ref.comprovante ? `Comprovante/Doc: ${ref.comprovante}` : '')
+  )
+  const [issuerName, setIssuerName] = useState(defaultIssuer.nome)
+  const [issuerCargo, setIssuerCargo] = useState(defaultIssuer.cargo)
+
+  const [mostrarCarimbo, setMostrarCarimbo] = useState(true)
+  const [mostrarExtenso, setMostrarExtenso] = useState(true)
+  const [mostrarAssinaturaDupla, setMostrarAssinaturaDupla] = useState(true)
+  const [mostrarQrCode, setMostrarQrCode] = useState(true)
+  const [copiedText, setCopiedText] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState<string>('')
+
+  // ── Unidade Selecionada e Metadados Reais da Instituição (Multi-Unidades) ──
+  const unidadeInfo = useMemo(() => {
+    const matched =
+      entidadesMultiUnidades.find((e) => e.nome === selectedUnidadeNome) ||
+      matchEntidadeByString(selectedUnidadeNome) ||
+      resolvedEntidadeDoCaixa ||
+      entidadesMultiUnidades[0]
+
+    const mantenedor = sourceMantenedores[0]
+    const nomeEscola =
+      matched?.nomeEscola ||
+      mantenedor?.nome ||
+      selectedUnidadeNome ||
+      'Colégio Impacto'
+    const razaoSocial =
+      matched?.razaoSocial ||
+      mantenedor?.razaoSocial ||
+      mantenedor?.razao_social ||
+      ''
+    const cnpj = matched?.cnpj || mantenedor?.cnpj || ''
+    const logo: string | null = matched?.logo || mantenedor?.logo || null
+    const endereco =
+      matched?.endereco ||
+      [mantenedor?.endereco, mantenedor?.numero, mantenedor?.bairro].filter(Boolean).join(', ') ||
+      ''
+    const cidade =
+      matched?.cidade ||
+      [mantenedor?.cidade, mantenedor?.estado].filter(Boolean).join(' - ') ||
+      ''
+
+    return { nomeEscola, razaoSocial, cnpj, logo, endereco, cidade }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entidadesMultiUnidades, selectedUnidadeNome, resolvedEntidadeDoCaixa, sourceMantenedores])
+
+  // ── Cálculos de Totais e Extenso ──
+  const totais = useMemo(() => {
+    let bruto = 0
+    let descontos = 0
+    let encargos = 0
+    let liquido = 0
+
+    for (const p of parcelas) {
+      const b = Number(p.valor) || 0
+      const d = Number(p.desconto) || 0
+      const e = (Number(p.juros) || 0) + (Number(p.multa) || 0)
+      const l = Number(p.valorFinal ?? b - d + e) || 0
+      bruto += b
+      descontos += d
+      encargos += e
+      liquido += l
+    }
+
+    return {
+      bruto: Math.round(bruto * 100) / 100,
+      descontos: Math.round(descontos * 100) / 100,
+      encargos: Math.round(encargos * 100) / 100,
+      liquido: Math.round(liquido * 100) / 100,
+    }
+  }, [parcelas])
+
+  const rNum = useMemo(() => receiptNumber(ref), [ref])
+  const emissao = useMemo(() => today(), [])
+  const hashVal = useMemo(() => generateUUID(), [])
+  const validationUrl = `https://impacto-edu.com/validar/${hashVal}`
+  const idFatura = ref.codBaixa || ref.comprovante || `#${rNum}`
+  const dtPagtoBR = fmtDateBR(dtPagtoISO)
+  const extensoStr = useMemo(() => valorPorExtenso(totais.liquido), [totais.liquido])
+
+  const declaracaoTexto = useMemo(() => {
+    const resumoItens = parcelas
+      .map((p) => p.evento || 'Lançamento')
+      .slice(0, 3)
+      .join(', ')
+    const maisItens = parcelas.length > 3 ? ` e mais ${parcelas.length - 3} item(ns)` : ''
+
+    if (natureza === 'pagar') {
+      return `Declaramos que a instituição <strong>${unidadeInfo.nomeEscola}</strong> (CNPJ ${unidadeInfo.cnpj}) efetuou o pagamento a <strong>${parteNome}</strong>${parteDocumento ? ` (${parteDocumento})` : ''} da importância líquida de <strong>R$ ${fmt(totais.liquido)}</strong> em <strong>${dtPagtoBR}</strong> via <strong>${formaPagto}</strong>, referente a <strong>${resumoItens}${maisItens}</strong>, pelo que o favorecido dá plena, geral e irrevogável quitação.`
+    }
+    return `Recebemos de <strong>${parteNome}</strong>${parteDocumento ? ` (CPF/CNPJ ${parteDocumento})` : ''} a importância líquida de <strong>R$ ${fmt(totais.liquido)}</strong> em <strong>${dtPagtoBR}</strong> via <strong>${formaPagto}</strong>, referente a <strong>${resumoItens}${maisItens}</strong> (${vinculoLabel}), dando plena, geral e rasa quitação dos valores discriminados neste recibo.`
+  }, [
+    natureza,
+    unidadeInfo,
+    parteNome,
+    parteDocumento,
+    totais.liquido,
+    dtPagtoBR,
+    formaPagto,
+    parcelas,
+    vinculoLabel,
+  ])
+
+  // ── Gera QR Code local em Canvas + DataURL Base64 (100% funcional offline e na impressão) ──
+  useEffect(() => {
+    if (qrCanvasRef.current) {
+      QRCode.toCanvas(qrCanvasRef.current, validationUrl, {
+        width: 80,
+        margin: 1,
+        color: { dark: '#0f172a', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      }).catch(() => {})
+    }
+    QRCode.toDataURL(validationUrl, {
+      width: 160,
       margin: 1,
       color: { dark: '#0f172a', light: '#ffffff' },
       errorCorrectionLevel: 'M',
-    }).catch(() => {
-      // fallback silencioso: canvas fica em branco
     })
+      .then((url) => setQrDataUrl(url))
+      .catch(() => {})
   }, [validationUrl])
 
-  // ── Handlers ──
-  const openPrintWindow = (autoprint = false) => {
-    const html = buildReceiptHTML(parcelas, rawParcelas, aluno, { nomeEscola, cnpj, logo, cidade, issuerName: issuer.nome, issuerCargo: issuer.cargo, hash: hashVal, qrCodeUrl: qrCodeUrlForPrint })
-    const win = window.open('', '_blank', 'width=900,height=800,scrollbars=yes')
-    if (!win) { alert('Permita popups para imprimir o recibo.'); return }
+  // Fecha com tecla Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const printOpts: PrintRenderOptions = {
+    natureza,
+    layoutMode,
+    rNum,
+    emissao,
+    nomeEscola: unidadeInfo.nomeEscola,
+    razaoSocial: unidadeInfo.razaoSocial,
+    cnpjEscola: unidadeInfo.cnpj,
+    logo: unidadeInfo.logo,
+    endereco: unidadeInfo.endereco,
+    cidade: unidadeInfo.cidade,
+    parteNome,
+    parteDocumento,
+    vinculoLabel,
+    formaPagto,
+    caixaOrigem,
+    dtPagtoBR,
+    idFatura,
+    observacao,
+    issuerName,
+    issuerCargo,
+    hash: hashVal,
+    qrCodeDataUrl: qrDataUrl,
+    totalBruto: totais.bruto,
+    totalDescontos: totais.descontos,
+    totalEncargos: totais.encargos,
+    totalPago: totais.liquido,
+    extensoStr,
+    declaracaoTexto,
+    mostrarCarimbo,
+    mostrarExtenso,
+    mostrarAssinaturaDupla,
+    mostrarQrCode,
+    semVinculoAluno,
+  }
+
+  // ── Handlers de Impressão, PDF, Cópia, WhatsApp e E-mail ──
+  const openPrintWindow = (autoprint = true) => {
+    const html = buildReceiptHTML(parcelas, printOpts)
+    const win = window.open('', '_blank', 'width=960,height=840,scrollbars=yes')
+    if (!win) {
+      toast.error('Permita pop-ups no navegador para abrir a impressão do recibo.')
+      return
+    }
     win.document.open()
     win.document.write(html)
     win.document.close()
-    
-    // Força o título para sugerir o nome do PDF na hora de salvar
-    win.document.title = `Recibo_${rNum}_${aluno.nome.replace(/\s+/g, '_')}`
-    
+    win.document.title = `Recibo_${rNum}_${parteNome.replace(/\s+/g, '_')}`
+
     if (autoprint) {
-      setTimeout(() => { win.focus(); win.print() }, 500)
-    } else {
-      // Se for "Salvar PDF" e não imprimir em papel, podemos forçar o print também, 
-      // mas instruir o usuário a selecionar "Salvar como PDF".
-      setTimeout(() => { win.focus(); win.print() }, 500)
+      setTimeout(() => {
+        win.focus()
+        win.print()
+      }, 350)
     }
   }
 
+  const buildPlainTextSummary = () => {
+    const tipoStr =
+      natureza === 'pagar'
+        ? 'RECIBO DE PAGAMENTO E QUITAÇÃO'
+        : 'RECIBO OFICIAL DE RECEBIMENTO'
+    const itensTxt = parcelas
+      .map(
+        (p, i) =>
+          `  ${i + 1}. ${p.evento || 'Lançamento'} (Venc: ${fmtDateBR(p.vencimento)}) — R$ ${fmt(p.valorFinal ?? p.valor ?? 0)}`
+      )
+      .join('\n')
+
+    return [
+      `*${unidadeInfo.nomeEscola}* (CNPJ: ${unidadeInfo.cnpj})`,
+      `📄 *${tipoStr} Nº #${rNum}*`,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      `👤 *${natureza === 'pagar' ? 'Favorecido' : 'Pagador'}:* ${parteNome}${parteDocumento ? ` (${parteDocumento})` : ''}`,
+      `📌 *Referência:* ${vinculoLabel}`,
+      `💳 *Meio de Pagamento:* ${formaPagto}`,
+      `📅 *Data da Liquidação:* ${dtPagtoBR}`,
+      `💰 *Valor Total Quitado:* R$ ${fmt(totais.liquido)} (${extensoStr})`,
+      `━━━━━━━━━━━━━━━━━━━━`,
+      `*Itens Discriminados:*`,
+      itensTxt,
+      observacao ? `\n📝 *Obs:* ${observacao}` : '',
+      `\n🔐 *Autenticação Digital:* ${hashVal}`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  const handleCopySummary = () => {
+    const txt = buildPlainTextSummary()
+    navigator.clipboard?.writeText(txt)
+    setCopiedText(true)
+    toast.success('Resumo completo do recibo copiado para a área de transferência!')
+    setTimeout(() => setCopiedText(false), 2200)
+  }
+
   const shareWhatsApp = () => {
-    const txt = `*${nomeEscola}*\nOlá, seu recibo nº ${rNum} no valor de R$ ${fmt(totalPago)} pago em ${dtPagto} já está disponível.\n\nAcesse o link abaixo para visualizar e baixar o seu PDF autêntico:\n\n🔗 ${validationUrl}`
-    try {
-      navigator.clipboard.writeText(txt).catch(() => {})
-    } catch {}
+    const txt = buildPlainTextSummary()
+    navigator.clipboard?.writeText(txt).catch(() => {})
     const telRaw = aluno.telResponsavelFinanceiro || (aluno as any).celular || ''
     const tel = telRaw.replace(/\D/g, '')
     const encoded = encodeURIComponent(txt)
-    let url = ''
-    if (tel) {
-      const fullPhone = tel.startsWith('55') ? tel : `55${tel}`
-      url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encoded}`
-    } else {
-      url = `https://api.whatsapp.com/send?text=${encoded}`
-    }
+    const url = tel
+      ? `https://api.whatsapp.com/send?phone=${tel.startsWith('55') ? tel : `55${tel}`}&text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`
     window.open(url, '_blank')
   }
 
   const shareEmail = () => {
     const targetEmail = aluno.emailResponsavelFinanceiro || (aluno as any).email || ''
-    if (targetEmail) {
-      navigator.clipboard.writeText(targetEmail)
-      alert(`O E-mail (${targetEmail}) foi copiado para a área de transferência!`)
-    }
-    const subj = `Seu Recibo de Pagamento - ${nomeEscola}`
-    const body = `Olá, segue os dados referentes ao comprovante de pagamento.\n\nEscola: ${nomeEscola}\nRecibo: #${rNum}\nValor: R$ ${fmt(totalPago)}\nData: ${dtPagto}\n\nCódigo de Verificação: ${hashVal}\n\nPara segurança, solicite o PDF deste recibo.`
-    window.open(`mailto:${targetEmail}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`)
+    const subj = `Recibo #${rNum} — ${unidadeInfo.nomeEscola} (R$ ${fmt(totais.liquido)})`
+    const body = buildPlainTextSummary().replace(/\*/g, '')
+    window.open(
+      `mailto:${targetEmail}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`
+    )
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 11px',
+    borderRadius: 8,
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    fontSize: 12.5,
+    fontWeight: 600,
+    outline: 'none',
+  }
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: 10,
+    fontWeight: 800,
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: 4,
   }
 
   return (
-    <div style={{
-      position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.65)', backdropFilter:'blur(12px)',
-      zIndex:5500, display:'flex', alignItems:'center', justifyContent:'center', padding:24,
-    }}>
-      <style>{`
-        @keyframes fadeInScale { 0% { opacity:0; transform:scale(0.96) translateY(20px) } 100% { opacity:1; transform:scale(1) translateY(0) } }
-        .receipt-scroll::-webkit-scrollbar { width:6px; height:6px }
-        .receipt-scroll::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.1); border-radius:10px }
-      `}</style>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="receipt-modal-title"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.68)',
+        backdropFilter: 'blur(10px)',
+        zIndex: 5500,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#f8fafc',
+          width: '100%',
+          maxWidth: 960,
+          maxHeight: '94vh',
+          borderRadius: 24,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          boxShadow: '0 32px 90px rgba(15, 23, 42, 0.35)',
+          border: '1px solid #cbd5e1',
+          overflow: 'hidden',
+        }}
+      >
+        {/* TOP ACCENT BAR */}
+        <div
+          style={{
+            height: 6,
+            background:
+              natureza === 'pagar'
+                ? 'linear-gradient(90deg, #0f172a 0%, #0284c7 50%, #059669 100%)'
+                : 'linear-gradient(90deg, #0284c7 0%, #2563eb 50%, #10b981 100%)',
+            width: '100%',
+          }}
+        />
 
-      {/* SUPER PREMIUM WRAPPER */}
-      <div style={{
-        background:'#f8fafc', width:'100%', maxWidth:860, maxHeight:'92vh',
-        borderRadius:32, display:'flex', flexDirection:'column', position:'relative',
-        boxShadow:'0 40px 100px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,1)',
-        border:'1px solid rgba(255,255,255,0.7)',
-        animation:'fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        overflow:'hidden'
-      }}>
-        
-        {/* TOP LINE ACCENT */}
-        <div style={{ height:6, background:'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #f59e0b 100%)', width:'100%' }} />
-
-        {/* HEADER BAR */}
-        <div style={{
-          padding:'28px 40px', background:'#ffffff', display:'flex', justifyContent:'space-between', alignItems:'flex-start',
-          borderBottom:'1px solid #e1e7ef'
-        }}>
-          <div style={{ display:'flex', gap:16, alignItems:'center' }}>
-            <div style={{ width:56, height:56, borderRadius:16, background:'linear-gradient(135deg, #1e293b, #0f172a)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 24px rgba(15,23,42,0.15)' }}>
-              <ShieldCheck size={28} color="#38bdf8" strokeWidth={1.5} />
+        {/* HEADER BAR + FORMAT CONTROLS */}
+        <div
+          style={{
+            padding: '16px 24px',
+            background: '#ffffff',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background:
+                  natureza === 'pagar'
+                    ? 'linear-gradient(135deg, #0f172a, #1e293b)'
+                    : 'linear-gradient(135deg, #0284c7, #1d4ed8)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                boxShadow: '0 6px 16px rgba(15, 23, 42, 0.15)',
+              }}
+            >
+              <Receipt size={22} />
             </div>
             <div>
-              <div style={{ fontSize:11, color:'#3b82f6', fontWeight:800, letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>Recibo Oficial</div>
-              <div style={{ fontSize:26, fontWeight:900, color:'#0f172a', letterSpacing:-1 }}>#{rNum}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: natureza === 'pagar' ? '#0f172a' : '#0284c7',
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {natureza === 'pagar'
+                    ? 'Central de Recibos • Contas a Pagar'
+                    : 'Central de Recibos • Contas a Receber'}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    padding: '2px 8px',
+                    borderRadius: 99,
+                    background: '#ecfdf5',
+                    color: '#047857',
+                    border: '1px solid #a7f3d0',
+                    fontWeight: 800,
+                  }}
+                >
+                  #{rNum}
+                </span>
+              </div>
+              <h2
+                id="receipt-modal-title"
+                style={{
+                  margin: '2px 0 0',
+                  fontSize: 17,
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {natureza === 'pagar'
+                  ? 'Recibo de Pagamento & Quitação de Compromisso'
+                  : 'Recibo Oficial de Recebimento Escolar'}
+              </h2>
             </div>
           </div>
-          
-          <button onClick={onClose} style={{
-            background:'#f1f5f9', border:'1px solid #e2e8f0', color:'#475569',
-            width:38, height:38, borderRadius:'50%', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
-            transition:'all 0.2s'
-          }} onMouseEnter={e=>(e.currentTarget.style.background='#e2e8f0')} onMouseLeave={e=>(e.currentTarget.style.background='#f1f5f9')}>
-            <X size={18} strokeWidth={2}/>
-          </button>
-        </div>
 
-        {/* BODY SCROLL */}
-        <div className="receipt-scroll" style={{ padding:'32px 40px', flex:1, overflowY:'auto' }}>
-          
-          {/* IDENTIFICATION GRID */}
-          <div style={{ display:'flex', gap:24, flexWrap:'wrap' }}>
-            {/* Left Data Column */}
-            <div style={{ flex:1, minWidth:300 }}>
-              <GlassContainer>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-                  <DataField label="Responsável Finc." value={respNome} highlight />
-                  <DataField label="Data da Baixa" value={dtPagto} />
-                  <DataField label="CPF" value={cpf} />
-                  <DataField label="Pagamento via" value={formaPagto} />
-                  <DataField label="ID Fatura" value={idFatura} />
-                  <DataField label="Emissão" value={emissao} />
-                </div>
-              </GlassContainer>
-            </div>
-            
-            {/* Right Summary Column */}
-            <div style={{ width:280, display:'flex', flexDirection:'column', gap:16 }}>
-              <div style={{ background:'linear-gradient(135deg, #059669, #10b981)', borderRadius:20, padding:24, color:'#fff', boxShadow:'0 12px 32px rgba(16,185,129,0.3)', position:'relative', overflow:'hidden' }}>
-                <div style={{ position:'absolute', top:-20, right:-20, opacity:0.1 }}>
-                  <ShieldCheck size={120} />
-                </div>
-                <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:1, color:'rgba(255,255,255,0.8)', marginBottom:6 }}>Total Pago Recebido</div>
-                <div style={{ fontSize:32, fontWeight:900, letterSpacing:-1.5 }}>R$ {fmt(totalPago)}</div>
-                <div style={{ fontSize:12, fontWeight:500, marginTop:12, background:'rgba(255,255,255,0.15)', display:'inline-block', padding:'4px 10px', borderRadius:20 }}>Transação Concluída ✓</div>
-              </div>
-            </div>
-          </div>
-
-          {/* TABLE */}
-          <div style={{ marginTop:16 }}>
-            <div style={{ fontSize:12, fontWeight:800, color:'#0f172a', textTransform:'uppercase', letterSpacing:1.5, marginBottom:16 }}>Composição das Parcelas</div>
-            <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:20, overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.02)' }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 90px 100px', background:'#f8fafc', padding:'12px 20px', fontSize:10, fontWeight:700, color:'#64748b', textTransform:'uppercase', letterSpacing:1, borderBottom:'1px solid #e1e7ef' }}>
-                <div>Competência / Serviço</div>
-                <div style={{ textAlign:'right' }}>Original</div>
-                <div style={{ textAlign:'right' }}>Descontos</div>
-                <div style={{ textAlign:'right' }}>Encargos</div>
-                <div style={{ textAlign:'right' }}>Pago</div>
-              </div>
-              {parcelas.map((p, i) => {
-                const encargos = (Number(p.juros)||0) + (Number(p.multa)||0)
-                const isOdd = i % 2 !== 0
+          {/* SELETOR DE FORMATO + BOTÃO PERSONALIZAR */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                background: '#f1f5f9',
+                padding: 3,
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+              }}
+            >
+              {[
+                { id: 'a4_1via', label: 'A4 (1 Via)', icon: <FileText size={13} /> },
+                { id: 'a4_2vias', label: 'A4 (2 Vias c/ Corte)', icon: <Scissors size={13} /> },
+                { id: 'bobina_80mm', label: 'Cupom 80mm', icon: <Receipt size={13} /> },
+              ].map((fmtOpt) => {
+                const active = layoutMode === fmtOpt.id
                 return (
-                  <div key={`${p.num}-${i}`} style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 90px 100px', padding:'16px 20px', alignItems:'center', background:isOdd?'#f8fafc':'#fff', borderBottom: i<parcelas.length-1?'1px solid #f1f5f9':'none' }}>
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:13, color:'#0f172a' }}>{(p as any).alunoNome ? (p as any).alunoNome + ' — ' : ''}{p.evento || 'Mensalidade'}</div>
-                      <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Parc {String(p.num).padStart(2,'0')} · Venc. {p.vencimento} {p.competencia?`· ${p.competencia}`:''}</div>
-                    </div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:'#475569' }}>R$ {fmt(p.valor)}</div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:p.desconto>0?'#d97706':'#94a3b8' }}>{p.desconto>0?`-R$ ${fmt(p.desconto)}`:'—'}</div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:encargos>0?'#dc2626':'#94a3b8' }}>{encargos>0?`+R$ ${fmt(encargos)}`:'—'}</div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:13, fontWeight:800, color:'#10b981' }}>R$ {fmt(p.valorFinal || p.valor || 0)}</div>
-                  </div>
+                  <button
+                    key={fmtOpt.id}
+                    type="button"
+                    onClick={() => setLayoutMode(fmtOpt.id as ReceiptLayoutMode)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '6px 10px',
+                      borderRadius: 7,
+                      border: 'none',
+                      background: active ? '#0f172a' : 'transparent',
+                      color: active ? '#ffffff' : '#475569',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {fmtOpt.icon}
+                    {fmtOpt.label}
+                  </button>
                 )
               })}
             </div>
-          </div>
 
-            {/* VERIFICATION & QR CODE ZONE */}
-          <div style={{ display:'flex', marginTop:32, gap:24, alignItems:'center', background:'#f1f5f9', borderRadius:20, padding:20, border:'1px dashed #cbd5e1' }}>
-            <canvas
-              ref={qrCanvasRef}
-              width={80}
-              height={80}
-              style={{ borderRadius:12, background:'#fff', padding:4, border:'1px solid #e2e8f0', flexShrink:0, imageRendering:'pixelated' }}
-              title="QR Code de Validação"
-            />
-            <div>
-              <div style={{ fontSize:11, fontWeight:800, color:'#3b82f6', textTransform:'uppercase', letterSpacing:1 }}>Garantia Digital</div>
-              <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginTop:4 }}>Validação via Infraestrutura ERP</div>
-              <div style={{ fontSize:11, color:'#64748b', marginTop:6, display:'flex', gap:6, alignItems:'center' }}>
-                <span style={{ fontWeight:600, color:'#0f172a' }}>Hash:</span> <span style={{ fontFamily:'monospace' }}>{hashVal}</span>
+            <button
+              type="button"
+              onClick={() => setShowCustomize((v) => !v)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 12px',
+                borderRadius: 9,
+                border: showCustomize ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                background: showCustomize ? '#eff6ff' : '#ffffff',
+                color: showCustomize ? '#1d4ed8' : '#334155',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <SlidersHorizontal size={14} />
+              {showCustomize ? 'Ocultar Ajustes' : 'Personalizar Recibo'}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar gerador de recibo"
+              style={{
+                background: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                color: '#475569',
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* PAINEL EXPANSÍVEL DE PERSONALIZAÇÃO DO RECIBO EM TEMPO REAL */}
+        {showCustomize && (
+          <div
+            style={{
+              padding: '16px 24px',
+              background: '#eff6ff',
+              borderBottom: '1px solid #bfdbfe',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <div>
+                <label htmlFor="rcp-unidade" style={labelStyle}>
+                  <Building2 size={10} style={{ display: 'inline', marginRight: 4 }} />
+                  Unidade / Empresa Emitente
+                </label>
+                <select
+                  id="rcp-unidade"
+                  value={selectedUnidadeNome}
+                  onChange={(e) => setSelectedUnidadeNome(e.target.value)}
+                  style={inputStyle}
+                >
+                  {unidadesDisponiveis.map((u) => (
+                    <option key={u.id} value={u.nome}>
+                      {u.nome} {u.cnpj ? `(${u.cnpj})` : ''}
+                    </option>
+                  ))}
+                  {!unidadesDisponiveis.some((u) => u.nome === selectedUnidadeNome) && (
+                    <option value={selectedUnidadeNome}>{selectedUnidadeNome}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="rcp-parte-nome" style={labelStyle}>
+                  {natureza === 'pagar' ? 'Favorecido / Credor' : 'Pagador / Responsável'}
+                </label>
+                <input
+                  id="rcp-parte-nome"
+                  type="text"
+                  value={parteNome}
+                  onChange={(e) => setParteNome(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="rcp-parte-doc" style={labelStyle}>CPF / CNPJ</label>
+                <input
+                  id="rcp-parte-doc"
+                  type="text"
+                  value={parteDocumento}
+                  onChange={(e) => setParteDocumento(e.target.value)}
+                  placeholder="000.000.000-00 ou CNPJ"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="rcp-vinculo" style={labelStyle}>
+                  {natureza === 'pagar' || semVinculoAluno ? 'Centro de Custo / Classificação' : 'Aluno / Vínculo'}
+                </label>
+                <input
+                  id="rcp-vinculo"
+                  type="text"
+                  value={vinculoLabel}
+                  onChange={(e) => setVinculoLabel(e.target.value)}
+                  style={inputStyle}
+                />
               </div>
             </div>
-            
-            <div style={{ marginLeft:'auto', textAlign:'right' }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'#0f172a' }}>{aluno.nome} {aluno.codigo ? `[${aluno.codigo}]` : ''}</div>
-              <div style={{ fontSize:11, color:'#64748b', marginTop:4 }}>{nomeEscola}</div>
-              <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>{cnpj}</div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr 1fr 1fr 1.2fr', gap: 10 }}>
+              <div>
+                <label htmlFor="rcp-metodo" style={labelStyle}>
+                  <CreditCard size={10} style={{ display: 'inline', marginRight: 4 }} />
+                  Método de Pagamento
+                </label>
+                <select
+                  id="rcp-metodo"
+                  value={formaPagto}
+                  onChange={(e) => setFormaPagto(e.target.value)}
+                  style={inputStyle}
+                >
+                  {metodosDisponiveis.map((m) => (
+                    <option key={m.id} value={m.nome}>
+                      {m.nome}
+                    </option>
+                  ))}
+                  {formaPagto && !metodosDisponiveis.some((m) => m.nome === formaPagto) && (
+                    <option value={formaPagto}>{formaPagto}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="rcp-dt-pagto" style={labelStyle}>Data da Liquidação</label>
+                <input
+                  id="rcp-dt-pagto"
+                  type="date"
+                  value={dtPagtoISO}
+                  onChange={(e) => setDtPagtoISO(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="rcp-emissor-nome" style={labelStyle}>Assinado por (Emitente)</label>
+                <input
+                  id="rcp-emissor-nome"
+                  type="text"
+                  value={issuerName}
+                  onChange={(e) => setIssuerName(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="rcp-emissor-cargo" style={labelStyle}>Cargo / Setor</label>
+                <input
+                  id="rcp-emissor-cargo"
+                  type="text"
+                  value={issuerCargo}
+                  onChange={(e) => setIssuerCargo(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="rcp-obs" style={labelStyle}>Observação / Nº Autenticação</label>
+                <input
+                  id="rcp-obs"
+                  type="text"
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  placeholder="NSU, ID PIX, Conta bancária..."
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 12,
+                paddingTop: 4,
+              }}
+            >
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mostrarExtenso}
+                    onChange={(e) => setMostrarExtenso(e.target.checked)}
+                  />
+                  Declaração c/ Valor por Extenso
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mostrarCarimbo}
+                    onChange={(e) => setMostrarCarimbo(e.target.checked)}
+                  />
+                  Selo Digital &ldquo;LIQUIDADO&rdquo;
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mostrarAssinaturaDupla}
+                    onChange={(e) => setMostrarAssinaturaDupla(e.target.checked)}
+                  />
+                  Assinatura Dupla (Escola + {natureza === 'pagar' ? 'Favorecido' : 'Pagador'})
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={mostrarQrCode}
+                    onChange={(e) => setMostrarQrCode(e.target.checked)}
+                  />
+                  QR Code de Autenticidade
+                </label>
+              </div>
+
+              <div style={{ display: 'inline-flex', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setNatureza('receber')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: natureza === 'receber' ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                    background: natureza === 'receber' ? '#e0f2fe' : '#ffffff',
+                    color: natureza === 'receber' ? '#0369a1' : '#64748b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Modelo Recebimento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNatureza('pagar')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: natureza === 'pagar' ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                    background: natureza === 'pagar' ? '#e2e8f0' : '#ffffff',
+                    color: natureza === 'pagar' ? '#0f172a' : '#64748b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Modelo Pagamento (Fornecedor)
+                </button>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* LIVE DOCUMENT PREVIEW AREA */}
+        <div
+          style={{
+            padding: '24px 28px',
+            flex: 1,
+            overflowY: 'auto',
+            background: '#e2e8f0',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          {/* Canvas oculto de apoio para renderização instantânea */}
+          <canvas ref={qrCanvasRef} width={80} height={80} style={{ display: 'none' }} />
+
+          {layoutMode === 'bobina_80mm' ? (
+            /* PREVIEW CUPOM TÉRMICO 80MM */
+            <div
+              style={{
+                width: 340,
+                background: '#fffef7',
+                border: '1px solid #cbd5e1',
+                borderRadius: 12,
+                padding: '22px 20px',
+                boxShadow: '0 16px 36px rgba(15, 23, 42, 0.14)',
+                fontFamily: "'Courier New', Courier, monospace",
+                color: '#0f172a',
+                fontSize: 12,
+                alignSelf: 'flex-start',
+              }}
+            >
+              <div style={{ textAlign: 'center', borderBottom: '1px dashed #64748b', paddingBottom: 10, marginBottom: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>{unidadeInfo.nomeEscola}</div>
+                <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>CNPJ: {unidadeInfo.cnpj}</div>
+                <div style={{ fontSize: 12, fontWeight: 900, marginTop: 8 }}>
+                  {natureza === 'pagar' ? 'RECIBO DE PAGAMENTO' : 'RECIBO DE RECEBIMENTO'}
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, marginTop: 2 }}>
+                  Nº #{rNum} • {emissao}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, borderBottom: '1px dashed #64748b', paddingBottom: 10, marginBottom: 10 }}>
+                <div>
+                  <strong>{natureza === 'pagar' ? 'FAVORECIDO:' : 'PAGADOR:'}</strong> {parteNome}
+                </div>
+                <div>
+                  <strong>CPF/CNPJ:</strong> {parteDocumento || 'Não informado'}
+                </div>
+                <div>
+                  <strong>VÍNCULO:</strong> {vinculoLabel || '—'}
+                </div>
+                <div>
+                  <strong>DATA BAIXA:</strong> {dtPagtoBR}
+                </div>
+                <div>
+                  <strong>MEIO PGTO:</strong> {formaPagto}
+                </div>
+              </div>
+
+              <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 11.5 }}>ITENS LIQUIDADOS:</div>
+              {parcelas.map((p, i) => (
+                <div key={`${p.num}-${i}`} style={{ padding: '6px 0', borderBottom: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontWeight: 700, fontSize: 11.5 }}>
+                    {i + 1}. {p.evento || 'Lançamento'}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 2 }}>
+                    <span>Venc: {fmtDateBR(p.vencimento)}</span>
+                    <strong>R$ {fmt(p.valorFinal ?? p.valor ?? 0)}</strong>
+                  </div>
+                </div>
+              ))}
+
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 0',
+                  borderTop: '1.5px solid #0f172a',
+                  borderBottom: '1.5px solid #0f172a',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 14,
+                  fontWeight: 900,
+                }}
+              >
+                <span>TOTAL QUITADO:</span>
+                <span>R$ {fmt(totais.liquido)}</span>
+              </div>
+
+              {mostrarExtenso && (
+                <div style={{ fontSize: 10.5, marginTop: 8, lineHeight: 1.4, color: '#334155' }}>
+                  ({extensoStr.toUpperCase()})
+                </div>
+              )}
+
+              {observacao && (
+                <div style={{ fontSize: 10.5, marginTop: 8, padding: 6, background: '#f1f5f9', borderRadius: 4 }}>
+                  <strong>OBS:</strong> {observacao}
+                </div>
+              )}
+
+              <div style={{ textAlign: 'center', marginTop: 22 }}>
+                <div style={{ borderTop: '1px solid #0f172a', paddingTop: 5, fontSize: 11, fontWeight: 700 }}>
+                  {issuerName} ({issuerCargo})
+                </div>
+                {mostrarQrCode && qrDataUrl && (
+                  <img
+                    src={qrDataUrl}
+                    width={88}
+                    height={88}
+                    alt="QR Code de Autenticidade"
+                    style={{ margin: '12px auto 6px', display: 'block', borderRadius: 6 }}
+                  />
+                )}
+                <div style={{ fontSize: 9, color: '#64748b', wordBreak: 'break-all' }}>
+                  HASH: {hashVal}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* PREVIEW FOLHA A4 (1 VIA OU 2 VIAS) */
+            <div style={{ width: '100%', maxWidth: 840 }}>
+              <div
+                dangerouslySetInnerHTML={{
+                  __html:
+                    buildSingleViaCardHTML(
+                      parcelas,
+                      printOpts,
+                      natureza === 'pagar'
+                        ? '1ª Via — Favorecido / Credor'
+                        : '1ª Via — Responsável / Pagador',
+                      layoutMode === 'a4_2vias'
+                    ) +
+                    (layoutMode === 'a4_2vias'
+                      ? `<div style="margin:14px 0;border-top:2px dashed #94a3b8;text-align:center;"><span style="background:#e2e8f0;padding:2px 12px;font-size:10.5px;font-weight:800;color:#475569;position:relative;top:-10px;border-radius:99px;">✂ LINHA DE CORTE — 2ª VIA ARQUIVO TESOURARIA</span></div>` +
+                        buildSingleViaCardHTML(
+                          parcelas,
+                          printOpts,
+                          '2ª Via — Contabilidade & Arquivo Tesouraria',
+                          true
+                        )
+                      : ''),
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* BOTTOM ACTION BAR */}
-        <div style={{ padding:'20px 40px', background:'#ffffff', borderTop:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          
-          <div style={{ display:'flex', gap:12 }}>
-            <button onClick={shareWhatsApp} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:14, background:'#ecfdf5', color:'#059669', border:'1px solid #a7f3d0', fontSize:13, fontWeight:700, cursor:'pointer', transition:'0.2s' }} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.02)'} onMouseLeave={e=>e.currentTarget.style.transform='none'}>
-              <MessageCircle size={16}/> Enviar WhatsApp
+        <div
+          style={{
+            padding: '16px 24px',
+            background: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={shareWhatsApp}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 15px',
+                borderRadius: 11,
+                background: '#ecfdf5',
+                color: '#047857',
+                border: '1px solid #a7f3d0',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              <MessageCircle size={15} />
+              WhatsApp
             </button>
-            <button onClick={shareEmail} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:14, background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', fontSize:13, fontWeight:700, cursor:'pointer', transition:'0.2s' }} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.02)'} onMouseLeave={e=>e.currentTarget.style.transform='none'}>
-              <Mail size={16}/> E-mail
+
+            <button
+              type="button"
+              onClick={shareEmail}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 15px',
+                borderRadius: 11,
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                border: '1px solid #bfdbfe',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              <Mail size={15} />
+              E-mail
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopySummary}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 15px',
+                borderRadius: 11,
+                background: '#f8fafc',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {copiedText ? <Check size={15} color="#059669" /> : <Copy size={15} />}
+              {copiedText ? 'Texto Copiado!' : 'Copiar Resumo'}
             </button>
           </div>
 
-          <div style={{ display:'flex', gap:12 }}>
-            <button onClick={() => openPrintWindow(false)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 24px', borderRadius:14, background:'#fff', color:'#475569', border:'1px solid #cbd5e1', fontSize:13, fontWeight:700, cursor:'pointer', transition:'0.2s' }} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.02)'} onMouseLeave={e=>e.currentTarget.style.transform='none'}>
-              <Download size={16}/> Salvar PDF
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => openPrintWindow(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 16px',
+                borderRadius: 11,
+                background: '#ffffff',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              <Download size={15} />
+              Salvar PDF
             </button>
-            <button onClick={() => openPrintWindow(true)} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 24px', borderRadius:14, background:'linear-gradient(135deg, #0ea5e9, #3b82f6)', color:'#fff', border:'none', fontSize:13, fontWeight:800, cursor:'pointer', boxShadow:'0 8px 24px rgba(59,130,246,0.3)', transition:'0.2s' }} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.02)'} onMouseLeave={e=>e.currentTarget.style.transform='none'}>
-              <Printer size={16}/> Imprimir Recibo
+
+            <button
+              type="button"
+              onClick={() => openPrintWindow(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 20px',
+                borderRadius: 11,
+                background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                color: '#ffffff',
+                border: 'none',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 6px 18px rgba(5, 150, 105, 0.28)',
+              }}
+            >
+              <Printer size={16} />
+              Imprimir Recibo ({layoutMode === 'a4_2vias' ? '2 Vias' : layoutMode === 'bobina_80mm' ? '80mm' : 'A4'})
             </button>
           </div>
-
         </div>
-
       </div>
     </div>
   )

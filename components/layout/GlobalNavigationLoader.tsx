@@ -42,6 +42,10 @@ const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
 
   // Financeiro
   'financeiro': { title: 'Financeiro', subtitle: 'GESTÃO FINANCEIRA' },
+  'financeiro/receber': { title: 'Contas a Receber', subtitle: 'FINANCEIRO' },
+  'financeiro/pagar': { title: 'Contas a Pagar', subtitle: 'FINANCEIRO' },
+  'financeiro/movimentacoes': { title: 'Movimentação Financeira', subtitle: 'FINANCEIRO' },
+  'financeiro/movimentacao': { title: 'Movimentação Financeira', subtitle: 'FINANCEIRO' },
   'financeiro/mensalidades': { title: 'Mensalidades', subtitle: 'FINANCEIRO' },
   'financeiro/boletos': { title: 'Boletos', subtitle: 'FINANCEIRO' },
   'financeiro/caixa': { title: 'Fluxo de Caixa', subtitle: 'FINANCEIRO' },
@@ -58,6 +62,8 @@ const ROUTE_INFO: Record<string, { title: string; subtitle: string }> = {
   'regimento-interno': { title: 'Regimento Interno', subtitle: 'INSTITUCIONAL' },
   'regulamento-interno': { title: 'Regulamento Interno', subtitle: 'INSTITUCIONAL' },
   'configuracoes': { title: 'Configurações', subtitle: 'SISTEMA' },
+  'configuracoes/financeiro/caixas': { title: 'Abertura de Caixas', subtitle: 'CONFIG. FINANCEIRO' },
+  'configuracoes/financeiro/caixa': { title: 'Abertura de Caixas', subtitle: 'CONFIG. FINANCEIRO' },
   'meu-perfil': { title: 'Meu Perfil', subtitle: 'CONTA' },
   'monitor-tv': { title: 'Monitor TV', subtitle: 'SISTEMA DE MÍDIA' },
   'relatorios': { title: 'Relatórios', subtitle: 'BUSINESS INTELLIGENCE' },

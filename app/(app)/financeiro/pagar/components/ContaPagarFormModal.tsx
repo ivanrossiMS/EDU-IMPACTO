@@ -7,7 +7,7 @@ import {
   AlertTriangle, Split, RotateCw, Search, Check,
   Edit3, BookOpen, FileText, ListOrdered
 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatCurrencyInput, handleCurrencyInputChange } from '@/lib/utils'
 import {
   type ContaPagarRecord,
   type FornecedorEscolar,
@@ -15,9 +15,11 @@ import {
   type ContaPagarTipoCusto,
   type CentroCustoEscolarOption,
   type PlanoContasEscolarOption,
+  type UnidadeEmpresaEscolarOption,
   type AnexoContaPagarItem,
   CENTROS_CUSTO_ESCOLARES,
   TEMPLATES_DESPESAS_ESCOLARES,
+  TIPO_CUSTO_CONFIG,
   resolvePlanoContasEscolares,
   calcularValorLiquido,
 } from '../types'
@@ -31,6 +33,7 @@ interface ContaPagarFormModalProps {
   planoContas: any[]
   eventosFinanceiros?: any[]
   centrosCusto?: CentroCustoEscolarOption[]
+  unidades?: UnidadeEmpresaEscolarOption[]
   onSave: (records: Partial<ContaPagarRecord>[]) => Promise<void>
   onQuickCreateFornecedor: (forn: Partial<FornecedorEscolar>) => Promise<FornecedorEscolar | null>
 }
@@ -96,12 +99,18 @@ export function ContaPagarFormModal({
   fornecedores,
   planoContas,
   centrosCusto,
+  unidades,
   onSave,
   onQuickCreateFornecedor,
 }: ContaPagarFormModalProps) {
   const listaCentrosCusto = useMemo(
     () => (Array.isArray(centrosCusto) && centrosCusto.length > 0 ? centrosCusto : CENTROS_CUSTO_ESCOLARES),
     [centrosCusto]
+  )
+
+  const listaUnidades = useMemo(
+    () => (Array.isArray(unidades) ? unidades : []),
+    [unidades]
   )
 
   const listaPlanoContas = useMemo(
@@ -443,13 +452,19 @@ export function ContaPagarFormModal({
     if (!descricao.trim()) {
       setDescricao(found.nomeFantasia || found.nome)
     }
+
+    let matchedPlano: PlanoContasEscolarOption | undefined
     if (found.categoriaPadrao) {
-      const matchedPlano = listaPlanoContas.find(
+      const catLower = found.categoriaPadrao.trim().toLowerCase()
+      matchedPlano = listaPlanoContas.find(
         (p) =>
           p.id === found.categoriaPadrao ||
           p.value === found.categoriaPadrao ||
           p.label === found.categoriaPadrao ||
-          p.descricao === found.categoriaPadrao
+          p.descricao === found.categoriaPadrao ||
+          p.label.toLowerCase() === catLower ||
+          p.value.toLowerCase() === catLower ||
+          p.descricao.toLowerCase() === catLower
       )
       if (matchedPlano) {
         setCategoria(matchedPlano.value)
@@ -458,6 +473,50 @@ export function ContaPagarFormModal({
         setCategoria(found.categoriaPadrao)
       }
     }
+
+    let matchedCc: CentroCustoEscolarOption | undefined
+    if (found.centroCustoPadrao) {
+      const ccLower = found.centroCustoPadrao.trim().toLowerCase()
+      matchedCc = listaCentrosCusto.find(
+        (cc) =>
+          cc.id === found.centroCustoPadrao ||
+          cc.label === found.centroCustoPadrao ||
+          cc.id.toLowerCase() === ccLower ||
+          cc.label.toLowerCase() === ccLower ||
+          (cc.sigla && cc.sigla.toLowerCase() === ccLower) ||
+          (cc.codigo && cc.codigo.toLowerCase() === ccLower)
+      )
+      setCentroCusto(matchedCc ? matchedCc.id : found.centroCustoPadrao)
+    }
+
+    if (found.unidadePadrao) {
+      const uniLower = found.unidadePadrao.trim().toLowerCase()
+      const matchedUni = listaUnidades.find(
+        (u) =>
+          u.nome === found.unidadePadrao ||
+          u.id === found.unidadePadrao ||
+          u.label === found.unidadePadrao ||
+          u.nome.toLowerCase() === uniLower ||
+          u.label.toLowerCase() === uniLower
+      )
+      setUnidadeEmpresa(matchedUni ? matchedUni.nome : found.unidadePadrao)
+    } else if (matchedCc?.unidadeId) {
+      const matchedUniFromCc = listaUnidades.find(
+        (u) => u.id === matchedCc!.unidadeId || u.nome === matchedCc!.unidadeId
+      )
+      if (matchedUniFromCc) {
+        setUnidadeEmpresa(matchedUniFromCc.nome)
+      }
+    } else if (listaUnidades.length === 1) {
+      setUnidadeEmpresa(listaUnidades[0].nome)
+    }
+
+    if (found.tipoCustoPadrao) {
+      setTipoCusto(found.tipoCustoPadrao)
+    } else if (matchedPlano?.tipoCustoPadrao) {
+      setTipoCusto(matchedPlano.tipoCustoPadrao)
+    }
+
     if (found.formaPagamentoPadrao && found.formaPagamentoPadrao !== 'Carteira') {
       setFormaPagamento(found.formaPagamentoPadrao)
     }
@@ -533,6 +592,8 @@ export function ContaPagarFormModal({
       chavePix: qfPix.trim(),
       categoriaPadrao: categoria,
       centroCustoPadrao: centroCusto,
+      unidadePadrao: unidadeEmpresa,
+      tipoCustoPadrao: tipoCusto,
       formaPagamentoPadrao: formaPagamento,
     })
     if (created) {
@@ -931,7 +992,20 @@ export function ContaPagarFormModal({
                       value={fornecedorNome}
                       onFocus={() => setShowFornecedorSearch(true)}
                       onBlur={() => {
-                        setTimeout(() => setShowFornecedorSearch(false), 180)
+                        setTimeout(() => {
+                          setShowFornecedorSearch(false)
+                          const q = fornecedorNome.trim().toLowerCase()
+                          if (q && !fornecedorId) {
+                            const exactMatch = fornecedores.find(
+                              (f) =>
+                                f.nome.toLowerCase() === q ||
+                                (f.nomeFantasia || '').toLowerCase() === q
+                            )
+                            if (exactMatch) {
+                              handleSelectFornecedor(exactMatch)
+                            }
+                          }
+                        }, 180)
                       }}
                       onChange={(e) => {
                         setFornecedorNome(e.target.value)
@@ -1017,20 +1091,50 @@ export function ContaPagarFormModal({
                             <div style={{ fontWeight: 700, color: '#0f172a' }}>{f.nomeFantasia || f.nome}</div>
                             {f.documento && <div style={{ fontSize: 11, color: '#64748b' }}>{f.documento}</div>}
                           </div>
-                          {f.categoriaPadrao && (
-                            <span
-                              style={{
-                                fontSize: 10.5,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                background: '#f1f5f9',
-                                color: '#475569',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {f.categoriaPadrao}
-                            </span>
-                          )}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: 'flex-end' }}>
+                            {f.unidadePadrao && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#f0fdf4',
+                                  color: '#15803d',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {f.unidadePadrao}
+                              </span>
+                            )}
+                            {f.centroCustoPadrao && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#eff6ff',
+                                  color: '#1d4ed8',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                CC: {f.centroCustoPadrao}
+                              </span>
+                            )}
+                            {f.categoriaPadrao && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#f1f5f9',
+                                  color: '#475569',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {f.categoriaPadrao}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -1460,12 +1564,21 @@ export function ContaPagarFormModal({
                 {/* LINHA 5: Unidade/Empresa (sem seleção "----") & Centro de Custo (sem seleção "-----") */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 10 }}>
                   <div>
-                    <label htmlFor="cp-unidade" style={labelStyle}>
-                      Unidade/Empresa
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label htmlFor="cp-unidade" style={{ ...labelStyle, marginBottom: 0 }}>
+                        Unidade/Empresa
+                      </label>
+                      <Link
+                        href="/configuracoes/unidades"
+                        style={{ fontSize: 10.5, fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
+                      >
+                        + Gerenciar
+                      </Link>
+                    </div>
                     <div style={{ display: 'flex', alignItems: 'stretch' }}>
                       <select
                         id="cp-unidade"
+                        name="unidadeEmpresa"
                         value={unidadeEmpresa}
                         onChange={(e) => setUnidadeEmpresa(e.target.value)}
                         style={{
@@ -1475,15 +1588,15 @@ export function ContaPagarFormModal({
                         }}
                       >
                         <option value="">----</option>
-                        <option value="Colégio Impacto — Matriz">Colégio Impacto — Matriz</option>
-                        <option value="Colégio Impacto — Unidade Infantil">Colégio Impacto — Unidade Infantil</option>
-                        <option value="Colégio Impacto — Ensino Médio">Colégio Impacto — Ensino Médio</option>
+                        {listaUnidades.map((u) => (
+                          <option key={u.id} value={u.nome}>
+                            {u.label}
+                          </option>
+                        ))}
                         {unidadeEmpresa &&
-                          ![
-                            'Colégio Impacto — Matriz',
-                            'Colégio Impacto — Unidade Infantil',
-                            'Colégio Impacto — Ensino Médio',
-                          ].includes(unidadeEmpresa) && <option value={unidadeEmpresa}>{unidadeEmpresa}</option>}
+                          !listaUnidades.some((u) => u.nome === unidadeEmpresa || u.label === unidadeEmpresa) && (
+                            <option value={unidadeEmpresa}>{unidadeEmpresa}</option>
+                          )}
                       </select>
                     </div>
                   </div>
@@ -1502,8 +1615,19 @@ export function ContaPagarFormModal({
                     </div>
                     <select
                       id="cp-centro-custo"
+                      name="centroCusto"
                       value={centroCusto}
-                      onChange={(e) => setCentroCusto(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCentroCusto(val)
+                        if (val && !unidadeEmpresa) {
+                          const matchedCc = listaCentrosCusto.find((cc) => cc.id === val)
+                          if (matchedCc?.unidadeId) {
+                            const matchedUnid = listaUnidades.find((u) => u.id === matchedCc.unidadeId)
+                            if (matchedUnid) setUnidadeEmpresa(matchedUnid.nome)
+                          }
+                        }
+                      }}
                       style={{ ...inputStyle, height: 36 }}
                     >
                       <option value="">-----</option>
@@ -1549,26 +1673,26 @@ export function ContaPagarFormModal({
                     <input
                       id="cp-valor-base"
                       name="valorBase"
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="numeric"
                       required
-                      value={valorBase}
+                      value={formatCurrencyInput(valorBase)}
                       onBlur={() => {
                         if (valorBase !== '' && numBase <= 0) {
                           setFormError('Informe um Valor (R$) maior que zero.')
                         }
                       }}
                       onChange={(e) => {
-                        setValorBase(e.target.value)
+                        setValorBase(handleCurrencyInputChange(e.target.value))
                         if (formError) setFormError('')
                       }}
-                      placeholder="0,00"
+                      placeholder="R$ 0,00"
                       style={{
                         ...inputStyle,
                         height: 36,
                         fontWeight: 700,
                         fontSize: 14,
+                        textAlign: 'right',
                       }}
                     />
                   </div>

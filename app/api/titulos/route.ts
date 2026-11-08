@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireStaff, resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { APIListQuerySchema, ZodTituloFinanceiro } from '@/lib/server/zodSchemas'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
@@ -35,8 +35,8 @@ export async function GET(request: Request) {
       }
     }
     
-    // 2. Supabase Authenticated (RLS Enforced)
-    const supabase = await createProtectedClient()
+    // 2. Supabase Admin Client (role & student access already validated above)
+    const supabase = getAdminClient()
 
     let query = supabase.from('titulos').select('*', { count: 'exact' })
 
@@ -81,7 +81,26 @@ export async function GET(request: Request) {
 
     if (error) throw new Error(error.message)
 
-    const mapped = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    const mapped = (data || []).map(row => {
+      const merged = { ...row, ...(row.dados || {}) }
+      const rawDesc = String(merged.descricao || '').trim()
+      const rawCod = String(merged.codigo || merged.id || '').trim()
+      const isReneg =
+        Boolean(merged.acordoId) ||
+        merged.origemLanca === 'renegociacao' ||
+        rawCod.startsWith('RNG') ||
+        /^(Acordo\s+Renegocia[cç][aã]o|Entrada\s+Acordo)\b/i.test(rawDesc)
+      if (isReneg) {
+        if (!merged.parcela) {
+          const descMatch = rawDesc.match(/\((\d+\s*\/\s*\d+)\)/)
+          if (descMatch) merged.parcela = descMatch[1].replace(/\s+/g, '')
+        }
+        merged.descricao = rawDesc.includes('(Saldo Residual)')
+          ? 'Acordo Renegociação (Saldo Residual)'
+          : 'Acordo Renegociação'
+      }
+      return merged
+    })
     const result = allowedAlunoIds
       ? mapped.filter(r => {
           const candidateId = String(r.aluno_id || r.alunoId || r.aluno || '')
@@ -105,9 +124,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const supabase = await createProtectedClient()
+    const supabase = getAdminClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
     let usuarioNome = 'Sistema'
     if (user) {
       usuarioNome = user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
@@ -135,7 +153,7 @@ export async function POST(request: Request) {
       const rows = body.map(processItem)
       
       // Upsert Seguro Assíncrono
-      const { error } = await supabase.from('titulos').upsert(rows)
+      const { error } = await supabase.from('titulos').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
       
       return NextResponse.json({ ok: true, count: rows.length })
@@ -143,39 +161,71 @@ export async function POST(request: Request) {
 
     // Zod Validation Única com injeção de auditoria
     const row = processItem(body)
-    const { data, error } = await supabase.from('titulos').upsert(row).select().single()
+    const { data, error } = await supabase.from('titulos').upsert(row, { onConflict: 'id' }).select().single()
     
     if (error) throw new Error(error.message)
     
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {
-    // Retorna os erros estritos de tipagem do Zod
-    return NextResponse.json({ error: e.errors || e.message }, { status: 400 })
+    const errMsg = Array.isArray(e?.errors)
+      ? e.errors.map((err: any) => err.message).join('; ')
+      : e?.message || 'Erro ao salvar título'
+    return NextResponse.json({ error: errMsg }, { status: 400 })
   }
 }
 
 function buildRowAuth(t: any) {
-  const { id, aluno, responsavel, descricao, valor, vencimento, pagamento, status, metodo, parcela, eventoId, eventoDescricao, ...rest } = t
+  const {
+    id,
+    aluno,
+    responsavel,
+    descricao,
+    valor,
+    vencimento,
+    pagamento,
+    status,
+    metodo,
+    parcela,
+    eventoId,
+    eventoDescricao,
+    evento_id,
+    evento_descricao,
+    created_at,
+    updated_at,
+    dados: prevDados,
+    _parcDisplay,
+    _parcCur,
+    _parcTot,
+    _parcCodigo,
+    ...rest
+  } = t
+
+  const cleanDados = {
+    ...(typeof prevDados === 'object' && prevDados !== null ? prevDados : {}),
+    ...rest,
+  }
+  delete (cleanDados as any).dados
+
   return {
-    id: id || crypto.randomUUID(), // Usando spec nativa segura
+    id: id || crypto.randomUUID(),
     aluno: aluno || '',
     responsavel: responsavel || '',
     descricao: descricao || '',
     valor: Number(valor) || 0,
-    vencimento: vencimento || '',
-    pagamento: pagamento || null,
+    vencimento: String(vencimento || '').slice(0, 10),
+    pagamento: pagamento ? String(pagamento).slice(0, 10) : null,
     status: status || 'pendente',
     metodo: metodo || null,
     parcela: parcela || '',
-    evento_id: eventoId || null,
-    evento_descricao: eventoDescricao || null,
-    dados: rest,
+    evento_id: eventoId || evento_id || null,
+    evento_descricao: eventoDescricao || evento_descricao || null,
+    dados: cleanDados,
     updated_at: new Date().toISOString(),
   }
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireStaff(request)
+  const { errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -200,7 +250,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID faltando' }, { status: 400 })
     }
 
-    const supabase = await createProtectedClient()
+    const supabase = getAdminClient()
     const { error } = await supabase.from('titulos').delete().in('id', targetIds)
     if (error) throw new Error(error.message)
 

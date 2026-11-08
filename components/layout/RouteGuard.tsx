@@ -440,8 +440,12 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
      userPerms.includes('/financeiro/receber'))
 
   const hasFinanceiroInheritedAccess =
-    (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar') || matchedRoute === '/configuracoes/financeiro/centro-custo' || pathname.startsWith('/configuracoes/financeiro/centro-custo')) &&
+    (matchedRoute === '/financeiro/pagar' || pathname.startsWith('/financeiro/pagar') || pathname.startsWith('/financeiro/contas-a-pagar') || matchedRoute === '/financeiro/movimentacoes' || pathname.startsWith('/financeiro/movimentacoes') || pathname.startsWith('/financeiro/movimentacao') || matchedRoute === '/configuracoes/financeiro/centro-custo' || pathname.startsWith('/configuracoes/financeiro/centro-custo') || matchedRoute === '/configuracoes/financeiro/caixas' || pathname.startsWith('/configuracoes/financeiro/caixas') || pathname.startsWith('/configuracoes/financeiro/caixa')) &&
     (userPerms.includes('/financeiro/pagar') ||
+     userPerms.includes('/financeiro/movimentacoes') ||
+     userPerms.includes('/financeiro/movimentacao') ||
+     userPerms.includes('/configuracoes/financeiro/caixas') ||
+     userPerms.includes('/configuracoes/financeiro/caixa') ||
      userPerms.includes('/configuracoes/financeiro/centro-custo') ||
      userPerms.includes('/configuracoes/financeiro/plano-contas') ||
      userPerms.includes('configuracoes') ||
