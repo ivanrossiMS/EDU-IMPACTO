@@ -4775,38 +4775,67 @@ sup {
   top: -0.5em;
 }
 
-/* Brown Neon Flashing Badge for Adaptada */
-@keyframes neon-glow-brown {
+/* Ultra-Modern Attention-Grabbing Blinking Badge for Adaptada */
+@keyframes badge-adaptada-modern-pulse {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(180, 83, 9, 0.6), 0 0 10px rgba(146, 64, 14, 0.4), inset 0 0 4px rgba(217, 119, 6, 0.3);
-    border-color: rgba(217, 119, 6, 0.85);
-    color: #ffd8be;
-    text-shadow: 0 0 4px rgba(249, 115, 22, 0.7);
-    background: rgba(120, 53, 15, 0.35);
+    background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+    border-color: #fbbf24;
+    box-shadow:
+      0 2px 8px rgba(234, 88, 12, 0.35),
+      0 0 0 0 rgba(245, 158, 11, 0.65);
+    transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 14px rgba(249, 115, 22, 1), 0 0 24px rgba(180, 83, 9, 0.85), 0 0 32px rgba(146, 64, 14, 0.5), inset 0 0 8px rgba(251, 146, 60, 0.5);
-    border-color: #f97316;
-    color: #ffffff;
-    text-shadow: 0 0 9px rgba(255, 200, 150, 1), 0 0 16px rgba(249, 115, 22, 0.95);
-    background: rgba(180, 83, 9, 0.55);
+    background: linear-gradient(135deg, #fbbf24 0%, #f97316 50%, #ea580c 100%);
+    border-color: #fde047;
+    box-shadow:
+      0 4px 16px rgba(249, 115, 22, 0.75),
+      0 0 0 5px rgba(245, 158, 11, 0);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes badge-adaptada-dot-flash {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.85);
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 8px #ffffff, 0 0 12px #fef08a;
   }
 }
 
 .badge-adaptada-neon-brown {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 9px;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
-  border: 1px solid rgba(217, 119, 6, 0.85);
-  animation: neon-glow-brown 1.2s ease-in-out infinite;
+  text-transform: uppercase;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(124, 45, 18, 0.45);
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+  border: 1px solid #fbbf24;
+  animation: badge-adaptada-modern-pulse 1.3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   white-space: nowrap;
   flex-shrink: 0;
   user-select: none;
+}
+
+.badge-adaptada-neon-brown::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  animation: badge-adaptada-dot-flash 0.65s ease-in-out infinite alternate;
+  flex-shrink: 0;
 }
 
 /* ──────── DIALOG BACKDROP (OCORRÊNCIAS QUICK DRAWER) ──────── */

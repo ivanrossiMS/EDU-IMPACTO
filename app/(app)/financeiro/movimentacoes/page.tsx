@@ -38,9 +38,10 @@ import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { useApp } from '@/lib/context'
 import { apiFetch } from '@/lib/api/apiClient'
-import { useConfigDb } from '@/lib/useConfigDb'
+import { useConfigDb, invalidateConfigCache } from '@/lib/useConfigDb'
 import {
   useData,
+  isSimulatedCaixaRecord,
   type ConfigCaixa,
   type ConfigPlanoContas,
   type ConfigCentroCusto,
@@ -60,6 +61,7 @@ import {
   CATEGORIA_LEGEND_META,
   getCategoriaShortLabel,
   isCaixaDoUsuario,
+  isUsuarioAdministrador,
   unificarMovimentacoesDoCaixa,
   calcularSaldosPorCaixaMap,
   formatCurrencyBRL,
@@ -68,7 +70,11 @@ import {
   normalizeText,
   extractCentrosCustoOptions,
 } from './types'
-import { CaixaSelectorModal } from './components/CaixaSelectorModal'
+import {
+  CaixaSelectorModal,
+  type UnidadeOptionDetalhada,
+  type OperadorOptionItem,
+} from './components/CaixaSelectorModal'
 import { NovaMovimentacaoModal } from './components/NovaMovimentacaoModal'
 import {
   RateioModal,
@@ -110,6 +116,10 @@ export default function MovimentacaoFinanceiraPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [saving, setSaving] = useState<boolean>(false)
   const [apiCaixas, setApiCaixas] = useState<ConfigCaixa[]>([])
+  const [dbCaixasDirect, setDbCaixasDirect] = useState<ConfigCaixa[]>([])
+  const [customTiposCaixa, setCustomTiposCaixa] = useState<string[]>([])
+  const [mantenedoresApi, setMantenedoresApi] = useState<any[]>([])
+  const [operadoresSistema, setOperadoresSistema] = useState<OperadorOptionItem[]>([])
   const [movsManuais, setMovsManuais] = useState<MovimentacaoCaixaRecord[]>([])
   const [overrides, setOverrides] = useState<Record<string, Partial<MovimentacaoCaixaRecord>>>({})
   const [contasPagarPagas, setContasPagarPagas] = useState<ContaPagarRecord[]>([])
@@ -202,17 +212,92 @@ export default function MovimentacaoFinanceiraPage() {
     fetchMovimentacoesData(false)
   }, [fetchMovimentacoesData])
 
+  // ── Sincronização direta com `/configuracoes/financeiro/caixas` ─────────────
+  const syncCaixasConfig = useCallback(async () => {
+    try {
+      invalidateConfigCache('cfgCaixas')
+      invalidateConfigCache('cfgTiposCaixa')
+      const [resCaixas, resTipos, resMant, resUsers] = await Promise.all([
+        apiFetch('/api/configuracoes?chave=cfgCaixas', { cache: 'no-store' }).catch(() => null),
+        apiFetch('/api/configuracoes?chave=cfgTiposCaixa', { cache: 'no-store' }).catch(() => null),
+        apiFetch('/api/configuracoes/mantenedores', { cache: 'no-store' }).catch(() => null),
+        apiFetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000', { cache: 'no-store' }).catch(() => null),
+      ])
+
+      if (resCaixas && resCaixas.ok) {
+        const json = await resCaixas.json().catch(() => null)
+        if (Array.isArray(json?.valor)) {
+          const clean = json.valor.filter(
+            (c: any) => c && typeof c === 'object' && !isSimulatedCaixaRecord(c)
+          )
+          setDbCaixasDirect(clean)
+          setCfgCaixas(clean)
+        }
+      }
+
+      if (resTipos && resTipos.ok) {
+        const tJson = await resTipos.json().catch(() => null)
+        if (Array.isArray(tJson?.valor)) {
+          setCustomTiposCaixa(
+            tJson.valor.map((s: any) => String(s || '').trim()).filter(Boolean)
+          )
+        }
+      }
+
+      if (resMant && resMant.ok) {
+        const mJson = await resMant.json().catch(() => null)
+        const lista = Array.isArray(mJson?.data) ? mJson.data : Array.isArray(mJson) ? mJson : []
+        if (lista.length > 0) setMantenedoresApi(lista)
+      }
+
+      if (resUsers && resUsers.ok) {
+        const uJson = await resUsers.json().catch(() => null)
+        const lista = Array.isArray(uJson?.data) ? uJson.data : Array.isArray(uJson) ? uJson : []
+        const mapped: OperadorOptionItem[] = lista
+          .filter((u: any) => u && u.nome)
+          .map((u: any, idx: number) => {
+            const nomeLimpo = String(u.nome).trim()
+            const isIvan = nomeLimpo.toLowerCase().includes('ivan rossi')
+            const cod = isIvan ? '11' : String(u.codigo || idx + 1)
+            const label = /^\d+\s*-/.test(nomeLimpo) ? nomeLimpo : `${cod} - ${nomeLimpo}`
+            return {
+              id: String(u.id || cod),
+              codigo: cod,
+              nome: nomeLimpo,
+              label,
+            }
+          })
+        if (mapped.length > 0) setOperadoresSistema(mapped)
+      }
+    } catch {
+      // ignora falha silenciosa
+    }
+  }, [setCfgCaixas])
+
+  useEffect(() => {
+    syncCaixasConfig()
+  }, [syncCaixasConfig])
+
+  useEffect(() => {
+    if (showCaixaModal) {
+      syncCaixasConfig()
+    }
+  }, [showCaixaModal, syncCaixasConfig])
+
   // ── Consolidação das listas de configuração ────────────────────────────────
   const allCaixas = useMemo(() => {
     const map = new Map<string, ConfigCaixa>()
     for (const c of ctxCaixas || []) {
-      if (c && c.id) map.set(c.id, c)
+      if (c && c.id && !isSimulatedCaixaRecord(c)) map.set(c.id, c)
     }
     for (const c of apiCaixas || []) {
-      if (c && c.id) map.set(c.id, c)
+      if (c && c.id && !isSimulatedCaixaRecord(c)) map.set(c.id, c)
+    }
+    for (const c of dbCaixasDirect || []) {
+      if (c && c.id && !isSimulatedCaixaRecord(c)) map.set(c.id, c)
     }
     return Array.from(map.values()).sort((a, b) => Number(b.codigo || 0) - Number(a.codigo || 0))
-  }, [ctxCaixas, apiCaixas])
+  }, [ctxCaixas, apiCaixas, dbCaixasDirect])
 
   const planoContasMerged = useMemo(() => {
     if (dbPlanoContas.length > 0) return dbPlanoContas
@@ -230,19 +315,90 @@ export default function MovimentacaoFinanceiraPage() {
     return ctxTiposDocumento
   }, [dbTiposDocumento, apiTiposDocumento, ctxTiposDocumento])
 
-  const unidadesDisponiveis = useMemo(() => {
-    const list: string[] = []
-    for (const m of mantenedores || []) {
-      if (Array.isArray((m as any).unidades)) {
-        for (const u of (m as any).unidades) {
-          const nome = typeof u === 'string' ? u : u?.nome
-          if (nome && !list.includes(nome)) list.push(nome)
+  // Unidades / Empresas reais (Matriz + Unidades) idênticas a /configuracoes/financeiro/caixas
+  const unidadesDetalhadas = useMemo<UnidadeOptionDetalhada[]>(() => {
+    const sourceMant =
+      Array.isArray(mantenedoresApi) && mantenedoresApi.length > 0
+        ? mantenedoresApi
+        : Array.isArray(mantenedores)
+        ? mantenedores
+        : []
+
+    const list: UnidadeOptionDetalhada[] = []
+
+    sourceMant.forEach((m: any, mIdx: number) => {
+      if (!m || typeof m !== 'object') return
+      const nomeMatriz = String(m.nome || m.razaoSocial || m.razao_social || '').trim()
+      const razaoMatriz = String(m.razaoSocial || m.razao_social || '').trim()
+      const cnpjMatriz = String(m.cnpj || '').trim()
+
+      if (nomeMatriz) {
+        const codMatriz = String(
+          m.codigo || (sourceMant.length > 1 ? `MATRIZ-${mIdx + 1}` : 'MATRIZ')
+        ).trim()
+        const temRazaoDistinta =
+          Boolean(razaoMatriz) && razaoMatriz.toLowerCase() !== nomeMatriz.toLowerCase()
+        const labelMatriz = temRazaoDistinta
+          ? `MATRIZ - ${nomeMatriz} (${razaoMatriz})`
+          : `MATRIZ - ${nomeMatriz}`
+
+        if (!list.some((item) => item.label.toLowerCase() === labelMatriz.toLowerCase())) {
+          list.push({
+            codigo: codMatriz,
+            label: labelMatriz,
+            cnpj: cnpjMatriz,
+            tipo: 'Matriz',
+            nomeExibicao: `${nomeMatriz} (Matriz)`,
+            subtitulo: razaoMatriz || 'Mantenedora Principal',
+          })
         }
       }
-    }
-    if (list.length === 0) list.push('Colégio Impacto - Matriz')
+
+      const unidadesInternas = Array.isArray(m.unidades) ? m.unidades : []
+      unidadesInternas.forEach((u: any, uIdx: number) => {
+        if (!u || typeof u !== 'object') return
+        const nomeFantasia = String(u.nomeFantasia || u.nome || '').trim()
+        const razaoSocial = String(u.razaoSocial || u.razao_social || '').trim()
+        const nomeBase = nomeFantasia || razaoSocial
+        if (!nomeBase) return
+
+        const cod = String(u.codigo || uIdx + 1).trim()
+        const temAmbosDistintos =
+          Boolean(nomeFantasia) &&
+          Boolean(razaoSocial) &&
+          nomeFantasia.toLowerCase() !== razaoSocial.toLowerCase()
+
+        const descCompleta = temAmbosDistintos
+          ? `${nomeFantasia} — ${razaoSocial}`
+          : razaoSocial || nomeFantasia
+
+        const label = `${cod} - ${descCompleta}`
+        if (!list.some((item) => item.label.toLowerCase() === label.toLowerCase())) {
+          list.push({
+            codigo: cod,
+            label,
+            cnpj: String(u.cnpj || cnpjMatriz || '').trim(),
+            tipo: 'Unidade',
+            nomeExibicao: `${cod} - ${nomeFantasia || razaoSocial}`,
+            subtitulo: razaoSocial || nomeFantasia,
+          })
+        }
+      })
+    })
+
     return list
-  }, [mantenedores])
+  }, [mantenedores, mantenedoresApi])
+
+  const unidadesDisponiveis = useMemo(() => {
+    const list: string[] = unidadesDetalhadas.map((u) => u.label)
+    for (const c of allCaixas) {
+      if (c.unidadeEmpresa && !list.includes(c.unidadeEmpresa)) {
+        list.push(c.unidadeEmpresa)
+      }
+    }
+    if (list.length === 0) list.push('MATRIZ - COLÉGIO IMPACTO (COLÉGIO IMPACTO CENTRO DE ENSINO)')
+    return list
+  }, [unidadesDetalhadas, allCaixas])
 
   const selectedCaixa = useMemo(() => {
     if (!selectedCaixaId) return null
@@ -565,7 +721,11 @@ export default function MovimentacaoFinanceiraPage() {
 
   // ── Handlers Operacionais ──────────────────────────────────────────────────
   const handleSelectCaixa = (cx: ConfigCaixa) => {
-    if (!isCaixaDoUsuario(cx, currentUser)) {
+    const canUse =
+      isCaixaDoUsuario(cx, currentUser) ||
+      isUsuarioAdministrador(currentUser, currentUserPerfil) ||
+      Boolean(cx.aceitaBaixaContasPagarOutroUsuario)
+    if (!canUse) {
       toast.error(`Acesso bloqueado: O Caixa ${cx.codigo} pertence exclusivamente ao operador ${cx.operador}.`)
       return
     }
@@ -575,35 +735,70 @@ export default function MovimentacaoFinanceiraPage() {
     toast.success(`Caixa ${cx.codigo} - ${cx.descricao} ativo!`)
   }
 
+  const handleCreateTipoCaixa = async (novoTipo: string) => {
+    const clean = novoTipo.trim()
+    if (!clean) return
+    const next = Array.from(new Set([...customTiposCaixa, clean]))
+    setCustomTiposCaixa(next)
+    try {
+      await apiFetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'cfgTiposCaixa', valor: next }),
+      })
+      invalidateConfigCache('cfgTiposCaixa')
+      toast.success(`Novo tipo de caixa "${clean}" salvo em Configurações!`)
+    } catch {
+      toast.error('Erro ao salvar tipo de caixa.')
+    }
+  }
+
   const handleQuickCreateCaixa = async (partial: Partial<ConfigCaixa>): Promise<ConfigCaixa | null> => {
     const nowISO = new Date().toISOString()
+    const maxNum = allCaixas.reduce((max, c) => {
+      const n = parseInt(String(c.codigo || ''), 10)
+      return !isNaN(n) && n > max ? n : max
+    }, 0)
+    const suggestedCode = String(maxNum + 1)
+
     const novo: ConfigCaixa = {
       id: `CX-${Date.now().toString(36).toUpperCase()}`,
-      codigo: partial.codigo || '108',
+      codigo: partial.codigo || suggestedCode,
       descricao: partial.descricao || 'CAIXA-OPERADOR',
-      tipoCaixa: 'Geral / Tesouraria',
+      tipoCaixa: partial.tipoCaixa || 'Caixa – Movimento Diário',
       operador: partial.operador || `11 - ${currentUser?.nome || 'Administrador'}`,
+      operadorCodigo: partial.operadorCodigo || '11',
       abertoPor: partial.abertoPor || `11 - ${currentUser?.nome || 'Administrador'}`,
       vistoriadoPor: '',
-      unidadeEmpresa: partial.unidadeEmpresa || unidadesDisponiveis[0] || 'Colégio Impacto - Matriz',
-      agencia: '',
-      conta: '',
+      unidadeEmpresa: partial.unidadeEmpresa || unidadesDisponiveis[0] || 'MATRIZ - COLÉGIO IMPACTO',
+      unidadeId: partial.unidadeId || '1',
+      contaPlanoId: partial.contaPlanoId,
+      contaPlanoLabel: partial.contaPlanoLabel,
+      agencia: partial.agencia || '',
+      conta: partial.conta || '',
       dataAbertura: partial.dataAbertura || hojeISO,
       situacao: 'Aberto',
       saldoInicial: Number(partial.saldoInicial || 0),
       totalEntradas: 0,
       totalSaidas: 0,
-      aceitaTransferenciaOutrosCaixas: true,
-      aceitaBaixaContasPagarOutroUsuario: true,
-      aceitaTransferencias: 'Sim',
+      aceitaTransferenciaOutrosCaixas:
+        partial.aceitaTransferenciaOutrosCaixas !== undefined
+          ? partial.aceitaTransferenciaOutrosCaixas
+          : true,
+      aceitaBaixaContasPagarOutroUsuario:
+        partial.aceitaBaixaContasPagarOutroUsuario !== undefined
+          ? partial.aceitaBaixaContasPagarOutroUsuario
+          : true,
+      aceitaTransferencias: partial.aceitaTransferencias || 'Sim',
       createdAt: nowISO,
       updatedAt: nowISO,
       historico: [
         {
           id: `HCX-INIT-${Date.now()}`,
           dataHora: nowISO,
-          acao: 'Abertura de Caixa',
+          acao: 'Abertura',
           usuario: currentUser?.nome || 'Administrador',
+          observacao: 'Caixa aberto diretamente na Movimentação Financeira.',
           detalhes: 'Caixa aberto diretamente na Movimentação Financeira.',
         },
       ],
@@ -611,6 +806,7 @@ export default function MovimentacaoFinanceiraPage() {
 
     const updatedList = [novo, ...allCaixas]
     setApiCaixas(updatedList)
+    setDbCaixasDirect(updatedList)
     setCfgCaixas(updatedList)
 
     try {
@@ -619,6 +815,7 @@ export default function MovimentacaoFinanceiraPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chave: 'cfgCaixas', valor: updatedList }),
       })
+      invalidateConfigCache('cfgCaixas')
       toast.success(`Caixa ${novo.codigo} - ${novo.descricao} aberto com sucesso!`)
       return novo
     } catch {
@@ -3275,10 +3472,15 @@ export default function MovimentacaoFinanceiraPage() {
         currentUser={currentUser}
         currentUserPerfil={currentUserPerfil}
         unidadesDisponiveis={unidadesDisponiveis}
+        unidadesDetalhadas={unidadesDetalhadas}
+        tiposCaixaDisponiveis={customTiposCaixa}
+        operadoresDisponiveis={operadoresSistema}
+        planoContas={planoContasMerged}
         saldosPorCaixaMap={saldosPorCaixaMap}
         onSelectCaixa={handleSelectCaixa}
         onQuickCreateCaixa={handleQuickCreateCaixa}
-        onClose={selectedCaixa ? () => setShowCaixaModal(false) : undefined}
+        onCreateTipoCaixa={handleCreateTipoCaixa}
+        onClose={() => setShowCaixaModal(false)}
       />
 
       {selectedCaixa && (

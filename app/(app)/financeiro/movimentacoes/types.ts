@@ -244,9 +244,12 @@ export function isUsuarioAdministrador(
     if (
       r === 'admin' ||
       r.includes('administrador') ||
-      r.includes('diretor geral') ||
+      r.includes('diretor') ||
       r.includes('master') ||
-      r.includes('mantenedor')
+      r.includes('mantenedor') ||
+      r.includes('financeiro') ||
+      r.includes('tesouraria') ||
+      r.includes('gestor')
     ) {
       return true
     }

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
+import Link from 'next/link'
 import {
   Wallet,
   Lock,
@@ -15,17 +16,41 @@ import {
   X,
   AlertCircle,
   Eye,
+  Landmark,
+  ExternalLink,
 } from 'lucide-react'
-import type { ConfigCaixa } from '@/lib/dataContext'
+import {
+  TIPOS_CAIXA_PADRAO,
+  type ConfigCaixa,
+  type ConfigPlanoContas,
+  type TipoCaixaConfig,
+} from '@/lib/dataContext'
 import { formatCurrencyInput, handleCurrencyInputChange } from '@/lib/utils'
 import {
   isCaixaDoUsuario,
   isUsuarioAdministrador,
   formatCurrencyBRL,
   formatDateBR,
+  getLocalISODate,
   normalizeText,
   type ResumoSaldoCaixa,
 } from '../types'
+
+export interface UnidadeOptionDetalhada {
+  codigo: string
+  label: string
+  cnpj?: string
+  tipo: 'Matriz' | 'Unidade'
+  nomeExibicao: string
+  subtitulo?: string
+}
+
+export interface OperadorOptionItem {
+  id: string
+  codigo: string
+  nome: string
+  label: string
+}
 
 interface CaixaSelectorModalProps {
   open: boolean
@@ -43,9 +68,14 @@ interface CaixaSelectorModalProps {
   } | null
   currentUserPerfil?: string
   unidadesDisponiveis: string[]
+  unidadesDetalhadas?: UnidadeOptionDetalhada[]
+  tiposCaixaDisponiveis?: string[]
+  operadoresDisponiveis?: OperadorOptionItem[]
+  planoContas?: ConfigPlanoContas[]
   saldosPorCaixaMap?: Record<string, ResumoSaldoCaixa>
   onSelectCaixa: (caixa: ConfigCaixa) => void
   onQuickCreateCaixa: (novoCaixa: Partial<ConfigCaixa>) => Promise<ConfigCaixa | null>
+  onCreateTipoCaixa?: (novoTipo: string) => Promise<void>
   onClose?: () => void
 }
 
@@ -56,9 +86,14 @@ export function CaixaSelectorModal({
   currentUser,
   currentUserPerfil,
   unidadesDisponiveis,
+  unidadesDetalhadas = [],
+  tiposCaixaDisponiveis = [],
+  operadoresDisponiveis = [],
+  planoContas = [],
   saldosPorCaixaMap = {},
   onSelectCaixa,
   onQuickCreateCaixa,
+  onCreateTipoCaixa,
   onClose,
 }: CaixaSelectorModalProps) {
   const [search, setSearch] = useState('')
@@ -70,19 +105,136 @@ export function CaixaSelectorModal({
     () => isUsuarioAdministrador(currentUser, currentUserPerfil),
     [currentUser, currentUserPerfil]
   )
-  const effectiveTab: 'meus' | 'todos' = isAdmin ? tab : 'meus'
+  const effectiveTab: 'meus' | 'todos' = tab
 
   const nomeOperador = currentUser?.nome || 'Operador'
   const anoAtual = new Date().getFullYear()
   const primeiroNomeUpper = (nomeOperador.split(' ')[0] || 'CAIXA').toUpperCase()
 
-  const [novoCodigo, setNovoCodigo] = useState(() => {
-    const maxCod = caixas.reduce((acc, c) => Math.max(acc, Number(c.codigo) || 100), 107)
-    return String(maxCod + 1)
-  })
-  const [novaDescricao, setNovaDescricao] = useState(`${primeiroNomeUpper}-${anoAtual}`)
-  const [novaUnidade, setNovaUnidade] = useState(unidadesDisponiveis[0] || 'Colégio Impacto - Matriz')
-  const [novoSaldoInicial, setNovoSaldoInicial] = useState('0')
+  const defaultOperadorLabel = useMemo(() => {
+    const raw = nomeOperador.trim()
+    if (/^\d+\s*-/.test(raw)) return raw
+    if (raw.toLowerCase().includes('ivan')) return `11 - ${raw}`
+    const matchOp = operadoresDisponiveis.find(
+      (op) => normalizeText(op.nome) === normalizeText(raw)
+    )
+    if (matchOp) return matchOp.label
+    return `11 - ${raw}`
+  }, [nomeOperador, operadoresDisponiveis])
+
+  // Próximo código sequencial idêntico a /configuracoes/financeiro/caixas (maior numérico + 1)
+  const nextSuggestedCode = useMemo(() => {
+    const maxNum = caixas.reduce((max, c) => {
+      const n = parseInt(String(c.codigo || ''), 10)
+      return !isNaN(n) && n > max ? n : max
+    }, 0)
+    return String(maxNum + 1)
+  }, [caixas])
+
+  // Lista consolidada de Tipos de Caixa de /configuracoes/financeiro/caixas
+  const todosTiposCaixa = useMemo<string[]>(() => {
+    const set = new Set<string>(TIPOS_CAIXA_PADRAO)
+    for (const t of tiposCaixaDisponiveis) {
+      const clean = String(t || '').trim()
+      if (clean) set.add(clean)
+    }
+    for (const c of caixas) {
+      const clean = String(c.tipoCaixa || '').trim()
+      if (clean) set.add(clean)
+    }
+    return Array.from(set)
+  }, [tiposCaixaDisponiveis, caixas])
+
+  // Lista consolidada de Operadores de /configuracoes/financeiro/caixas
+  const todosOperadores = useMemo<OperadorOptionItem[]>(() => {
+    const map = new Map<string, OperadorOptionItem>()
+    if (defaultOperadorLabel) {
+      const parts = defaultOperadorLabel.split('-').map((s) => s.trim())
+      map.set(defaultOperadorLabel, {
+        id: String(currentUser?.id || parts[0] || '11'),
+        codigo: parts.length > 1 ? parts[0] : '11',
+        nome: parts.length > 1 ? parts.slice(1).join(' - ') : defaultOperadorLabel,
+        label: defaultOperadorLabel,
+      })
+    }
+    for (const op of operadoresDisponiveis) {
+      if (op?.label && !map.has(op.label)) map.set(op.label, op)
+    }
+    for (const c of caixas) {
+      if (c.operador && !map.has(c.operador)) {
+        const parts = c.operador.split('-').map((s) => s.trim())
+        map.set(c.operador, {
+          id: c.operadorCodigo || c.operador,
+          codigo: parts.length > 1 ? parts[0] : '',
+          nome: parts.length > 1 ? parts.slice(1).join(' - ') : c.operador,
+          label: c.operador,
+        })
+      }
+    }
+    return Array.from(map.values())
+  }, [defaultOperadorLabel, currentUser, operadoresDisponiveis, caixas])
+
+  // Lista consolidada de Unidades/Empresas de /configuracoes/financeiro/caixas
+  const todasUnidadesLabels = useMemo<string[]>(() => {
+    const set = new Set<string>()
+    for (const u of unidadesDetalhadas) {
+      if (u.label) set.add(u.label)
+    }
+    for (const u of unidadesDisponiveis) {
+      if (u) set.add(u)
+    }
+    for (const c of caixas) {
+      if (c.unidadeEmpresa) set.add(c.unidadeEmpresa)
+    }
+    return Array.from(set)
+  }, [unidadesDetalhadas, unidadesDisponiveis, caixas])
+
+  // Estados do formulário "+ Abrir Novo Caixa" sincronizado com /configuracoes/financeiro/caixas
+  const [novoCodigo, setNovoCodigo] = useState<string>(nextSuggestedCode)
+  const [novaDataAbertura, setNovaDataAbertura] = useState<string>(() => getLocalISODate())
+  const [novaDescricao, setNovaDescricao] = useState<string>(`${primeiroNomeUpper}-${anoAtual}`)
+  const [novoTipoCaixa, setNovoTipoCaixa] = useState<TipoCaixaConfig>('Caixa – Movimento Diário')
+  const [novoOperador, setNovoOperador] = useState<string>(defaultOperadorLabel)
+  const [novaUnidade, setNovaUnidade] = useState<string>(todasUnidadesLabels[0] || '')
+  const [novaContaPlanoId, setNovaContaPlanoId] = useState<string>('')
+  const [novaContaPlanoLabel, setNovaContaPlanoLabel] = useState<string>('')
+  const [novoSaldoInicial, setNovoSaldoInicial] = useState<string>('0')
+  const [novaAgencia, setNovaAgencia] = useState<string>('')
+  const [novaConta, setNovaConta] = useState<string>('')
+  const [novoAceitaTransferencia, setNovoAceitaTransferencia] = useState<'Sim' | 'Não'>('Sim')
+  const [novoAceitaBaixaOutro, setNovoAceitaBaixaOutro] = useState<'Sim' | 'Não'>('Sim')
+  const [showNovoTipoInput, setShowNovoTipoInput] = useState<boolean>(false)
+  const [novoTipoNome, setNovoTipoNome] = useState<string>('')
+  const [savingNovoTipo, setSavingNovoTipo] = useState<boolean>(false)
+
+  // Mantém o código sequencial e unidade padrão sincronizados quando os caixas/unidades carregam
+  useEffect(() => {
+    setNovoCodigo(nextSuggestedCode)
+  }, [nextSuggestedCode, showCreateForm])
+
+  useEffect(() => {
+    if (!novaUnidade && todasUnidadesLabels.length > 0) {
+      setNovaUnidade(todasUnidadesLabels[0])
+    }
+  }, [todasUnidadesLabels, novaUnidade])
+
+  useEffect(() => {
+    if (defaultOperadorLabel) {
+      setNovoOperador(defaultOperadorLabel)
+    }
+  }, [defaultOperadorLabel])
+
+  // Fechar modal com tecla Escape
+  useEffect(() => {
+    if (!open || !onClose) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onClose])
 
   const { meusCaixas, todosCaixasFiltrados } = useMemo(() => {
     const q = normalizeText(search)
@@ -92,7 +244,8 @@ export function CaixaSelectorModal({
         normalizeText(c.codigo).includes(q) ||
         normalizeText(c.descricao).includes(q) ||
         normalizeText(c.operador).includes(q) ||
-        normalizeText(c.unidadeEmpresa).includes(q)
+        normalizeText(c.unidadeEmpresa).includes(q) ||
+        normalizeText(c.tipoCaixa).includes(q)
       )
     })
 
@@ -109,22 +262,53 @@ export function CaixaSelectorModal({
 
   if (!open) return null
 
+  const handleAddNovoTipo = async () => {
+    const clean = novoTipoNome.trim()
+    if (!clean) return
+    setSavingNovoTipo(true)
+    try {
+      if (onCreateTipoCaixa) {
+        await onCreateTipoCaixa(clean)
+      }
+      setNovoTipoCaixa(clean)
+      setNovoTipoNome('')
+      setShowNovoTipoInput(false)
+    } finally {
+      setSavingNovoTipo(false)
+    }
+  }
+
   const handleCreateAndSelect = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!novaDescricao.trim()) return
     setCreating(true)
     try {
+      const opVal = novoOperador.trim() || defaultOperadorLabel
+      const opParts = opVal.split('-').map((s) => s.trim())
+      const opCodigo = opParts.length > 1 ? opParts[0] : '11'
+      const unVal = novaUnidade || todasUnidadesLabels[0] || 'MATRIZ - COLÉGIO IMPACTO'
+      const unParts = unVal.split('-').map((s) => s.trim())
+      const unCodigo = unParts.length > 1 ? unParts[0] : '1'
+
       const created = await onQuickCreateCaixa({
-        codigo: novoCodigo.trim() || '108',
-        descricao: novaDescricao.trim().toUpperCase(),
-        operador: `11 - ${nomeOperador}`,
-        abertoPor: `11 - ${nomeOperador}`,
-        unidadeEmpresa: novaUnidade,
-        dataAbertura: new Date().toISOString().slice(0, 10),
+        codigo: novoCodigo.trim() || nextSuggestedCode,
+        descricao: novaDescricao.trim(),
+        tipoCaixa: novoTipoCaixa || 'Caixa – Movimento Diário',
+        operador: opVal,
+        operadorCodigo: opCodigo,
+        abertoPor: defaultOperadorLabel,
+        unidadeEmpresa: unVal,
+        unidadeId: unCodigo,
+        contaPlanoId: novaContaPlanoId || undefined,
+        contaPlanoLabel: novaContaPlanoLabel || undefined,
+        agencia: novaAgencia.trim(),
+        conta: novaConta.trim(),
+        dataAbertura: novaDataAbertura || getLocalISODate(),
         situacao: 'Aberto',
         saldoInicial: Number(String(novoSaldoInicial).replace(',', '.')) || 0,
-        aceitaBaixaContasPagarOutroUsuario: true,
-        aceitaTransferencias: 'Sim',
+        aceitaTransferenciaOutrosCaixas: novoAceitaTransferencia === 'Sim',
+        aceitaBaixaContasPagarOutroUsuario: novoAceitaBaixaOutro === 'Sim',
+        aceitaTransferencias: novoAceitaTransferencia,
       })
       if (created) {
         setShowCreateForm(false)
@@ -140,6 +324,11 @@ export function CaixaSelectorModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-selecao-caixa-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) {
+          onClose()
+        }
+      }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -155,8 +344,8 @@ export function CaixaSelectorModal({
       <div
         style={{
           width: '100%',
-          maxWidth: 880,
-          maxHeight: '90vh',
+          maxWidth: 920,
+          maxHeight: '92vh',
           background: '#ffffff',
           borderRadius: 16,
           boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.4)',
@@ -166,7 +355,7 @@ export function CaixaSelectorModal({
           overflow: 'hidden',
         }}
       >
-        {/* Top Header — Título 100% Branco e Alinhado */}
+        {/* Top Header — Com Botão de Fechar Sempre Visível */}
         <div
           style={{
             padding: '18px 24px',
@@ -227,31 +416,36 @@ export function CaixaSelectorModal({
             </div>
           </div>
 
-          {selectedCaixa && onClose && (
+          {onClose && (
             <button
               type="button"
               onClick={onClose}
-              title="Manter caixa atual e fechar"
+              aria-label="Fechar modal"
+              title="Fechar modal (Esc)"
               style={{
-                width: 34,
-                height: 34,
+                height: 36,
+                padding: '0 12px',
                 borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.22)',
-                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.28)',
+                background: 'rgba(255,255,255,0.12)',
                 color: '#ffffff',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 6,
+                fontSize: 12.5,
+                fontWeight: 700,
                 cursor: 'pointer',
                 flexShrink: 0,
               }}
             >
-              <X size={18} />
+              <X size={17} />
+              <span>Fechar</span>
             </button>
           )}
         </div>
 
-        {/* Security & Operator Ownership Banner — Em Linha Única Sem Quebra */}
+        {/* Security & Operator Ownership Banner */}
         <div
           style={{
             padding: '10px 24px',
@@ -275,7 +469,14 @@ export function CaixaSelectorModal({
                 textOverflow: 'ellipsis',
               }}
             >
-              <strong>Regra de Titularidade do Sistema:</strong> Os caixas só podem ser operados pelo usuário titular vinculado.
+              <strong>Regra de Titularidade do Sistema:</strong> Os caixas são sincronizados com{' '}
+              <Link
+                href="/configuracoes/financeiro/caixas"
+                style={{ color: '#0284c7', fontWeight: 700, textDecoration: 'underline' }}
+              >
+                Configurações &gt; Financeiro &gt; Caixas
+              </Link>
+              .
             </div>
           </div>
 
@@ -299,7 +500,7 @@ export function CaixaSelectorModal({
           </div>
         </div>
 
-        {/* Toolbar: Tabs + Search + Quick New Caixa — Alinhados em Linha Única */}
+        {/* Toolbar: Tabs + Search + Quick New Caixa */}
         <div
           style={{
             padding: '12px 24px',
@@ -336,33 +537,40 @@ export function CaixaSelectorModal({
               <span>Meus Caixas ({meusCaixas.length})</span>
             </button>
 
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setTab('todos')}
-                style={{
-                  height: 36,
-                  padding: '0 14px',
-                  borderRadius: 8,
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  border: effectiveTab === 'todos' ? '1px solid #334155' : '1px solid #cbd5e1',
-                  background: effectiveTab === 'todos' ? '#334155' : '#ffffff',
-                  color: effectiveTab === 'todos' ? '#ffffff' : '#475569',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Eye size={14} />
-                <span>Todos os Caixas ({todosCaixasFiltrados.length})</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setTab('todos')}
+              style={{
+                height: 36,
+                padding: '0 14px',
+                borderRadius: 8,
+                fontSize: 12.5,
+                fontWeight: 700,
+                border: effectiveTab === 'todos' ? '1px solid #334155' : '1px solid #cbd5e1',
+                background: effectiveTab === 'todos' ? '#334155' : '#ffffff',
+                color: effectiveTab === 'todos' ? '#ffffff' : '#475569',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Eye size={14} />
+              <span>Todos os Caixas ({todosCaixasFiltrados.length})</span>
+            </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto', justifyContent: 'flex-end', minWidth: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flex: '1 1 auto',
+              justifyContent: 'flex-end',
+              minWidth: 0,
+            }}
+          >
             <div style={{ position: 'relative', width: '100%', maxWidth: 250 }}>
               <Search
                 size={14}
@@ -413,35 +621,76 @@ export function CaixaSelectorModal({
               }}
             >
               <Plus size={14} />
-              <span>Abrir Novo Caixa</span>
+              <span>{showCreateForm ? 'Fechar Formulário' : 'Abrir Novo Caixa'}</span>
             </button>
           </div>
         </div>
 
-        {/* Inline Quick Create Form */}
+        {/* Formulário Completo "+ Abrir Novo Caixa" — 100% Sincronizado com /configuracoes/financeiro/caixas */}
         {showCreateForm && (
           <form
             onSubmit={handleCreateAndSelect}
             style={{
-              padding: '14px 24px',
+              padding: '16px 24px',
               background: '#f0fdf4',
               borderBottom: '1px solid #bbf7d0',
+              maxHeight: '56vh',
+              overflowY: 'auto',
             }}
           >
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: '#166534', marginBottom: 10 }}>
-              Abrir Novo Caixa Vinculado ao Operador: {nomeOperador}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Landmark size={15} />
+                <span>Abrir Novo Caixa — Sincronizado com Configurações &gt; Financeiro &gt; Caixas</span>
+              </div>
+              <Link
+                href="/configuracoes/financeiro/caixas"
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: '#15803d',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  textDecoration: 'none',
+                }}
+              >
+                <span>Gerenciar em Configurações/Caixas</span>
+                <ExternalLink size={12} />
+              </Link>
             </div>
+
+            {/* Linha 1: Código + Data Abertura + Identificação do Caixa + Tipo do Caixa */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '85px 1fr 1.3fr 130px auto',
+                gridTemplateColumns: '95px 135px 1.2fr 1.2fr',
                 gap: 10,
+                marginBottom: 10,
                 alignItems: 'end',
               }}
             >
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#15803d', marginBottom: 4, whiteSpace: 'nowrap' }}>
-                  Código
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Código (Seq.)
                 </label>
                 <input
                   type="text"
@@ -455,19 +704,62 @@ export function CaixaSelectorModal({
                     borderRadius: 6,
                     border: '1px solid #86efac',
                     fontSize: 12.5,
+                    fontWeight: 800,
                     background: '#ffffff',
+                    color: '#0f172a',
                   }}
                 />
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#15803d', marginBottom: 4, whiteSpace: 'nowrap' }}>
-                  Identificação do Caixa
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Data Abertura
+                </label>
+                <input
+                  type="date"
+                  value={novaDataAbertura}
+                  onChange={(e) => setNovaDataAbertura(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                    color: '#0f172a',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Identificação / Descrição do Caixa
                 </label>
                 <input
                   type="text"
                   value={novaDescricao}
                   onChange={(e) => setNovaDescricao(e.target.value)}
-                  placeholder="Ex: IVAN-2026"
+                  placeholder="Ex: IVAN-2026 ou CAIXA SECRETARIA"
                   required
                   style={{
                     width: '100%',
@@ -477,12 +769,177 @@ export function CaixaSelectorModal({
                     border: '1px solid #86efac',
                     fontSize: 12.5,
                     background: '#ffffff',
+                    color: '#0f172a',
                   }}
                 />
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#15803d', marginBottom: 4, whiteSpace: 'nowrap' }}>
-                  Unidade Escolar
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 4,
+                  }}
+                >
+                  <label
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#15803d',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Tipo do Caixa
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNovoTipoInput((v) => !v)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#0284c7',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {showNovoTipoInput ? 'Fechar' : '+ Novo Tipo'}
+                  </button>
+                </div>
+                <select
+                  value={novoTipoCaixa}
+                  onChange={(e) => setNovoTipoCaixa(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12.5,
+                    background: '#ffffff',
+                    color: '#0f172a',
+                  }}
+                >
+                  {todosTiposCaixa.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {showNovoTipoInput && (
+              <div
+                style={{
+                  marginBottom: 10,
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  background: '#ffffff',
+                  border: '1px solid #bae6fd',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', whiteSpace: 'nowrap' }}>
+                  Novo Tipo de Caixa:
+                </span>
+                <input
+                  type="text"
+                  value={novoTipoNome}
+                  onChange={(e) => setNovoTipoNome(e.target.value)}
+                  placeholder="Ex: Caixa Cantina, Caixa Eventos..."
+                  style={{
+                    flex: 1,
+                    height: 30,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #cbd5e1',
+                    fontSize: 12,
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={savingNovoTipo}
+                  onClick={handleAddNovoTipo}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {savingNovoTipo ? 'Salvando...' : 'Adicionar Tipo'}
+                </button>
+              </div>
+            )}
+
+            {/* Linha 2: Operador + Unidade/Empresa (Matriz + Unidades) + Conta Plano */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1.6fr 1fr',
+                gap: 10,
+                marginBottom: 10,
+                alignItems: 'end',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Operador Responsável
+                </label>
+                <select
+                  value={novoOperador}
+                  onChange={(e) => setNovoOperador(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12.5,
+                    background: '#ffffff',
+                    color: '#0f172a',
+                  }}
+                >
+                  {todosOperadores.map((op) => (
+                    <option key={op.label} value={op.label}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Unidade / Empresa (Matriz e Unidades)
                 </label>
                 <select
                   value={novaUnidade}
@@ -495,17 +952,245 @@ export function CaixaSelectorModal({
                     border: '1px solid #86efac',
                     fontSize: 12.5,
                     background: '#ffffff',
+                    color: '#0f172a',
                   }}
                 >
-                  {unidadesDisponiveis.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
+                  {unidadesDetalhadas.length > 0 ? (
+                    <>
+                      {unidadesDetalhadas.some((u) => u.tipo === 'Matriz') && (
+                        <optgroup label="🏢 Matriz / Mantenedora Principal">
+                          {unidadesDetalhadas
+                            .filter((u) => u.tipo === 'Matriz')
+                            .map((u) => (
+                              <option key={u.label} value={u.label}>
+                                {u.label}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {unidadesDetalhadas.some((u) => u.tipo === 'Unidade') && (
+                        <optgroup label="🏫 Unidades Educacionais">
+                          {unidadesDetalhadas
+                            .filter((u) => u.tipo === 'Unidade')
+                            .map((u) => (
+                              <option key={u.label} value={u.label}>
+                                {u.label}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      {todasUnidadesLabels
+                        .filter((lbl) => !unidadesDetalhadas.some((u) => u.label === lbl))
+                        .map((lbl) => (
+                          <option key={lbl} value={lbl}>
+                            {lbl}
+                          </option>
+                        ))}
+                    </>
+                  ) : (
+                    todasUnidadesLabels.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#15803d', marginBottom: 4, whiteSpace: 'nowrap' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Conta Plano (Opcional)
+                </label>
+                <select
+                  value={novaContaPlanoId}
+                  onChange={(e) => {
+                    const pid = e.target.value
+                    setNovaContaPlanoId(pid)
+                    const found = planoContas.find((p) => p.id === pid)
+                    if (found) {
+                      const cod = found.codPlano || (found as any).codigo || ''
+                      const desc = found.descricao || (found as any).nome || ''
+                      setNovaContaPlanoLabel(`${cod} - ${desc}`)
+                    } else {
+                      setNovaContaPlanoLabel('')
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                    color: '#0f172a',
+                  }}
+                >
+                  <option value="">— Selecionar Conta Plano —</option>
+                  {planoContas.map((p) => {
+                    const cod = p.codPlano || (p as any).codigo || ''
+                    const desc = p.descricao || (p as any).nome || ''
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {cod} - {desc}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            </div>
+
+            {/* Linha 3: Agência + Conta + Transferências + Baixa Outro Usuário + Saldo Inicial + Botões */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '90px 105px 1fr 1fr 125px auto',
+                gap: 10,
+                alignItems: 'end',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Agência
+                </label>
+                <input
+                  type="text"
+                  value={novaAgencia}
+                  onChange={(e) => setNovaAgencia(e.target.value)}
+                  placeholder="Ex: 6492"
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Conta
+                </label>
+                <input
+                  type="text"
+                  value={novaConta}
+                  onChange={(e) => setNovaConta(e.target.value)}
+                  placeholder="Ex: 34022-6"
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Aceita Transferências
+                </label>
+                <select
+                  value={novoAceitaTransferencia}
+                  onChange={(e) => setNovoAceitaTransferencia(e.target.value as 'Sim' | 'Não')}
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                  }}
+                >
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Baixa de Outro Usuário
+                </label>
+                <select
+                  value={novoAceitaBaixaOutro}
+                  onChange={(e) => setNovoAceitaBaixaOutro(e.target.value as 'Sim' | 'Não')}
+                  style={{
+                    width: '100%',
+                    height: 34,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid #86efac',
+                    fontSize: 12,
+                    background: '#ffffff',
+                  }}
+                >
+                  <option value="Sim">Sim</option>
+                  <option value="Não">Não</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#15803d',
+                    marginBottom: 4,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   Saldo Inicial (R$)
                 </label>
                 <input
@@ -525,6 +1210,7 @@ export function CaixaSelectorModal({
                   }}
                 />
               </div>
+
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   type="submit"
@@ -578,7 +1264,7 @@ export function CaixaSelectorModal({
             gap: 14,
           }}
         >
-          {/* ABA 1: MEUS CAIXAS (Apenas caixas cujo Operador designado é o usuário logado) */}
+          {/* ABA 1: MEUS CAIXAS */}
           {effectiveTab === 'meus' && (
             <div>
               <div
@@ -622,28 +1308,52 @@ export function CaixaSelectorModal({
                     Nenhum caixa designado para {nomeOperador}
                   </div>
                   <p style={{ fontSize: 12.5, color: '#475569', margin: '0 0 14px' }}>
-                    Somente aparecem em &ldquo;Meus Caixas&rdquo; os caixas cujo operador designado é você. Clique abaixo para abrir um caixa em seu nome.
+                    Somente aparecem em &ldquo;Meus Caixas&rdquo; os caixas cujo operador designado é você. Você também pode consultar a aba &ldquo;Todos os Caixas ({todosCaixasFiltrados.length})&rdquo; ou abrir um novo caixa.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateForm(true)}
-                    style={{
-                      padding: '9px 18px',
-                      borderRadius: 8,
-                      border: 'none',
-                      background: '#0284c7',
-                      color: '#ffffff',
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <Plus size={15} />
-                    <span>Abrir Meu Caixa Agora ({primeiroNomeUpper}-{anoAtual})</span>
-                  </button>
+                  <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateForm(true)}
+                      style={{
+                        padding: '9px 18px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <Plus size={15} />
+                      <span>Abrir Meu Caixa Agora ({primeiroNomeUpper}-{anoAtual})</span>
+                    </button>
+                    {todosCaixasFiltrados.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setTab('todos')}
+                        style={{
+                          padding: '9px 16px',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          color: '#334155',
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Eye size={14} />
+                        <span>Ver Todos os Caixas ({todosCaixasFiltrados.length})</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -714,6 +1424,23 @@ export function CaixaSelectorModal({
                               >
                                 Caixa: {cx.codigo} - {cx.descricao}
                               </span>
+                              {cx.tipoCaixa && (
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    background: '#eff6ff',
+                                    color: '#0369a1',
+                                    border: '1px solid #bae6fd',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {cx.tipoCaixa}
+                                </span>
+                              )}
                               <span
                                 style={{
                                   padding: '2px 9px',
@@ -882,8 +1609,8 @@ export function CaixaSelectorModal({
             </div>
           )}
 
-          {/* ABA 2: TODOS OS CAIXAS DO SISTEMA (Exclusivo para Administrador) */}
-          {effectiveTab === 'todos' && isAdmin && (
+          {/* ABA 2: TODOS OS CAIXAS DE CONFIGURAÇÕES/FINANCEIRO/CAIXAS */}
+          {effectiveTab === 'todos' && (
             <div>
               <div
                 style={{
@@ -908,10 +1635,10 @@ export function CaixaSelectorModal({
                   }}
                 >
                   <Eye size={14} style={{ color: '#0284c7' }} />
-                  <span>Todos os Caixas do Sistema — Visão Administrador ({todosCaixasFiltrados.length})</span>
+                  <span>Todos os Caixas de Configurações/Financeiro/Caixas ({todosCaixasFiltrados.length})</span>
                 </span>
                 <span style={{ fontSize: 11.5, color: '#64748b', whiteSpace: 'nowrap' }}>
-                  Visão geral de todos os caixas e seus operadores designados
+                  Relação completa de caixas cadastrados no sistema
                 </span>
               </div>
 
@@ -934,6 +1661,7 @@ export function CaixaSelectorModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {todosCaixasFiltrados.map((cx) => {
                     const isMeu = isCaixaDoUsuario(cx, currentUser)
+                    const canOperate = isMeu || isAdmin || Boolean(cx.aceitaBaixaContasPagarOutroUsuario)
                     const isSelected = selectedCaixa?.id === cx.id
                     const isAberto = cx.situacao === 'Aberto'
                     const resumo = saldosPorCaixaMap[cx.id] || saldosPorCaixaMap[cx.codigo]
@@ -948,22 +1676,22 @@ export function CaixaSelectorModal({
                       <div
                         key={cx.id}
                         onClick={() => {
-                          if (isMeu) onSelectCaixa(cx)
+                          if (canOperate) onSelectCaixa(cx)
                         }}
                         style={{
                           padding: '14px 18px',
                           borderRadius: 12,
                           border: isSelected
                             ? '2px solid #0284c7'
-                            : isMeu
+                            : canOperate
                             ? '1px solid #cbd5e1'
                             : '1px solid #e2e8f0',
-                          background: isSelected ? '#f0f9ff' : isMeu ? '#ffffff' : '#f8fafc',
+                          background: isSelected ? '#f0f9ff' : canOperate ? '#ffffff' : '#f8fafc',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 16,
-                          cursor: isMeu ? 'pointer' : 'default',
+                          cursor: canOperate ? 'pointer' : 'default',
                           transition: 'all 0.15s ease',
                         }}
                       >
@@ -1003,6 +1731,23 @@ export function CaixaSelectorModal({
                               >
                                 Caixa: {cx.codigo} - {cx.descricao}
                               </span>
+                              {cx.tipoCaixa && (
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    fontSize: 10.5,
+                                    fontWeight: 700,
+                                    background: '#eff6ff',
+                                    color: '#0369a1',
+                                    border: '1px solid #bae6fd',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {cx.tipoCaixa}
+                                </span>
+                              )}
                               <span
                                 style={{
                                   padding: '2px 9px',
@@ -1145,7 +1890,7 @@ export function CaixaSelectorModal({
                             </div>
                           </div>
 
-                          {isMeu ? (
+                          {canOperate ? (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1212,7 +1957,7 @@ export function CaixaSelectorModal({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — Botão de Fechar Sempre Visível */}
         <div
           style={{
             padding: '12px 24px',
@@ -1227,27 +1972,32 @@ export function CaixaSelectorModal({
           }}
         >
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Dica: Você pode alternar entre os seus caixas a qualquer momento clicando na lupa ao lado do caixa selecionado.
+            Dica: Você pode alternar entre os caixas a qualquer momento clicando em &ldquo;Alterar Caixa&rdquo;.
           </span>
-          {selectedCaixa && onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '7px 16px',
-                borderRadius: 8,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#334155',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              Continuar com Caixa {selectedCaixa.codigo}
-            </button>
+          {onClose && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <X size={14} />
+                <span>{selectedCaixa ? `Fechar (Continuar com Caixa ${selectedCaixa.codigo})` : 'Fechar Modal'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
