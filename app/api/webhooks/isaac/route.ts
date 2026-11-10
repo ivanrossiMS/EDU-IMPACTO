@@ -62,10 +62,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Nenhum ID de parcela fornecido' })
     }
 
-    // 2. Buscar o status atualizado da parcela na API do Isaac
+    // 2. Buscar o status atualizado da parcela na API do Isaac (incluindo receivables ativos com vencimento real)
     let installmentData: any = null
     try {
-      const resp = await isaacRequest<any>(`/consolidated-installments/${installmentId}`)
+      const resp = await isaacRequest<any>(
+        `/consolidated-installments/${installmentId}?include_active_receivables=true`
+      )
       installmentData = resp?.data || resp
     } catch (err: any) {
       console.error(`[Isaac Webhook] Erro ao consultar parcela ${installmentId} no Isaac:`, err.message)

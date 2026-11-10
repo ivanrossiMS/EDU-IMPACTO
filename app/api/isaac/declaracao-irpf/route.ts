@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server'
 import { resolveUserRole, getAuthorizedAlunoIdsForUser, getAuthorizedResponsavelIdsForUser } from '@/lib/server/authGuard'
 import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { isaacRequest, formatIsaacAmount, getEffectiveAmount, IsaacInstallment } from '@/lib/isaac'
+import { isaacRequest, formatIsaacAmount, getEffectiveAmount, getEffectiveDueDate, IsaacInstallment } from '@/lib/isaac'
 import { getOrFetchYearCache } from '@/lib/isaacCache'
 import { valorPorExtenso } from '@/lib/numeroPorExtenso'
 
@@ -543,7 +543,7 @@ export async function GET(request: Request) {
 
   // Ordenar por data de vencimento / competência cronológica
   mensalidadesPagas.sort(
-    (a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+    (a, b) => getEffectiveDueDate(a).localeCompare(getEffectiveDueDate(b))
   )
 
   // ── 5. Calcular Somatória e Dados Financeiros ──────────────────────────────
@@ -551,14 +551,15 @@ export async function GET(request: Request) {
   const itensFormatados = mensalidadesPagas.map((item, idx) => {
     const valorPagoItem = item.paid_value || getEffectiveAmount(item)
     totalPagoCentavos += valorPagoItem
+    const effectiveDueDate = getEffectiveDueDate(item)
 
     return {
       index: idx + 1,
       id: item.id,
       descricao: item.description,
-      competencia: getCompetenciaNome(item.competence_date, item.due_date),
-      vencimento: formatDateBr(item.due_date),
-      dataPagamento: formatDateBr(item.paid_date || item.due_date),
+      competencia: getCompetenciaNome(item.competence_date, effectiveDueDate || item.due_date),
+      vencimento: formatDateBr(effectiveDueDate || item.due_date),
+      dataPagamento: formatDateBr(item.paid_date || effectiveDueDate || item.due_date),
       valorBase: formatIsaacAmount(item.base_amount),
       valorPago: formatIsaacAmount(valorPagoItem),
       valorNumerico: valorPagoItem / 100,

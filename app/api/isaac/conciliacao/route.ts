@@ -15,7 +15,14 @@ import { NextResponse } from 'next/server'
 import { resolveUserRole } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
-import { formatIsaacAmount, getEffectiveAmount, type IsaacInstallment } from '@/lib/isaac'
+import {
+  formatIsaacAmount,
+  getEffectiveAmount,
+  getEffectiveDueDate,
+  getTodayDateStrBrasilia,
+  isInstallmentOverdue,
+  type IsaacInstallment,
+} from '@/lib/isaac'
 import { getOrFetchYearCache } from '@/lib/isaacCache'
 import { getAlunoVinculosAtivos, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
@@ -1075,8 +1082,8 @@ export async function GET(request: Request) {
       }
       const installments = Array.from(uniqueInstMap.values())
 
-      // Ordenar parcelas cronologicamente por vencimento
-      installments.sort((a, b) => new Date(a.due_date || 0).getTime() - new Date(b.due_date || 0).getTime())
+      // Ordenar parcelas cronologicamente por vencimento efetivo
+      installments.sort((a, b) => getEffectiveDueDate(a).localeCompare(getEffectiveDueDate(b)))
 
       // Mapear DTO de cada parcela e agrupar por produto
       interface RawProdGroup {
@@ -1099,9 +1106,8 @@ export async function GET(request: Request) {
         const mesObj = mesCompetencia ? MESES_INFO[mesCompetencia - 1] : null
         const seqInfo = extractInstallmentSequence(inst.description)
 
-        const isOverdue =
-          inst.status === 'OVERDUE' ||
-          (inst.status === 'OPEN' && Boolean(inst.due_date) && new Date(inst.due_date + 'T23:59:59') < now)
+        const effectiveDueDate = getEffectiveDueDate(inst)
+        const isOverdue = isInstallmentOverdue(inst)
 
         const effectiveStatus: ParcelaConciliacaoDTO['status'] = isOverdue ? 'OVERDUE' : inst.status
         const valorEfetivoCentavos = getEffectiveAmount(inst)
@@ -1126,7 +1132,7 @@ export async function GET(request: Request) {
           mesSigla: mesObj ? mesObj.sigla : '—',
           numeroParcela: seqInfo ? seqInfo.current : mesCompetencia,
           totalParcelasDeclarado: seqInfo ? seqInfo.total : null,
-          vencimento: inst.due_date || '',
+          vencimento: effectiveDueDate,
           dataPagamento: inst.paid_date || null,
           competencia: inst.competence_date || '',
           anoReferencia: inst.reference_year || ano,

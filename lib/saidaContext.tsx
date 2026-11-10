@@ -332,6 +332,7 @@ interface SaidaCtx {
   callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null, forceNewCall?: boolean, targetTime?: string | null) => PickupCall | null
   blockAttempt: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, rfidCode: string | undefined, blockType: 'proibido' | 'dia_restrito', blockReason: string, studentPhoto?: string | null) => PickupCall
   confirmPickup: (callId: string) => void
+  confirmAllWaiting: (customTargetCalls?: PickupCall[]) => Promise<number>
   cancelCall: (callId: string) => void
   recallStudent: (callId: string, speakFn: (text: string) => void) => void
   revertCall: (callId: string) => void
@@ -475,6 +476,41 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
           continue
         }
         console.error('Failed to persist call after retries', e)
+      }
+    }
+  }, [])
+
+  const persistCallsBatch = useCallback(async (calls: PickupCall[]) => {
+    if (!calls || calls.length === 0) return
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        invalidateCache('saida/calls')
+        const res = await apiFetch('/api/saida/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(calls)
+        })
+        if (res.ok) {
+          if (!channelRef.current || channelRef.current.state !== 'joined') {
+            reconnectRealtimeRef.current?.()
+          }
+          return
+        }
+        const errData = await res.json().catch(() => ({}))
+        console.warn(`[saidaContext] Falha ao persistir lote de chamadas no banco (tentativa ${attempt}/${maxAttempts}):`, res.status, errData)
+        if (attempt < maxAttempts && [408, 429, 500, 502, 503, 504].includes(res.status)) {
+          await new Promise(r => setTimeout(r, 1200 * attempt))
+          continue
+        }
+        return
+      } catch (e) {
+        console.warn(`[saidaContext] Oscilação de rede ao salvar lote de chamadas (tentativa ${attempt}/${maxAttempts}):`, e)
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1500 * attempt))
+          continue
+        }
+        console.error('Failed to persist batch calls after retries', e)
       }
     }
   }, [])
@@ -1308,6 +1344,119 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     addLog('CONFIRM', `Saída confirmada: ${callToUpdate.studentName ?? callId}`)
   }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
 
+  // ─── confirmAllWaiting ───────────────────────────────────────────────────
+  const confirmAllWaiting = useCallback(async (customTargetCalls?: PickupCall[]): Promise<number> => {
+    const currentNow = now()
+    const todayKey = getCampoGrandeDateStr(currentNow)
+    const currentOperator = resolveOperatorName()
+
+    // Identificar quais chamadas estão aguardando
+    const candidates = customTargetCalls && customTargetCalls.length > 0
+      ? customTargetCalls
+      : activeCalls.filter(c =>
+          (c.status === 'waiting' || c.status === 'called') &&
+          !isSaiuSozinhoCall(c) &&
+          isFromToday(c.calledAt)
+        )
+
+    if (candidates.length === 0) return 0
+
+    const targetCallIds = new Set(candidates.map(c => c.id))
+    const targetStudentIds = new Set(
+      candidates.map(c => c.studentId ? String(c.studentId) : null).filter(Boolean) as string[]
+    )
+    const targetStudentNames = new Set(
+      candidates.map(c => c.studentName ? c.studentName.trim().toLowerCase() : '').filter(Boolean)
+    )
+
+    const fixCall = (c: PickupCall) => {
+      const conf = currentNow
+      const cTime = (c.calledAt && new Date(c.calledAt).getTime() > new Date(conf).getTime()) ? conf : c.calledAt
+      return {
+        ...c,
+        calledAt: cTime,
+        status: 'confirmed' as const,
+        confirmedAt: conf,
+        operatorId: c.operatorId || currentOperator,
+        authorizedBy: c.authorizedBy || c.operatorId || currentOperator,
+        confirmedBy: currentOperator || c.confirmedBy || c.operatorId,
+      }
+    }
+
+    // Filtrar todas as chamadas correspondentes no dia de hoje
+    const callsToConfirm = activeCalls.filter(c =>
+      c.status !== 'special_auth' && c.status !== 'cancelled' &&
+      isFromToday(c.confirmedAt || c.calledAt) &&
+      (targetCallIds.has(c.id) ||
+       (c.studentId != null && targetStudentIds.has(String(c.studentId))) ||
+       (c.studentName && targetStudentNames.has(c.studentName.trim().toLowerCase())))
+    )
+
+    const updatedCalls: PickupCall[] = callsToConfirm.length > 0
+      ? callsToConfirm.map(fixCall)
+      : candidates.map(fixCall)
+
+    // Atualiza confirmedDates nos registros de special_auth
+    const specialAuthsToUpdate: PickupCall[] = activeCalls
+      .filter(c => {
+        if (c.status !== 'special_auth') return false
+        const cStudentId = c.studentId ? String(c.studentId) : null
+        const cStudentName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+        return (cStudentId && targetStudentIds.has(cStudentId)) ||
+               (cStudentName && targetStudentNames.has(cStudentName))
+      })
+      .map(c => ({
+        ...c,
+        confirmedBy: currentOperator || c.confirmedBy,
+        confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+      }))
+
+    // Atualiza estado local de forma imediata e otimista
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      return arr.map(c => {
+        const cStudentId = c.studentId ? String(c.studentId) : null
+        const cStudentName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+        const matchesStudent =
+          (cStudentId && targetStudentIds.has(cStudentId)) ||
+          (cStudentName && targetStudentNames.has(cStudentName))
+
+        if (c.status === 'special_auth') {
+          if (matchesStudent) {
+            return {
+              ...c,
+              confirmedBy: currentOperator || c.confirmedBy,
+              confirmedDates: { ...(c.confirmedDates || {}), [todayKey]: currentNow }
+            }
+          }
+          return c
+        }
+
+        if (c.status !== 'cancelled' && isFromToday(c.confirmedAt || c.calledAt) &&
+            (targetCallIds.has(c.id) || matchesStudent)) {
+          return fixCall(c)
+        }
+        return c
+      })
+    })
+
+    // Persistir em lote via /api/saida/calls
+    const allPersist = [...updatedCalls, ...specialAuthsToUpdate]
+    if (allPersist.length > 0) {
+      persistCallsBatch(allPersist)
+    }
+
+    // Emitir eventos Realtime para todas as chamadas confirmadas
+    updatedCalls.forEach(uCall => {
+      const sId = uCall.studentId ? String(uCall.studentId) : undefined
+      emit('CONFIRM_PICKUP', { callId: uCall.id, studentId: sId, confirmedAt: currentNow, _remote: false })
+      sendBroadcast('CONFIRM_PICKUP', { callId: uCall.id, studentId: sId, confirmedAt: currentNow })
+    })
+
+    addLog('CONFIRM', `Saída em lote confirmada para ${updatedCalls.length} chamada(s) aguardando.`)
+    return updatedCalls.length
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistCallsBatch, isFromToday])
+
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
     const callToUpdate = activeCalls.find(c => c.id === callId)
@@ -1952,7 +2101,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
+      callStudent, blockAttempt, confirmPickup, confirmAllWaiting, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
       broadcastAnnouncement, cancelAnnouncement,
       updateConfig, clearLog, clearCalls, refreshCalls, ensureRealtimeConnected,
     }}>

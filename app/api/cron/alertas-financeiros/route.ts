@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getOrFetchYearCache } from '@/lib/isaacCache'
+import { getEffectiveDueDate } from '@/lib/isaac'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { requireAuth } from '@/lib/server/authGuard'
 
@@ -165,7 +166,7 @@ async function runOverdueFinancialAlertsRoutine(options: { forceSimulate?: boole
     if (status !== 'OPEN' && status !== 'OVERDUE') continue
     if (item.paid_date) continue
 
-    const dueDateStr = item.due_date ? String(item.due_date).split('T')[0] : ''
+    const dueDateStr = getEffectiveDueDate(item)
     if (!dueDateStr) continue
 
     // Checar se está dentro da janela de 3 a 7 dias de atraso

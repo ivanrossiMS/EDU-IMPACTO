@@ -28,6 +28,7 @@ const PUBLIC_PATHS = [
   '/api/auth/update-password',
   '/api/auth/recover-password',
   '/api/auth/first-access',
+  '/api/auth/google-status', // Verificação pública de disponibilidade do provedor Google OAuth
   '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
@@ -70,6 +71,8 @@ const PUBLIC_PATHS = [
   '/privacidade',             // Alias público de privacidade
   '/splash-preview',          // Pré-visualização da tela cinematográfica de carregamento
   '/api/gestao-pessoas/materiais-divulgacao', // Central de materiais de divulgação (acesso público para incremento de visitas)
+  '/gestao-pessoas/formularios/', // Links diretos para responder formulários (acesso público quando liberado)
+  '/api/gestao-pessoas/formularios/', // API para carregar e submeter respostas de formulários
 ]
 
 function isPublicPath(pathname: string): boolean {

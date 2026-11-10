@@ -168,6 +168,7 @@ export async function fetchInstallmentsByGuardian(
   qs.set('per_page', String(perPage))
 
   if (referenceYear) qs.set('reference_year', referenceYear)
+  qs.set('include_active_receivables', 'true')
 
   // Isaac aceita múltiplos status via query repetida: ?status=OPEN&status=OVERDUE
   if (status) {
@@ -204,4 +205,78 @@ export function getEffectiveAmount(installment: IsaacInstallment): number {
   return installment.payable_amount > 0
     ? installment.payable_amount
     : installment.minimum_amount
+}
+
+/**
+ * Retorna a data de vencimento efetiva da parcela no formato YYYY-MM-DD.
+ * 
+ * Regra de Ouro da API Isaac:
+ * 1. Se houver `active_receivables` com `due_date`, esta é a data real da fatura/boleto emitida
+ *    ao pagador (considerando negociações de dia de vencimento, prorrogações da secretaria e
+ *    ajuste automático de dias não úteis/bancários do Isaac).
+ * 2. Caso contrário, recai sobre `installment.due_date` (data original base do contrato).
+ */
+export function getEffectiveDueDate(installment: {
+  due_date?: string | null
+  active_receivables?: Array<{ due_date?: string | null; status?: string | null }> | null
+}): string {
+  if (Array.isArray(installment?.active_receivables) && installment.active_receivables.length > 0) {
+    const validRec = installment.active_receivables.find(
+      (r) => r && r.status !== 'CANCELED' && Boolean(r.due_date)
+    ) || installment.active_receivables[0]
+
+    if (validRec?.due_date && typeof validRec.due_date === 'string') {
+      const clean = validRec.due_date.split('T')[0].trim()
+      if (clean) return clean
+    }
+  }
+
+  if (installment?.due_date && typeof installment.due_date === 'string') {
+    return installment.due_date.split('T')[0].trim()
+  }
+  return ''
+}
+
+/**
+ * Retorna a data de HOJE no fuso horário oficial de Brasília (America/Sao_Paulo)
+ * no formato 'YYYY-MM-DD'.
+ */
+export function getTodayDateStrBrasilia(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+/**
+ * Avalia se uma parcela do Isaac está estritamente vencida (inadimplente).
+ * 
+ * Regras:
+ * - Parcela com status 'PAID', 'CANCELED', 'AGGLUTINATED' ou 'RENEGOTIATED' NUNCA está vencida.
+ * - Parcela com status 'OVERDUE' está vencida.
+ * - Parcela com status 'OPEN':
+ *   - Vence hoje (effectiveDueDate === today): NÃO está vencida (está no dia do vencimento).
+ *   - effectiveDueDate < today: ESTÁ vencida.
+ *   - effectiveDueDate > today: A VENCER (futura).
+ */
+export function isInstallmentOverdue(
+  installment: {
+    status?: string | null
+    due_date?: string | null
+    active_receivables?: Array<{ due_date?: string | null; status?: string | null }> | null
+  },
+  todayStr: string = getTodayDateStrBrasilia()
+): boolean {
+  const status = String(installment?.status || '').toUpperCase()
+  if (['PAID', 'CANCELED', 'AGGLUTINATED', 'RENEGOTIATED'].includes(status)) {
+    return false
+  }
+  if (status === 'OVERDUE') return true
+  if (status === 'OPEN') {
+    const dueDate = getEffectiveDueDate(installment)
+    return Boolean(dueDate && dueDate < todayStr)
+  }
+  return false
 }

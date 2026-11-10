@@ -92,8 +92,19 @@ export function cleanAlternativeText(str: string): string {
       .trim()
   }
 
-  // Remove any lingering orphan markers or closing tags
-  cleaned = cleaned.replace(/^(?:<\/[a-z0-9]+>\s*)+/gi, '').trim()
+  // Remove any lingering orphan markers, [[GABARITO]] fragments, or closing tags
+  cleaned = cleaned
+    .replace(/\[\[GABARITO\]\]/gi, '')
+    .replace(/\[\[?GABARITO\]?\]?/gi, '')
+    .replace(/\[?GABARITO\]\]/gi, '')
+    .replace(/^(?:<\/[a-z0-9]+>\s*)+/gi, '')
+    .trim()
+
+  // Remove stray trailing '[' left by a split [[GABARITO]] marker (preserving valid math intervals like [0, 1[ or ]0, 1[)
+  if (!/[\[\]][^,\[\]]+,[^,\[\]]+\[(?:\s*<\/[a-z0-9]+>\s*)*$/i.test(cleaned)) {
+    cleaned = cleaned.replace(/\[(\s*(?:<\/[a-z0-9]+>\s*)*)$/i, '$1').trim()
+  }
+
   return cleaned
 }
 
@@ -105,6 +116,9 @@ export function cleanQuestionStatementHtml(str: string): string {
   if (!str) return ''
 
   let cleaned = cleanHtmlGarbage(str)
+    .replace(/\[\[GABARITO\]\]/gi, '')
+    .replace(/\[\[?GABARITO\]?\]?/gi, '')
+    .replace(/\[?GABARITO\]\]/gi, '')
 
   // Normalize paragraphs
   cleaned = cleaned
@@ -113,6 +127,10 @@ export function cleanQuestionStatementHtml(str: string): string {
     .replace(/<p>\s*(?=<p>)/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+
+  if (!/[\[\]][^,\[\]]+,[^,\[\]]+\[(?:\s*<\/[a-z0-9]+>\s*)*$/i.test(cleaned)) {
+    cleaned = cleaned.replace(/\[(\s*(?:<\/[a-z0-9]+>\s*)*)$/i, '$1').trim()
+  }
 
   return cleaned
 }

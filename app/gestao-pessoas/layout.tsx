@@ -13,7 +13,14 @@ export default function GestaoPessoasLayout({ children }: { children: React.Reac
   const router = useRouter()
   const pathname = usePathname()
 
-  if (!hydrated) return <div style={{ minHeight: '100vh', background: '#0A0F24' }} />
+  const isDirectFormPage =
+    pathname.startsWith('/gestao-pessoas/formularios/') &&
+    pathname !== '/gestao-pessoas/formularios' &&
+    pathname !== '/gestao-pessoas/formularios/novo'
+
+  if (!hydrated) {
+    return <div style={{ minHeight: '100vh', background: isDirectFormPage ? '#f8fafc' : '#0A0F24' }} />
+  }
 
   return (
     <DataProvider>
@@ -32,7 +39,14 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile()
   const [mounted, setMounted] = React.useState(false)
 
-  const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
+  const isDirectFormPage =
+    pathname.startsWith('/gestao-pessoas/formularios/') &&
+    pathname !== '/gestao-pessoas/formularios' &&
+    pathname !== '/gestao-pessoas/formularios/novo'
+
+  const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>(
+    isDirectFormPage ? 'allowed' : 'checking'
+  )
   
   React.useEffect(() => {
     setMounted(true)
@@ -42,8 +56,23 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     setLoadingPath(null)
   }, [pathname, setLoadingPath])
 
-  // Se currentUser for null no mount, tenta restaurar via /api/auth/me
+  // Se currentUser for null no mount, tenta restaurar via /api/auth/me (exceto em links diretos de formulários que podem ser públicos)
   React.useEffect(() => {
+    if (isDirectFormPage) {
+      // Em links de formulários diretos, tenta obter usuário caso exista sessão ativa, mas NUNCA redireciona para /login
+      if (hydrated && !currentUser) {
+        fetch('/api/auth/me', { cache: 'no-store' })
+          .then(r => (r.ok ? r.json() : null))
+          .then(data => {
+            if (data?.user) {
+              setCurrentUser(data.user)
+            }
+          })
+          .catch(() => {})
+      }
+      return
+    }
+
     if (hydrated && !currentUser) {
       fetch('/api/auth/me', { cache: 'no-store' })
         .then(r => r.ok ? r.json() : null)
@@ -58,7 +87,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
           // Em caso de erro de rede, permite acesso a usuários locais ou redireciona
         })
     }
-  }, [hydrated, currentUser, setCurrentUser, router])
+  }, [hydrated, currentUser, setCurrentUser, router, isDirectFormPage])
 
   // Checagem principal de permissões com timeout de emergência (1.5s)
   React.useEffect(() => {
@@ -86,6 +115,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     const emergencyTimer = setTimeout(() => {
       setAccessState(prev => {
         if (prev !== 'checking') return prev
+        if (isDirectFormPage) return 'allowed'
         const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
         if (isFamily) return 'denied'
         if (!isAdmin && isTryingToAccessRestricted) return 'denied'
@@ -96,13 +126,23 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     }, 1500)
 
     if (!currentUser) {
+      if (isDirectFormPage) {
+        setAccessState('allowed')
+        clearTimeout(emergencyTimer)
+        return
+      }
       return () => clearTimeout(emergencyTimer)
     }
 
-    // Alunos e Familiares não têm acesso a Gestão de Pessoas
+    // Alunos e Familiares não têm acesso a Gestão de Pessoas por padrão,
+    // mas podem acessar formulários diretos caso o formulário esteja liberado
     const isFamily = currentUser.perfil === 'Família' || currentUser.cargo === 'Aluno' || currentUser.cargo === 'Responsável'
     if (isFamily) {
-      setAccessState('denied')
+      if (isDirectFormPage) {
+        setAccessState('allowed')
+      } else {
+        setAccessState('denied')
+      }
       clearTimeout(emergencyTimer)
       return
     }
@@ -123,7 +163,13 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
         setAccessState('allowed')
       }
     } else {
-      setAccessState('denied')
+      // Se não possui acesso ao módulo, mas está acessando um link direto de formulário,
+      // permite renderizar a página (a API e a página do formulário validarão a permissão do form)
+      if (isDirectFormPage) {
+        setAccessState('allowed')
+      } else {
+        setAccessState('denied')
+      }
     }
 
     clearTimeout(emergencyTimer)
@@ -173,7 +219,21 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!mounted) return <div style={{ minHeight: '100vh', background: '#0A0F24' }} />
+  if (!mounted) return <div style={{ minHeight: '100vh', background: isDirectFormPage ? '#f8fafc' : '#0A0F24' }} />
+
+  const userPerfilObj = resolveUserPerfil(perfis, currentUserPerfil, currentUser)
+  const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+  const hasModuleAccess = Boolean(currentUser && !isFamily && (userPerfilObj ? !userPerfilObj.bloqueadoGestaoPessoas : true))
+
+  // Para páginas diretas de formulários quando o usuário não possui permissão ao módulo GP:
+  // Renderiza a página do formulário sem a barra lateral do RH
+  if (isDirectFormPage && !hasModuleAccess) {
+    return (
+      <div style={{ minHeight: '100vh', width: '100vw', overflowY: 'auto', background: '#f8fafc' }}>
+        {children}
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f8fafc' }}>

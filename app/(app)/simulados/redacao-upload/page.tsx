@@ -12,7 +12,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { getDerivedStatus } from '@/lib/utils'
+import { getDerivedStatus, isCollaboratorRole, isUserRequisicaoOwner, isUserCreator } from '@/lib/utils'
 import { GabaritoRedacaoModal } from '@/components/simulados/GabaritoRedacaoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
@@ -402,8 +402,8 @@ export default function UploadRedacoesGerenciamentoPage() {
     }
   }
 
-  const isProfView = currentUserPerfil === 'Professor'
-  const isCoord = currentUserPerfil !== 'Professor'
+  const isProfView = isCollaboratorRole(currentUser, currentUserPerfil)
+  const isCoord = !isProfView
 
   const getBimestreAno = (b: any): string => {
     if (!b) return ''
@@ -435,10 +435,13 @@ export default function UploadRedacoesGerenciamentoPage() {
       const matchStatus = filterStatus === 'todos' || p.status === filterStatus
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
-      const isAssigned = !isProfView || (p.redacao_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
+      const isAssigned =
+        !isProfView ||
+        isUserCreator(currentUser, p) ||
+        (p.redacao_upload_requisicoes || []).some((r: any) => isUserRequisicaoOwner(currentUser, r))
       return matchStatus && matchBimestre && matchSerie && isAssigned
     })
-  }, [redacoesInYear, filterStatus, filterBimestre, filterSerie, isProfView, currentUser?.id])
+  }, [redacoesInYear, filterStatus, filterBimestre, filterSerie, isProfView, currentUser])
 
   const groupedStructure = useMemo(() => {
     const result: Array<{
@@ -1167,13 +1170,17 @@ export default function UploadRedacoesGerenciamentoPage() {
                                                           </Link>
                                                         </DropdownMenu.Item>
 
-                                                        <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
+                                                        {(!isProfView || isUserRequisicaoOwner(currentUser, req) || isUserCreator(currentUser, redacao)) && (
+                                                          <>
+                                                            <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
 
-                                                        <DropdownMenu.Item asChild>
-                                                          <div onClick={() => setDeleteConfirmId(redacao.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <Trash2 size={15} color="#ef4444" /> Excluir
-                                                          </div>
-                                                        </DropdownMenu.Item>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div onClick={() => setDeleteConfirmId(redacao.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
+                                                                <Trash2 size={15} color="#ef4444" /> Excluir
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                          </>
+                                                        )}
                                                       </DropdownMenu.Content>
                                                     </DropdownMenu.Portal>
                                                   </DropdownMenu.Root>

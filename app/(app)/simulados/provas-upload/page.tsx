@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { getDerivedStatus, isQuestionForRequisicao } from '@/lib/utils'
+import { getDerivedStatus, isQuestionForRequisicao, isFileForRequisicao, isCollaboratorRole, isUserRequisicaoOwner, isUserCreator } from '@/lib/utils'
 import { GabaritoProvaModal } from '@/components/simulados/GabaritoProvaModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -192,6 +192,13 @@ export default function UploadProvasGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    prova: any
+    mode: 'collaborator_only' | 'full_prova'
+    targetReqs: any[]
+    allReqs: any[]
+    canDeleteFullProva: boolean
+  } | null>(null)
   const [adaptarModalProva, setAdaptarModalProva] = useState<any | null>(null)
   
   // Accordion expanded states for turmas (default true for first or all)
@@ -494,11 +501,121 @@ export default function UploadProvasGerenciamentoPage() {
     loadData(nextPage, true)
   }
 
+  const isProfView = isCollaboratorRole(currentUser, currentUserPerfil)
+  const isCoord = !isProfView
+
+  const openDeleteModal = (prova: any, specificReq?: any) => {
+    if (!prova) return
+    const rawReqs = Array.isArray(prova.provas_upload_requisicoes) ? prova.provas_upload_requisicoes : []
+    const myReqs = rawReqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+    const otherReqs = rawReqs.filter((r: any) => !isUserRequisicaoOwner(currentUser, r))
+    const createdByMe = isUserCreator(currentUser, prova)
+
+    if (isProfView && myReqs.length === 0 && !createdByMe) return
+    if (specificReq && isProfView && !isUserRequisicaoOwner(currentUser, specificReq) && !createdByMe) return
+
+    const targetReqs = specificReq ? [specificReq] : (isProfView ? myReqs : rawReqs)
+    const hasOtherCollaborators = rawReqs.some((r: any) => !targetReqs.some((tr: any) => tr.id === r.id))
+    const canDeleteFullProva = !isProfView || (!hasOtherCollaborators && (createdByMe || rawReqs.length <= 1))
+
+    const defaultMode: 'collaborator_only' | 'full_prova' =
+      hasOtherCollaborators || (isProfView && !createdByMe && targetReqs.length > 0)
+        ? 'collaborator_only'
+        : 'full_prova'
+
+    setDeleteConfirmId(prova.id)
+    setDeleteConfirmTarget({
+      prova,
+      mode: defaultMode,
+      targetReqs,
+      allReqs: rawReqs,
+      canDeleteFullProva
+    })
+  }
+
   const confirmDelete = async () => {
-    if (!deleteConfirmId) return
-    await (supabase as any).from('provas_upload').delete().eq('id', deleteConfirmId)
-    setProvas(prev => prev.filter(p => p.id !== deleteConfirmId))
+    if (!deleteConfirmId || !deleteConfirmTarget) return
+    const { prova, mode, targetReqs, allReqs, canDeleteFullProva } = deleteConfirmTarget
+    const hasOtherCollaborators = allReqs.some((r: any) => !targetReqs.some((tr: any) => tr.id === r.id))
+    const effectiveMode = (isProfView && hasOtherCollaborators) || !canDeleteFullProva ? 'collaborator_only' : mode
+
+    if (effectiveMode === 'collaborator_only' && targetReqs.length > 0) {
+      const { data: latestProva } = await (supabase as any)
+        .from('provas_upload')
+        .select('questoes_json, config_estudio')
+        .eq('id', prova.id)
+        .single()
+
+      const currentQs: any[] = Array.isArray(latestProva?.questoes_json)
+        ? latestProva.questoes_json
+        : (Array.isArray(prova.questoes_json) ? prova.questoes_json : [])
+
+      const remainingQs = currentQs.filter(
+        (q: any) => !targetReqs.some((tr: any) => isQuestionForRequisicao(q, tr, allReqs, false))
+      )
+      const validRemainingCount = remainingQs.filter(
+        (q: any) => q?.tipo_questao !== 'texto_apoio' && !q?.is_texto_apoio && !q?.isTextoApoio
+      ).length
+
+      const currentConfig = latestProva?.config_estudio || prova.config_estudio || {}
+      const currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais)
+        ? currentConfig.arquivos_originais
+        : []
+      const remainingArquivos = currentArquivos.filter(
+        (a: any) => !targetReqs.some((tr: any) => isFileForRequisicao(a, tr, allReqs))
+      )
+
+      const targetReqIds = targetReqs.map((tr: any) => tr.id).filter(Boolean)
+      if (targetReqIds.length > 0) {
+        await (supabase as any)
+          .from('provas_upload_requisicoes')
+          .update({ status: 'pendente', enviado_em: null })
+          .in('id', targetReqIds)
+      }
+
+      const updatedReqs = allReqs.map((r: any) =>
+        targetReqIds.includes(r.id) ? { ...r, status: 'pendente', enviado_em: null } : r
+      )
+
+      const newStatus = getDerivedStatus(
+        { ...prova, provas_upload_requisicoes: updatedReqs, questoes_json: remainingQs, status: 'em_revisao' },
+        'prova'
+      )
+
+      const updatedConfig = { ...currentConfig, arquivos_originais: remainingArquivos }
+
+      await (supabase as any)
+        .from('provas_upload')
+        .update({
+          questoes_json: remainingQs,
+          questoes_count: validRemainingCount,
+          config_estudio: updatedConfig,
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', prova.id)
+
+      setProvas(prev =>
+        prev.map(p =>
+          p.id === prova.id
+            ? {
+                ...p,
+                questoes_json: remainingQs,
+                questoes_count: validRemainingCount,
+                config_estudio: updatedConfig,
+                provas_upload_requisicoes: updatedReqs,
+                status: newStatus
+              }
+            : p
+        )
+      )
+    } else {
+      await (supabase as any).from('provas_upload').delete().eq('id', prova.id)
+      setProvas(prev => prev.filter(p => p.id !== prova.id))
+    }
+
     setDeleteConfirmId(null)
+    setDeleteConfirmTarget(null)
   }
 
   const handleAdaptar = async (prova: any) => {
@@ -622,9 +739,6 @@ export default function UploadProvasGerenciamentoPage() {
     }
   }
 
-  const isProfView = currentUserPerfil === 'Professor'
-  const isCoord = currentUserPerfil !== 'Professor'
-
   const getBimestreAno = (b: any): string => {
     if (!b) return ''
     if (b.ano_letivo) return String(b.ano_letivo).trim()
@@ -657,7 +771,10 @@ export default function UploadProvasGerenciamentoPage() {
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
       
-      const isAssigned = !isProfView || (p.provas_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
+      const isAssigned =
+        !isProfView ||
+        isUserCreator(currentUser, p) ||
+        (p.provas_upload_requisicoes || []).some((r: any) => isUserRequisicaoOwner(currentUser, r))
       
       return matchSearch && matchStatus && matchBimestre && matchSerie && isAssigned
     })
@@ -1484,13 +1601,17 @@ export default function UploadProvasGerenciamentoPage() {
                                                           </DropdownMenu.Item>
                                                         )}
 
-                                                        <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
+                                                        {(!isProfView || isUserRequisicaoOwner(currentUser, req) || (rawReqs.length === 0 && isUserCreator(currentUser, prova))) && (
+                                                          <>
+                                                            <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
 
-                                                        <DropdownMenu.Item asChild>
-                                                          <div onClick={() => setDeleteConfirmId(prova.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <Trash2 size={15} color="#ef4444" /> Excluir
-                                                          </div>
-                                                        </DropdownMenu.Item>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div onClick={() => openDeleteModal(prova, req)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
+                                                                <Trash2 size={15} color="#ef4444" /> {isProfView && reqs.length > 1 ? `Excluir minha parte (${disciplinaNome})` : 'Excluir'}
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                          </>
+                                                        )}
                                                       </DropdownMenu.Content>
                                                     </DropdownMenu.Portal>
                                                   </DropdownMenu.Root>
@@ -1610,26 +1731,28 @@ export default function UploadProvasGerenciamentoPage() {
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
-        {deleteConfirmId && (
+        {deleteConfirmId && deleteConfirmTarget && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDeleteConfirmId(null)}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setDeleteConfirmId(null); setDeleteConfirmTarget(null) }}
               style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }} />
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              style={{ position: 'relative', background: 'hsl(var(--bg-elevated))', padding: 32, borderRadius: 24, boxShadow: '0 24px 48px rgba(0,0,0,0.2)', maxWidth: 400, width: '100%', textAlign: 'center', border: '1px solid hsl(var(--border-subtle))' }}>
+              style={{ position: 'relative', background: 'hsl(var(--bg-elevated))', padding: 32, borderRadius: 24, boxShadow: '0 24px 48px rgba(0,0,0,0.2)', maxWidth: 440, width: '100%', textAlign: 'center', border: '1px solid hsl(var(--border-subtle))' }}>
               
-              <div style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+              <div style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
                 <Trash2 size={32} color="#ef4444" />
               </div>
               
               <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 12, letterSpacing: '-0.02em' }}>
-                Excluir Prova
+                {deleteConfirmTarget.mode === 'collaborator_only' ? 'Excluir Envio do Colaborador?' : 'Excluir Prova'}
               </h2>
-              <p style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', marginBottom: 32, lineHeight: 1.5 }}>
-                Tem certeza que deseja excluir esta prova? Esta ação não poderá ser desfeita.
+              <p style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', marginBottom: 24, lineHeight: 1.5 }}>
+                {deleteConfirmTarget.mode === 'collaborator_only'
+                  ? 'Serão removidas apenas as questões e o arquivo enviado deste colaborador. As questões dos demais colaboradores permanecerão intactas.'
+                  : 'Tem certeza que deseja excluir esta prova? Esta ação não poderá ser desfeita.'}
               </p>
               
               <div style={{ display: 'flex', gap: 12 }}>
-                <motion.button onClick={() => setDeleteConfirmId(null)}
+                <motion.button onClick={() => { setDeleteConfirmId(null); setDeleteConfirmTarget(null) }}
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                   style={{ flex: 1, padding: '12px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                   Cancelar
@@ -1637,7 +1760,7 @@ export default function UploadProvasGerenciamentoPage() {
                 <motion.button onClick={confirmDelete}
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                   style={{ flex: 1, padding: '12px', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(239,68,68,0.3)' }}>
-                  Sim, Excluir
+                  {deleteConfirmTarget.mode === 'collaborator_only' ? 'Excluir Esta Parte' : 'Sim, Excluir'}
                 </motion.button>
               </div>
             </motion.div>

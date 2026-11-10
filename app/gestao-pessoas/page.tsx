@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { 
   Users, ShieldAlert, GraduationCap, ArrowRight, HeartPulse, 
   PieChart, Heart, Activity, CheckCircle2, AlertTriangle, 
-  Stethoscope, Sparkles, Scale, HelpCircle, BookOpen, Clock, Zap, KeyRound
+  Stethoscope, Sparkles, Scale, HelpCircle, BookOpen, Clock, Zap, KeyRound, ClipboardCheck
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { motion, Variants } from 'framer-motion'
@@ -89,6 +89,7 @@ export default function GestaoPessoasDashboard() {
 
   const modules = [
     { title: 'Colaboradores', desc: 'Gestão de equipe e perfis.', icon: Users, link: '/gestao-pessoas/colaboradores', color: '#3b82f6', bg: '#eff6ff', adminOnly: true },
+    { title: 'Formulários Dinâmicos', desc: 'Construtor de formulários e relatórios.', icon: ClipboardCheck, link: '/gestao-pessoas/formularios', color: '#4f46e5', bg: '#eef2ff' },
     { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe' },
     { title: 'Pesquisa de Clima', desc: 'Análise de engajamento.', icon: PieChart, link: '/gestao-pessoas/pesquisa-clima', color: '#0ea5e9', bg: '#e0f2fe' },
     { title: 'Treinamentos', desc: 'Capacitação contínua.', icon: GraduationCap, link: '/gestao-pessoas/treinamentos', color: '#14b8a6', bg: '#ccfbf1' },

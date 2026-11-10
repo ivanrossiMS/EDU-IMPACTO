@@ -21,6 +21,7 @@ import { TrocarModuloModal } from '@/components/layout/TrocarModuloModal'
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
   { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores', adminOnly: true },
+  { href: '/gestao-pessoas/formularios', icon: ClipboardCheck, label: 'Formulários & Pesquisas' },
   { href: '/gestao-pessoas/shai', icon: KeyRound, label: 'Plataforma SHAI' },
   { href: '/gestao-pessoas/materiais-divulgacao', icon: Megaphone, label: 'Materiais de Divulgação' },
   { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
@@ -36,6 +37,7 @@ const MENUS = [
 const SHORT_LABELS: Record<string, string> = {
   '/gestao-pessoas': 'Início',
   '/gestao-pessoas/colaboradores': 'Equipe',
+  '/gestao-pessoas/formularios': 'Forms',
   '/gestao-pessoas/shai': 'SHAI',
   '/gestao-pessoas/materiais-divulgacao': 'Divulgação',
   '/gestao-pessoas/pesquisa-clima': 'Clima',

@@ -18,6 +18,9 @@ import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import {
   formatIsaacAmount,
   getEffectiveAmount,
+  getEffectiveDueDate,
+  getTodayDateStrBrasilia,
+  isInstallmentOverdue,
   type IsaacInstallment,
 } from '@/lib/isaac'
 import { getFilteredInstallments } from '@/lib/isaacCache'
@@ -273,7 +276,7 @@ export async function GET(request: Request) {
     }
 
     // ── 5. Ordenação por status e vencimento ──────────────────────────────────
-    const now = new Date()
+    const todayStr = getTodayDateStrBrasilia()
     const statusOrder: Record<string, number> = {
       OVERDUE: 0,
       OPEN: 1,
@@ -284,20 +287,18 @@ export async function GET(request: Request) {
     }
 
     allItems.sort((a, b) => {
-      const isAOverdue = a.status === 'OPEN' && new Date(a.due_date) < now
-      const isBOverdue = b.status === 'OPEN' && new Date(b.due_date) < now
+      const isAOverdue = isInstallmentOverdue(a, todayStr)
+      const isBOverdue = isInstallmentOverdue(b, todayStr)
       const aKey = isAOverdue ? 'OVERDUE' : a.status
       const bKey = isBOverdue ? 'OVERDUE' : b.status
       const orderDiff = (statusOrder[aKey] ?? 9) - (statusOrder[bKey] ?? 9)
       if (orderDiff !== 0) return orderDiff
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      return getEffectiveDueDate(a).localeCompare(getEffectiveDueDate(b))
     })
 
     // ── 6. Resumo financeiro ──────────────────────────────────────────────────
     const emAberto = allItems.filter((i) => i.status === 'OPEN' || i.status === 'OVERDUE')
-    const vencidas = allItems.filter(
-      (i) => i.status === 'OPEN' && new Date(i.due_date) < now
-    )
+    const vencidas = allItems.filter((i) => isInstallmentOverdue(i, todayStr))
     const pagas = allItems.filter((i) => i.status === 'PAID')
 
     const totalEmAberto = emAberto.reduce((s, i) => s + getEffectiveAmount(i), 0)
@@ -305,8 +306,8 @@ export async function GET(request: Request) {
     const totalPago = pagas.reduce((s, i) => s + (i.paid_value || 0), 0)
 
     const proximoVencimento = allItems
-      .filter((i) => i.status === 'OPEN' && new Date(i.due_date) >= now)
-      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
+      .filter((i) => i.status === 'OPEN' && getEffectiveDueDate(i) >= todayStr)
+      .sort((a, b) => getEffectiveDueDate(a).localeCompare(getEffectiveDueDate(b)))[0]
 
     const summary = {
       totalEmAberto,
@@ -321,7 +322,7 @@ export async function GET(request: Request) {
       proximoVencimento: proximoVencimento
         ? {
             valor: formatIsaacAmount(getEffectiveAmount(proximoVencimento)),
-            data: proximoVencimento.due_date,
+            data: getEffectiveDueDate(proximoVencimento),
             descricao: proximoVencimento.description,
           }
         : null,
@@ -330,14 +331,18 @@ export async function GET(request: Request) {
 
     // ── 7. DTO de resposta para o frontend ────────────────────────────────────
     const parcelas = allItems.map((item) => {
-      const isItemOverdue = item.status === 'OPEN' && new Date(item.due_date) < now
+      const effectiveDueDate = getEffectiveDueDate(item)
+      const isItemOverdue = isInstallmentOverdue(item, todayStr)
+      const isDueToday = item.status === 'OPEN' && effectiveDueDate === todayStr
       return {
         id: item.id,
         descricao: item.description,
         tipo: item.type,
         status: isItemOverdue ? 'OVERDUE' : item.status,
-        vencimento: item.due_date,
-        dataPagamento: item.paid_date,
+        vencimento: effectiveDueDate,
+        vencimentoOriginal: item.due_date || null,
+        isDueToday,
+        dataPagamento: item.paid_date || item.active_receivables?.[0]?.paid_date || null,
         competencia: item.competence_date,
         anoReferencia: item.reference_year,
         valorBase: item.base_amount,

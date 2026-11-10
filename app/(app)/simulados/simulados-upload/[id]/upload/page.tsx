@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestionImages, normalizeQuestoesList } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
@@ -26,10 +26,11 @@ export default function UploadSimuladoPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const simuladoId = params.id as string
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const isProfessorViewAll = currentUser?.perfil === 'Professor' && searchParams.get('all') === 'true'
+  const isCollaborator = isCollaboratorRole(currentUser, currentUserPerfil)
+  const isProfessorViewAll = isCollaborator && searchParams.get('all') === 'true'
 
   const [simulado, setSimulado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -77,8 +78,8 @@ export default function UploadSimuladoPage() {
       const found = reqs.find((r: any) => (r.id_disciplina === targetDiscId || r.disciplina_nome === targetDiscId) && (!targetProfId || r.id_professor === targetProfId))
       if (found) return found
     }
-    if (currentUser?.perfil === 'Professor') {
-      const myReqs = reqs.filter((r: any) => r.id_professor === currentUser.id)
+    if (isCollaborator) {
+      const myReqs = reqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
       if (myReqs.length > 0) {
         return myReqs.find((r: any) => r.status === 'pendente') || myReqs[0]
       }
@@ -89,16 +90,17 @@ export default function UploadSimuladoPage() {
     }
 
     return reqs[0] || null
-  }, [simulado, targetReqId, targetDiscId, targetProfId, showAll, currentUser])
+  }, [simulado, targetReqId, targetDiscId, targetProfId, showAll, currentUser, isCollaborator])
 
   // Requisitions relevant to current user
   const userRelevantRequisicoes = useMemo(() => {
     if (!simulado?.simulados_upload_requisicoes) return []
-    if (currentUser?.perfil === 'Professor') {
-      return simulado.simulados_upload_requisicoes.filter((r: any) => r.id_professor === currentUser.id)
+    if (isCollaborator) {
+      const mine = simulado.simulados_upload_requisicoes.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+      if (mine.length > 0) return mine
     }
     return simulado.simulados_upload_requisicoes
-  }, [simulado, currentUser])
+  }, [simulado, currentUser, isCollaborator])
 
   const loadSimulado = async () => {
     setLoading(true)
@@ -164,9 +166,9 @@ export default function UploadSimuladoPage() {
           currentActiveReq = reqs.find((r: any) => r.id === targetReqId)
         } else if (targetDiscId) {
           currentActiveReq = reqs.find((r: any) => (r.id_disciplina === targetDiscId || r.disciplina_nome === targetDiscId) && (!targetProfId || r.id_professor === targetProfId))
-        } else if (currentUser?.perfil === 'Professor') {
-          const myReqs = reqs.filter((r: any) => r.id_professor === currentUser.id)
-          currentActiveReq = myReqs.find((r: any) => r.status === 'pendente') || myReqs[0]
+        } else if (isCollaborator) {
+          const myReqs = reqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+          currentActiveReq = myReqs.find((r: any) => r.status === 'pendente') || myReqs[0] || reqs[0]
         } else if (targetProfId) {
           currentActiveReq = reqs.find((r: any) => r.id_professor === targetProfId)
         } else {
@@ -295,7 +297,11 @@ export default function UploadSimuladoPage() {
 
           const rawQuestions = Array.isArray(simuladoData?.questoes_json) ? simuladoData.questoes_json : []
           const hasUnnormalizedAlts = rawQuestions.some((q: any) =>
-            (q.alternativas || []).some((a: any) => a.text && a.text.includes('[IMAGEM'))
+            hasGabaritoBracketArtifact(q.enunciado) ||
+            (q.alternativas || []).some((a: any) =>
+              (a.text && a.text.includes('[IMAGEM')) ||
+              hasGabaritoBracketArtifact(a.text || a.texto)
+            )
           )
 
           const isOrderDivergent = validReqQuestions.some((vq: any, i: number) => {

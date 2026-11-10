@@ -305,6 +305,9 @@ export function updateInstallmentInCache(item: IsaacInstallment) {
   // Atualiza ou insere na lista principal
   const index = entry.items.findIndex((i) => i.id === item.id)
   if (index >= 0) {
+    if (!item.active_receivables && entry.items[index].active_receivables) {
+      item.active_receivables = entry.items[index].active_receivables
+    }
     entry.items[index] = item
   } else {
     entry.items.push(item)

@@ -16,17 +16,18 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile, normalizeQuestionImages, normalizeQuestoesList } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
   const provaId = params.id as string
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const isProfessorViewAll = currentUser?.perfil === 'Professor' && searchParams.get('all') === 'true'
+  const isCollaborator = isCollaboratorRole(currentUser, currentUserPerfil)
+  const isProfessorViewAll = isCollaborator && searchParams.get('all') === 'true'
 
   const [prova, setProva] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -111,7 +112,25 @@ export default function UploadProvaPage() {
 
       // If questions already exist, load them for review
       if (provaData?.questoes_json && provaData.questoes_json.length > 0) {
-        let qs = normalizeQuestoesList(provaData.questoes_json)
+        const rawQuestions = Array.isArray(provaData.questoes_json) ? provaData.questoes_json : []
+        const hasGabaritoOrImageArtifacts = rawQuestions.some((q: any) =>
+          hasGabaritoBracketArtifact(q.enunciado) ||
+          (q.alternativas || []).some((a: any) =>
+            (a.text && a.text.includes('[IMAGEM')) ||
+            hasGabaritoBracketArtifact(a.text || a.texto)
+          )
+        )
+        let qs = normalizeQuestoesList(rawQuestions)
+        if (hasGabaritoOrImageArtifacts) {
+          ;(supabase as any)
+            .from('provas_upload')
+            .update({
+              questoes_json: qs,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', provaId)
+            .then(() => {})
+        }
         
         if (!showAll) {
           if (targetReq) {
@@ -124,8 +143,13 @@ export default function UploadProvaPage() {
             qs = qs.filter((q: any) => q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)
           } else if (targetProf) {
             qs = qs.filter((q: any) => q.id_professor === targetProf)
-          } else if (currentUser?.perfil === 'Professor') {
-            qs = qs.filter((q: any) => q.id_professor === currentUser.id)
+          } else if (isCollaborator) {
+            const myReq = (reqs || []).find((r: any) => isUserRequisicaoOwner(currentUser, r))
+            qs = qs.filter((q: any) =>
+              (myReq && q.id_requisicao === myReq.id) ||
+              q.id_professor === currentUser?.id ||
+              (currentUser?.colaborador_id && q.id_professor === currentUser.colaborador_id)
+            )
           }
         }
         

@@ -43,6 +43,11 @@ import { ContaPagarFormModal } from './components/ContaPagarFormModal'
 import { BaixaContaModal } from './components/BaixaContaModal'
 import { ContaFichaModal } from './components/ContaFichaModal'
 import { AnexosLancamentoModal } from './components/AnexosLancamentoModal'
+import {
+  isFornecedoresSpreadsheet,
+  parseFornecedoresRows,
+  exportFornecedoresExcel,
+} from './components/OrcamentoFornecedoresTabs'
 
 const RelatoriosContasPagarTab = dynamic(
   () => import('./components/RelatoriosContasPagarTab').then((m) => m.RelatoriosContasPagarTab),
@@ -610,6 +615,30 @@ export default function ContasPagarPage() {
     return null
   }
 
+  const handleImportFornecedoresBatch = async (
+    lista: Partial<FornecedorEscolar>[]
+  ): Promise<{ importedCount: number; updatedCount: number } | null> => {
+    const res = await apiFetch('/api/contas-pagar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'import_fornecedores', fornecedores: lista }),
+      skipRetry: true,
+    })
+    const json = await res.json().catch(() => ({}))
+    if (res.ok) {
+      if (Array.isArray(json.fornecedores)) setFornecedores(json.fornecedores)
+      const importedCount = Number(json.importedCount || 0)
+      const updatedCount = Number(json.updatedCount || 0)
+      showToast(
+        `${importedCount + updatedCount} fornecedor(es) processado(s) com sucesso!`,
+        'success'
+      )
+      return { importedCount, updatedCount }
+    }
+    showToast(json?.error || 'Erro ao importar fornecedores', 'error')
+    return null
+  }
+
   const handleDeleteFornecedor = async (id: string) => {
     const prevFornecedores = fornecedores
     const targetForn = fornecedores.find((f) => f.id === id)
@@ -767,6 +796,10 @@ export default function ContasPagarPage() {
 
   // Exportar Lista Filtrada para Excel (.xlsx)
   const handleExportListExcel = () => {
+    if (activeTab === 'fornecedores') {
+      exportFornecedoresExcel(fornecedores)
+      return
+    }
     const rows = contasFiltradas.map((c) => ({
       Código: c.codigo || c.id,
       Fornecedor: c.fornecedorNome,
@@ -804,11 +837,30 @@ export default function ContasPagarPage() {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array' })
       const firstSheet = wb.Sheets[wb.SheetNames[0]]
-      const rows: any[] = XLSX.utils.sheet_to_json(firstSheet)
+      const rows: any[] = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
       if (!rows.length) {
         showToast('A planilha selecionada está vazia.', 'error')
         return
       }
+
+      if (activeTab === 'fornecedores' || isFornecedoresSpreadsheet(rows)) {
+        const { items } = parseFornecedoresRows(rows, {
+          planoContas: planosContasAtivos,
+          centrosCusto: centrosCustoAtivos,
+          unidades: unidadesEscolares,
+        })
+        if (items.length === 0) {
+          showToast(
+            'Nenhum fornecedor válido encontrado. Verifique a coluna "Razão Social / Nome *".',
+            'error'
+          )
+          return
+        }
+        await handleImportFornecedoresBatch(items)
+        if (activeTab !== 'fornecedores') setActiveTab('fornecedores')
+        return
+      }
+
       const imported: Partial<ContaPagarRecord>[] = rows.map((r, i) => ({
         codigo: String(r['Código'] || r['codigo'] || `IMP-${i + 1}`),
         descricao: String(r['Descrição'] || r['descricao'] || r['Historico'] || 'Despesa Importada'),
@@ -2827,6 +2879,7 @@ export default function ContasPagarPage() {
           planoContas={planosContasAtivos}
           unidades={unidadesEscolares}
           onSaveFornecedor={handleSaveFornecedor}
+          onImportFornecedores={handleImportFornecedoresBatch}
           onDeleteFornecedor={handleDeleteFornecedor}
         />
       )}

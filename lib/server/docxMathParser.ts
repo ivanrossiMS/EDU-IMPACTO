@@ -455,10 +455,25 @@ export interface ParsedQuestion {
   pontuacao: number
 }
 
+export function stripGabaritoArtifacts(str: string): string {
+  if (!str) return ''
+  let res = str
+    .replace(/\[\[GABARITO\]\]/gi, '')
+    .replace(/\[\[?GABARITO\]?\]?/gi, '')
+    .replace(/\[?GABARITO\]\]/gi, '')
+
+  // Remove stray trailing '[' left by a split [[GABARITO]] marker (while preserving math intervals like [0, 1[ or ]0, 1[)
+  const isMathInterval = /[\[\]][^,\[\]]+,[^,\[\]]+\[(?:\s*<\/[a-z0-9]+>\s*)*$/i.test(res)
+  if (!isMathInterval) {
+    res = res.replace(/\[(\s*(?:<\/[a-z0-9]+>\s*)*)$/i, '$1')
+  }
+  return res
+}
+
 export function cleanEnunciadoHtml(html: string): string {
   if (!html) return ''
   const metaTags: string[] = []
-  let cleaned = html.replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
+  let cleaned = stripGabaritoArtifacts(html).replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
     metaTags.push(match)
     return ''
   })
@@ -485,7 +500,7 @@ export function cleanEnunciadoHtml(html: string): string {
       .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/div>$/gi, '</div>')
   }
   const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : ''
-  return prefix + cleaned
+  return prefix + stripGabaritoArtifacts(cleaned)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -503,16 +518,17 @@ export function parseBlock(block: string): ParsedBlock {
     block = block.slice(0, gabMatch.index).trim()
   }
 
-  // Mask GABARITO markers so they don't break regex position indices
-  const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
-  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[^>]+>|\s)*([a-eA-E])(?:<[^>]+>|\s)*[\.\-\)](?:<[^>]+>|\s)*/gm
+  // Mask [[GABARITO]] with 12 non-whitespace placeholder characters (\uE000) so regex whitespace classes (\s)
+  // never split [[GABARITO]] in half at the first '[' character.
+  const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '\uE000'.repeat(12))
+  const markerRe = /(^|[\s\n,;:!?\u2013\u2014]|\uE000{12})((?:<\/?(?:p|div|br|span|b|strong|i|em|u)\b[^>]*>|\s|\uE000)*?)((?:<(?:b|strong|i|em|u|span)\b[^>]*>\s*)*([a-eA-E])(?:<[^>]+>|\s|\uE000)*[\.\-\)](?:<[^>]+>|\s|\uE000)*)/gm
 
   const found: AltMarker[] = []
   let m: RegExpExecArray | null
 
   while ((m = markerRe.exec(spaceBlock)) !== null) {
-    const letter = m[2].toUpperCase()
-    const letterPos = m.index + m[1].length
+    const letter = m[4].toUpperCase()
+    const letterPos = m.index + m[1].length + m[2].length
     const end = m.index + m[0].length
     found.push({ pos: letterPos, end, letter })
   }
@@ -585,11 +601,11 @@ export function parseBlock(block: string): ParsedBlock {
     const isBoldMarker = /(?:<b>|<strong>|<span[^>]*font-weight:\s*(?:bold|[789]00)).*?[a-eA-E].*?(?:<\/b>|<\/strong>|<\/span>)/i.test(markerText) ||
       /^(?:<b>|<strong>|<span[^>]*font-weight:\s*(?:bold|[789]00))/i.test(markerText)
 
-    let text = cleanAlternativeText(
-      textPart
-        .replace(/\[\[GABARITO\]\]/g, '')
-        .trim()
-    )
+    let text = stripGabaritoArtifacts(
+      cleanAlternativeText(
+        stripGabaritoArtifacts(textPart).trim()
+      )
+    ).trim()
 
     // Check if this alternative contains an explicit gabarito marker at the end
     const altGabMatch = text.match(/(?:[\n\r\s,;.\-\–\—]|^)(?:\(?\s*(?:gabarito|resposta(?:\s+correta)?|resp|chave)[\s\:\-\–\—\=]+(?:\(?\s*)?([a-eA-E])(?:\s*\)?)?[\s\.\,\;]*\s*)$/i)
@@ -863,6 +879,12 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
           if (isRed) {
             modified = true
             return run.replace(/<w:t( [^>]*)?>([^<]*)<\/w:t>/g, (_match, attrs, text) => {
+              if (!text || !text.trim()) return `<w:t${attrs || ''}>${text}</w:t>`
+              const trailingWsMatch = text.match(/(\s+)$/)
+              if (trailingWsMatch) {
+                const core = text.slice(0, text.length - trailingWsMatch[1].length)
+                return `<w:t${attrs || ''}>${core}[[GABARITO]]${trailingWsMatch[1]}</w:t>`
+              }
               return `<w:t${attrs || ''}>${text}[[GABARITO]]</w:t>`
             })
           }

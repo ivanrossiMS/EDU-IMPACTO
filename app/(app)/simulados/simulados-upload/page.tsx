@@ -13,7 +13,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { getDerivedStatus, isQuestionForRequisicao } from '@/lib/utils'
+import { getDerivedStatus, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner, isUserCreator } from '@/lib/utils'
 import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
@@ -205,6 +205,15 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    simulado: any
+    mode: 'collaborator_only' | 'full_simulado'
+    selectedReqId: string
+    targetReqs: any[]
+    allReqs: any[]
+    canDeleteFullSimulado: boolean
+  } | null>(null)
+  const [deletingItem, setDeletingItem] = useState(false)
   const [adaptarModalSimulado, setAdaptarModalSimulado] = useState<any | null>(null)
   
   const [expandedTurmas, setExpandedTurmas] = useState<Record<string, boolean>>({})
@@ -419,8 +428,13 @@ export default function UploadSimuladosGerenciamentoPage() {
         try {
           newSimuladosData = newSimuladosData.map((p: any) => {
             const pReqs = p.simulados_upload_requisicoes || []
-            let pQs = Array.isArray(p.questoes_json) ? p.questoes_json : []
-            let hasOrphan = false
+            const rawPQs = Array.isArray(p.questoes_json) ? p.questoes_json : []
+            const hadGabaritoArtifact = rawPQs.some((q: any) =>
+              hasGabaritoBracketArtifact(q.enunciado) ||
+              (q.alternativas || []).some((a: any) => hasGabaritoBracketArtifact(a.text || a.texto))
+            )
+            let pQs = normalizeQuestoesList(rawPQs)
+            let hasOrphan = hadGabaritoArtifact
 
             if (pQs.length > 0 && pReqs.length > 0) {
               pQs = pQs.map((q: any) => {
@@ -441,18 +455,18 @@ export default function UploadSimuladosGerenciamentoPage() {
                 }
                 return q
               })
+            }
 
-              if (hasOrphan) {
-                (supabase as any)
-                  .from('simulados_upload')
-                  .update({
-                    questoes_json: pQs,
-                    questoes_count: pQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', p.id)
-                  .then(() => {})
-              }
+            if (hasOrphan && pQs.length > 0) {
+              (supabase as any)
+                .from('simulados_upload')
+                .update({
+                  questoes_json: pQs,
+                  questoes_count: pQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', p.id)
+                .then(() => {})
             }
 
             const fixedReqs = pReqs.map((r: any) => {
@@ -562,11 +576,217 @@ export default function UploadSimuladosGerenciamentoPage() {
     loadData(nextPage, true)
   }
 
+  const isProfView = isCollaboratorRole(currentUser, currentUserPerfil)
+  const isCoord = !isProfView
+
+  const openDeleteModal = (simulado: any, specificReq?: any) => {
+    if (!simulado) return
+    const rawReqs = Array.isArray(simulado.simulados_upload_requisicoes) ? simulado.simulados_upload_requisicoes : []
+    const myReqs = rawReqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+    const otherReqs = rawReqs.filter((r: any) => !isUserRequisicaoOwner(currentUser, r))
+    const createdByMe = isUserCreator(currentUser, simulado)
+
+    // Colaborador nunca pode excluir simulado de outros colaboradores
+    if (isProfView && myReqs.length === 0 && !createdByMe) {
+      return
+    }
+
+    if (specificReq) {
+      if (isProfView && !isUserRequisicaoOwner(currentUser, specificReq) && !createdByMe) {
+        return
+      }
+      const canFull = !isProfView || (otherReqs.length === 0 && createdByMe)
+      setDeleteConfirmId(simulado.id)
+      setDeleteConfirmTarget({
+        simulado,
+        mode: 'collaborator_only',
+        selectedReqId: specificReq.id || 'my_all',
+        targetReqs: [specificReq],
+        allReqs: rawReqs,
+        canDeleteFullSimulado: canFull
+      })
+      return
+    }
+
+    // Se for colaborador:
+    if (isProfView) {
+      // Se existem outros colaboradores neste simulado, DEVE excluir APENAS a parte deste colaborador!
+      if (otherReqs.length > 0) {
+        setDeleteConfirmId(simulado.id)
+        setDeleteConfirmTarget({
+          simulado,
+          mode: 'collaborator_only',
+          selectedReqId: myReqs[0]?.id || 'my_all',
+          targetReqs: myReqs,
+          allReqs: rawReqs,
+          canDeleteFullSimulado: false
+        })
+        return
+      }
+
+      // Se o simulado tem apenas a requisição deste colaborador:
+      const myQsCount = Array.isArray(simulado.questoes_json)
+        ? simulado.questoes_json.filter((q: any) => myReqs.some((mr: any) => isQuestionForRequisicao(q, mr, rawReqs, true))).length
+        : 0
+
+      // Se foi criado pela Coordenação e o professor enviou questões, o padrão seguro é limpar apenas o envio dele (ou excluir se ele mesmo criou)
+      const canFull = createdByMe || rawReqs.length <= 1
+      const defaultMode: 'collaborator_only' | 'full_simulado' = (!createdByMe && myQsCount > 0 && myReqs.length > 0)
+        ? 'collaborator_only'
+        : 'full_simulado'
+
+      setDeleteConfirmId(simulado.id)
+      setDeleteConfirmTarget({
+        simulado,
+        mode: defaultMode,
+        selectedReqId: myReqs[0]?.id || 'my_all',
+        targetReqs: myReqs,
+        allReqs: rawReqs,
+        canDeleteFullSimulado: canFull
+      })
+      return
+    }
+
+    // Se for Coordenação / Admin:
+    // Se o simulado possui múltiplos colaboradores/disciplinas, abre com opção de excluir apenas de um colaborador específico ou o simulado inteiro
+    if (rawReqs.length > 1) {
+      const firstWithQs = rawReqs.find((r: any) =>
+        Array.isArray(simulado.questoes_json) &&
+        simulado.questoes_json.some((q: any) => isQuestionForRequisicao(q, r, rawReqs, true))
+      ) || rawReqs[0]
+
+      setDeleteConfirmId(simulado.id)
+      setDeleteConfirmTarget({
+        simulado,
+        mode: 'collaborator_only',
+        selectedReqId: firstWithQs.id,
+        targetReqs: [firstWithQs],
+        allReqs: rawReqs,
+        canDeleteFullSimulado: true
+      })
+      return
+    }
+
+    setDeleteConfirmId(simulado.id)
+    setDeleteConfirmTarget({
+      simulado,
+      mode: 'full_simulado',
+      selectedReqId: rawReqs[0]?.id || '',
+      targetReqs: rawReqs,
+      allReqs: rawReqs,
+      canDeleteFullSimulado: true
+    })
+  }
+
   const confirmDelete = async () => {
-    if (!deleteConfirmId) return
-    await (supabase as any).from('simulados_upload').delete().eq('id', deleteConfirmId)
-    setSimulados(prev => prev.filter(p => p.id !== deleteConfirmId))
-    setDeleteConfirmId(null)
+    if (!deleteConfirmId || !deleteConfirmTarget) return
+    setDeletingItem(true)
+    try {
+      const { simulado, mode, targetReqs, allReqs, canDeleteFullSimulado } = deleteConfirmTarget
+
+      // Segurança extra: se o usuário for colaborador e houver outros colaboradores no simulado, NUNCA permite excluir o simulado inteiro
+      const hasOtherCollaborators = allReqs.some((r: any) => !targetReqs.some((tr: any) => tr.id === r.id))
+      const effectiveMode = (isProfView && hasOtherCollaborators) || !canDeleteFullSimulado
+        ? 'collaborator_only'
+        : mode
+
+      if (effectiveMode === 'collaborator_only' && targetReqs.length > 0) {
+        // Busca o estado mais recente do banco para não afetar nenhum outro colaborador
+        const { data: latestSim } = await (supabase as any)
+          .from('simulados_upload')
+          .select('questoes_json, config_estudio')
+          .eq('id', simulado.id)
+          .single()
+
+        const currentQs: any[] = Array.isArray(latestSim?.questoes_json)
+          ? latestSim.questoes_json
+          : (Array.isArray(simulado.questoes_json) ? simulado.questoes_json : [])
+
+        // Mantém APENAS as questões que NÃO pertencem às requisições-alvo da exclusão
+        const remainingQsRaw = currentQs.filter((q: any) =>
+          !targetReqs.some((tr: any) => isQuestionForRequisicao(q, tr, allReqs, false))
+        )
+
+        let numCounter = 1
+        const remainingQs = remainingQsRaw.map((q: any) => {
+          const isApoio = q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
+          return {
+            ...q,
+            numero: isApoio ? 0 : numCounter++
+          }
+        })
+
+        const validRemainingCount = remainingQs.filter(
+          (q: any) => q?.tipo_questao !== 'texto_apoio' && !q?.is_texto_apoio && !q?.isTextoApoio
+        ).length
+
+        // Remove apenas o arquivo original (.docx) enviado por este colaborador
+        const currentConfig = latestSim?.config_estudio || simulado.config_estudio || {}
+        const currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais)
+          ? currentConfig.arquivos_originais
+          : []
+        const remainingArquivos = currentArquivos.filter(
+          (a: any) => !targetReqs.some((tr: any) => isFileForRequisicao(a, tr, allReqs))
+        )
+
+        const targetReqIds = targetReqs.map((tr: any) => tr.id).filter(Boolean)
+        if (targetReqIds.length > 0) {
+          await (supabase as any)
+            .from('simulados_upload_requisicoes')
+            .update({ status: 'pendente', enviado_em: null })
+            .in('id', targetReqIds)
+        }
+
+        const updatedReqs = allReqs.map((r: any) =>
+          targetReqIds.includes(r.id) ? { ...r, status: 'pendente', enviado_em: null } : r
+        )
+
+        const newStatus = getDerivedStatus(
+          { ...simulado, simulados_upload_requisicoes: updatedReqs, questoes_json: remainingQs, status: 'em_revisao' },
+          'simulado'
+        )
+
+        const updatedConfig = {
+          ...currentConfig,
+          arquivos_originais: remainingArquivos
+        }
+
+        await (supabase as any)
+          .from('simulados_upload')
+          .update({
+            questoes_json: remainingQs,
+            questoes_count: validRemainingCount,
+            config_estudio: updatedConfig,
+            status: newStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', simulado.id)
+
+        setSimulados(prev =>
+          prev.map(p =>
+            p.id === simulado.id
+              ? {
+                  ...p,
+                  questoes_json: remainingQs,
+                  questoes_count: validRemainingCount,
+                  config_estudio: updatedConfig,
+                  simulados_upload_requisicoes: updatedReqs,
+                  status: newStatus
+                }
+              : p
+          )
+        )
+      } else {
+        await (supabase as any).from('simulados_upload').delete().eq('id', simulado.id)
+        setSimulados(prev => prev.filter(p => p.id !== simulado.id))
+      }
+    } catch (e) {
+      console.error('Erro ao excluir:', e)
+    } finally {
+      setDeletingItem(false)
+      setDeleteConfirmId(null)
+      setDeleteConfirmTarget(null)
+    }
   }
 
   const handleAdaptar = async (simulado: any) => {
@@ -706,9 +926,6 @@ export default function UploadSimuladosGerenciamentoPage() {
     }
   }
 
-  const isProfView = currentUserPerfil === 'Professor'
-  const isCoord = currentUserPerfil !== 'Professor'
-
   const getBimestreAno = (b: any): string => {
     if (!b) return ''
     if (b.ano_letivo) return String(b.ano_letivo).trim()
@@ -739,10 +956,13 @@ export default function UploadSimuladosGerenciamentoPage() {
       const matchStatus = filterStatus === 'todos' || p.status === filterStatus
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
-      const isAssigned = !isProfView || (p.simulados_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
+      const isAssigned =
+        !isProfView ||
+        isUserCreator(currentUser, p) ||
+        (p.simulados_upload_requisicoes || []).some((r: any) => isUserRequisicaoOwner(currentUser, r))
       return matchStatus && matchBimestre && matchSerie && isAssigned
     })
-  }, [simuladosInYear, filterStatus, filterBimestre, filterSerie, isProfView, currentUser?.id])
+  }, [simuladosInYear, filterStatus, filterBimestre, filterSerie, isProfView, currentUser])
 
   // Strict separation: Regular Simulados vs Adapted Simulados
   const filteredRegulares = useMemo(() => filtered.filter(p => !isSimuladoAdaptado(p)), [filtered])
@@ -1911,6 +2131,12 @@ export default function UploadSimuladosGerenciamentoPage() {
                                       status: simulado.status
                                     }]
 
+                                    const myReqsInCard = rawReqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+                                    const otherReqsInCard = rawReqs.filter((r: any) => !isUserRequisicaoOwner(currentUser, r))
+                                    const isCreatedByMe = isUserCreator(currentUser, simulado)
+                                    const canUserDeleteOnCard = !isProfView || myReqsInCard.length > 0 || (rawReqs.length === 0 && isCreatedByMe)
+                                    const canUserManageConfig = !isProfView || (isCreatedByMe && otherReqsInCard.length === 0)
+
                                     const isAdaptada = isSimuladoAdaptado(simulado)
                                     const baseSimuladoTitle = getBaseSimuladoTitle(simulado.titulo)
                                     const relatedAdaptados = !isAdaptada
@@ -1922,8 +2148,13 @@ export default function UploadSimuladosGerenciamentoPage() {
                                     const dateCriacaoStr = simulado.created_at ? new Date(simulado.created_at).toLocaleDateString('pt-BR') : '—'
                                     const accentColor = isAdaptada ? '#d97706' : '#8b5cf6'
 
-                                    const openAllQuestionsUrl = `/simulados/simulados-upload/${simulado.id}/upload?all=true`
-                                    const openAllPrintUrl = `/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`
+                                    const myFirstReq = myReqsInCard[0]
+                                    const openAllQuestionsUrl = (isProfView && myFirstReq && otherReqsInCard.length > 0)
+                                      ? `/simulados/simulados-upload/${simulado.id}/upload?req=${myFirstReq.id}&prof=${myFirstReq.id_professor || ''}&disc=${myFirstReq.id_disciplina || ''}`
+                                      : `/simulados/simulados-upload/${simulado.id}/upload?all=true`
+                                    const openAllPrintUrl = (isProfView && myFirstReq && otherReqsInCard.length > 0)
+                                      ? `/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${myFirstReq.id}&prof=${myFirstReq.id_professor || ''}&disc=${myFirstReq.id_disciplina || ''}`
+                                      : `/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`
                                     const editConfigUrl = `/simulados/simulados-upload/${simulado.id}/editar`
                                     const estudioAdaptadaUrl = `/simulados/simulados-upload/${simulado.id}/adaptar`
 
@@ -2225,29 +2456,31 @@ export default function UploadSimuladosGerenciamentoPage() {
                                             </button>
 
                                             {/* Config */}
-                                            <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
-                                              <button
-                                                type="button"
-                                                className="simulado-action-btn"
-                                                style={{
-                                                  display: 'inline-flex',
-                                                  alignItems: 'center',
-                                                  gap: 5,
-                                                  padding: '6px 11px',
-                                                  borderRadius: 8,
-                                                  border: '1px solid rgba(139, 92, 246, 0.3)',
-                                                  color: '#7c3aed',
-                                                  background: 'rgba(139, 92, 246, 0.07)',
-                                                  fontWeight: 700,
-                                                  fontSize: 11.5,
-                                                  cursor: 'pointer',
-                                                  whiteSpace: 'nowrap'
-                                                }}
-                                                title="Configurações do simulado"
-                                              >
-                                                <Layers size={12} /> Config
-                                              </button>
-                                            </Link>
+                                            {canUserManageConfig && (
+                                              <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
+                                                <button
+                                                  type="button"
+                                                  className="simulado-action-btn"
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 5,
+                                                    padding: '6px 11px',
+                                                    borderRadius: 8,
+                                                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                                                    color: '#7c3aed',
+                                                    background: 'rgba(139, 92, 246, 0.07)',
+                                                    fontWeight: 700,
+                                                    fontSize: 11.5,
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap'
+                                                  }}
+                                                  title="Configurações do simulado"
+                                                >
+                                                  <Layers size={12} /> Config
+                                                </button>
+                                              </Link>
+                                            )}
 
                                             {/* IA Inclusiva (when Adapted) OR Adaptar + Ver Adaptadas (when Regular) */}
                                             {isAdaptada ? (
@@ -2276,28 +2509,30 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               </Link>
                                             ) : (
                                               <>
-                                                <button
-                                                  type="button"
-                                                  className="simulado-action-btn"
-                                                  onClick={() => setAdaptarModalSimulado(simulado)}
-                                                  style={{
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: 5,
-                                                    padding: '6px 11px',
-                                                    borderRadius: 8,
-                                                    border: '1px solid rgba(59, 130, 246, 0.32)',
-                                                    color: '#2563eb',
-                                                    background: 'rgba(59, 130, 246, 0.08)',
-                                                    fontWeight: 700,
-                                                    fontSize: 11.5,
-                                                    cursor: 'pointer',
-                                                    whiteSpace: 'nowrap'
-                                                  }}
-                                                  title="Criar versão adaptada deste simulado"
-                                                >
-                                                  <BookOpen size={12} /> Adaptar
-                                                </button>
+                                                {canUserManageConfig && (
+                                                  <button
+                                                    type="button"
+                                                    className="simulado-action-btn"
+                                                    onClick={() => setAdaptarModalSimulado(simulado)}
+                                                    style={{
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: 5,
+                                                      padding: '6px 11px',
+                                                      borderRadius: 8,
+                                                      border: '1px solid rgba(59, 130, 246, 0.32)',
+                                                      color: '#2563eb',
+                                                      background: 'rgba(59, 130, 246, 0.08)',
+                                                      fontWeight: 700,
+                                                      fontSize: 11.5,
+                                                      cursor: 'pointer',
+                                                      whiteSpace: 'nowrap'
+                                                    }}
+                                                    title="Criar versão adaptada deste simulado"
+                                                  >
+                                                    <BookOpen size={12} /> Adaptar
+                                                  </button>
+                                                )}
 
                                                 {relatedAdaptados.length > 0 && (
                                                   <button
@@ -2330,29 +2565,35 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               </>
                                             )}
 
-                                            {/* Excluir */}
-                                            <button
-                                              type="button"
-                                              className="simulado-action-btn"
-                                              onClick={() => setDeleteConfirmId(simulado.id)}
-                                              style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: 4,
-                                                padding: '6px 10px',
-                                                borderRadius: 8,
-                                                border: '1px solid rgba(239, 68, 68, 0.28)',
-                                                color: '#ef4444',
-                                                background: 'rgba(239, 68, 68, 0.06)',
-                                                fontWeight: 700,
-                                                fontSize: 11.5,
-                                                cursor: 'pointer',
-                                                whiteSpace: 'nowrap'
-                                              }}
-                                              title="Excluir simulado"
-                                            >
-                                              <Trash2 size={12} /> Excluir
-                                            </button>
+                                            {/* Excluir (Somente visível se o colaborador for dono de alguma parte/simulado ou se for Coordenação/Admin) */}
+                                            {canUserDeleteOnCard && (
+                                              <button
+                                                type="button"
+                                                className="simulado-action-btn"
+                                                onClick={() => openDeleteModal(simulado)}
+                                                style={{
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: 4,
+                                                  padding: '6px 10px',
+                                                  borderRadius: 8,
+                                                  border: '1px solid rgba(239, 68, 68, 0.28)',
+                                                  color: '#ef4444',
+                                                  background: 'rgba(239, 68, 68, 0.06)',
+                                                  fontWeight: 700,
+                                                  fontSize: 11.5,
+                                                  cursor: 'pointer',
+                                                  whiteSpace: 'nowrap'
+                                                }}
+                                                title={
+                                                  isProfView && otherReqsInCard.length > 0
+                                                    ? 'Excluir apenas as minhas questões enviadas neste simulado'
+                                                    : 'Opções de exclusão deste simulado'
+                                                }
+                                              >
+                                                <Trash2 size={12} /> {isProfView && otherReqsInCard.length > 0 ? 'Excluir minha parte' : 'Excluir'}
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
 
@@ -2700,6 +2941,24 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                             </div>
                                                           </DropdownMenu.Item>
                                                         )}
+
+                                                        {(!isProfView || isUserRequisicaoOwner(currentUser, req)) && (
+                                                          <>
+                                                            <DropdownMenu.Separator style={{ height: 1, background: "hsl(var(--border-subtle))", margin: "4px 0" }} />
+                                                            <DropdownMenu.Item asChild>
+                                                              <div
+                                                                onClick={() => openDeleteModal(simulado, req)}
+                                                                style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#ef4444", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                                className="menu-item-hover"
+                                                              >
+                                                                <Trash2 size={15} color="#ef4444" />
+                                                                {isUserRequisicaoOwner(currentUser, req)
+                                                                  ? `Excluir meu envio (${disciplinaNome})`
+                                                                  : `Excluir envio de ${formatTeacherShortName(profName)} (${disciplinaNome})`}
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                          </>
+                                                        )}
                                                       </DropdownMenu.Content>
                                                     </DropdownMenu.Portal>
                                                   </DropdownMenu.Root>
@@ -2893,9 +3152,9 @@ export default function UploadSimuladosGerenciamentoPage() {
           )}
         </AnimatePresence>
 
-        {/* Modal de Exclusão */}
+        {/* Modal de Exclusão Inteligente (Isolado por Colaborador ou Completo) */}
         <AnimatePresence>
-          {deleteConfirmId && (
+          {deleteConfirmId && deleteConfirmTarget && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2906,7 +3165,12 @@ export default function UploadSimuladosGerenciamentoPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 zIndex: 9999, padding: 16
               }}
-              onClick={() => setDeleteConfirmId(null)}
+              onClick={() => {
+                if (!deletingItem) {
+                  setDeleteConfirmId(null)
+                  setDeleteConfirmTarget(null)
+                }
+              }}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
@@ -2915,7 +3179,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                 onClick={e => e.stopPropagation()}
                 style={{
                   background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                  borderRadius: 20, padding: 28, maxWidth: 420, width: '100%',
+                  borderRadius: 20, padding: 28, maxWidth: 480, width: '100%',
                   boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
                 }}
               >
@@ -2923,31 +3187,162 @@ export default function UploadSimuladosGerenciamentoPage() {
                   <Trash2 size={24} />
                 </div>
                 <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>
-                  Excluir Simulado?
+                  {deleteConfirmTarget.mode === 'collaborator_only'
+                    ? (isProfView ? 'Excluir Meu Envio do Simulado?' : 'Excluir Envio do Colaborador?')
+                    : 'Excluir Simulado Completo?'}
                 </h3>
-                <p style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', margin: '0 0 24px', lineHeight: 1.5 }}>
-                  Esta ação não pode ser desfeita. Todos os arquivos e dados vinculados a este simulado serão removidos permanentemente.
+
+                {/* Se houver opções (ex: Coordenação ou criador podendo escolher entre limpar só um colaborador ou todo o simulado) */}
+                {deleteConfirmTarget.canDeleteFullSimulado && deleteConfirmTarget.allReqs.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0 16px' }}>
+                    <label
+                      onClick={() => {
+                        const defaultReq = deleteConfirmTarget.targetReqs[0] || deleteConfirmTarget.allReqs[0]
+                        setDeleteConfirmTarget(prev => prev ? {
+                          ...prev,
+                          mode: 'collaborator_only',
+                          selectedReqId: defaultReq?.id || '',
+                          targetReqs: defaultReq ? [defaultReq] : prev.allReqs
+                        } : null)
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
+                        borderRadius: 10, cursor: 'pointer',
+                        border: deleteConfirmTarget.mode === 'collaborator_only'
+                          ? '1.5px solid #ef4444'
+                          : '1px solid hsl(var(--border-subtle))',
+                        background: deleteConfirmTarget.mode === 'collaborator_only'
+                          ? 'rgba(239, 68, 68, 0.06)'
+                          : 'hsl(var(--bg-app))'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        checked={deleteConfirmTarget.mode === 'collaborator_only'}
+                        onChange={() => {}}
+                        style={{ marginTop: 3, accentColor: '#ef4444' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                          Excluir apenas questões de um colaborador
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                          Mantém o simulado e preserva todas as questões enviadas pelos demais colaboradores.
+                        </div>
+                        {deleteConfirmTarget.mode === 'collaborator_only' && deleteConfirmTarget.allReqs.length > 1 && !isProfView && (
+                          <select
+                            value={deleteConfirmTarget.selectedReqId}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => {
+                              const reqId = e.target.value
+                              const found = deleteConfirmTarget.allReqs.find((r: any) => r.id === reqId)
+                              if (found) {
+                                setDeleteConfirmTarget(prev => prev ? {
+                                  ...prev,
+                                  selectedReqId: reqId,
+                                  targetReqs: [found]
+                                } : null)
+                              }
+                            }}
+                            style={{
+                              marginTop: 8, width: '100%', padding: '7px 10px', borderRadius: 8,
+                              border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))',
+                              color: 'hsl(var(--text-primary))', fontSize: 12.5, fontWeight: 600
+                            }}
+                          >
+                            {deleteConfirmTarget.allReqs.map((r: any) => {
+                              const qCount = Array.isArray(deleteConfirmTarget.simulado?.questoes_json)
+                                ? deleteConfirmTarget.simulado.questoes_json.filter((q: any) => isQuestionForRequisicao(q, r, deleteConfirmTarget.allReqs, true)).length
+                                : 0
+                              return (
+                                <option key={r.id} value={r.id}>
+                                  {r.disciplina_nome || 'Geral'} — {r.professor_nome || 'Professor'} ({qCount}/{r.qtd_questoes || 10} questões)
+                                </option>
+                              )
+                            })}
+                          </select>
+                        )}
+                      </div>
+                    </label>
+
+                    <label
+                      onClick={() => setDeleteConfirmTarget(prev => prev ? { ...prev, mode: 'full_simulado' } : null)}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
+                        borderRadius: 10, cursor: 'pointer',
+                        border: deleteConfirmTarget.mode === 'full_simulado'
+                          ? '1.5px solid #ef4444'
+                          : '1px solid hsl(var(--border-subtle))',
+                        background: deleteConfirmTarget.mode === 'full_simulado'
+                          ? 'rgba(239, 68, 68, 0.06)'
+                          : 'hsl(var(--bg-app))'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        checked={deleteConfirmTarget.mode === 'full_simulado'}
+                        onChange={() => {}}
+                        style={{ marginTop: 3, accentColor: '#ef4444' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                          Excluir card completo do simulado
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                          Remove o simulado inteiro e todas as disciplinas vinculadas.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                <p style={{ fontSize: 13.5, color: 'hsl(var(--text-secondary))', margin: '0 0 24px', lineHeight: 1.55 }}>
+                  {deleteConfirmTarget.mode === 'collaborator_only' ? (
+                    <>
+                      Serão removidas <strong>apenas as questões e o arquivo enviado</strong> de{' '}
+                      <strong style={{ color: 'hsl(var(--text-primary))' }}>
+                        {deleteConfirmTarget.targetReqs.map((r: any) => `${r.disciplina_nome || 'Geral'} (${r.professor_nome || 'Colaborador'})`).join(', ')}
+                      </strong>
+                      . As questões enviadas pelos outros colaboradores neste simulado <strong>permanecerão intactas</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Esta ação não pode ser desfeita. O simulado <strong>{deleteConfirmTarget.simulado?.titulo}</strong> e seus dados vinculados serão removidos permanentemente.
+                    </>
+                  )}
                 </p>
+
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => setDeleteConfirmId(null)}
+                    disabled={deletingItem}
+                    onClick={() => {
+                      setDeleteConfirmId(null)
+                      setDeleteConfirmTarget(null)
+                    }}
                     style={{
                       padding: '10px 18px', borderRadius: 10, background: 'hsl(var(--bg-app))',
                       border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))',
-                      fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                      fontSize: 13, fontWeight: 700, cursor: deletingItem ? 'not-allowed' : 'pointer'
                     }}
                   >
                     Cancelar
                   </button>
                   <button
+                    disabled={deletingItem}
                     onClick={confirmDelete}
                     style={{
                       padding: '10px 18px', borderRadius: 10, background: '#ef4444',
-                      border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                      border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
+                      cursor: deletingItem ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                      opacity: deletingItem ? 0.7 : 1
                     }}
                   >
-                    Excluir
+                    {deletingItem
+                      ? 'Excluindo...'
+                      : deleteConfirmTarget.mode === 'collaborator_only'
+                        ? 'Excluir Apenas Esta Parte'
+                        : 'Excluir Simulado'}
                   </button>
                 </div>
               </motion.div>

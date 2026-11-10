@@ -1114,6 +1114,114 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, fornecedor: novoForn, fornecedores })
     }
 
+    // 2.1 Importar Fornecedores Escolares em Lote (Excel / CSV)
+    if (action === 'import_fornecedores') {
+      const incoming = Array.isArray(body.fornecedores) ? body.fornecedores : []
+      if (incoming.length === 0) {
+        return NextResponse.json({ error: 'Nenhum fornecedor válido para importar' }, { status: 400 })
+      }
+
+      const cleanDigits = (val?: string) => String(val || '').replace(/\D/g, '')
+      let importedCount = 0
+      let updatedCount = 0
+
+      for (let i = 0; i < incoming.length; i++) {
+        const f = incoming[i] as Partial<FornecedorEscolar>
+        const nomeTrim = String(f?.nome || '').trim()
+        if (!nomeTrim) continue
+
+        const docTrim = String(f?.documento || '').trim()
+        const docDigits = cleanDigits(docTrim)
+        const nomeLower = nomeTrim.toLowerCase()
+
+        const existingIdx = fornecedores.findIndex((x) => {
+          if (f.id && x.id === f.id) return true
+          if (docDigits.length >= 11 && cleanDigits(x.documento) === docDigits) return true
+          return String(x.nome || '').trim().toLowerCase() === nomeLower
+        })
+
+        if (existingIdx >= 0) {
+          const prev = fornecedores[existingIdx]
+          fornecedores[existingIdx] = {
+            ...prev,
+            nome: nomeTrim,
+            nomeFantasia: f.nomeFantasia?.trim() || prev.nomeFantasia || nomeTrim,
+            documento: docTrim || prev.documento || '',
+            categoriaPadrao:
+              f.categoriaPadrao !== undefined && f.categoriaPadrao !== ''
+                ? f.categoriaPadrao
+                : prev.categoriaPadrao,
+            centroCustoPadrao:
+              f.centroCustoPadrao !== undefined && f.centroCustoPadrao !== ''
+                ? f.centroCustoPadrao
+                : prev.centroCustoPadrao,
+            unidadePadrao:
+              f.unidadePadrao !== undefined && f.unidadePadrao !== ''
+                ? f.unidadePadrao
+                : prev.unidadePadrao,
+            tipoCustoPadrao: f.tipoCustoPadrao || prev.tipoCustoPadrao || 'fixo',
+            formaPagamentoPadrao: f.formaPagamentoPadrao || prev.formaPagamentoPadrao || 'PIX',
+            banco: f.banco || prev.banco || '',
+            agencia: f.agencia || prev.agencia || '',
+            contaCorrente: f.contaCorrente || prev.contaCorrente || '',
+            chavePix: f.chavePix !== undefined && f.chavePix !== '' ? f.chavePix : prev.chavePix,
+            tipoPix: f.tipoPix || prev.tipoPix || 'CNPJ',
+            contatoNome: f.contatoNome || prev.contatoNome || '',
+            telefone: f.telefone || prev.telefone || '',
+            email: f.email || prev.email || '',
+            observacoes: f.observacoes || prev.observacoes || '',
+            avaliacao: Number(f.avaliacao ?? prev.avaliacao ?? 5),
+            ativo: f.ativo !== false,
+          }
+          updatedCount++
+        } else {
+          const novoForn: FornecedorEscolar = {
+            id: f.id || `forn-${Date.now().toString(36)}-${i}`,
+            nome: nomeTrim,
+            nomeFantasia: f.nomeFantasia?.trim() || nomeTrim,
+            documento: docTrim,
+            categoriaPadrao: f.categoriaPadrao || '',
+            centroCustoPadrao: f.centroCustoPadrao ?? '',
+            unidadePadrao: f.unidadePadrao ?? '',
+            tipoCustoPadrao: f.tipoCustoPadrao || 'fixo',
+            formaPagamentoPadrao: f.formaPagamentoPadrao || 'PIX',
+            banco: f.banco || '',
+            agencia: f.agencia || '',
+            contaCorrente: f.contaCorrente || '',
+            chavePix: f.chavePix || '',
+            tipoPix: f.tipoPix || 'CNPJ',
+            contatoNome: f.contatoNome || '',
+            telefone: f.telefone || '',
+            email: f.email || '',
+            observacoes: f.observacoes || '',
+            avaliacao: Number(f.avaliacao ?? 5),
+            ativo: f.ativo !== false,
+          }
+          fornecedores.push(novoForn)
+          importedCount++
+        }
+      }
+
+      const { error: saveBatchErr } = await admin
+        .from('configuracoes')
+        .upsert(
+          { chave: CFG_KEY_FORNECEDORES, valor: fornecedores, updated_at: nowISO },
+          { onConflict: 'chave' }
+        )
+
+      if (saveBatchErr) {
+        throw new Error(saveBatchErr.message)
+      }
+      ;(globalThis as any).configCache?.clear?.()
+
+      return NextResponse.json({
+        ok: true,
+        importedCount,
+        updatedCount,
+        fornecedores,
+      })
+    }
+
     // 3. Excluir Fornecedor Escolar
     if (action === 'delete_fornecedor') {
       const fornId = String(body.id || '').trim()

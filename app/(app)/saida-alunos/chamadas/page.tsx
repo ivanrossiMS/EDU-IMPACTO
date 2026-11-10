@@ -60,7 +60,7 @@ import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
 import {
-  CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
+  CheckCircle2, CheckCheck, Clock, Search, Megaphone, X, GraduationCap,
   UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin,
   Users, Sparkles, AlertCircle, Volume2, VolumeX, History, Calendar
 } from 'lucide-react'
@@ -3344,7 +3344,7 @@ function ProibidosRetiradaCard() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ChamadasContent() {
 
-  const { activeCalls = [], confirmPickup, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
+  const { activeCalls = [], confirmPickup, confirmAllWaiting, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
   const { currentUser, currentUserPerfil } = useApp()
   const [turmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
@@ -3387,6 +3387,8 @@ function ChamadasContent() {
   const [callSearch,    setCallSearch]    = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+  const [confirmModalAllWaiting, setConfirmModalAllWaiting] = useState(false)
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false)
   const [selectedCallForIrmaos, setSelectedCallForIrmaos] = useState<PickupCall | null>(null)
 
   // -- Busca de Alunos Refatorada Direct Supabase --
@@ -4017,7 +4019,7 @@ function ChamadasContent() {
           })}
         </div>
 
-        {/* Right: Search Input + Zerar Chamadas */}
+        {/* Right: Search Input + Confirmar Todos + Zerar Chamadas */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -4025,6 +4027,7 @@ function ChamadasContent() {
           flex: isMobile ? '1 1 100%' : '0 0 auto',
           marginLeft: isMobile ? 0 : 'auto',
           justifyContent: isMobile ? 'space-between' : 'flex-end',
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
         }}>
           {/* Search Input with Gradient Accent */}
           <div style={{
@@ -4092,6 +4095,29 @@ function ChamadasContent() {
               </button>
             )}
           </div>
+
+          {/* Botão Organizado: Confirmar Todos Que Estão Aguardando */}
+          <button
+            type="button"
+            className="btn-confirmar-todos"
+            disabled={waiting.length === 0}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (waiting.length > 0) {
+                setConfirmModalAllWaiting(true)
+              }
+            }}
+            title={waiting.length > 0 ? `Confirmar saída de todos os ${waiting.length} alunos aguardando` : 'Nenhum aluno aguardando no momento'}
+          >
+            <CheckCheck size={14} strokeWidth={2.4} />
+            <span>Confirmar Todos</span>
+            {waiting.length > 0 && (
+              <span className="badge-count">
+                {waiting.length}
+              </span>
+            )}
+          </button>
 
           {/* Zerar Chamadas with Gradient Danger Theme */}
           {isAdmin && (
@@ -4191,6 +4217,192 @@ function ChamadasContent() {
             onRecallStudent={handleRecall}
             showToast={showToast}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL DE CONFIRMAÇÃO (CONFIRMAR TODOS OS AGUARDANDO) ───────── */}
+      <AnimatePresence>
+        {confirmModalAllWaiting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 16,
+            }}
+            onClick={() => {
+              if (!isConfirmingAll) setConfirmModalAllWaiting(false)
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 24, padding: 24, width: '100%', maxWidth: 440,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                display: 'flex', flexDirection: 'column', gap: 18,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 16,
+                  background: 'rgba(16, 185, 129, 0.12)', color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <CheckCheck size={26} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                    Confirmar todos que estão aguardando?
+                  </h3>
+                  <p style={{ margin: '6px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.45 }}>
+                    Deseja confirmar a saída de <strong style={{ color: '#059669' }}>{waiting.length} {waiting.length === 1 ? 'aluno' : 'alunos'}</strong> que {waiting.length === 1 ? 'está aguardando' : 'estão aguardando'} na portaria?
+                  </p>
+                </div>
+              </div>
+
+              {/* Lista dos alunos que serão confirmados */}
+              {waiting.length > 0 && (
+                <div style={{
+                  maxHeight: 180,
+                  overflowY: 'auto',
+                  borderRadius: 14,
+                  border: '1px solid hsl(var(--border-subtle))',
+                  background: 'hsl(var(--bg-surface))',
+                  padding: '8px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}>
+                  {waiting.map((c, idx) => {
+                    const turmaNome = turmaNameMap.get(String(c.studentClass)) || c.studentClass
+                    return (
+                      <div
+                        key={c.id || idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          padding: '6px 8px',
+                          borderRadius: 8,
+                          background: 'hsl(var(--bg-elevated))',
+                          fontSize: 12,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <span style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: '#f59e0b', flexShrink: 0,
+                          }} />
+                          <span style={{
+                            fontWeight: 700, color: 'hsl(var(--text-primary))',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {c.studentName}
+                          </span>
+                        </div>
+                        {turmaNome && (
+                          <span style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: 'hsl(var(--text-muted))',
+                            padding: '2px 7px',
+                            background: 'hsl(var(--bg-overlay))',
+                            borderRadius: 6,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}>
+                            {turmaNome}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  disabled={isConfirmingAll}
+                  onClick={() => setConfirmModalAllWaiting(false)}
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12,
+                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-secondary))', fontWeight: 700, fontSize: 13,
+                    cursor: isConfirmingAll ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isConfirmingAll) e.currentTarget.style.background = 'hsl(var(--bg-overlay))'
+                  }}
+                  onMouseLeave={e => {
+                    if (!isConfirmingAll) e.currentTarget.style.background = 'hsl(var(--bg-surface))'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isConfirmingAll || waiting.length === 0}
+                  onClick={async () => {
+                    try {
+                      setIsConfirmingAll(true)
+                      const count = await confirmAllWaiting(waiting)
+                      showToast(`${count} ${count === 1 ? 'saída confirmada' : 'saídas confirmadas'} com sucesso!`, true)
+                      setConfirmModalAllWaiting(false)
+                    } catch (err: any) {
+                      console.error('Erro ao confirmar todas as chamadas:', err)
+                      showToast('Ocorreu um erro ao confirmar as saídas.', false)
+                    } finally {
+                      setIsConfirmingAll(false)
+                    }
+                  }}
+                  style={{
+                    flex: 1.4, height: 44, borderRadius: 12,
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: 'none',
+                    color: '#fff', fontWeight: 700, fontSize: 13,
+                    cursor: isConfirmingAll ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    opacity: isConfirmingAll ? 0.75 : 1,
+                  }}
+                  onMouseEnter={e => {
+                    if (!isConfirmingAll) {
+                      e.currentTarget.style.filter = 'brightness(1.08)'
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isConfirmingAll) {
+                      e.currentTarget.style.filter = 'none'
+                      e.currentTarget.style.transform = 'none'
+                    }
+                  }}
+                >
+                  {isConfirmingAll ? (
+                    <>
+                      <RefreshCw size={15} className="spin" />
+                      <span>Confirmando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCheck size={16} strokeWidth={2.4} />
+                      <span>Confirmar {waiting.length} {waiting.length === 1 ? 'Aluno' : 'Alunos'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -4334,6 +4546,56 @@ function ChamadasContent() {
           box-shadow: 0 8px 24px rgba(16,185,129,0.45);
           transform: translateY(-2px);
           filter: brightness(1.1);
+        }
+
+        .btn-confirmar-todos {
+          height: 36px;
+          padding: 0 14px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 700;
+          border: 1px solid rgba(16, 185, 129, 0.35);
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%);
+          color: #059669;
+          cursor: pointer;
+          transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          white-space: nowrap;
+          flex-shrink: 0;
+          box-shadow: 0 2px 6px rgba(16, 185, 129, 0.08);
+        }
+        .btn-confirmar-todos:hover:not(:disabled) {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: #ffffff;
+          border-color: transparent;
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.38);
+          transform: translateY(-1px);
+        }
+        .btn-confirmar-todos:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          border-color: rgba(16, 185, 129, 0.15);
+          background: hsl(var(--bg-surface));
+          color: hsl(var(--text-muted));
+          box-shadow: none;
+          transform: none;
+        }
+        .btn-confirmar-todos .badge-count {
+          background: rgba(16, 185, 129, 0.18);
+          color: inherit;
+          border-radius: 100px;
+          font-size: 10px;
+          padding: 1px 7px;
+          font-weight: 800;
+          min-width: 16px;
+          text-align: center;
+          transition: all 0.18s ease;
+        }
+        .btn-confirmar-todos:hover:not(:disabled) .badge-count {
+          background: rgba(255, 255, 255, 0.25);
+          color: #ffffff;
         }
 
         .btn-cancelar {

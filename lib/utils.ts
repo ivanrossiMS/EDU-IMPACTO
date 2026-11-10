@@ -569,23 +569,151 @@ export async function downloadOriginalFile(url: string, filename?: string) {
 }
 
 /**
+ * Detecta se um texto possui resíduos do marcador [[GABARITO]] ou colchete '[' órfão no final
+ * (preservando intervalos matemáticos legítimos como [0, 1[ ou ]0, 1[).
+ */
+export function hasGabaritoBracketArtifact(str?: string | null): boolean {
+  if (!str || typeof str !== 'string') return false
+  if (/\[\[?GABARITO\]?\]?|\[?GABARITO\]\]/i.test(str)) return true
+  const isMathInterval = /[\[\]][^,\[\]]+,[^,\[\]]+\[(?:\s*<\/[a-z0-9]+>\s*)*$/i.test(str)
+  if (isMathInterval) return false
+  return /\[(\s*(?:<\/[a-z0-9]+>\s*)*)$/i.test(str.trim())
+}
+
+/**
+ * Remove resíduos de [[GABARITO]] ou colchete '[' órfão no final do texto da alternativa/enunciado.
+ */
+export function cleanGabaritoBracketArtifact(str?: string | null): string {
+  if (!str || typeof str !== 'string') return ''
+  let res = str
+    .replace(/\[\[GABARITO\]\]/gi, '')
+    .replace(/\[\[?GABARITO\]?\]?/gi, '')
+    .replace(/\[?GABARITO\]\]/gi, '')
+
+  const isMathInterval = /[\[\]][^,\[\]]+,[^,\[\]]+\[(?:\s*<\/[a-z0-9]+>\s*)*$/i.test(res)
+  if (!isMathInterval) {
+    res = res.replace(/\[(\s*(?:<\/[a-z0-9]+>\s*)*)$/i, '$1')
+  }
+  return res.trim()
+}
+
+/**
+ * Verifica se o usuário atual possui perfil de colaborador/professor (e não gestão/coordenação/admin).
+ */
+export function isCollaboratorRole(user: any, currentUserPerfil?: string | null): boolean {
+  const roleStr = String(currentUserPerfil || user?.perfil || user?.cargo || '').toLowerCase().trim()
+  if (!roleStr) return false
+  const adminOrCoord = [
+    'administrador',
+    'administrador master',
+    'master',
+    'diretor',
+    'diretora',
+    'direcao',
+    'direção',
+    'coordenador',
+    'coordenadora',
+    'coordenacao',
+    'coordenação',
+    'supervisor',
+    'supervisora'
+  ]
+  if (adminOrCoord.some(r => roleStr.includes(r))) return false
+  return (
+    roleStr === 'professor' ||
+    roleStr === 'colaborador' ||
+    roleStr.includes('prof') ||
+    roleStr.includes('docente') ||
+    roleStr.includes('colaborador')
+  )
+}
+
+/**
+ * Verifica com máxima precisão se uma requisição (disciplina/professor) pertence ao colaborador logado,
+ * comparando todos os IDs possíveis (auth id, colaborador_id, system_user_id) e nome normalizado.
+ */
+export function isUserRequisicaoOwner(user: any, req: any): boolean {
+  if (!user || !req) return false
+  const userIds = [
+    user.id,
+    user.colaborador_id,
+    user.system_user_id,
+    user.professor_id
+  ].filter(Boolean).map(id => String(id).trim())
+
+  const reqProfId = req.id_professor ? String(req.id_professor).trim() : ''
+  if (reqProfId && userIds.includes(reqProfId)) {
+    return true
+  }
+
+  const normalizeName = (s?: string | null) =>
+    (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  const uName = normalizeName(user.nome)
+  const rName = normalizeName(req.professor_nome || req.professores?.nome)
+  if (uName && rName && uName === rName) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Verifica se o simulado/prova/redação foi criado diretamente pelo usuário logado.
+ */
+export function isUserCreator(user: any, item: any): boolean {
+  if (!user || !item) return false
+  const userIds = [
+    user.id,
+    user.colaborador_id,
+    user.system_user_id,
+    user.professor_id
+  ].filter(Boolean).map(id => String(id).trim())
+
+  const creatorId = item.criado_por ? String(item.criado_por).trim() : ''
+  if (creatorId && userIds.includes(creatorId)) {
+    return true
+  }
+  return false
+}
+
+/**
  * Normaliza questões onde as alternativas possuem tags [IMAGEM N] ou onde as imagens
  * pertencem às alternativas mas ficaram retidas em q.imagens.
- * Transfere a imagem para alt.imagem_url, limpa o alt.text e remove de q.imagens
- * para evitar que sejam renderizadas no enunciado da questão.
+ * Também higieniza resíduos de [[GABARITO]] ou '[' órfão no final da alternativa correta.
  */
 export function normalizeQuestionImages(q: any): any {
-  if (!q || !Array.isArray(q.alternativas) || q.alternativas.length === 0) {
-    return q
+  if (!q) return q
+
+  let enunciadoChanged = false
+  let cleanedEnunciado = q.enunciado || ''
+  if (hasGabaritoBracketArtifact(cleanedEnunciado)) {
+    cleanedEnunciado = cleanGabaritoBracketArtifact(cleanedEnunciado)
+    enunciadoChanged = true
+  }
+
+  if (!Array.isArray(q.alternativas) || q.alternativas.length === 0) {
+    return enunciadoChanged ? { ...q, enunciado: cleanedEnunciado } : q
   }
 
   const imagens = Array.isArray(q.imagens) ? [...q.imagens] : []
-  let changed = false
+  let changed = enunciadoChanged
   const usedImageIndices = new Set<number>()
+  let detectedGabaritoIndex = -1
 
-  const updatedAlternativas = q.alternativas.map((alt: any) => {
-    let altText = alt.text || ''
+  const updatedAlternativas = q.alternativas.map((alt: any, idx: number) => {
+    let altText = alt.text ?? alt.texto ?? ''
     let altImgUrl = alt.imagem_url
+
+    if (hasGabaritoBracketArtifact(altText)) {
+      altText = cleanGabaritoBracketArtifact(altText)
+      detectedGabaritoIndex = idx
+      changed = true
+    }
 
     const match = altText.match(/\[IMAGEM\s+(\d+)\]/i)
     if (match) {
@@ -618,15 +746,27 @@ export function normalizeQuestionImages(q: any): any {
     return {
       ...alt,
       text: altText,
+      ...(alt.texto !== undefined ? { texto: altText } : {}),
       ...(altImgUrl ? { imagem_url: altImgUrl } : {})
     }
   })
 
+  // Se uma alternativa tinha resíduo de [[GABARITO]] / '[' e nenhuma estava marcada como correta ainda, restaura a marcação
+  const hasAnyCorrect = updatedAlternativas.some((a: any) => a.correct === true || a.correta === true || a.eh_correta === true)
+  if (!hasAnyCorrect && detectedGabaritoIndex >= 0 && updatedAlternativas[detectedGabaritoIndex]) {
+    updatedAlternativas[detectedGabaritoIndex] = {
+      ...updatedAlternativas[detectedGabaritoIndex],
+      correct: true,
+      ...(updatedAlternativas[detectedGabaritoIndex].correta !== undefined ? { correta: true } : {})
+    }
+    changed = true
+  }
+
   // Fallback: se nenhuma alternativa tinha [IMAGEM N], mas todas têm texto vazio,
   // q.imagens tem a mesma quantidade de alternativas e enunciado não referencia imagens
-  if (!changed && usedImageIndices.size === 0 && imagens.length > 0 && imagens.length === q.alternativas.length) {
+  if (usedImageIndices.size === 0 && imagens.length > 0 && imagens.length === q.alternativas.length) {
     const allAltsEmpty = q.alternativas.every((a: any) => !a.text || !a.text.trim())
-    const enunciadoHasImages = (q.enunciado || '').includes('[IMAGEM')
+    const enunciadoHasImages = cleanedEnunciado.includes('[IMAGEM')
     const altsAlreadyHaveImages = q.alternativas.some((a: any) => a.imagem_url)
     if (allAltsEmpty && !enunciadoHasImages && !altsAlreadyHaveImages) {
       const remappedAlts = q.alternativas.map((alt: any, i: number) => {
@@ -649,6 +789,7 @@ export function normalizeQuestionImages(q: any): any {
       })
       return {
         ...q,
+        enunciado: cleanedEnunciado,
         imagens: [],
         alternativas: remappedAlts
       }
@@ -665,7 +806,7 @@ export function normalizeQuestionImages(q: any): any {
       }
     })
 
-    let newEnunciado = q.enunciado || ''
+    let newEnunciado = cleanedEnunciado
     if (newImagens.length !== imagens.length) {
       newEnunciado = newEnunciado.replace(/\[IMAGEM\s+(\d+)\]/gi, (match: string, numStr: string) => {
         const oldIdx = parseInt(numStr, 10) - 1
@@ -676,11 +817,15 @@ export function normalizeQuestionImages(q: any): any {
       })
     }
 
+    const correctAlt = updatedAlternativas.find((a: any) => a.correct === true || a.correta === true || a.eh_correta === true)
+    const updatedGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra || q.gabarito) : q.gabarito
+
     return {
       ...q,
       enunciado: newEnunciado,
       imagens: newImagens,
-      alternativas: updatedAlternativas
+      alternativas: updatedAlternativas,
+      ...(updatedGabarito ? { gabarito: updatedGabarito } : {})
     }
   }
 

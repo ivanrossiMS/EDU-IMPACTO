@@ -65,6 +65,8 @@ interface Parcela {
   tipo: string
   status: ParcelaStatus
   vencimento: string
+  vencimentoOriginal?: string | null
+  isDueToday?: boolean
   dataPagamento: string | null
   competencia: string
   anoReferencia: string
@@ -214,14 +216,50 @@ function getCompetenceLabel(competenceStr: string): string {
   }
 }
 
+function getTodayDateStrBrasilia(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+  } catch {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+}
+
 function checkIsOverdue(parcela: Parcela): boolean {
-  if (parcela.status === 'PAID' || parcela.status === 'CANCELED') return false
+  if (parcela.status === 'PAID' || parcela.status === 'CANCELED' || parcela.status === 'AGGLUTINATED' || parcela.status === 'RENEGOTIATED') return false
   if (parcela.status === 'OVERDUE') return true
   if (parcela.status === 'OPEN' && parcela.vencimento) {
-    const due = new Date(parcela.vencimento + 'T23:59:59')
-    return due < new Date()
+    const rawDate = parcela.vencimento.split('T')[0].trim()
+    if (!rawDate) return false
+    const today = getTodayDateStrBrasilia()
+    return rawDate < today
   }
   return false
+}
+
+function checkIsDueToday(parcela: Parcela): boolean {
+  if (parcela.status === 'PAID' || parcela.status === 'CANCELED' || parcela.status === 'AGGLUTINATED' || parcela.status === 'RENEGOTIATED') return false
+  if (parcela.isDueToday) return true
+  if (parcela.status === 'OPEN' && parcela.vencimento) {
+    const rawDate = parcela.vencimento.split('T')[0].trim()
+    const today = getTodayDateStrBrasilia()
+    return rawDate === today
+  }
+  return false
+}
+
+const DUE_TODAY_THEME = {
+  label: 'Vence Hoje',
+  badgeBg: '#fffbeb',
+  badgeText: '#b45309',
+  badgeBorder: '#fde68a',
+  dotColor: '#f59e0b',
+  icon: <Clock size={11} strokeWidth={2.5} />,
 }
 
 // ─── Skeleton Loader Responsivo ──────────────────────────────────────────────
@@ -254,8 +292,13 @@ function MobileInvoiceCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isVencida = checkIsOverdue(parcela)
-  const effectiveTheme = isVencida ? STATUS_THEMES.OVERDUE : (STATUS_THEMES[parcela.status] || STATUS_THEMES.OPEN)
-  const canPay = (parcela.status === 'OPEN' || isVencida) && parcela.valorEfetivo > 0
+  const isDueToday = !isVencida && checkIsDueToday(parcela)
+  const effectiveTheme = isVencida
+    ? STATUS_THEMES.OVERDUE
+    : isDueToday
+    ? DUE_TODAY_THEME
+    : (STATUS_THEMES[parcela.status] || STATUS_THEMES.OPEN)
+  const canPay = (parcela.status === 'OPEN' || isVencida || isDueToday) && parcela.valorEfetivo > 0
 
   const competenceFormatted = getCompetenceLabel(parcela.competencia)
 
@@ -269,7 +312,7 @@ function MobileInvoiceCard({
       style={{
         background: '#ffffff',
         borderRadius: 22,
-        border: `1.5px solid ${isVencida ? '#fecaca' : isExpanded ? '#cbd5e1' : '#edf2f7'}`,
+        border: `1.5px solid ${isVencida ? '#fecaca' : isDueToday ? '#fde68a' : isExpanded ? '#cbd5e1' : '#edf2f7'}`,
         boxShadow: isExpanded
           ? '0 10px 25px -4px rgba(0, 0, 0, 0.06)'
           : '0 2px 8px -2px rgba(0, 0, 0, 0.03)',
@@ -296,9 +339,9 @@ function MobileInvoiceCard({
               style={{
                 fontSize: 11,
                 fontWeight: 900,
-                color: parcela.status === 'PAID' ? '#059669' : isVencida ? '#dc2626' : '#0284c7',
-                background: parcela.status === 'PAID' ? '#ecfdf5' : isVencida ? '#fef2f2' : '#f0f9ff',
-                border: `1px solid ${parcela.status === 'PAID' ? '#a7f3d0' : isVencida ? '#fecaca' : '#bae6fd'}`,
+                color: parcela.status === 'PAID' ? '#059669' : isVencida ? '#dc2626' : isDueToday ? '#b45309' : '#0284c7',
+                background: parcela.status === 'PAID' ? '#ecfdf5' : isVencida ? '#fef2f2' : isDueToday ? '#fffbeb' : '#f0f9ff',
+                border: `1px solid ${parcela.status === 'PAID' ? '#a7f3d0' : isVencida ? '#fecaca' : isDueToday ? '#fde68a' : '#bae6fd'}`,
                 padding: '3px 9px',
                 borderRadius: 8,
                 letterSpacing: 0.4,
@@ -333,7 +376,7 @@ function MobileInvoiceCard({
             style={{
               fontSize: 18,
               fontWeight: 900,
-              color: parcela.status === 'PAID' ? '#059669' : isVencida ? '#dc2626' : '#0f172a',
+              color: parcela.status === 'PAID' ? '#059669' : isVencida ? '#dc2626' : isDueToday ? '#b45309' : '#0f172a',
               letterSpacing: '-0.02em',
               textAlign: 'right',
             }}
@@ -398,6 +441,10 @@ function MobileInvoiceCard({
               {parcela.status === 'PAID' ? (
                 <span>
                   Liquidada em <strong style={{ color: '#059669' }}>{formatDateDisplay(parcela.dataPagamento)}</strong>
+                </span>
+              ) : isDueToday ? (
+                <span>
+                  Vence <strong style={{ color: '#b45309' }}>hoje ({formatDateDisplay(parcela.vencimento)})</strong>
                 </span>
               ) : (
                 <span>
