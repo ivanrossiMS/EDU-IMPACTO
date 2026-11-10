@@ -75,8 +75,8 @@ export default function GestaoPessoasFormulariosPage() {
     loadInitialData()
   }, [])
 
-  const loadInitialData = async () => {
-    setLoading(true)
+  const loadInitialData = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [formsRes, funcsRes] = await Promise.all([
         fetch('/api/gestao-pessoas/formularios', { cache: 'no-store' }),
@@ -99,7 +99,7 @@ export default function GestaoPessoasFormulariosPage() {
     } catch (err) {
       console.error('Erro ao carregar formulários:', err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -470,11 +470,11 @@ export default function GestaoPessoasFormulariosPage() {
           editingResponse={prefilledEditingResponse}
           colaboradoresList={colaboradoresList}
           onSubmitSuccess={() => {
-            loadInitialData()
+            loadInitialData(true)
           }}
           onCancel={() => {
             setViewMode('list')
-            loadInitialData()
+            loadInitialData(true)
           }}
         />
       </div>

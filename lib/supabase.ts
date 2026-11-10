@@ -320,15 +320,39 @@ if (isBrowser) {
     const rawSearch = window.location.search || ''
     const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash)
     const searchParams = new URLSearchParams(rawSearch)
-    const isRecoveryUrl =
+
+    // Detecção segura de recuperação de senha:
+    // Apenas redireciona para /atualizar-senha se for explicitamente um fluxo de recuperação
+    // NUNCA sequestrar erros gerais de autenticação ou OAuth (como 403, Signups not allowed, etc.)
+    const isExplicitRecoveryType =
       hashParams.get('type') === 'recovery' ||
       searchParams.get('type') === 'recovery' ||
-      Boolean(searchParams.get('token_hash'))
-    const hasAuthErrorInHash = Boolean(
-      hashParams.get('error') || hashParams.get('error_code') || hashParams.get('error_description')
-    )
+      Boolean(searchParams.get('token_hash')) ||
+      Boolean(hashParams.get('token_hash'))
 
-    if (isRecoveryUrl) {
+    const isExplicitRecoveryOtpExpired =
+      hashParams.get('error_code') === 'otp_expired' ||
+      searchParams.get('error_code') === 'otp_expired' ||
+      (hashParams.get('error_description') || '').toLowerCase().includes('otp') ||
+      (searchParams.get('error_description') || '').toLowerCase().includes('otp')
+
+    const hasStoredRecoveryPending =
+      typeof window !== 'undefined' &&
+      window.sessionStorage?.getItem('edu_password_recovery_pending') === '1'
+
+    const isRecoveryUrl =
+      isExplicitRecoveryType ||
+      (isExplicitRecoveryOtpExpired &&
+        (hasStoredRecoveryPending || !window.location.pathname.startsWith('/gestao-pessoas/formularios')))
+
+    // Verifica se há formulário pendente sendo preenchido
+    const hasFormPending =
+      typeof window !== 'undefined' &&
+      (Boolean(window.sessionStorage?.getItem('gp_form_auth_pending')) ||
+        Boolean(window.localStorage?.getItem('gp_form_auth_pending')) ||
+        window.location.pathname.startsWith('/gestao-pessoas/formularios'))
+
+    if (isRecoveryUrl && !hasFormPending) {
       ;(window as any).__EDU_IS_PASSWORD_RECOVERY__ = true
       ;(window as any).__EDU_INITIAL_RECOVERY_HASH__ = rawHash
       ;(window as any).__EDU_INITIAL_RECOVERY_SEARCH__ = rawSearch
@@ -343,17 +367,6 @@ if (isBrowser) {
         shouldDeferUrlDetectionForRedirect = true
         window.location.replace(`/atualizar-senha${rawSearch}${rawHash}`)
       }
-    } else if (
-      hasAuthErrorInHash &&
-      !window.location.pathname.startsWith('/atualizar-senha') &&
-      !window.location.pathname.startsWith('/login')
-    ) {
-      ;(window as any).__EDU_INITIAL_AUTH_ERROR_HASH__ = rawHash
-      try {
-        window.sessionStorage.setItem('edu_password_recovery_error_hash', rawHash)
-      } catch {}
-      shouldDeferUrlDetectionForRedirect = true
-      window.location.replace(`/atualizar-senha${rawSearch}${rawHash}`)
     }
   } catch {}
 

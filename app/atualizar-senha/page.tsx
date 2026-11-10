@@ -73,6 +73,22 @@ export default function AtualizarSenha() {
       searchParams.get('error');
     const errCode = hashParams.get('error_code') || searchParams.get('error_code');
 
+    // Se o usuário estava no fluxo de identificação de formulário de Gestão de Pessoas e caiu aqui por engano
+    const formPending =
+      window.sessionStorage?.getItem('gp_form_auth_pending') ||
+      window.localStorage?.getItem('gp_form_auth_pending');
+    const formReturnUrl =
+      window.sessionStorage?.getItem('gp_form_return_url') ||
+      window.localStorage?.getItem('gp_form_return_url') ||
+      (formPending ? `/gestao-pessoas/formularios/${formPending}` : null);
+
+    if (formReturnUrl && (err?.toLowerCase().includes('signups') || (!tokenHash && !accessToken && !code))) {
+      clearRecoveryTempFlags();
+      const cleanFormBase = formReturnUrl.split('#')[0].split('?')[0];
+      window.location.replace(`${cleanFormBase}${rawSearch}${rawHash}`);
+      return;
+    }
+
     // 1. Se houver erro explícito na URL e nenhum token válido para validar
     if ((err || errCode) && !tokenHash && !accessToken && !code) {
       console.error('[Auth Error] Error detected in URL on atualizar-senha:', errCode, err);

@@ -155,7 +155,7 @@ export interface GPFormResponse {
   respondentRole?: string
   respondentDepartment?: string
   respondentUnit?: string
-  source: 'colaborador_logado' | 'inserido_pelo_gestor' | 'importado_planilha'
+  source: 'colaborador_logado' | 'inserido_pelo_gestor' | 'importado_planilha' | 'publico_google' | 'link_publico'
   insertedByAdminName?: string
   adminNotes?: string
   answers: Record<string, any>

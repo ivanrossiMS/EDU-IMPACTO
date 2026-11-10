@@ -30,8 +30,8 @@ export default function FormularioDirectPage({
     loadFormDetails()
   }, [id])
 
-  const loadFormDetails = async () => {
-    setLoading(true)
+  const loadFormDetails = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const [res, funcsRes] = await Promise.all([
         fetch(`/api/gestao-pessoas/formularios/${id}`, { cache: 'no-store' }),
@@ -44,7 +44,7 @@ export default function FormularioDirectPage({
         const errJson = await res.json().catch(() => ({}))
         setError(errJson.error || 'Formulário não encontrado ou indisponível.')
         setHasModuleAccess(Boolean(errJson.hasModuleAccess ?? false))
-        setLoading(false)
+        if (!silent) setLoading(false)
         return
       }
 
@@ -63,9 +63,9 @@ export default function FormularioDirectPage({
         }
       }
     } catch (err) {
-      setError('Erro de conexão ao carregar o formulário.')
+      if (!silent) setError('Erro de conexão ao carregar o formulário.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -267,8 +267,8 @@ export default function FormularioDirectPage({
         isAdmin={isAdmin}
         initialManualMode={mode === 'manual'}
         colaboradoresList={colaboradoresList}
-        onSubmitSuccess={() => loadFormDetails()}
-        onCancel={hasModuleAccess ? () => router.push('/gestao-pessoas/formularios') : undefined}
+        onSubmitSuccess={() => loadFormDetails(true)}
+        onCancel={() => router.push(hasModuleAccess ? '/gestao-pessoas/formularios' : '/dashboard')}
       />
     </div>
   )

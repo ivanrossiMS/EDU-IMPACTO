@@ -4,11 +4,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2,
+  Check,
   AlertCircle,
   Lock,
   Send,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Star,
   ArrowUp,
   ArrowDown,
@@ -21,6 +24,7 @@ import {
   Info,
   RotateCcw,
   FileCheck2,
+  FileText,
   ShieldCheck,
   Printer,
   Plus,
@@ -32,6 +36,8 @@ import {
   X,
   User,
   LogIn,
+  Copy,
+  Edit3,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -278,6 +284,48 @@ function SignaturePad({
   )
 }
 
+function decodeGoogleJwt(token: string): any {
+  try {
+    const base64Url = token.split('.')[1]
+    if (!base64Url) return null
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(jsonPayload)
+  } catch {
+    return null
+  }
+}
+
+function loadGoogleGsiScript(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') return reject(new Error('Window not available'))
+    if ((window as any).google?.accounts?.oauth2 || (window as any).google?.accounts?.id) {
+      return resolve((window as any).google)
+    }
+    const existing = document.getElementById('google-gsi-client')
+    if (existing) {
+      existing.addEventListener('load', () => resolve((window as any).google))
+      existing.addEventListener('error', () =>
+        reject(new Error('Falha ao carregar biblioteca de login do Google'))
+      )
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'google-gsi-client'
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve((window as any).google)
+    script.onerror = () => reject(new Error('Falha ao carregar Google Identity Services'))
+    document.head.appendChild(script)
+  })
+}
+
 export function FormRenderer({
   form,
   currentUser,
@@ -342,6 +390,14 @@ export function FormRenderer({
   const [isManualMode, setIsManualMode] = useState<boolean>(
     Boolean(initialManualMode || editingResponse?.source === 'inserido_pelo_gestor')
   )
+
+  useEffect(() => {
+    if (initialManualMode) {
+      setIsManualMode(true)
+      setSubmittedResponse(null)
+    }
+  }, [initialManualMode])
+
   const [selectedColabId, setSelectedColabId] = useState<string>(
     editingResponse?.respondentId || ''
   )
@@ -364,7 +420,80 @@ export function FormRenderer({
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [submittedResponse, setSubmittedResponse] = useState<GPFormResponse | null>(null)
+
+  // Check if there is an existing response: from form.myResponse or localStorage
+  const localSavedResponse = useMemo<GPFormResponse | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const s = localStorage.getItem(`gp_form_completed_${form.id}`)
+      if (s) {
+        const parsed = JSON.parse(s)
+        if (parsed && parsed.id) return parsed
+      }
+    } catch {}
+    return null
+  }, [form.id])
+
+  const initialExistingResponse =
+    !editingResponse && !initialManualMode && !form.settings?.allowMultipleResponses
+      ? (form.myResponse || localSavedResponse)
+      : null
+
+  const [submittedResponse, setSubmittedResponse] = useState<GPFormResponse | null>(initialExistingResponse)
+  const [editingSelfResponse, setEditingSelfResponse] = useState<GPFormResponse | null>(null)
+  const [isJustUpdated, setIsJustUpdated] = useState(false)
+  const [isReturningRespondent, setIsReturningRespondent] = useState<boolean>(Boolean(initialExistingResponse))
+  const [copiedProtocol, setCopiedProtocol] = useState(false)
+  const [showAnswersSummary, setShowAnswersSummary] = useState(false)
+
+  useEffect(() => {
+    const existing = form.myResponse || localSavedResponse
+    if (
+      existing &&
+      !form.settings?.allowMultipleResponses &&
+      !editingResponse &&
+      !isManualMode &&
+      !submittedResponse &&
+      !editingSelfResponse
+    ) {
+      setSubmittedResponse(existing)
+      setIsReturningRespondent(true)
+    }
+  }, [form.myResponse, localSavedResponse, form.settings?.allowMultipleResponses, editingResponse, isManualMode, submittedResponse, editingSelfResponse])
+
+  const handleStartEditing = () => {
+    const targetResp = submittedResponse || form.myResponse || localSavedResponse
+    if (!targetResp) return
+    setEditingSelfResponse(targetResp)
+    if (targetResp.answers) {
+      setAnswers({ ...targetResp.answers })
+    }
+    setSubmittedResponse(null)
+    setIsJustUpdated(false)
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleCancelEditing = () => {
+    if (editingSelfResponse) {
+      setSubmittedResponse(editingSelfResponse)
+      setEditingSelfResponse(null)
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+  }
+
+  const handleSendAnotherResponse = () => {
+    setSubmittedResponse(null)
+    setEditingSelfResponse(null)
+    setAnswers({})
+    startTimeRef.current = Date.now()
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null)
 
   // Load saved draft for collaborator mode
@@ -398,12 +527,170 @@ export function FormRenderer({
     })
   }, [form.sections])
 
-  // Check for returning Google OAuth session or active session
+  // Aplica identificação do respondente (via Google ou sessão) sem cadastrar usuário no Supabase
+  const applyGoogleRespondent = (userData: {
+    nome: string
+    email: string
+    sub?: string
+    avatarUrl?: string
+  }) => {
+    const identifiedUser = {
+      id: `google-${userData.sub || Date.now()}`,
+      nome: userData.nome,
+      email: userData.email,
+      cargo: 'Respondente Identificado (Google)',
+      perfil: 'Público / Google',
+      provider: 'google',
+      avatarUrl: userData.avatarUrl || '',
+      verified: true,
+      sub: userData.sub,
+    }
+
+    setSessionUser(identifiedUser)
+    setManualNameOverride(false)
+
+    try {
+      window.sessionStorage.setItem(`gp_form_google_user_${form.id}`, JSON.stringify(identifiedUser))
+      window.localStorage.setItem(`gp_form_google_user_${form.id}`, JSON.stringify(identifiedUser))
+    } catch {}
+
+    setAnswers(prev => {
+      const next = { ...prev }
+      for (const sec of form.sections || []) {
+        for (const f of sec.fields || []) {
+          if (
+            f.type === 'usuario_logado' ||
+            f.autoFillUser === 'nome' ||
+            /nome completo|seu nome/i.test(f.title)
+          ) {
+            next[f.id] = identifiedUser.nome
+          }
+          if (
+            (f.autoFillUser === 'email' ||
+              (f.type === 'texto_curto' && /e-?mail/i.test(f.title))) &&
+            identifiedUser.email
+          ) {
+            next[f.id] = identifiedUser.email
+          }
+        }
+      }
+      return next
+    })
+
+    setIsAuthModalOpen(false)
+    setAuthSuccessToast(`Identificado via Conta Google: ${identifiedUser.nome}`)
+    setTimeout(() => setAuthSuccessToast(''), 4500)
+  }
+
+  // 1. Pré-carrega a biblioteca oficial Google Identity Services (GIS) no background
   useEffect(() => {
-    async function checkOAuthSession() {
+    loadGoogleGsiScript().catch(() => {})
+  }, [])
+
+  // 2. Restaura identificação Google prévia salva no navegador deste formulário
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const savedGoogle =
+        window.sessionStorage?.getItem(`gp_form_google_user_${form.id}`) ||
+        window.localStorage?.getItem(`gp_form_google_user_${form.id}`)
+      if (savedGoogle) {
+        const parsed = JSON.parse(savedGoogle)
+        if (parsed?.email && parsed?.provider === 'google') {
+          setSessionUser(parsed)
+          setAnswers(prev => {
+            const next = { ...prev }
+            let changed = false
+            for (const sec of form.sections || []) {
+              for (const f of sec.fields || []) {
+                if (
+                  (f.type === 'usuario_logado' ||
+                    f.autoFillUser === 'nome' ||
+                    /nome completo|seu nome/i.test(f.title)) &&
+                  !next[f.id]
+                ) {
+                  next[f.id] = parsed.nome
+                  changed = true
+                }
+                if (
+                  (f.autoFillUser === 'email' ||
+                    (f.type === 'texto_curto' && /e-?mail/i.test(f.title))) &&
+                  !next[f.id] &&
+                  parsed.email
+                ) {
+                  next[f.id] = parsed.email
+                  changed = true
+                }
+              }
+            }
+            return changed ? next : prev
+          })
+        }
+      }
+    } catch {}
+  }, [form.id, form.sections])
+
+  // 3. Verifica retorno de token do Google via hash de URL (caso fallback direto tenha sido usado)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const rawHash = window.location.hash || ''
+    if (!rawHash) return
+    const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.slice(1) : rawHash)
+
+    const idToken = hashParams.get('id_token')
+    const accessToken = hashParams.get('access_token')
+
+    if (idToken || accessToken) {
+      try {
+        window.history.replaceState(null, '', window.location.pathname)
+        window.sessionStorage.removeItem('gp_form_auth_pending')
+        window.localStorage.removeItem('gp_form_auth_pending')
+        window.sessionStorage.removeItem('gp_form_return_url')
+        window.localStorage.removeItem('gp_form_return_url')
+      } catch {}
+
+      if (idToken) {
+        const payload = decodeGoogleJwt(idToken)
+        if (payload?.email) {
+          const resolvedName = payload.name || payload.given_name || payload.email.split('@')[0]
+          applyGoogleRespondent({
+            nome: resolvedName,
+            email: payload.email,
+            sub: payload.sub,
+            avatarUrl: payload.picture,
+          })
+          return
+        }
+      }
+
+      if (accessToken) {
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+          .then(r => r.json())
+          .then(profile => {
+            if (profile?.email) {
+              const resolvedName = profile.name || profile.given_name || profile.email.split('@')[0]
+              applyGoogleRespondent({
+                nome: resolvedName,
+                email: profile.email,
+                sub: profile.sub,
+                avatarUrl: profile.picture,
+              })
+            }
+          })
+          .catch(() => {})
+        return
+      }
+    }
+  }, [form.sections])
+
+  // 4. Verifica se já existe sessão de colaborador do IMPACTO EDU logado no navegador
+  useEffect(() => {
+    async function checkImpactoSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) {
+        if (session?.user && !sessionUser) {
           const u = session.user
           const meta = u.user_metadata || {}
           const resolvedName =
@@ -454,79 +741,103 @@ export function FormRenderer({
         console.warn('Erro ao verificar sessão do Supabase no formulário:', err)
       }
     }
-    checkOAuthSession()
-  }, [form.sections])
+    checkImpactoSession()
+  }, [form.sections, sessionUser])
 
-  // Login Handlers (Conta Google e Sistema IMPACTO EDU)
+  // Login Handler: Identificação direta com a Conta Google (sem cadastrar no Supabase)
   const handleGoogleLogin = async () => {
     setAuthLoading(true)
     setAuthError('')
     try {
-      // 1. Verifica se o provedor Google está ativado no Supabase antes de redirecionar
-      const checkRes = await fetch('/api/auth/google-status', { cache: 'no-store' }).catch(() => null)
-      if (checkRes) {
-        const checkData = await checkRes.json().catch(() => ({}))
-        if (checkData.enabled === false) {
-          if (isPreview) {
-            // Em modo pré-visualização no estúdio, simula para testes do gestor
-            const simulatedName = 'Usuário Google (Teste)'
-            const simulatedUser = {
-              id: 'google-simulated-preview',
-              nome: simulatedName,
-              email: 'usuario.google@gmail.com',
-              cargo: 'Conta Google',
-              perfil: 'Público / Google',
-              provider: 'google',
-            }
-            setSessionUser(simulatedUser)
-            setManualNameOverride(false)
-            setAnswers(prev => {
-              const next = { ...prev }
-              for (const s of form.sections || []) {
-                for (const f of s.fields || []) {
-                  if (
-                    f.type === 'usuario_logado' ||
-                    f.autoFillUser === 'nome' ||
-                    /nome/i.test(f.title)
-                  ) {
-                    next[f.id] = simulatedName
-                  }
-                }
-              }
-              return next
-            })
-            setIsAuthModalOpen(false)
-            setAuthSuccessToast(`Simulação: Identificado via Conta Google (${simulatedName})`)
-            setTimeout(() => setAuthSuccessToast(''), 4000)
-            return
-          } else {
-            setAuthError(
-              'O login com Conta Google ainda não está ativado no painel do Supabase (Authentication → Providers → Google). Para responder agora, use o Login do Sistema IMPACTO EDU ou digite seu nome.'
-            )
-            return
-          }
-        }
+      if (isPreview) {
+        const simulatedName = 'Usuário Google (Teste)'
+        applyGoogleRespondent({
+          nome: simulatedName,
+          email: 'usuario.google@gmail.com',
+          avatarUrl: '',
+        })
+        setAuthLoading(false)
+        return
       }
 
-      if (typeof window !== 'undefined') {
+      // 1. Obtém o Client ID do Google
+      let clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
+      if (!clientId) {
+        try {
+          const res = await fetch('/api/auth/google-status', { cache: 'no-store' })
+          const data = await res.json()
+          if (data?.clientId) clientId = data.clientId
+        } catch {}
+      }
+      if (!clientId) {
+        clientId = '805517903971-dage2hg6l432538c9tncgtb37c74jje0.apps.googleusercontent.com'
+      }
+
+      // 2. Carrega biblioteca oficial do Google (GIS)
+      const googleObj = await loadGoogleGsiScript().catch(() => null)
+
+      if (googleObj?.accounts?.oauth2) {
+        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'email profile openid',
+          prompt: 'select_account',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              setAuthLoading(false)
+              if (tokenResponse.error === 'popup_closed_by_user') return
+              if (tokenResponse.error === 'access_denied') {
+                setAuthError('Autorização da Conta Google cancelada.')
+                return
+              }
+              setAuthError(
+                `Não foi possível conectar com o Google (${tokenResponse.error}). Você pode preencher seu nome manualmente.`
+              )
+              return
+            }
+
+            if (tokenResponse?.access_token) {
+              try {
+                const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                })
+                if (!userRes.ok) throw new Error('Falha ao obter perfil Google')
+                const profile = await userRes.json()
+                const resolvedName = profile.name || profile.given_name || profile.email?.split('@')[0]
+                applyGoogleRespondent({
+                  nome: resolvedName,
+                  email: profile.email,
+                  sub: profile.sub,
+                  avatarUrl: profile.picture,
+                })
+              } catch (fetchErr) {
+                console.error('[Google Auth] Erro ao buscar userinfo:', fetchErr)
+                setAuthError('Falha ao carregar perfil do Google. Você pode preencher seu nome manualmente.')
+              } finally {
+                setAuthLoading(false)
+              }
+            }
+          },
+        })
+
+        tokenClient.requestAccessToken()
+        return
+      }
+
+      // 3. Fallback: Redirecionamento direto via OAuth2 do Google (caso GIS popup não esteja disponível)
+      try {
         window.sessionStorage.setItem('gp_form_auth_pending', form.id)
-      }
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.href : undefined,
-        },
-      })
-      if (error) {
-        throw error
-      }
+        window.localStorage.setItem('gp_form_auth_pending', form.id)
+        window.sessionStorage.setItem('gp_form_return_url', window.location.href)
+        window.localStorage.setItem('gp_form_return_url', window.location.href)
+      } catch {}
+      const callbackUrl = `${window.location.origin}/auth/callback`
+      const redirectUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+        callbackUrl
+      )}&response_type=token%20id_token&scope=email%20profile%20openid&nonce=${Date.now()}`
+      window.location.href = redirectUrl
     } catch (err: any) {
-      console.error('Google OAuth error:', err)
-      setAuthError(
-        err.message ||
-          'Não foi possível conectar com o Google no momento. Por favor, utilize o login do sistema IMPACTO EDU ou preencha seu nome.'
-      )
-    } finally {
+      console.error('[Google Login Error]:', err)
+      setAuthError(err.message || 'Não foi possível conectar com o Google no momento. Preencha seu nome manualmente.')
       setAuthLoading(false)
     }
   }
@@ -610,6 +921,14 @@ export function FormRenderer({
   const handleClearUser = () => {
     setSessionUser(null)
     setManualNameOverride(true)
+    try {
+      window.sessionStorage.removeItem(`gp_form_google_user_${form.id}`)
+      window.localStorage.removeItem(`gp_form_google_user_${form.id}`)
+      window.sessionStorage.removeItem('gp_form_auth_pending')
+      window.localStorage.removeItem('gp_form_auth_pending')
+      window.sessionStorage.removeItem('gp_form_return_url')
+      window.localStorage.removeItem('gp_form_return_url')
+    } catch {}
     setAnswers(prev => {
       const next = { ...prev }
       for (const sec of form.sections || []) {
@@ -929,6 +1248,9 @@ export function FormRenderer({
         submittedAt: new Date().toISOString(),
       }
       setSubmittedResponse(fakeResp)
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
       return
     }
 
@@ -936,19 +1258,20 @@ export function FormRenderer({
     const elapsedSeconds = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
 
     try {
-      const isEditingExisting = Boolean(editingResponse?.id)
+      const targetEditResp = editingResponse || editingSelfResponse
+      const isEditingExisting = Boolean(targetEditResp?.id)
       const url = `/api/gestao-pessoas/formularios/${form.id}/respostas`
       const method = isEditingExisting ? 'PUT' : 'POST'
 
       const payload = isEditingExisting
         ? {
-            responseId: editingResponse!.id,
+            responseId: targetEditResp!.id,
             answers,
-            respondentName: isManualMode ? manualName : editingResponse!.respondentName,
-            respondentRole: isManualMode ? manualRole : editingResponse!.respondentRole,
-            respondentDepartment: isManualMode ? manualDept : editingResponse!.respondentDepartment,
-            respondentUnit: isManualMode ? manualUnit : editingResponse!.respondentUnit,
-            adminNotes: isManualMode ? manualNotes : editingResponse!.adminNotes,
+            respondentName: isManualMode ? manualName : targetEditResp!.respondentName,
+            respondentRole: isManualMode ? manualRole : targetEditResp!.respondentRole,
+            respondentDepartment: isManualMode ? manualDept : targetEditResp!.respondentDepartment,
+            respondentUnit: isManualMode ? manualUnit : targetEditResp!.respondentUnit,
+            adminNotes: isManualMode ? manualNotes : targetEditResp!.adminNotes,
           }
         : {
             mode: isManualMode ? 'manual_admin' : 'collaborator',
@@ -956,6 +1279,16 @@ export function FormRenderer({
             completionTimeSeconds: elapsedSeconds,
             respondentName: effectiveUser?.nome || undefined,
             respondentEmail: effectiveUser?.email || undefined,
+            googleRespondent:
+              effectiveUser?.provider === 'google'
+                ? {
+                    id: effectiveUser.id,
+                    name: effectiveUser.nome,
+                    email: effectiveUser.email,
+                    avatarUrl: (effectiveUser as any).avatarUrl,
+                    sub: (effectiveUser as any).sub,
+                  }
+                : undefined,
             email: !effectiveUser && !isManualMode && !isPublicForm ? loginEmail : undefined,
             password: !effectiveUser && !isManualMode && !isPublicForm ? loginPassword : undefined,
             manualRespondent: isManualMode
@@ -990,6 +1323,11 @@ export function FormRenderer({
         localStorage.removeItem(draftStorageKey)
       } catch {}
 
+      // Save completed response to localStorage for return visits
+      try {
+        localStorage.setItem(`gp_form_completed_${form.id}`, JSON.stringify(data))
+      } catch {}
+
       if (addAnother && isManualMode) {
         // Reset for quick next entry
         setAnswers({})
@@ -1003,7 +1341,14 @@ export function FormRenderer({
         startTimeRef.current = Date.now()
         if (onSubmitSuccess) onSubmitSuccess(data, true)
       } else {
+        const wasEditingSelf = Boolean(editingSelfResponse)
         setSubmittedResponse(data)
+        setEditingSelfResponse(null)
+        setIsJustUpdated(wasEditingSelf)
+        setIsReturningRespondent(false)
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }
         if (onSubmitSuccess) onSubmitSuccess(data, false)
       }
     } catch (err: any) {
@@ -1043,6 +1388,26 @@ export function FormRenderer({
   // CONFIRMATION / RECEIPT VIEW AFTER SUBMISSION
   // ---------------------------------------------------------------------------
   if (submittedResponse) {
+    const isEditAllowed = form.settings?.allowEditOwnResponse !== false
+
+    const headerBadgeText = isJustUpdated
+      ? '✓ Resposta Atualizada com Sucesso'
+      : isReturningRespondent
+      ? '✓ Você já respondeu a este formulário'
+      : '✓ Formulário Concluído com Sucesso'
+
+    const headerTitleText = isJustUpdated
+      ? 'Alterações salvas com sucesso!'
+      : isReturningRespondent
+      ? 'Você já respondeu a este formulário'
+      : form.settings?.confirmationTitle || 'Muito obrigado pela sua participação!'
+
+    const headerMessageText = isJustUpdated
+      ? 'Suas novas respostas foram gravadas e atualizadas no sistema.'
+      : isReturningRespondent
+      ? `Identificamos que você já enviou suas respostas para este formulário em ${new Date(submittedResponse.submittedAt).toLocaleString('pt-BR')}.`
+      : form.settings?.confirmationMessage || 'Sua resposta foi registrada e finalizada no sistema. Agradecemos sua colaboração!'
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
@@ -1058,45 +1423,158 @@ export function FormRenderer({
           fontFamily,
         }}
       >
+        {/* Top Celebration / Thank You Header */}
         <div
           style={{
             background: form.theme?.headerGradient || primaryColor,
-            padding: '36px 32px',
+            padding: '40px 32px 36px',
             color: '#ffffff',
             textAlign: 'center',
+            position: 'relative',
           }}
         >
+          {/* Status Badge */}
           <div
             style={{
-              width: 72,
-              height: 72,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '7px 18px',
+              borderRadius: 99,
+              background: 'rgba(255, 255, 255, 0.22)',
+              backdropFilter: 'blur(10px)',
+              fontSize: 12.5,
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              color: '#ffffff',
+              marginBottom: 18,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.35)',
+            }}
+          >
+            <CheckCircle2 size={16} /> {headerBadgeText}
+          </div>
+
+          <div
+            style={{
+              width: 80,
+              height: 80,
               borderRadius: '50%',
-              background: 'rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.25)',
               backdropFilter: 'blur(8px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 16px',
+              border: '2px solid rgba(255,255,255,0.4)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
             }}
           >
-            <CheckCircle2 size={40} color="#ffffff" />
+            <CheckCircle2 size={46} color="#ffffff" />
           </div>
-          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>
-            {form.settings?.confirmationTitle || 'Resposta registrada com sucesso!'}
+
+          <h2 style={{ margin: 0, fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
+            {headerTitleText}
           </h2>
-          <p style={{ margin: '10px auto 0', maxWidth: 520, fontSize: 15, opacity: 0.92, lineHeight: 1.5 }}>
-            {form.settings?.confirmationMessage ||
-              'Agradecemos sua participação. Seu comprovante digital foi gerado abaixo.'}
+
+          <p style={{ margin: '12px auto 0', maxWidth: 540, fontSize: 15.5, opacity: 0.95, lineHeight: 1.55 }}>
+            {headerMessageText}
           </p>
         </div>
 
         <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Reassurance Notice Box */}
+          <div
+            style={{
+              background: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              borderRadius: 18,
+              padding: '18px 22px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                background: '#10b981',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <FileCheck2 size={22} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: '#065f46' }}>
+                {isReturningRespondent ? 'Formulário Já Concluído' : 'Conclusão Confirmada · Nenhuma ação adicional é necessária'}
+              </div>
+              <div style={{ fontSize: 13.5, color: '#047857', marginTop: 4, lineHeight: 1.5 }}>
+                {isReturningRespondent
+                  ? `Identificamos que você já enviou sua resposta anteriormente em ${new Date(submittedResponse.submittedAt).toLocaleString('pt-BR')}. Seus dados estão salvos com segurança. Você pode editar suas respostas clicando no botão abaixo.`
+                  : 'Todas as suas respostas foram computadas e gravadas com sucesso no banco de dados da instituição. Seu comprovante digital oficial foi gerado abaixo.'}
+              </div>
+            </div>
+          </div>
+
+          {/* Destaque de Edição: Botão grande para Editar Respostas */}
+          {isEditAllowed && (
+            <div
+              style={{
+                background: '#eff6ff',
+                border: '2px dashed #60a5fa',
+                borderRadius: 18,
+                padding: '20px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 16,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Edit3 size={18} color="#2563eb" /> Deseja alterar suas respostas?
+                </div>
+                <div style={{ fontSize: 13, color: '#1e3a8a', marginTop: 4 }}>
+                  Você pode revisar os campos e salvar novas respostas a qualquer momento.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartEditing}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.28)',
+                }}
+              >
+                <Edit3 size={16} /> Editar Minhas Respostas
+              </button>
+            </div>
+          )}
+
           {/* Protocol & Authentication Receipt */}
           <div
             style={{
               background: '#f8fafc',
               borderRadius: 18,
-              padding: 20,
+              padding: 22,
               border: '1px solid #e2e8f0',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -1107,10 +1585,47 @@ export function FormRenderer({
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                 Protocolo Oficial
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: primaryColor, marginTop: 4 }}>
-                #{submittedResponse.protocol}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <span style={{ fontSize: 16, fontWeight: 800, color: primaryColor }}>
+                  #{submittedResponse.protocol}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                      navigator.clipboard.writeText(submittedResponse.protocol)
+                      setCopiedProtocol(true)
+                      setTimeout(() => setCopiedProtocol(false), 2500)
+                    }
+                  }}
+                  title="Copiar protocolo"
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 8,
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: copiedProtocol ? '#059669' : '#475569',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  {copiedProtocol ? (
+                    <>
+                      <Check size={12} /> Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} /> Copiar
+                    </>
+                  )}
+                </button>
               </div>
             </div>
+
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                 Colaborador
@@ -1118,7 +1633,13 @@ export function FormRenderer({
               <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
                 {submittedResponse.respondentName}
               </div>
+              {submittedResponse.respondentEmail && (
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  {submittedResponse.respondentEmail}
+                </div>
+              )}
             </div>
+
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                 Cargo / Origem
@@ -1129,10 +1650,16 @@ export function FormRenderer({
                   ? 'Lançamento Gestor'
                   : 'Autenticado'}
               </div>
+              {submittedResponse.respondentDepartment && (
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  {submittedResponse.respondentDepartment}
+                </div>
+              )}
             </div>
+
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                Data e Hora
+                Data e Horário
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginTop: 4 }}>
                 {new Date(submittedResponse.submittedAt).toLocaleString('pt-BR')}
@@ -1189,7 +1716,67 @@ export function FormRenderer({
               </div>
             )}
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+          {/* Collapsible Submitted Answers Summary */}
+          {submittedResponse.answers && Object.keys(submittedResponse.answers).length > 0 && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setShowAnswersSummary(prev => !prev)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 20px',
+                  background: '#f8fafc',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  color: '#334155',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileText size={16} color={primaryColor} />
+                  Ver resumo das respostas enviadas ({Object.keys(submittedResponse.answers).length} campos preenchidos)
+                </span>
+                {showAnswersSummary ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              {showAnswersSummary && (
+                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14, background: '#ffffff' }}>
+                  {(form.sections || []).flatMap(s => s.fields || []).filter(f => f.type !== 'bloco_informativo' && f.type !== 'bloco_imagem').map((field, idx) => {
+                    const ans = submittedResponse.answers[field.id]
+                    if (ans === undefined || ans === null || ans === '') return null
+                    let displayAns = ''
+                    if (Array.isArray(ans)) {
+                      displayAns = ans.join(', ')
+                    } else if (typeof ans === 'object') {
+                      displayAns = JSON.stringify(ans)
+                    } else if (typeof ans === 'boolean') {
+                      displayAns = ans ? 'Sim' : 'Não'
+                    } else {
+                      displayAns = String(ans)
+                    }
+
+                    return (
+                      <div key={field.id} style={{ paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                          {idx + 1}. {field.title}
+                        </div>
+                        <div style={{ fontSize: 13.5, color: '#475569', marginTop: 4, fontWeight: 500 }}>
+                          {displayAns}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
             <button
               type="button"
               onClick={() => window.print()}
@@ -1210,14 +1797,32 @@ export function FormRenderer({
               <Printer size={17} /> Imprimir Comprovante
             </button>
 
+            {isEditAllowed && (
+              <button
+                type="button"
+                onClick={handleStartEditing}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 22px',
+                  borderRadius: 12,
+                  border: '1px solid #2563eb',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                <Edit3 size={17} /> Editar Minhas Respostas
+              </button>
+            )}
+
             {(form.settings?.allowMultipleResponses || isAdmin) && (
               <button
                 type="button"
-                onClick={() => {
-                  setSubmittedResponse(null)
-                  setAnswers({})
-                  startTimeRef.current = Date.now()
-                }}
+                onClick={handleSendAnotherResponse}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -3417,6 +4022,65 @@ export function FormRenderer({
         }}
         style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
       >
+        {/* BANNER DE EDIÇÃO ATIVA */}
+        {editingSelfResponse && (
+          <div
+            style={{
+              background: '#eff6ff',
+              border: '2px solid #3b82f6',
+              borderRadius: 20,
+              padding: '18px 22px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 14,
+              boxShadow: '0 4px 16px rgba(59, 130, 246, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: '#3b82f6',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Edit3 size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#1e3a8a' }}>
+                  Modo de Edição Ativo
+                </div>
+                <div style={{ fontSize: 13, color: '#1d4ed8', marginTop: 3, lineHeight: 1.45 }}>
+                  Você está alterando sua resposta anterior registrada no Protocolo <strong>#{editingSelfResponse.protocol}</strong>. Modifique os campos necessários e clique no botão <strong>"Salvar Alterações da Resposta"</strong> ao final.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelEditing}
+              style={{
+                padding: '9px 18px',
+                borderRadius: 12,
+                border: '1px solid #bfdbfe',
+                background: '#ffffff',
+                color: '#1d4ed8',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Cancelar Edição
+            </button>
+          </div>
+        )}
         {/* MODE A: FOCUS ONE BY ONE (TYPEFORM STYLE) */}
         {activeDisplayMode === 'focus_one_by_one' && allVisibleInteractiveFields.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -3944,8 +4608,8 @@ export function FormRenderer({
                 >
                   <Send size={18} />
                   {isSubmitting
-                    ? 'Registrando...'
-                    : editingResponse
+                    ? 'Salvando alterações...'
+                    : (editingResponse || editingSelfResponse)
                     ? 'Salvar Alterações da Resposta'
                     : isManualMode
                     ? 'Registrar Resposta Manual'
@@ -4185,22 +4849,23 @@ export function FormRenderer({
                       borderRadius: 12,
                       border: '1px solid #fecaca',
                       padding: '12px 14px',
-                      color: '#b91c1c',
-                      fontSize: 13,
+                      color: '#991b1b',
+                      fontSize: 12.5,
+                      lineHeight: 1.45,
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
+                      alignItems: 'flex-start',
+                      gap: 10,
                     }}
                   >
-                    <AlertCircle size={16} />
-                    <span>{authError}</span>
+                    <AlertCircle size={17} style={{ flexShrink: 0, marginTop: 2, color: '#dc2626' }} />
+                    <span style={{ flex: 1 }}>{authError}</span>
                   </div>
                 )}
 
                 {/* OPTION 1: GOOGLE SIGN-IN */}
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    Opção 1: Entrar com Conta Google
+                    Opção 1: Identificar-se com Conta Google
                   </div>
                   <button
                     type="button"
@@ -4236,7 +4901,7 @@ export function FormRenderer({
                     <span>{authLoading ? 'Conectando ao Google...' : 'Continuar com a Conta Google'}</span>
                   </button>
                   <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
-                    Login instantâneo com e-mail institucional Google ou pessoal (@gmail.com).
+                    Identificação rápida com seu e-mail Google (apenas para preencher o formulário, sem criar acesso no sistema).
                   </div>
                 </div>
 
