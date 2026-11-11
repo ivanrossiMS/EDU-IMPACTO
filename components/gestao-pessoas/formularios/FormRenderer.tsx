@@ -26,7 +26,6 @@ import {
   FileCheck2,
   FileText,
   ShieldCheck,
-  Printer,
   Plus,
   Search,
   Image as ImageIcon,
@@ -705,7 +704,6 @@ export function FormRenderer({
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
-  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null)
 
   // Load saved draft for collaborator mode
   useEffect(() => {
@@ -942,7 +940,6 @@ export function FormRenderer({
       try {
         if (Object.keys(answers).length > 0) {
           localStorage.setItem(draftStorageKey, JSON.stringify(answers))
-          setDraftSavedAt(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
         }
       } catch {}
     }, 800)
@@ -1379,12 +1376,6 @@ export function FormRenderer({
   if (submittedResponse) {
     const isEditAllowed = form.settings?.allowEditOwnResponse !== false
 
-    const headerBadgeText = isJustUpdated
-      ? '✓ Resposta Atualizada com Sucesso'
-      : isReturningRespondent
-      ? '✓ Você já respondeu a este formulário'
-      : '✓ Formulário Concluído com Sucesso'
-
     const headerTitleText = isJustUpdated
       ? 'Alterações salvas com sucesso!'
       : isReturningRespondent
@@ -1422,29 +1413,6 @@ export function FormRenderer({
             position: 'relative',
           }}
         >
-          {/* Status Badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '7px 18px',
-              borderRadius: 99,
-              background: 'rgba(255, 255, 255, 0.22)',
-              backdropFilter: 'blur(10px)',
-              fontSize: 12.5,
-              fontWeight: 800,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              color: '#ffffff',
-              marginBottom: 18,
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.35)',
-            }}
-          >
-            <CheckCircle2 size={16} /> {headerBadgeText}
-          </div>
-
           <div
             style={{
               width: 80,
@@ -1463,11 +1431,11 @@ export function FormRenderer({
             <CheckCircle2 size={46} color="#ffffff" />
           </div>
 
-          <h2 style={{ margin: 0, fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
+          <h2 style={{ margin: 0, fontSize: 27, fontWeight: 900, lineHeight: 1.25, color: '#ffffff' }}>
             {headerTitleText}
           </h2>
 
-          <p style={{ margin: '12px auto 0', maxWidth: 540, fontSize: 15.5, opacity: 0.95, lineHeight: 1.55 }}>
+          <p style={{ margin: '12px auto 0', maxWidth: 540, fontSize: 15.5, opacity: 0.95, lineHeight: 1.55, color: '#ffffff' }}>
             {headerMessageText}
           </p>
         </div>
@@ -1813,115 +1781,56 @@ export function FormRenderer({
           )}
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '12px 20px',
-                borderRadius: 12,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#334155',
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              <Printer size={17} /> Imprimir Comprovante
-            </button>
+          {((isPublicForm && !isManualMode && !effectiveUser && !isPreview) ||
+            form.settings?.allowMultipleResponses ||
+            isAdmin) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 4 }}>
+              {isPublicForm && !isManualMode && !effectiveUser && !isPreview && (
+                <button
+                  type="button"
+                  onClick={handleSwitchRespondent}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 18px',
+                    borderRadius: 12,
+                    border: '1px solid #eab308',
+                    background: '#facc15',
+                    color: '#422006',
+                    fontSize: 13.5,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(234, 179, 8, 0.25)',
+                  }}
+                >
+                  <RefreshCw size={15} /> Não é você? Responder com outro e-mail
+                </button>
+              )}
 
-            {isEditAllowed && (
-              <button
-                type="button"
-                onClick={handleStartEditing}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 22px',
-                  borderRadius: 12,
-                  border: '1px solid #2563eb',
-                  background: '#eff6ff',
-                  color: '#2563eb',
-                  fontSize: 14,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                <Edit3 size={17} /> Editar Minhas Respostas
-              </button>
-            )}
-
-            {isPublicForm && !isManualMode && !effectiveUser && !isPreview && (
-              <button
-                type="button"
-                onClick={handleSwitchRespondent}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 18px',
-                  borderRadius: 12,
-                  border: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  color: '#475569',
-                  fontSize: 13.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <RefreshCw size={15} /> Não é você? Responder com outro e-mail
-              </button>
-            )}
-
-            {(form.settings?.allowMultipleResponses || isAdmin) && (
-              <button
-                type="button"
-                onClick={handleSendAnotherResponse}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 22px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: primaryColor,
-                  color: '#ffffff',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <Plus size={17} /> Enviar Outra Resposta
-              </button>
-            )}
-
-            {onCancel && (
-              <button
-                type="button"
-                onClick={onCancel}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 22px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: '#0f172a',
-                  color: '#ffffff',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                Voltar à Central de Formulários
-              </button>
-            )}
-          </div>
+              {(form.settings?.allowMultipleResponses || isAdmin) && (
+                <button
+                  type="button"
+                  onClick={handleSendAnotherResponse}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '12px 22px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: primaryColor,
+                    color: '#ffffff',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Plus size={17} /> Enviar Outra Resposta
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </motion.div>
     )
@@ -3323,170 +3232,555 @@ export function FormRenderer({
         gap: 20,
       }}
     >
-      {/* Top Bar: Identity & Display Mode Switcher */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 12,
-          background: '#ffffff',
-          padding: '12px 18px',
-          borderRadius: 16,
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 2px 10px rgba(15,23,42,0.03)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {effectiveUser ? (
-            <>
-              <div
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  background: '#ecfdf5',
-                  color: '#059669',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <ShieldCheck size={19} />
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-                  <span>
-                    {isManualMode
-                      ? 'Modo de Lançamento Manual (Gestor / RH)'
-                      : `Colaborador Autenticado: ${effectiveUser.nome}`}
-                  </span>
-                  {!isManualMode && (
-                    <button
-                      type="button"
-                      onClick={() => setIsAuthModalOpen(true)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#4f46e5',
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        padding: 0,
-                        textDecoration: 'underline',
-                      }}
-                    >
-                      (Trocar Conta)
-                    </button>
-                  )}
-                </div>
-                <div style={{ fontSize: 11.5, color: '#64748b' }}>
-                  {isManualMode
-                    ? 'Registre respostas em nome de colaboradores ou entrevistas presenciais'
-                    : `${effectiveUser.cargo || effectiveUser.perfil || 'Colaborador'} • ${effectiveUser.email || 'Sessão verificada'}`}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: isPublicForm ? '#15803d' : '#d97706', fontSize: 13, fontWeight: 700 }}>
-                {isPublicForm ? <Globe size={16} /> : <Lock size={16} />}
-                <span>{isPublicForm ? 'Link Público Aberto' : 'Autenticação de colaborador exigida'}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAuthModalOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 11px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  color: '#1e293b',
-                  fontSize: 12,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                }}
-              >
-                <LogIn size={13} /> Fazer Login no Sistema
-              </button>
+      {/* PUBLIC ACCESS NOTICE & IDENTIFIER RECOVERY AT THE VERY TOP OF THE HEADER */}
+      {!effectiveUser &&
+        !isManualMode &&
+        !isPreview &&
+        isPublicForm &&
+        !editingSelfResponse &&
+        !editingResponse && (
+        <div
+          style={{
+            background: '#f0fdf4',
+            borderRadius: 20,
+            border: '1.5px solid #86efac',
+            padding: '18px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+            color: '#166534',
+            boxShadow: '0 4px 14px rgba(22, 101, 52, 0.05)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: '#dcfce7',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: '#15803d',
+              }}
+            >
+              <Globe size={22} />
             </div>
-          )}
-        </div>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 800 }}>
+                Link Público Aberto • Resposta sem Necessidade de Login
+              </div>
+              <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
+                Você pode responder diretamente preenchendo seu nome ou se identificar com seu login do sistema IMPACTO EDU.
+              </div>
+            </div>
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {draftSavedAt && !isManualMode && !isPreview && (
-            <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>
-              ✓ Rascunho salvo às {draftSavedAt}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {(identifierFields.length > 0 || form.settings?.allowEditOwnResponse !== false) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLookupOpen(prev => !prev)
+                    setLookupError('')
+                    setLookupSuccessMsg('')
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '9px 14px',
+                    borderRadius: 10,
+                    border: '1px solid #4ade80',
+                    background: isLookupOpen ? '#15803d' : '#dcfce7',
+                    color: isLookupOpen ? '#ffffff' : '#14532d',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Search size={14} /> Já respondi • Editar por{' '}
+                  {identifierFields[0]?.type === 'cpf'
+                    ? 'CPF'
+                    : identifierFields[0]?.type === 'telefone'
+                    ? 'Telefone'
+                    : 'E-mail'}
+                </button>
+              )}
 
-          {/* Admin Toggle between Collaborator Self-Answer and Manual Entry */}
-          {isAdmin && form.settings?.allowManualAdminEntry !== false && (
             <button
               type="button"
-              onClick={() => setIsManualMode(prev => !prev)}
+              onClick={() => setIsAuthModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '9px 16px',
+                borderRadius: 10,
+                border: '1px solid #86efac',
+                background: '#ffffff',
+                color: '#166534',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+              }}
+            >
+              <LogIn size={15} /> Entrar no Sistema
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* COMPACT TRIGGER WHEN USER IS LOGGED IN ON A PUBLIC FORM WITH IDENTIFIER FIELDS */}
+      {effectiveUser &&
+        !isManualMode &&
+        !isPreview &&
+        isPublicForm &&
+        !editingSelfResponse &&
+        !editingResponse &&
+        identifierFields.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 10,
+              padding: '12px 18px',
+              borderRadius: 14,
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              fontSize: 13,
+              color: '#475569',
+            }}
+          >
+            <span>
+              Deseja localizar ou editar uma resposta enviada por{' '}
+              <strong>
+                {identifierFields.map(f => (f.type === 'cpf' ? 'CPF' : f.type === 'telefone' ? 'Telefone' : 'E-mail válido')).join(' ou ')}
+              </strong>
+              ?
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsLookupOpen(prev => !prev)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6,
                 padding: '7px 14px',
-                borderRadius: 10,
-                border: isManualMode ? `1.5px solid #059669` : '1px solid #cbd5e1',
-                background: isManualMode ? '#ecfdf5' : '#f8fafc',
-                color: isManualMode ? '#059669' : '#334155',
+                borderRadius: 9,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: primaryColor,
                 fontSize: 12.5,
-                fontWeight: 700,
+                fontWeight: 800,
                 cursor: 'pointer',
               }}
             >
-              <UserPlus size={15} />
-              {isManualMode ? 'Lançando Manualmente (Ativo)' : 'Lançar Resposta por Outro Colaborador'}
+              <Search size={14} /> {isLookupOpen ? 'Fechar Busca' : 'Buscar Resposta por Identificador'}
             </button>
-          )}
+          </div>
+        )}
 
-          {/* Display Mode Selector */}
-          <div
-            style={{
-              display: 'inline-flex',
-              background: '#f1f5f9',
-              padding: 3,
-              borderRadius: 10,
-              gap: 2,
-            }}
-          >
-            {[
-              { id: 'classic_all', label: 'Lista' },
-              ...(sections.length > 1 ? [{ id: 'section_wizard', label: 'Seções' }] : []),
-              { id: 'focus_one_by_one', label: 'Modo Foco' },
-            ].map(m => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setActiveDisplayMode(m.id as any)}
+      {/* IDENTIFIER RECOVERY & VERIFICATION PANEL (EMAIL / CPF / PROTOCOLO) */}
+      {isLookupOpen &&
+        !isManualMode &&
+        !isPreview &&
+        isPublicForm &&
+        !editingSelfResponse &&
+        !editingResponse && (
+        <div
+          id="gp-public-lookup-panel"
+          style={{
+            background: '#ffffff',
+            borderRadius: 20,
+            border: `1.5px solid ${primaryColor}`,
+            padding: '22px 24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
                 style={{
-                  padding: '5px 10px',
-                  borderRadius: 7,
-                  border: 'none',
-                  background: activeDisplayMode === m.id ? '#ffffff' : 'transparent',
-                  color: activeDisplayMode === m.id ? '#0f172a' : '#64748b',
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow:
-                    activeDisplayMode === m.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: accentColor,
+                  color: primaryColor,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                {m.label}
-              </button>
-            ))}
+                <KeyRound size={19} />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                  Localizar e Editar Resposta Anterior
+                </div>
+                <div style={{ fontSize: 12.5, color: '#64748b' }}>
+                  Busque pelo identificador validado cadastrado (E-mail válido, CPF ou Telefone) para liberar sua resposta com segurança.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Fechar painel de busca"
+              onClick={() => {
+                setIsLookupOpen(false)
+                setLookupPendingDraftApply(false)
+              }}
+              style={{
+                border: 'none',
+                background: '#f1f5f9',
+                borderRadius: 8,
+                padding: 6,
+                cursor: 'pointer',
+                color: '#475569',
+              }}
+            >
+              <X size={16} />
+            </button>
           </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            {Array.from(
+              new Map(
+                (identifierFields.length > 0
+                  ? identifierFields
+                  : [{ type: 'email' as FormIdentifierType, label: 'E-mail' }]
+                ).map(item => [item.type, item])
+              ).values()
+            ).length > 1 && (
+              <select
+                aria-label="Tipo de identificador"
+                value={lookupType}
+                onChange={e => {
+                  setLookupType(e.target.value as FormIdentifierType)
+                  setLookupResult(null)
+                  setLookupError('')
+                  setLookupOtpSent(false)
+                }}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  color: '#0f172a',
+                  background: '#f8fafc',
+                }}
+              >
+                {Array.from(new Set(identifierFields.map(f => f.type))).map(t => (
+                  <option key={t} value={t}>
+                    {t === 'email'
+                      ? 'E-mail válido'
+                      : t === 'cpf'
+                      ? 'CPF (11 dígitos)'
+                      : t === 'telefone'
+                      ? 'Telefone com DDD'
+                      : 'Link / URL'}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <input
+              type={lookupType === 'email' ? 'email' : 'text'}
+              value={lookupValue}
+              onChange={e => {
+                setLookupValue(e.target.value)
+                setLookupError('')
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleLookupByIdentifier()
+                }
+              }}
+              placeholder={
+                lookupType === 'cpf'
+                  ? 'Digite seu CPF (ex.: 000.000.000-00)'
+                  : lookupType === 'telefone'
+                  ? 'Digite seu telefone com DDD'
+                  : 'Digite o e-mail utilizado na resposta (ex.: nome@outlook.com)'
+              }
+              style={{
+                flex: 1,
+                minWidth: 220,
+                padding: '10px 14px',
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+                fontSize: 14,
+                color: '#0f172a',
+                background: '#ffffff',
+              }}
+            />
+
+            <button
+              type="button"
+              disabled={lookupLoading}
+              onClick={() => handleLookupByIdentifier()}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '10px 18px',
+                borderRadius: 10,
+                border: 'none',
+                background: primaryColor,
+                color: '#ffffff',
+                fontSize: 13.5,
+                fontWeight: 800,
+                cursor: lookupLoading ? 'not-allowed' : 'pointer',
+                opacity: lookupLoading ? 0.7 : 1,
+              }}
+            >
+              <Search size={15} /> {lookupLoading ? 'Buscando...' : 'Buscar'}
+            </button>
+          </div>
+
+          {lookupError && (
+            <div
+              role="alert"
+              style={{
+                padding: '10px 14px',
+                borderRadius: 10,
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {lookupError}
+            </div>
+          )}
+
+          {lookupSuccessMsg && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 10,
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                color: '#065f46',
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {lookupSuccessMsg}
+            </div>
+          )}
+
+          {lookupResult && !lookupResult.found && (
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                color: '#475569',
+                fontSize: 13,
+              }}
+            >
+              Nenhuma resposta registrada encontrada para <strong>{lookupResult.maskedIdentifier}</strong>. Você pode preencher o formulário normalmente abaixo.
+            </div>
+          )}
+
+          {lookupResult?.found && (
+            <div
+              style={{
+                padding: '16px 18px',
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>
+                  Resposta localizada para {lookupResult.maskedIdentifier}
+                  {lookupResult.protocolHint ? ` • Protocolo ${lookupResult.protocolHint}` : ''}
+                </div>
+                {lookupResult.canSendEmailOtp && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => setLookupMethod('otp')}
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: 8,
+                        border: lookupMethod === 'otp' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
+                        background: lookupMethod === 'otp' ? accentColor : '#ffffff',
+                        color: lookupMethod === 'otp' ? primaryColor : '#475569',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Código no E-mail
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLookupMethod('protocol')}
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: 8,
+                        border: lookupMethod === 'protocol' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
+                        background: lookupMethod === 'protocol' ? accentColor : '#ffffff',
+                        color: lookupMethod === 'protocol' ? primaryColor : '#475569',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Usar Protocolo
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {lookupResult.allowEditOwnResponse === false ? (
+                <div style={{ fontSize: 13, color: '#b45309', fontWeight: 600 }}>
+                  Este formulário está configurado para aceitar apenas 1 resposta e não permite alterações posteriores.
+                </div>
+              ) : lookupMethod === 'otp' && lookupResult.canSendEmailOtp ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      disabled={lookupLoading}
+                      onClick={handleRequestLookupOtp}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '9px 14px',
+                        borderRadius: 10,
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#0f172a',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: lookupLoading ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <Mail size={14} />{' '}
+                      {lookupOtpSent
+                        ? 'Reenviar Código para E-mail'
+                        : `Enviar Código de 6 dígitos para ${lookupResult.maskedEmail}`}
+                    </button>
+                  </div>
+
+                  {lookupOtpSent && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={lookupOtpInput}
+                        onChange={e => setLookupOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleVerifyLookup('otp')
+                          }
+                        }}
+                        placeholder="Código de 6 dígitos"
+                        style={{
+                          width: 170,
+                          padding: '9px 12px',
+                          borderRadius: 10,
+                          border: '1px solid #cbd5e1',
+                          fontSize: 15,
+                          fontWeight: 800,
+                          letterSpacing: 3,
+                          textAlign: 'center',
+                          background: '#ffffff',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={lookupLoading || lookupOtpInput.length < 6}
+                        onClick={() => handleVerifyLookup('otp')}
+                        style={{
+                          padding: '9px 16px',
+                          borderRadius: 10,
+                          border: 'none',
+                          background: '#059669',
+                          color: '#ffffff',
+                          fontSize: 13,
+                          fontWeight: 800,
+                          cursor: lookupLoading || lookupOtpInput.length < 6 ? 'not-allowed' : 'pointer',
+                          opacity: lookupLoading || lookupOtpInput.length < 6 ? 0.6 : 1,
+                        }}
+                      >
+                        Confirmar Código e Liberar Edição
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={lookupProtocolInput}
+                    onChange={e => setLookupProtocolInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleVerifyLookup('protocol')
+                      }
+                    }}
+                    placeholder="Digite seu Protocolo Oficial (ex.: #FORM-2026-123456)"
+                    style={{
+                      flex: 1,
+                      minWidth: 230,
+                      padding: '9px 12px',
+                      borderRadius: 10,
+                      border: '1px solid #cbd5e1',
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      background: '#ffffff',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={lookupLoading || !lookupProtocolInput.trim()}
+                    onClick={() => handleVerifyLookup('protocol')}
+                    style={{
+                      padding: '9px 16px',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: '#059669',
+                      color: '#ffffff',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      cursor: lookupLoading || !lookupProtocolInput.trim() ? 'not-allowed' : 'pointer',
+                      opacity: lookupLoading || !lookupProtocolInput.trim() ? 0.6 : 1,
+                    }}
+                  >
+                    Confirmar Protocolo e Liberar Edição
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* MANUAL ADMIN ENTRY PANEL ("Mas tambem posso adicionar respostas") */}
       {isAdmin && isManualMode && (
@@ -4336,546 +4630,6 @@ export function FormRenderer({
               )
             })
           })()
-        )}
-
-        {/* PUBLIC ACCESS NOTICE IF NOT AUTHENTICATED AND IS PUBLIC FORM */}
-        {!effectiveUser && !isManualMode && !isPreview && isPublicForm && (
-          <div
-            style={{
-              background: '#f0fdf4',
-              borderRadius: 20,
-              border: '1.5px solid #86efac',
-              padding: '18px 24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 16,
-              color: '#166534',
-              boxShadow: '0 4px 14px rgba(22, 101, 52, 0.05)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  background: '#dcfce7',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  color: '#15803d',
-                }}
-              >
-                <Globe size={22} />
-              </div>
-              <div>
-                <div style={{ fontSize: 14.5, fontWeight: 800 }}>
-                  Link Público Aberto • Resposta sem Necessidade de Login
-                </div>
-                <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
-                  Você pode responder diretamente preenchendo seu nome ou se identificar com seu login do sistema IMPACTO EDU.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {(identifierFields.length > 0 || form.settings?.allowEditOwnResponse !== false) &&
-                !editingSelfResponse && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLookupOpen(prev => !prev)
-                      setLookupError('')
-                      setLookupSuccessMsg('')
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      padding: '9px 14px',
-                      borderRadius: 10,
-                      border: '1px solid #4ade80',
-                      background: isLookupOpen ? '#15803d' : '#dcfce7',
-                      color: isLookupOpen ? '#ffffff' : '#14532d',
-                      fontSize: 13,
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <Search size={14} /> Já respondi • Editar por{' '}
-                    {identifierFields[0]?.type === 'cpf'
-                      ? 'CPF'
-                      : identifierFields[0]?.type === 'telefone'
-                      ? 'Telefone'
-                      : 'E-mail'}
-                  </button>
-                )}
-
-              <button
-                type="button"
-                onClick={() => setIsAuthModalOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 16px',
-                  borderRadius: 10,
-                  border: '1px solid #86efac',
-                  background: '#ffffff',
-                  color: '#166534',
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-                }}
-              >
-                <LogIn size={15} /> Entrar no Sistema
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* COMPACT TRIGGER WHEN USER IS LOGGED IN ON A PUBLIC FORM WITH IDENTIFIER FIELDS */}
-        {effectiveUser &&
-          !isManualMode &&
-          !isPreview &&
-          isPublicForm &&
-          !editingSelfResponse &&
-          identifierFields.length > 0 && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 10,
-                padding: '12px 18px',
-                borderRadius: 14,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                fontSize: 13,
-                color: '#475569',
-              }}
-            >
-              <span>
-                Deseja localizar ou editar uma resposta enviada por{' '}
-                <strong>
-                  {identifierFields.map(f => (f.type === 'cpf' ? 'CPF' : f.type === 'telefone' ? 'Telefone' : 'E-mail válido')).join(' ou ')}
-                </strong>
-                ?
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsLookupOpen(prev => !prev)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 14px',
-                  borderRadius: 9,
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
-                  color: primaryColor,
-                  fontSize: 12.5,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                <Search size={14} /> {isLookupOpen ? 'Fechar Busca' : 'Buscar Resposta por Identificador'}
-              </button>
-            </div>
-          )}
-
-        {/* IDENTIFIER RECOVERY & VERIFICATION PANEL (EMAIL / CPF / PROTOCOLO) */}
-        {isLookupOpen && !isManualMode && !isPreview && isPublicForm && !editingSelfResponse && (
-          <div
-            id="gp-public-lookup-panel"
-            style={{
-              background: '#ffffff',
-              borderRadius: 20,
-              border: `1.5px solid ${primaryColor}`,
-              padding: '22px 24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-              boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 10,
-                    background: accentColor,
-                    color: primaryColor,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <KeyRound size={19} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
-                    Localizar e Editar Resposta Anterior
-                  </div>
-                  <div style={{ fontSize: 12.5, color: '#64748b' }}>
-                    Busque pelo identificador validado cadastrado (E-mail válido, CPF ou Telefone) para liberar sua resposta com segurança.
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                aria-label="Fechar painel de busca"
-                onClick={() => {
-                  setIsLookupOpen(false)
-                  setLookupPendingDraftApply(false)
-                }}
-                style={{
-                  border: 'none',
-                  background: '#f1f5f9',
-                  borderRadius: 8,
-                  padding: 6,
-                  cursor: 'pointer',
-                  color: '#475569',
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-              {Array.from(
-                new Map(
-                  (identifierFields.length > 0
-                    ? identifierFields
-                    : [{ type: 'email' as FormIdentifierType, label: 'E-mail' }]
-                  ).map(item => [item.type, item])
-                ).values()
-              ).length > 1 && (
-                <select
-                  aria-label="Tipo de identificador"
-                  value={lookupType}
-                  onChange={e => {
-                    setLookupType(e.target.value as FormIdentifierType)
-                    setLookupResult(null)
-                    setLookupError('')
-                    setLookupOtpSent(false)
-                  }}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid #cbd5e1',
-                    fontSize: 13.5,
-                    fontWeight: 700,
-                    color: '#0f172a',
-                    background: '#f8fafc',
-                  }}
-                >
-                  {Array.from(new Set(identifierFields.map(f => f.type))).map(t => (
-                    <option key={t} value={t}>
-                      {t === 'email'
-                        ? 'E-mail válido'
-                        : t === 'cpf'
-                        ? 'CPF (11 dígitos)'
-                        : t === 'telefone'
-                        ? 'Telefone com DDD'
-                        : 'Link / URL'}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <input
-                type={lookupType === 'email' ? 'email' : 'text'}
-                value={lookupValue}
-                onChange={e => {
-                  setLookupValue(e.target.value)
-                  setLookupError('')
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleLookupByIdentifier()
-                  }
-                }}
-                placeholder={
-                  lookupType === 'cpf'
-                    ? 'Digite seu CPF (ex.: 000.000.000-00)'
-                    : lookupType === 'telefone'
-                    ? 'Digite seu telefone com DDD'
-                    : 'Digite o e-mail utilizado na resposta (ex.: nome@outlook.com)'
-                }
-                style={{
-                  flex: 1,
-                  minWidth: 220,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  border: '1px solid #cbd5e1',
-                  fontSize: 14,
-                  color: '#0f172a',
-                  background: '#ffffff',
-                }}
-              />
-
-              <button
-                type="button"
-                disabled={lookupLoading}
-                onClick={() => handleLookupByIdentifier()}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  padding: '10px 18px',
-                  borderRadius: 10,
-                  border: 'none',
-                  background: primaryColor,
-                  color: '#ffffff',
-                  fontSize: 13.5,
-                  fontWeight: 800,
-                  cursor: lookupLoading ? 'not-allowed' : 'pointer',
-                  opacity: lookupLoading ? 0.7 : 1,
-                }}
-              >
-                <Search size={15} /> {lookupLoading ? 'Buscando...' : 'Buscar'}
-              </button>
-            </div>
-
-            {lookupError && (
-              <div
-                role="alert"
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#b91c1c',
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                {lookupError}
-              </div>
-            )}
-
-            {lookupSuccessMsg && (
-              <div
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  color: '#065f46',
-                  fontSize: 13,
-                  fontWeight: 700,
-                }}
-              >
-                {lookupSuccessMsg}
-              </div>
-            )}
-
-            {lookupResult && !lookupResult.found && (
-              <div
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 10,
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  color: '#475569',
-                  fontSize: 13,
-                }}
-              >
-                Nenhuma resposta registrada encontrada para <strong>{lookupResult.maskedIdentifier}</strong>. Você pode preencher o formulário normalmente abaixo.
-              </div>
-            )}
-
-            {lookupResult?.found && (
-              <div
-                style={{
-                  padding: '16px 18px',
-                  borderRadius: 14,
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>
-                    Resposta localizada para {lookupResult.maskedIdentifier}
-                    {lookupResult.protocolHint ? ` • Protocolo ${lookupResult.protocolHint}` : ''}
-                  </div>
-                  {lookupResult.canSendEmailOtp && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        type="button"
-                        onClick={() => setLookupMethod('otp')}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: 8,
-                          border: lookupMethod === 'otp' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
-                          background: lookupMethod === 'otp' ? accentColor : '#ffffff',
-                          color: lookupMethod === 'otp' ? primaryColor : '#475569',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Código no E-mail
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLookupMethod('protocol')}
-                        style={{
-                          padding: '5px 10px',
-                          borderRadius: 8,
-                          border: lookupMethod === 'protocol' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
-                          background: lookupMethod === 'protocol' ? accentColor : '#ffffff',
-                          color: lookupMethod === 'protocol' ? primaryColor : '#475569',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Usar Protocolo
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {lookupResult.allowEditOwnResponse === false ? (
-                  <div style={{ fontSize: 13, color: '#b45309', fontWeight: 600 }}>
-                    Este formulário está configurado para aceitar apenas 1 resposta e não permite alterações posteriores.
-                  </div>
-                ) : lookupMethod === 'otp' && lookupResult.canSendEmailOtp ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        disabled={lookupLoading}
-                        onClick={handleRequestLookupOtp}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          padding: '9px 14px',
-                          borderRadius: 10,
-                          border: '1px solid #cbd5e1',
-                          background: '#ffffff',
-                          color: '#0f172a',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          cursor: lookupLoading ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        <Mail size={14} />{' '}
-                        {lookupOtpSent
-                          ? 'Reenviar Código para E-mail'
-                          : `Enviar Código de 6 dígitos para ${lookupResult.maskedEmail}`}
-                      </button>
-                    </div>
-
-                    {lookupOtpSent && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={lookupOtpInput}
-                          onChange={e => setLookupOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              handleVerifyLookup('otp')
-                            }
-                          }}
-                          placeholder="Código de 6 dígitos"
-                          style={{
-                            width: 170,
-                            padding: '9px 12px',
-                            borderRadius: 10,
-                            border: '1px solid #cbd5e1',
-                            fontSize: 15,
-                            fontWeight: 800,
-                            letterSpacing: 3,
-                            textAlign: 'center',
-                            background: '#ffffff',
-                          }}
-                        />
-                        <button
-                          type="button"
-                          disabled={lookupLoading || lookupOtpInput.length < 6}
-                          onClick={() => handleVerifyLookup('otp')}
-                          style={{
-                            padding: '9px 16px',
-                            borderRadius: 10,
-                            border: 'none',
-                            background: '#059669',
-                            color: '#ffffff',
-                            fontSize: 13,
-                            fontWeight: 800,
-                            cursor: lookupLoading || lookupOtpInput.length < 6 ? 'not-allowed' : 'pointer',
-                            opacity: lookupLoading || lookupOtpInput.length < 6 ? 0.6 : 1,
-                          }}
-                        >
-                          Confirmar Código e Liberar Edição
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                    <input
-                      type="text"
-                      value={lookupProtocolInput}
-                      onChange={e => setLookupProtocolInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleVerifyLookup('protocol')
-                        }
-                      }}
-                      placeholder="Digite seu Protocolo Oficial (ex.: #FORM-2026-123456)"
-                      style={{
-                        flex: 1,
-                        minWidth: 230,
-                        padding: '9px 12px',
-                        borderRadius: 10,
-                        border: '1px solid #cbd5e1',
-                        fontSize: 13.5,
-                        fontWeight: 700,
-                        background: '#ffffff',
-                      }}
-                    />
-                    <button
-                      type="button"
-                      disabled={lookupLoading || !lookupProtocolInput.trim()}
-                      onClick={() => handleVerifyLookup('protocol')}
-                      style={{
-                        padding: '9px 16px',
-                        borderRadius: 10,
-                        border: 'none',
-                        background: '#059669',
-                        color: '#ffffff',
-                        fontSize: 13,
-                        fontWeight: 800,
-                        cursor: lookupLoading || !lookupProtocolInput.trim() ? 'not-allowed' : 'pointer',
-                        opacity: lookupLoading || !lookupProtocolInput.trim() ? 0.6 : 1,
-                      }}
-                    >
-                      Confirmar Protocolo e Liberar Edição
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         )}
 
         {/* INLINE COLLABORATOR LOGIN IF NOT AUTHENTICATED */}
