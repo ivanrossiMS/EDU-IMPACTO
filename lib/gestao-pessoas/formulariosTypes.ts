@@ -150,8 +150,12 @@ export interface GPFormResponse {
   formId: string
   protocol: string
   respondentId: string
+  respondentUserId?: string
   respondentName: string
   respondentEmail?: string
+  respondentCpf?: string
+  respondentPhone?: string
+  identifierKeys?: string[]
   respondentRole?: string
   respondentDepartment?: string
   respondentUnit?: string
@@ -169,6 +173,9 @@ export interface GPFormResponse {
   submittedAt: string
   updatedAt?: string
   ipAddress?: string
+  /** Hash SHA-256 do token secreto de edição (nunca exposto ao cliente) */
+  editTokenHash?: string
+  editTokenIssuedAt?: string
 }
 
 export interface ThemePreset {

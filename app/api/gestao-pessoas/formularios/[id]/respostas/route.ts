@@ -11,6 +11,22 @@ import {
   isHrOrAdminUser,
 } from '@/lib/server/gpFormulariosStore'
 import { GPFormResponse } from '@/lib/gestao-pessoas/formulariosTypes'
+import {
+  extractFormIdentity,
+  validateIdentifierAnswers,
+  doesResponseMatchIdentity,
+  maskIdentifierForUi,
+  maskProtocolForUi,
+  normalizeEmailValue,
+  normalizeProtocolCode,
+  sanitizeFormResponseForClient,
+} from '@/lib/gestao-pessoas/formIdentity'
+import {
+  generateFormEditToken,
+  verifyFormEditToken,
+  readEditCookieToken,
+  attachEditCookieHeader,
+} from '@/lib/server/gpFormSecurity'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -82,13 +98,33 @@ export async function POST(
         roleCtx.dbUser?.nome || roleCtx.user?.email || 'Gestor RH'
       const importedList: GPFormResponse[] = bulkRows.map((row: any) => {
         const rowAnswers = row.answers || {}
+        const rowIdentity = extractFormIdentity(form, rowAnswers)
+        const fallbackEmail = normalizeEmailValue(row.respondentEmail)
+        const resolvedEmail = rowIdentity.respondentEmail || fallbackEmail
+        const resolvedId =
+          row.respondentId ||
+          rowIdentity.respondentId ||
+          (resolvedEmail ? `email:${resolvedEmail}` : '') ||
+          `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        const keys = Array.from(
+          new Set([
+            ...rowIdentity.identifierKeys,
+            ...(resolvedEmail ? [`email:${resolvedEmail}`] : []),
+          ])
+        )
         return {
           id: `resp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           formId,
           protocol: generateProtocol(),
-          respondentId: row.respondentId || `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          respondentName: row.respondentName || 'Colaborador Importado',
-          respondentEmail: row.respondentEmail || '',
+          respondentId: resolvedId,
+          respondentName:
+            row.respondentName ||
+            rowIdentity.respondentName ||
+            'Colaborador Importado',
+          respondentEmail: resolvedEmail,
+          respondentCpf: rowIdentity.respondentCpf || undefined,
+          respondentPhone: rowIdentity.respondentPhone || undefined,
+          identifierKeys: keys.length > 0 ? keys : undefined,
           respondentRole: row.respondentRole || 'Colaborador',
           respondentDepartment: row.respondentDepartment || '',
           respondentUnit: row.respondentUnit || '',
@@ -114,7 +150,7 @@ export async function POST(
       return NextResponse.json({
         success: true,
         importedCount: importedList.length,
-        responses: updatedResponses,
+        responses: updatedResponses.map(sanitizeFormResponseForClient),
       })
     }
 
@@ -131,12 +167,27 @@ export async function POST(
 
       const adminName =
         roleCtx.dbUser?.nome || roleCtx.user?.email || 'Gestor RH'
+      const manualAnswers = answers || {}
+      const manualIdentity = extractFormIdentity(form, manualAnswers)
+      const respEmail =
+        manualIdentity.respondentEmail ||
+        normalizeEmailValue(manualRespondent?.email) ||
+        ''
       const respName =
-        String(manualRespondent?.name || '').trim() || 'Colaborador (Lançamento Manual)'
+        String(manualRespondent?.name || '').trim() ||
+        manualIdentity.respondentName ||
+        'Colaborador (Lançamento Manual)'
       const respId =
         String(manualRespondent?.id || '').trim() ||
+        manualIdentity.respondentId ||
+        (respEmail ? `email:${respEmail}` : '') ||
         `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-      const respEmail = String(manualRespondent?.email || '').trim()
+      const respKeys = Array.from(
+        new Set([
+          ...manualIdentity.identifierKeys,
+          ...(respEmail ? [`email:${respEmail}`] : []),
+        ])
+      )
       const respRole = String(manualRespondent?.role || '').trim() || 'Colaborador'
       const respDept = String(manualRespondent?.department || '').trim()
       const respUnit = String(manualRespondent?.unit || '').trim()
@@ -152,14 +203,17 @@ export async function POST(
         respondentId: respId,
         respondentName: respName,
         respondentEmail: respEmail,
+        respondentCpf: manualIdentity.respondentCpf || undefined,
+        respondentPhone: manualIdentity.respondentPhone || undefined,
+        identifierKeys: respKeys.length > 0 ? respKeys : undefined,
         respondentRole: respRole,
         respondentDepartment: respDept,
         respondentUnit: respUnit,
         source: 'inserido_pelo_gestor',
         insertedByAdminName: adminName,
         adminNotes: adminNotes || undefined,
-        answers: answers || {},
-        quizScore: computeQuizScore(form, answers || {}),
+        answers: manualAnswers,
+        quizScore: computeQuizScore(form, manualAnswers),
         completionTimeSeconds: Number(completionTimeSeconds || 0) || undefined,
         submittedAt: respDate,
         ipAddress: ip,
@@ -174,13 +228,15 @@ export async function POST(
       }
       await saveAllGPForms(forms)
 
-      return NextResponse.json(newResponse, { status: 201 })
+      return NextResponse.json(sanitizeFormResponseForClient(newResponse), { status: 201 })
     }
 
     // -------------------------------------------------------------------------
-    // MODE 3: COLLABORATOR SUBMISSION (Requires Login / Session or Credentials)
+    // MODE 3: COLLABORATOR / PUBLIC SUBMISSION (Identificação Determinística)
     // -------------------------------------------------------------------------
-    const isPublicForm = Boolean(form.settings?.publicLink)
+    const isPublicForm = Boolean(
+      form.settings?.publicLink || form.settings?.requireLogin === false
+    )
     const isAcceptingResponses =
       form.status === 'ativo' || (form.status === 'rascunho' && isPublicForm)
 
@@ -212,26 +268,93 @@ export async function POST(
       }
     }
 
+    const safeAnswers = answers && typeof answers === 'object' ? answers : {}
+    const identifierValidation = validateIdentifierAnswers(form, safeAnswers)
+    if (!identifierValidation.valid) {
+      return NextResponse.json(
+        {
+          error: identifierValidation.message || 'Verifique os campos de identificação.',
+          fieldId: identifierValidation.fieldId,
+        },
+        { status: 400 }
+      )
+    }
+
+    const formIdentity = extractFormIdentity(form, safeAnswers)
+
     let respondentId = ''
+    let respondentUserId: string | undefined = undefined
     let respondentName = ''
     let respondentEmail = ''
+    let respondentCpf: string | undefined = formIdentity.respondentCpf || undefined
+    let respondentPhone: string | undefined = formIdentity.respondentPhone || undefined
     let respondentRole = 'Colaborador'
     let respondentDepartment = ''
     let respondentUnit = ''
+    let authedUserId = ''
+    let authedUserEmail = ''
+    let authedMatched = false
+    let sourceForResponse: GPFormResponse['source'] = isPublicForm
+      ? 'link_publico'
+      : 'colaborador_logado'
 
+    const identifierKeySet = new Set<string>(formIdentity.identifierKeys)
     const adminSupabase = getAdminClient()
 
+    const applyAuthenticatedIdentity = (
+      sysId: string,
+      sysName: string,
+      sysEmail: string,
+      sysRole: string
+    ) => {
+      authedUserId = sysId
+      authedUserEmail = normalizeEmailValue(sysEmail)
+      authedMatched = true
+
+      const hasDifferentExplicitEmail = Boolean(
+        formIdentity.respondentEmail &&
+          authedUserEmail &&
+          formIdentity.respondentEmail !== authedUserEmail
+      )
+
+      if (isPublicForm && hasDifferentExplicitEmail) {
+        // Quando usuário autenticado envia formulário público informando explicitamente outro e-mail válido,
+        // o registro pertence ao identificador informado (evita colisões e preserva separação por e-mail).
+        respondentId = formIdentity.respondentId
+        respondentName = formIdentity.respondentName || 'Participante (Público)'
+        respondentEmail = formIdentity.respondentEmail
+        respondentRole = 'Público / Externo'
+        sourceForResponse = 'link_publico'
+      } else {
+        respondentUserId = sysId || undefined
+        if (sysId) identifierKeySet.add(`uid:${sysId.toLowerCase()}`)
+        if (authedUserEmail && !formIdentity.respondentEmail) {
+          identifierKeySet.add(`email:${authedUserEmail}`)
+        }
+
+        respondentId = formIdentity.respondentId || sysId
+        respondentName = formIdentity.respondentName || sysName
+        respondentEmail = formIdentity.respondentEmail || authedUserEmail
+        respondentRole = sysRole
+        sourceForResponse = isPublicForm ? 'link_publico' : 'colaborador_logado'
+      }
+    }
+
     if (!roleCtx.errorResponse && roleCtx.isStaff && roleCtx.dbUser) {
-      respondentId = String(roleCtx.dbUser.id)
-      respondentName = String(roleCtx.dbUser.nome || roleCtx.user?.email || 'Colaborador')
-      respondentEmail = String(roleCtx.dbUser.email || roleCtx.user?.email || '')
-      respondentRole = String(roleCtx.dbUser.cargo || roleCtx.dbUser.perfil || 'Colaborador')
+      applyAuthenticatedIdentity(
+        String(roleCtx.dbUser.id),
+        String(roleCtx.dbUser.nome || roleCtx.user?.email || 'Colaborador'),
+        String(roleCtx.dbUser.email || roleCtx.user?.email || ''),
+        String(roleCtx.dbUser.cargo || roleCtx.dbUser.perfil || 'Colaborador')
+      )
     } else if (!roleCtx.errorResponse && roleCtx.user && form.settings?.allowAccessWithoutModule) {
       // Qualquer usuário do sistema autenticado (mesmo sem estar em system_users ou sem permissão ao módulo GP)
-      respondentId = String(roleCtx.user.id)
-      respondentName = String(roleCtx.user.user_metadata?.nome || roleCtx.user.email?.split('@')[0] || 'Usuário')
-      respondentEmail = String(roleCtx.user.email || '')
-      respondentRole = String(roleCtx.cargo || roleCtx.perfil || roleCtx.user.user_metadata?.cargo || 'Usuário')
+      applyAuthenticatedIdentity(
+        String(roleCtx.user.id),
+        String(roleCtx.user.user_metadata?.nome || roleCtx.user.email?.split('@')[0] || 'Usuário'),
+        String(roleCtx.user.email || ''),
+        String(roleCtx.cargo || roleCtx.perfil || roleCtx.user.user_metadata?.cargo || 'Usuário')
+      )
     } else if (email && password) {
       // Authenticate via Supabase Auth credentials when collaborator signs in directly on the form
       const authClient = createClient(
@@ -261,10 +384,12 @@ export async function POST(
 
       if (!sysUser || String(sysUser.status || '').toLowerCase() === 'inativo') {
         if (form.settings?.allowAccessWithoutModule && authData.user) {
-          respondentId = String(authData.user.id)
-          respondentName = String(authData.user.user_metadata?.nome || cleanEmail)
-          respondentEmail = cleanEmail
-          respondentRole = 'Usuário'
+          applyAuthenticatedIdentity(
+            String(authData.user.id),
+            String(authData.user.user_metadata?.nome || cleanEmail),
+            cleanEmail,
+            'Usuário'
+          )
         } else {
           return NextResponse.json(
             { error: 'Acesso permitido apenas para colaboradores ativos do sistema.' },
@@ -272,40 +397,36 @@ export async function POST(
           )
         }
       } else {
-        respondentId = String(sysUser.id)
-        respondentName = String(sysUser.nome || authData.user.user_metadata?.nome || cleanEmail)
-        respondentEmail = String(sysUser.email || cleanEmail)
-        respondentRole = String(sysUser.cargo || sysUser.perfil || 'Colaborador')
+        applyAuthenticatedIdentity(
+          String(sysUser.id),
+          String(sysUser.nome || authData.user.user_metadata?.nome || cleanEmail),
+          String(sysUser.email || cleanEmail),
+          String(sysUser.cargo || sysUser.perfil || 'Colaborador')
+        )
       }
-    } else if (form.settings?.publicLink || form.settings?.requireLogin === false) {
-      // Procura se o participante preencheu o campo de nome no formulário
-      const allFields = (form.sections || []).flatMap(s => s.fields || [])
-      let detectedName = ''
-      for (const [fId, val] of Object.entries(answers)) {
-        const field = allFields.find(f => f.id === fId)
-        if (
-          field &&
-          (field.autoFillUser === 'nome' ||
-            field.type === 'usuario_logado' ||
-            /nome/i.test(field.title))
-        ) {
-          if (typeof val === 'string' && val.trim()) {
-            detectedName = val.trim()
-            break
-          }
-        }
-      }
+    } else if (isPublicForm) {
+      const bodyEmail = normalizeEmailValue(body.respondentEmail)
+      respondentEmail = formIdentity.respondentEmail || bodyEmail || ''
+      if (respondentEmail) identifierKeySet.add(`email:${respondentEmail}`)
 
-      respondentId = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-      respondentName = detectedName || body.respondentName || 'Participante (Público)'
-      respondentEmail = body.respondentEmail || ''
+      respondentId =
+        formIdentity.respondentId ||
+        (respondentEmail ? `email:${respondentEmail}` : '') ||
+        `anon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      respondentName =
+        formIdentity.respondentName ||
+        String(body.respondentName || '').trim() ||
+        'Participante (Público)'
       respondentRole = 'Público / Externo'
+      sourceForResponse = 'link_publico'
     } else {
       return NextResponse.json(
         { error: 'Você precisa estar logado no sistema para responder a este formulário.' },
         { status: 401 }
       )
     }
+
+    const identifierKeys = Array.from(identifierKeySet)
 
     // Enrich department & unit from funcionarios table if available
     if (respondentEmail) {
@@ -323,56 +444,151 @@ export async function POST(
       }
     }
 
-    // Check if collaborator already responded when allowMultipleResponses is false
-    const existingIndex = allResponses.findIndex(
-      r =>
-        ((respondentId && r.respondentId === respondentId) ||
-          (respondentEmail &&
-            String(r.respondentEmail || '').toLowerCase() ===
-              respondentEmail.toLowerCase()))
+    // Busca determinística de resposta existente por ID de e-mail, CPF, telefone ou UID
+    const matchCriteria = {
+      respondentId,
+      identifierKeys,
+      userId: respondentUserId || undefined,
+      userEmail: respondentEmail || undefined,
+    }
+    const existingIndex = allResponses.findIndex(r =>
+      doesResponseMatchIdentity(form, r, matchCriteria)
     )
 
     if (existingIndex !== -1 && !form.settings?.allowMultipleResponses) {
-      if (form.settings?.allowEditOwnResponse !== false) {
-        // Update existing response
-        const prev = allResponses[existingIndex]
-        const updatedResp: GPFormResponse = {
-          ...prev,
-          answers: answers || {},
-          quizScore: computeQuizScore(form, answers || {}),
-          completionTimeSeconds:
-            Number(completionTimeSeconds || 0) || prev.completionTimeSeconds,
-          updatedAt: new Date().toISOString(),
-          ipAddress: ip,
-        }
-        const nextList = [...allResponses]
-        nextList[existingIndex] = updatedResp
-        await saveFormResponses(formId, nextList)
-        return NextResponse.json(updatedResp)
-      } else {
+      const prev = allResponses[existingIndex]
+
+      if (form.settings?.allowEditOwnResponse === false) {
         return NextResponse.json(
-          { error: 'Você já respondeu a este formulário (limite de 1 resposta por colaborador).' },
-          { status: 400 }
+          {
+            error:
+              'Já existe uma resposta registrada com este identificador (E-mail/CPF). Este formulário não permite múltiplas respostas nem alterações.',
+            code: 'DUPLICATE_LOCKED',
+          },
+          { status: 409 }
         )
       }
+
+      const cookieAuth = readEditCookieToken(req, formId)
+      const candidateToken = String(
+        body.editToken ||
+          (cookieAuth?.responseId === prev.id ? cookieAuth.editToken : '') ||
+          ''
+      ).trim()
+      const hasValidToken = Boolean(
+        prev.editTokenHash &&
+          candidateToken &&
+          verifyFormEditToken(candidateToken, prev.editTokenHash)
+      )
+      const isSessionOwner = Boolean(
+        authedMatched &&
+          doesResponseMatchIdentity(form, prev, {
+            userId: authedUserId,
+            userEmail: authedUserEmail,
+          })
+      )
+      const reqLegacyProto = normalizeProtocolCode(body.legacyProtocol)
+      const hasLegacyMatch = Boolean(
+        !prev.editTokenHash &&
+          body.responseId &&
+          body.responseId === prev.id &&
+          reqLegacyProto &&
+          reqLegacyProto === normalizeProtocolCode(prev.protocol)
+      )
+
+      if (!(isAdmin || isSessionOwner || hasValidToken || hasLegacyMatch)) {
+        const idType =
+          formIdentity.primaryType || (respondentEmail ? 'email' : null)
+        const idVal = formIdentity.primaryValue || respondentEmail
+        return NextResponse.json(
+          {
+            error:
+              'Já existe uma resposta registrada para este identificador. Confirme sua identidade para visualizar ou editar sua resposta anterior.',
+            code: 'EXISTING_RESPONSE_REQUIRES_VERIFICATION',
+            identifierType: idType,
+            maskedIdentifier: maskIdentifierForUi(idType, idVal),
+            protocolHint: maskProtocolForUi(prev.protocol),
+            supportsEmailOtp: Boolean(
+              formIdentity.respondentEmail || prev.respondentEmail
+            ),
+          },
+          { status: 409 }
+        )
+      }
+
+      let rawTokenToReturn = ''
+      let nextTokenHash = prev.editTokenHash
+      let nextTokenIssuedAt = prev.editTokenIssuedAt
+      if (!nextTokenHash) {
+        const issued = generateFormEditToken()
+        rawTokenToReturn = issued.rawToken
+        nextTokenHash = issued.tokenHash
+        nextTokenIssuedAt = new Date().toISOString()
+      }
+
+      const updatedResp: GPFormResponse = {
+        ...prev,
+        respondentId: respondentId || prev.respondentId,
+        respondentUserId: respondentUserId || prev.respondentUserId,
+        respondentName: respondentName || prev.respondentName,
+        respondentEmail: respondentEmail || prev.respondentEmail,
+        respondentCpf: respondentCpf || prev.respondentCpf,
+        respondentPhone: respondentPhone || prev.respondentPhone,
+        identifierKeys: identifierKeys.length > 0 ? identifierKeys : prev.identifierKeys,
+        respondentRole: respondentRole || prev.respondentRole,
+        respondentDepartment: respondentDepartment || prev.respondentDepartment,
+        respondentUnit: respondentUnit || prev.respondentUnit,
+        answers: safeAnswers,
+        quizScore: computeQuizScore(form, safeAnswers),
+        completionTimeSeconds:
+          Number(completionTimeSeconds || 0) || prev.completionTimeSeconds,
+        updatedAt: new Date().toISOString(),
+        ipAddress: ip,
+        editTokenHash: nextTokenHash,
+        editTokenIssuedAt: nextTokenIssuedAt,
+      }
+
+      const nextList = [...allResponses]
+      nextList[existingIndex] = updatedResp
+      await saveFormResponses(formId, nextList)
+
+      const payloadOut: Record<string, any> = {
+        ...sanitizeFormResponseForClient(updatedResp),
+        updated: true,
+      }
+      if (rawTokenToReturn) {
+        payloadOut._editToken = rawTokenToReturn
+      }
+      const res = NextResponse.json(payloadOut)
+      if (rawTokenToReturn) {
+        attachEditCookieHeader(res, formId, updatedResp.id, rawTokenToReturn)
+      }
+      return res
     }
 
+    const { rawToken, tokenHash } = generateFormEditToken()
     const newResponse: GPFormResponse = {
       id: `resp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       formId,
       protocol: generateProtocol(),
       respondentId,
+      respondentUserId,
       respondentName,
       respondentEmail,
+      respondentCpf,
+      respondentPhone,
+      identifierKeys: identifierKeys.length > 0 ? identifierKeys : undefined,
       respondentRole,
       respondentDepartment,
       respondentUnit,
-      source: isPublicForm ? 'link_publico' : 'colaborador_logado',
-      answers: answers || {},
-      quizScore: computeQuizScore(form, answers || {}),
+      source: sourceForResponse,
+      answers: safeAnswers,
+      quizScore: computeQuizScore(form, safeAnswers),
       completionTimeSeconds: Number(completionTimeSeconds || 0) || undefined,
       submittedAt: new Date().toISOString(),
       ipAddress: ip,
+      editTokenHash: tokenHash,
+      editTokenIssuedAt: new Date().toISOString(),
     }
 
     const updatedResponses = [newResponse, ...allResponses]
@@ -384,7 +600,15 @@ export async function POST(
     }
     await saveAllGPForms(forms)
 
-    return NextResponse.json(newResponse, { status: 201 })
+    const res = NextResponse.json(
+      {
+        ...sanitizeFormResponseForClient(newResponse),
+        _editToken: rawToken,
+      },
+      { status: 201 }
+    )
+    attachEditCookieHeader(res, formId, newResponse.id, rawToken)
+    return res
   } catch (error: any) {
     console.error('[POST /api/gestao-pessoas/formularios/[id]/respostas]', error)
     return NextResponse.json(
@@ -401,15 +625,26 @@ export async function PUT(
   try {
     const { id: formId } = await params
     const body = await req.json()
-    const { responseId, answers, respondentName, respondentRole, respondentDepartment, respondentUnit, adminNotes } = body
+    const {
+      responseId,
+      identifierKey,
+      respondentId: reqRespondentId,
+      answers,
+      respondentName,
+      respondentRole,
+      respondentDepartment,
+      respondentUnit,
+      adminNotes,
+      editToken,
+      legacyProtocol,
+    } = body
 
     const roleCtx = await resolveUserRole(req)
-    if (roleCtx.errorResponse) return roleCtx.errorResponse
-
+    const isAuthenticated = Boolean(!roleCtx.errorResponse && roleCtx.user)
     const isAdmin = Boolean(
-      !roleCtx.errorResponse &&
-      roleCtx.isStaff &&
-      isHrOrAdminUser(roleCtx.perfil, roleCtx.cargo)
+      isAuthenticated &&
+        roleCtx.isStaff &&
+        isHrOrAdminUser(roleCtx.perfil, roleCtx.cargo)
     )
 
     const forms = await loadAllGPForms()
@@ -418,46 +653,231 @@ export async function PUT(
       return NextResponse.json({ error: 'Formulário não encontrado.' }, { status: 404 })
     }
 
+    const isPublicForm = Boolean(
+      form.settings?.publicLink || form.settings?.requireLogin === false
+    )
+
+    if (!isAuthenticated && !isPublicForm) {
+      return (
+        roleCtx.errorResponse ||
+        NextResponse.json(
+          { error: 'Autenticação necessária para editar esta resposta.' },
+          { status: 401 }
+        )
+      )
+    }
+
     const allResponses = await loadFormResponses(formId)
-    const idx = allResponses.findIndex(r => r.id === responseId)
+    const nextAnswersObj = answers !== undefined && typeof answers === 'object' ? answers : null
+    const draftIdentity = nextAnswersObj ? extractFormIdentity(form, nextAnswersObj) : null
+
+    // Busca prioritária por responseId; caso omitido, resolve pelo ID determinístico do identificador (e-mail, CPF, etc.)
+    let idx = responseId ? allResponses.findIndex(r => r.id === responseId) : -1
+    if (idx === -1 && (identifierKey || reqRespondentId || draftIdentity?.respondentId)) {
+      const candidateKeys = [
+        ...(identifierKey ? [String(identifierKey)] : []),
+        ...(draftIdentity?.identifierKeys || []),
+      ]
+      idx = allResponses.findIndex(r =>
+        doesResponseMatchIdentity(form, r, {
+          respondentId: reqRespondentId || draftIdentity?.respondentId,
+          identifierKeys: candidateKeys,
+        })
+      )
+    }
+
     if (idx === -1) {
       return NextResponse.json({ error: 'Resposta não encontrada.' }, { status: 404 })
     }
 
     const target = allResponses[idx]
     const userId = String(roleCtx.dbUser?.id || roleCtx.user?.id || '').trim()
-    const userEmail = String(roleCtx.dbUser?.email || roleCtx.user?.email || '').trim().toLowerCase()
-    const targetEmail = String(target.respondentEmail || '').trim().toLowerCase()
-    const isOwner = Boolean(
-      (userId && target.respondentId === userId) ||
-      (userEmail && targetEmail && userEmail === targetEmail)
+    const userEmail = String(roleCtx.dbUser?.email || roleCtx.user?.email || '')
+      .trim()
+      .toLowerCase()
+    const isSessionOwner =
+      isAuthenticated &&
+      doesResponseMatchIdentity(form, target, { userId, userEmail })
+
+    const cookieAuth = readEditCookieToken(req, formId)
+    const candidateToken = String(
+      editToken ||
+        (cookieAuth?.responseId === target.id ? cookieAuth.editToken : '') ||
+        ''
+    ).trim()
+    const hasValidEditToken = Boolean(
+      target.editTokenHash &&
+        candidateToken &&
+        verifyFormEditToken(candidateToken, target.editTokenHash)
     )
 
-    if (!isAdmin && (!isOwner || form.settings?.allowEditOwnResponse === false)) {
-      return NextResponse.json(
-        { error: 'Sem permissão para editar esta resposta.' },
-        { status: 403 }
-      )
+    const reqLegacyProto = normalizeProtocolCode(legacyProtocol)
+    const targetProto = normalizeProtocolCode(target.protocol)
+    const hasLegacyOwnerMatch = Boolean(
+      !target.editTokenHash &&
+        responseId &&
+        responseId === target.id &&
+        reqLegacyProto &&
+        targetProto &&
+        reqLegacyProto === targetProto
+    )
+
+    if (!isAdmin) {
+      if (form.settings?.allowEditOwnResponse === false) {
+        return NextResponse.json(
+          { error: 'Este formulário não permite alteração das respostas após o envio.' },
+          { status: 403 }
+        )
+      }
+      if (!isSessionOwner && !hasValidEditToken && !hasLegacyOwnerMatch) {
+        return NextResponse.json(
+          {
+            error:
+              'Sem permissão para editar esta resposta. Confirme sua identidade por código no e-mail ou protocolo.',
+            code: 'EDIT_AUTHORIZATION_REQUIRED',
+          },
+          { status: isAuthenticated ? 403 : 401 }
+        )
+      }
     }
 
     const nextAnswers = answers !== undefined ? answers : target.answers
+    if (!isAdmin) {
+      const idValidation = validateIdentifierAnswers(form, nextAnswers || {})
+      if (!idValidation.valid) {
+        return NextResponse.json(
+          {
+            error: idValidation.message || 'Verifique os campos de identificação.',
+            fieldId: idValidation.fieldId,
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    const nextIdentity = extractFormIdentity(form, nextAnswers || {})
+
+    if (!form.settings?.allowMultipleResponses && !isAdmin && nextIdentity.respondentId) {
+      const duplicateOther = allResponses.some(
+        (r, i) =>
+          i !== idx &&
+          doesResponseMatchIdentity(form, r, {
+            respondentId: nextIdentity.respondentId,
+          })
+      )
+      if (duplicateOther) {
+        return NextResponse.json(
+          {
+            error:
+              'Já existe outra resposta registrada com este mesmo e-mail ou documento identificador.',
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    const mergedKeys = new Set<string>(nextIdentity.identifierKeys)
+    if (target.respondentUserId) {
+      mergedKeys.add(`uid:${String(target.respondentUserId).toLowerCase()}`)
+    }
+    const resolvedEmail =
+      nextIdentity.respondentEmail || normalizeEmailValue(target.respondentEmail)
+    if (resolvedEmail) mergedKeys.add(`email:${resolvedEmail}`)
+
+    const nextRespondentId =
+      nextIdentity.respondentId ||
+      (target.respondentId && !target.respondentId.startsWith('anon-')
+        ? target.respondentId
+        : resolvedEmail
+        ? `email:${resolvedEmail}`
+        : target.respondentId)
+
+    const nextRespondentName =
+      isAdmin && respondentName !== undefined
+        ? respondentName
+        : nextIdentity.respondentName || target.respondentName
+    let nextRespondentRole =
+      isAdmin && respondentRole !== undefined
+        ? respondentRole
+        : target.respondentRole
+    let nextRespondentDepartment =
+      isAdmin && respondentDepartment !== undefined
+        ? respondentDepartment
+        : target.respondentDepartment
+    let nextRespondentUnit =
+      isAdmin && respondentUnit !== undefined
+        ? respondentUnit
+        : target.respondentUnit
+
+    if (
+      resolvedEmail &&
+      resolvedEmail !== normalizeEmailValue(target.respondentEmail)
+    ) {
+      try {
+        const adminSupabase = getAdminClient()
+        const { data: funcRow } = await adminSupabase
+          .from('funcionarios')
+          .select('departamento, unidade, cargo')
+          .ilike('email', resolvedEmail)
+          .limit(1)
+          .maybeSingle()
+
+        if (funcRow) {
+          if (!isAdmin || respondentDepartment === undefined) {
+            nextRespondentDepartment = String(funcRow.departamento || nextRespondentDepartment || '')
+          }
+          if (!isAdmin || respondentUnit === undefined) {
+            nextRespondentUnit = String(funcRow.unidade || nextRespondentUnit || '')
+          }
+          if ((!isAdmin || respondentRole === undefined) && funcRow.cargo) {
+            nextRespondentRole = String(funcRow.cargo)
+          }
+        }
+      } catch {}
+    }
+
+    let rawTokenToReturn = ''
+    let nextTokenHash = target.editTokenHash
+    let nextTokenIssuedAt = target.editTokenIssuedAt
+    if (!isAdmin && !nextTokenHash) {
+      const issued = generateFormEditToken()
+      rawTokenToReturn = issued.rawToken
+      nextTokenHash = issued.tokenHash
+      nextTokenIssuedAt = new Date().toISOString()
+    }
+
     const updated: GPFormResponse = {
       ...target,
-      respondentName: isAdmin && respondentName !== undefined ? respondentName : target.respondentName,
-      respondentRole: isAdmin && respondentRole !== undefined ? respondentRole : target.respondentRole,
-      respondentDepartment: isAdmin && respondentDepartment !== undefined ? respondentDepartment : target.respondentDepartment,
-      respondentUnit: isAdmin && respondentUnit !== undefined ? respondentUnit : target.respondentUnit,
+      respondentId: nextRespondentId,
+      respondentName: nextRespondentName,
+      respondentEmail: resolvedEmail,
+      respondentCpf: nextIdentity.respondentCpf || target.respondentCpf,
+      respondentPhone: nextIdentity.respondentPhone || target.respondentPhone,
+      identifierKeys: mergedKeys.size > 0 ? Array.from(mergedKeys) : target.identifierKeys,
+      respondentRole: nextRespondentRole,
+      respondentDepartment: nextRespondentDepartment,
+      respondentUnit: nextRespondentUnit,
       adminNotes: isAdmin && adminNotes !== undefined ? adminNotes : target.adminNotes,
       answers: nextAnswers,
       quizScore: computeQuizScore(form, nextAnswers),
       updatedAt: new Date().toISOString(),
+      editTokenHash: nextTokenHash,
+      editTokenIssuedAt: nextTokenIssuedAt,
     }
 
     const nextResponses = [...allResponses]
     nextResponses[idx] = updated
     await saveFormResponses(formId, nextResponses)
 
-    return NextResponse.json(updated)
+    const outPayload: Record<string, any> = sanitizeFormResponseForClient(updated)
+    if (rawTokenToReturn) {
+      outPayload._editToken = rawTokenToReturn
+    }
+    const res = NextResponse.json(outPayload)
+    if (rawTokenToReturn) {
+      attachEditCookieHeader(res, formId, updated.id, rawTokenToReturn)
+    }
+    return res
   } catch (error: any) {
     console.error('[PUT /api/gestao-pessoas/formularios/[id]/respostas]', error)
     return NextResponse.json(

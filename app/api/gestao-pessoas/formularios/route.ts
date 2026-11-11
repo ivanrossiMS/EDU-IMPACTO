@@ -7,6 +7,10 @@ import {
   normalizeForm,
   isHrOrAdminUser,
 } from '@/lib/server/gpFormulariosStore'
+import {
+  doesResponseMatchIdentity,
+  sanitizeFormResponseForClient,
+} from '@/lib/gestao-pessoas/formIdentity'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -34,15 +38,11 @@ export async function GET(req: Request) {
 
     const enrichedForms = forms.map(f => {
       const list = responsesMap[f.id] || []
-      const myResponse =
-        list.find(
-          r =>
-            (userId && r.respondentId === userId) ||
-            (userEmail &&
-              String(r.respondentEmail || '')
-                .trim()
-                .toLowerCase() === userEmail)
+      const matched =
+        list.find(r =>
+          doesResponseMatchIdentity(f, r, { userId, userEmail })
         ) || null
+      const myResponse = matched ? sanitizeFormResponseForClient(matched) : null
 
       return {
         ...f,

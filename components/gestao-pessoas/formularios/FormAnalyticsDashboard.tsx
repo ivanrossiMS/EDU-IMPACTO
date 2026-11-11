@@ -46,6 +46,7 @@ import {
   GPFormResponse,
   FormField,
 } from '@/lib/gestao-pessoas/formulariosTypes'
+import { formatDisplayIdentifier } from '@/lib/gestao-pessoas/formIdentity'
 
 const CHART_COLORS = [
   '#4f46e5',
@@ -79,26 +80,32 @@ interface FormAnalyticsDashboardProps {
   onBulkImportSuccess: (updatedResponses: GPFormResponse[]) => void
 }
 
-export function formatAnswerValue(field: FormField, answers: Record<string, any>): string {
+export function formatAnswerValue(
+  field: FormField,
+  answers: Record<string, any>,
+  multiline = false
+): string {
   const raw = answers?.[field.id]
   if (raw === undefined || raw === null || raw === '') return '—'
+  const sep = multiline ? '\n' : ', '
 
   if (field.type === 'grade_multipla' || field.type === 'grade_caixas') {
     if (typeof raw !== 'object') return String(raw)
     return Object.entries(raw)
       .map(([row, col]) => `${row}: ${Array.isArray(col) ? col.join(', ') : col}`)
-      .join(' | ')
+      .join(multiline ? '\n' : ' | ')
   }
 
   if (field.type === 'ranking' && Array.isArray(raw)) {
-    return raw.map((item, idx) => `${idx + 1}º ${item}`).join(' → ')
+    return raw.map((item, idx) => `${idx + 1}º ${item}`).join(multiline ? '\n' : ' → ')
   }
 
   if (Array.isArray(raw)) {
+    if (raw.length === 0) return '—'
     const mapped = raw.map(v =>
       v === '__other__' ? `Outro (${answers[`${field.id}__other`] || ''})` : v
     )
-    return mapped.join(', ')
+    return mapped.join(sep)
   }
 
   if (raw === '__other__') {
@@ -179,7 +186,16 @@ export function FormAnalyticsDashboard({
     const total = responses.length
     const totalColabs = colaboradoresList.length || 1
     const uniqueRespondents = new Set(
-      responses.map(r => (r.respondentEmail || r.respondentName || r.id).toLowerCase().trim())
+      responses.map(r =>
+        (
+          r.respondentEmail ||
+          (r.respondentId && !r.respondentId.startsWith('anon-') ? r.respondentId : '') ||
+          r.respondentName ||
+          r.id
+        )
+          .toLowerCase()
+          .trim()
+      )
     ).size
     const adesaoPercent =
       colaboradoresList.length > 0
@@ -1134,6 +1150,8 @@ export function FormAnalyticsDashboard({
         const q = sheetSearch.toLowerCase()
         const inMeta =
           r.respondentName?.toLowerCase().includes(q) ||
+          r.respondentEmail?.toLowerCase().includes(q) ||
+          r.respondentId?.toLowerCase().includes(q) ||
           r.respondentRole?.toLowerCase().includes(q) ||
           r.respondentDepartment?.toLowerCase().includes(q) ||
           r.protocol?.toLowerCase().includes(q)
@@ -1625,9 +1643,12 @@ export function FormAnalyticsDashboard({
                             fontSize: 13.5,
                             fontWeight: 700,
                             color: '#1e293b',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.5,
+                            overflowWrap: 'anywhere',
                           }}
                         >
-                          {formatAnswerValue(field, r.answers)}
+                          {formatAnswerValue(field, r.answers, true)}
                         </div>
                       </div>
                     ))}
@@ -1803,7 +1824,9 @@ export function FormAnalyticsDashboard({
                             : currentResp.respondentName}
                         </div>
                         <div style={{ fontSize: 12, color: '#64748b' }}>
-                          {currentResp.respondentEmail || ''}
+                          {form.settings?.confidentialMode
+                            ? ''
+                            : currentResp.respondentEmail || formatDisplayIdentifier(currentResp) || ''}
                         </div>
                       </div>
                       <div>
@@ -1824,6 +1847,10 @@ export function FormAnalyticsDashboard({
                         <div style={{ fontSize: 13, fontWeight: 800, color: primaryColor, marginTop: 2 }}>
                           {currentResp.source === 'colaborador_logado'
                             ? '✓ Respondido via Login do Colaborador'
+                            : currentResp.source === 'link_publico'
+                            ? 'Link Público (Identificação no Formulário)'
+                            : currentResp.source === 'importado_planilha'
+                            ? 'Importado via Planilha'
                             : `Lançado pelo Gestor (${currentResp.insertedByAdminName || 'RH'})`}
                         </div>
                       </div>
@@ -1884,8 +1911,17 @@ export function FormAnalyticsDashboard({
                                 }}
                               />
                             ) : (
-                              <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
-                                {formatAnswerValue(f, currentResp.answers)}
+                              <div
+                                style={{
+                                  fontSize: 15,
+                                  fontWeight: 700,
+                                  color: '#0f172a',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.55,
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
+                                {formatAnswerValue(f, currentResp.answers, true)}
                               </div>
                             )}
                           </div>

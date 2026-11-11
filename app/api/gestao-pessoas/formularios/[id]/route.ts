@@ -9,6 +9,14 @@ import {
   normalizeForm,
   isHrOrAdminUser,
 } from '@/lib/server/gpFormulariosStore'
+import {
+  doesResponseMatchIdentity,
+  sanitizeFormResponseForClient,
+} from '@/lib/gestao-pessoas/formIdentity'
+import {
+  readEditCookieToken,
+  verifyFormEditToken,
+} from '@/lib/server/gpFormSecurity'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -81,18 +89,32 @@ export async function GET(
     const allResponses = await loadFormResponses(id)
 
     if (!isAuthenticated) {
+      // Verifica se este navegador possui cookie HttpOnly válido de resposta própria
+      const cookieAuth = readEditCookieToken(req, id)
+      const matchedByCookie = cookieAuth
+        ? allResponses.find(
+            r =>
+              r.id === cookieAuth.responseId &&
+              verifyFormEditToken(cookieAuth.editToken, r.editTokenHash)
+          ) || null
+        : null
+      const safeCookieResponses = matchedByCookie
+        ? [sanitizeFormResponseForClient(matchedByCookie)]
+        : []
+
       // Retorna a estrutura pública para exibir cabeçalho ou permitir resposta pública
       return NextResponse.json({
         form: {
           ...form,
           respostasCount: allResponses.length,
+          myResponse: safeCookieResponses[0] || null,
         },
         authenticated: false,
         isPublic: isPublicForm,
         isAdmin: false,
         hasModuleAccess: false,
         responses: [],
-        myResponses: [],
+        myResponses: safeCookieResponses,
       })
     }
 
@@ -100,15 +122,23 @@ export async function GET(
     const userEmail = String(roleCtx.dbUser?.email || roleCtx.user?.email || '')
       .trim()
       .toLowerCase()
+    const cookieAuth = readEditCookieToken(req, id)
 
-    const myResponses = allResponses.filter(
-      r =>
-        (userId && r.respondentId === userId) ||
-        (userEmail &&
-          String(r.respondentEmail || '')
-            .trim()
-            .toLowerCase() === userEmail)
-    )
+    const myResponses = allResponses
+      .filter(
+        r =>
+          doesResponseMatchIdentity(form, r, { userId, userEmail }) ||
+          Boolean(
+            cookieAuth &&
+              r.id === cookieAuth.responseId &&
+              verifyFormEditToken(cookieAuth.editToken, r.editTokenHash)
+          )
+      )
+      .map(sanitizeFormResponseForClient)
+
+    const safeResponses = isAdmin
+      ? allResponses.map(sanitizeFormResponseForClient)
+      : []
 
     return NextResponse.json({
       form: {
@@ -119,7 +149,7 @@ export async function GET(
       authenticated: true,
       isAdmin,
       hasModuleAccess,
-      responses: isAdmin ? allResponses : [],
+      responses: safeResponses,
       myResponses,
     })
   } catch (error: any) {

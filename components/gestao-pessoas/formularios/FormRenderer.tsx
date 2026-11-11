@@ -38,6 +38,9 @@ import {
   LogIn,
   Copy,
   Edit3,
+  Mail,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -46,6 +49,12 @@ import {
   GPFormResponse,
   MOOD_OPTIONS,
 } from '@/lib/gestao-pessoas/formulariosTypes'
+import {
+  FormIdentifierType,
+  extractFormIdentity,
+  formatDisplayIdentifier,
+  getFormIdentifierFields,
+} from '@/lib/gestao-pessoas/formIdentity'
 import { RenderMediaCollection } from './FormMediaHelper'
 import { FormRichTextRenderer } from './FormRichTextEditor'
 
@@ -358,6 +367,31 @@ export function FormRenderer({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  const identifierFields = useMemo(() => getFormIdentifierFields(form), [form])
+
+  const getEditTokenForResponse = (respId?: string | null): string => {
+    if (typeof window === 'undefined' || !respId) return ''
+    try {
+      const raw = localStorage.getItem(`gp_form_edit_tokens_${form.id}`)
+      if (!raw) return ''
+      const parsed = JSON.parse(raw)
+      return typeof parsed?.[respId] === 'string' ? parsed[respId] : ''
+    } catch {
+      return ''
+    }
+  }
+
+  const saveEditTokenForResponse = (respId?: string | null, token?: string | null) => {
+    if (typeof window === 'undefined' || !respId || !token) return
+    try {
+      const key = `gp_form_edit_tokens_${form.id}`
+      const raw = localStorage.getItem(key)
+      const parsed = raw ? JSON.parse(raw) : {}
+      const next = parsed && typeof parsed === 'object' ? { ...parsed, [respId]: token } : { [respId]: token }
+      localStorage.setItem(key, JSON.stringify(next))
+    } catch {}
+  }
+
   // Check if there is an existing response: from form.myResponse or localStorage
   const localSavedResponse = useMemo<GPFormResponse | null>(() => {
     if (typeof window === 'undefined') return null
@@ -371,6 +405,8 @@ export function FormRenderer({
     return null
   }, [form.id])
 
+  const [hasClearedLocalSession, setHasClearedLocalSession] = useState(false)
+
   const initialExistingResponse =
     !editingResponse && !initialManualMode && !form.settings?.allowMultipleResponses
       ? (form.myResponse || localSavedResponse)
@@ -383,7 +419,32 @@ export function FormRenderer({
   const [copiedProtocol, setCopiedProtocol] = useState(false)
   const [showAnswersSummary, setShowAnswersSummary] = useState(false)
 
+  // Public Lookup / Verification by Identifier (email:, cpf:, tel:)
+  const [isLookupOpen, setIsLookupOpen] = useState(false)
+  const [lookupType, setLookupType] = useState<FormIdentifierType>(
+    () => identifierFields[0]?.type || 'email'
+  )
+  const [lookupValue, setLookupValue] = useState('')
+  const [lookupProtocolInput, setLookupProtocolInput] = useState('')
+  const [lookupOtpInput, setLookupOtpInput] = useState('')
+  const [lookupMethod, setLookupMethod] = useState<'otp' | 'protocol'>('otp')
+  const [lookupOtpSent, setLookupOtpSent] = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupError, setLookupError] = useState('')
+  const [lookupSuccessMsg, setLookupSuccessMsg] = useState('')
+  const [lookupResult, setLookupResult] = useState<{
+    found: boolean
+    maskedIdentifier?: string
+    protocolHint?: string
+    allowEditOwnResponse?: boolean
+    canSendEmailOtp?: boolean
+    maskedEmail?: string
+  } | null>(null)
+  const [lookupPendingDraftApply, setLookupPendingDraftApply] = useState(false)
+  const [originalSavedAnswersSnapshot, setOriginalSavedAnswersSnapshot] = useState<Record<string, any> | null>(null)
+
   useEffect(() => {
+    if (hasClearedLocalSession) return
     const existing = form.myResponse || localSavedResponse
     if (
       existing &&
@@ -396,19 +457,232 @@ export function FormRenderer({
       setSubmittedResponse(existing)
       setIsReturningRespondent(true)
     }
-  }, [form.myResponse, localSavedResponse, form.settings?.allowMultipleResponses, editingResponse, isManualMode, submittedResponse, editingSelfResponse])
+  }, [
+    form.myResponse,
+    localSavedResponse,
+    form.settings?.allowMultipleResponses,
+    editingResponse,
+    isManualMode,
+    submittedResponse,
+    editingSelfResponse,
+    hasClearedLocalSession,
+  ])
 
   const handleStartEditing = () => {
     const targetResp = submittedResponse || form.myResponse || localSavedResponse
     if (!targetResp) return
     setEditingSelfResponse(targetResp)
+    setOriginalSavedAnswersSnapshot(targetResp.answers ? { ...targetResp.answers } : null)
     if (targetResp.answers) {
       setAnswers({ ...targetResp.answers })
     }
     setSubmittedResponse(null)
     setIsJustUpdated(false)
+    setSubmitError('')
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleSwitchRespondent = async () => {
+    setHasClearedLocalSession(true)
+    try {
+      localStorage.removeItem(`gp_form_completed_${form.id}`)
+      localStorage.removeItem(`gp_form_edit_tokens_${form.id}`)
+      localStorage.removeItem(draftStorageKey)
+    } catch {}
+    try {
+      await fetch(`/api/gestao-pessoas/formularios/${form.id}/identificar`, {
+        method: 'DELETE',
+      })
+    } catch {}
+    setSubmittedResponse(null)
+    setEditingSelfResponse(null)
+    setOriginalSavedAnswersSnapshot(null)
+    setIsReturningRespondent(false)
+    setIsJustUpdated(false)
+    setAnswers({})
+    setFieldErrors({})
+    setTouchedFields({})
+    setSubmitError('')
+    setLookupResult(null)
+    setLookupError('')
+    setLookupOtpInput('')
+    setLookupProtocolInput('')
+    setLookupOtpSent(false)
+    setLookupPendingDraftApply(false)
+    startTimeRef.current = Date.now()
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const persistUnlockedResponse = (
+    rawPayload: any,
+    options?: { enterEditWithCurrentAnswers?: boolean }
+  ) => {
+    const { _editToken, updated: _u, ...cleanResp } = rawPayload || {}
+    if (!cleanResp || !cleanResp.id) return
+    saveEditTokenForResponse(cleanResp.id, _editToken)
+    setHasClearedLocalSession(false)
+    try {
+      localStorage.setItem(`gp_form_completed_${form.id}`, JSON.stringify(cleanResp))
+    } catch {}
+
+    setIsLookupOpen(false)
+    setLookupResult(null)
+    setLookupOtpSent(false)
+    setLookupOtpInput('')
+    setLookupProtocolInput('')
+    setLookupError('')
+    setSubmitError('')
+
+    if (options?.enterEditWithCurrentAnswers) {
+      setEditingSelfResponse(cleanResp)
+      setOriginalSavedAnswersSnapshot(cleanResp.answers ? { ...cleanResp.answers } : null)
+      setSubmittedResponse(null)
+      setIsJustUpdated(false)
+      setLookupPendingDraftApply(false)
+      setAuthSuccessToast(
+        `Resposta #${cleanResp.protocol} liberada para edição! Revise e clique em "Salvar Alterações da Resposta".`
+      )
+      setTimeout(() => setAuthSuccessToast(''), 5500)
+    } else {
+      setSubmittedResponse(cleanResp)
+      setEditingSelfResponse(null)
+      setOriginalSavedAnswersSnapshot(null)
+      setIsReturningRespondent(true)
+      setIsJustUpdated(false)
+      setLookupPendingDraftApply(false)
+      if (cleanResp.answers) {
+        setAnswers({ ...cleanResp.answers })
+      }
+      setAuthSuccessToast(`Resposta #${cleanResp.protocol} localizada e carregada!`)
+      setTimeout(() => setAuthSuccessToast(''), 4500)
+    }
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const handleLookupByIdentifier = async (overrideType?: FormIdentifierType, overrideValue?: string) => {
+    const t = overrideType || lookupType
+    const val = (overrideValue ?? lookupValue).trim()
+    setLookupError('')
+    setLookupSuccessMsg('')
+    setLookupOtpSent(false)
+    setLookupOtpInput('')
+    setLookupProtocolInput('')
+
+    if (!val) {
+      setLookupError('Informe seu e-mail ou documento identificador cadastrado.')
+      return
+    }
+
+    setLookupLoading(true)
+    try {
+      const res = await fetch(`/api/gestao-pessoas/formularios/${form.id}/identificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'lookup',
+          identifierType: t,
+          identifierValue: val,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setLookupError(data.error || 'Verifique os dados informados.')
+        setLookupResult(null)
+        return
+      }
+      if (!data.found) {
+        setLookupResult({ found: false, maskedIdentifier: data.maskedIdentifier })
+        return
+      }
+      if (data.unlocked && data.response) {
+        persistUnlockedResponse(
+          { ...data.response, _editToken: data._editToken },
+          { enterEditWithCurrentAnswers: lookupPendingDraftApply }
+        )
+        return
+      }
+      setLookupResult(data)
+      setLookupMethod(data.canSendEmailOtp ? 'otp' : 'protocol')
+    } catch {
+      setLookupError('Erro de conexão ao buscar resposta.')
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
+  const handleRequestLookupOtp = async () => {
+    setLookupError('')
+    setLookupSuccessMsg('')
+    setLookupLoading(true)
+    try {
+      const res = await fetch(`/api/gestao-pessoas/formularios/${form.id}/identificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'request_otp',
+          identifierType: lookupType,
+          identifierValue: lookupValue.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        if (data.smtpUnavailable) {
+          setLookupMethod('protocol')
+          setLookupError(
+            data.error ||
+              'Envio automático de e-mail indisponível. Confirme usando seu Protocolo Oficial.'
+          )
+        } else {
+          setLookupError(data.error || 'Não foi possível enviar o código no momento.')
+        }
+        return
+      }
+      setLookupOtpSent(true)
+      setLookupSuccessMsg(
+        `Código de 6 dígitos enviado para ${data.maskedEmail}. Confira sua caixa de entrada ou spam.`
+      )
+    } catch {
+      setLookupError('Erro de conexão ao solicitar código.')
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
+  const handleVerifyLookup = async (methodToUse: 'otp' | 'protocol') => {
+    setLookupError('')
+    setLookupLoading(true)
+    try {
+      const res = await fetch(`/api/gestao-pessoas/formularios/${form.id}/identificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: methodToUse === 'otp' ? 'verify_otp' : 'verify_protocol',
+          identifierType: lookupType,
+          identifierValue: lookupValue.trim(),
+          code: methodToUse === 'otp' ? lookupOtpInput.trim() : undefined,
+          protocol: methodToUse === 'protocol' ? lookupProtocolInput.trim() : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success || !data.response) {
+        setLookupError(data.error || 'Não foi possível confirmar sua identidade.')
+        return
+      }
+      persistUnlockedResponse(
+        { ...data.response, _editToken: data._editToken },
+        { enterEditWithCurrentAnswers: lookupPendingDraftApply }
+      )
+    } catch {
+      setLookupError('Erro de conexão ao confirmar identidade.')
+    } finally {
+      setLookupLoading(false)
     }
   }
 
@@ -933,16 +1207,25 @@ export function FormRenderer({
       const isEditingExisting = Boolean(targetEditResp?.id)
       const url = `/api/gestao-pessoas/formularios/${form.id}/respostas`
       const method = isEditingExisting ? 'PUT' : 'POST'
+      const activeLocalResp = hasClearedLocalSession ? null : localSavedResponse
+      const candidateRespForToken = targetEditResp || activeLocalResp
+      const storedEditToken = getEditTokenForResponse(candidateRespForToken?.id)
+      const currentIdentity = extractFormIdentity(form, answers)
 
       const payload = isEditingExisting
         ? {
             responseId: targetEditResp!.id,
+            respondentId: targetEditResp!.respondentId,
             answers,
-            respondentName: isManualMode ? manualName : targetEditResp!.respondentName,
+            respondentName: isManualMode
+              ? manualName
+              : currentIdentity.respondentName || targetEditResp!.respondentName,
             respondentRole: isManualMode ? manualRole : targetEditResp!.respondentRole,
             respondentDepartment: isManualMode ? manualDept : targetEditResp!.respondentDepartment,
             respondentUnit: isManualMode ? manualUnit : targetEditResp!.respondentUnit,
             adminNotes: isManualMode ? manualNotes : targetEditResp!.adminNotes,
+            editToken: storedEditToken || undefined,
+            legacyProtocol: targetEditResp!.protocol || undefined,
           }
         : {
             mode: isManualMode ? 'manual_admin' : 'collaborator',
@@ -950,6 +1233,9 @@ export function FormRenderer({
             completionTimeSeconds: elapsedSeconds,
             respondentName: effectiveUser?.nome || undefined,
             respondentEmail: effectiveUser?.email || undefined,
+            responseId: activeLocalResp?.id || undefined,
+            editToken: storedEditToken || undefined,
+            legacyProtocol: activeLocalResp?.protocol || undefined,
             email: !effectiveUser && !isManualMode && !isPublicForm ? loginEmail : undefined,
             password: !effectiveUser && !isManualMode && !isPublicForm ? loginPassword : undefined,
             manualRespondent: isManualMode
@@ -974,19 +1260,59 @@ export function FormRenderer({
 
       const data = await res.json()
       if (!res.ok) {
+        if (res.status === 409 && data?.code === 'EXISTING_RESPONSE_REQUIRES_VERIFICATION') {
+          const detectedId = extractFormIdentity(form, answers)
+          const resolvedType: FormIdentifierType =
+            data.identifierType || detectedId.primaryType || identifierFields[0]?.type || 'email'
+          const resolvedVal = detectedId.primaryValue || detectedId.respondentEmail || ''
+          setLookupType(resolvedType)
+          setLookupValue(resolvedVal)
+          setLookupResult({
+            found: true,
+            maskedIdentifier: data.maskedIdentifier || resolvedVal,
+            protocolHint: data.protocolHint || '',
+            allowEditOwnResponse: form.settings?.allowEditOwnResponse !== false,
+            canSendEmailOtp: Boolean(data.supportsEmailOtp),
+            maskedEmail: data.maskedIdentifier || resolvedVal,
+          })
+          setLookupMethod(data.supportsEmailOtp ? 'otp' : 'protocol')
+          setLookupPendingDraftApply(true)
+          setIsLookupOpen(true)
+          setLookupError('')
+          setLookupSuccessMsg('')
+          setSubmitError(
+            data.error ||
+              'Já existe uma resposta para este identificador. Confirme sua identidade no painel acima para atualizar sua resposta.'
+          )
+          setIsSubmitting(false)
+          if (typeof window !== 'undefined') {
+            setTimeout(() => {
+              const el = document.getElementById('gp-public-lookup-panel')
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }, 80)
+          }
+          return
+        }
         setSubmitError(data.error || 'Não foi possível registrar a resposta.')
         setIsSubmitting(false)
         return
       }
+
+      const { _editToken: receivedEditToken, updated: _updatedFlag, ...cleanResp } = data
 
       // Clear draft
       try {
         localStorage.removeItem(draftStorageKey)
       } catch {}
 
+      if (receivedEditToken && cleanResp?.id) {
+        saveEditTokenForResponse(cleanResp.id, receivedEditToken)
+      }
+      setHasClearedLocalSession(false)
+
       // Save completed response to localStorage for return visits
       try {
-        localStorage.setItem(`gp_form_completed_${form.id}`, JSON.stringify(data))
+        localStorage.setItem(`gp_form_completed_${form.id}`, JSON.stringify(cleanResp))
       } catch {}
 
       if (addAnother && isManualMode) {
@@ -1000,17 +1326,19 @@ export function FormRenderer({
         setManualUnit('')
         setManualNotes('')
         startTimeRef.current = Date.now()
-        if (onSubmitSuccess) onSubmitSuccess(data, true)
+        if (onSubmitSuccess) onSubmitSuccess(cleanResp, true)
       } else {
-        const wasEditingSelf = Boolean(editingSelfResponse)
-        setSubmittedResponse(data)
+        const wasEditingSelf = Boolean(editingSelfResponse || data?.updated)
+        setSubmittedResponse(cleanResp)
         setEditingSelfResponse(null)
+        setOriginalSavedAnswersSnapshot(null)
+        setLookupPendingDraftApply(false)
         setIsJustUpdated(wasEditingSelf)
         setIsReturningRespondent(false)
         if (typeof window !== 'undefined') {
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
-        if (onSubmitSuccess) onSubmitSuccess(data, false)
+        if (onSubmitSuccess) onSubmitSuccess(cleanResp, false)
       }
     } catch (err: any) {
       setSubmitError('Erro de conexão ao enviar respostas. Tente novamente.')
@@ -1289,14 +1617,14 @@ export function FormRenderer({
 
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-                Colaborador
+                {submittedResponse.source === 'link_publico' ? 'Respondente' : 'Colaborador'}
               </div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
                 {submittedResponse.respondentName}
               </div>
-              {submittedResponse.respondentEmail && (
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  {submittedResponse.respondentEmail}
+              {(submittedResponse.respondentEmail || formatDisplayIdentifier(submittedResponse)) && (
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, wordBreak: 'break-all' }}>
+                  {submittedResponse.respondentEmail || formatDisplayIdentifier(submittedResponse)}
                 </div>
               )}
             </div>
@@ -1309,6 +1637,10 @@ export function FormRenderer({
                 {submittedResponse.respondentRole || 'Colaborador'} •{' '}
                 {submittedResponse.source === 'inserido_pelo_gestor'
                   ? 'Lançamento Gestor'
+                  : submittedResponse.source === 'importado_planilha'
+                  ? 'Importado'
+                  : submittedResponse.source === 'link_publico'
+                  ? 'Link Público'
                   : 'Autenticado'}
               </div>
               {submittedResponse.respondentDepartment && (
@@ -1406,31 +1738,75 @@ export function FormRenderer({
 
               {showAnswersSummary && (
                 <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14, background: '#ffffff' }}>
-                  {(form.sections || []).flatMap(s => s.fields || []).filter(f => f.type !== 'bloco_informativo' && f.type !== 'bloco_imagem').map((field, idx) => {
-                    const ans = submittedResponse.answers[field.id]
-                    if (ans === undefined || ans === null || ans === '') return null
-                    let displayAns = ''
-                    if (Array.isArray(ans)) {
-                      displayAns = ans.join(', ')
-                    } else if (typeof ans === 'object') {
-                      displayAns = JSON.stringify(ans)
-                    } else if (typeof ans === 'boolean') {
-                      displayAns = ans ? 'Sim' : 'Não'
-                    } else {
-                      displayAns = String(ans)
-                    }
+                  {(form.sections || [])
+                    .flatMap(s => s.fields || [])
+                    .filter(f => f.type !== 'bloco_informativo' && f.type !== 'bloco_imagem')
+                    .map((field, idx) => {
+                      const ans = submittedResponse.answers[field.id]
+                      if (
+                        ans === undefined ||
+                        ans === null ||
+                        ans === '' ||
+                        (Array.isArray(ans) && ans.length === 0) ||
+                        (typeof ans === 'object' && !Array.isArray(ans) && Object.keys(ans).length === 0)
+                      ) {
+                        return null
+                      }
 
-                    return (
-                      <div key={field.id} style={{ paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-                          {idx + 1}. {field.title}
+                      const otherText = submittedResponse.answers[`${field.id}__other`]
+                      let answerLines: string[] = []
+                      if (field.type === 'assinatura_digital' && String(ans).startsWith('data:image')) {
+                        answerLines = ['[Assinatura Digital Capturada]']
+                      } else if (Array.isArray(ans)) {
+                        answerLines =
+                          field.type === 'ranking'
+                            ? ans.map((v, i) => `${i + 1}º ${String(v)}`)
+                            : ans.map(v =>
+                                v === '__other__'
+                                  ? `Outro: ${otherText || ''}`
+                                  : String(v)
+                              )
+                      } else if (typeof ans === 'object') {
+                        answerLines = Object.entries(ans).map(([row, col]) => {
+                          const colLabel = Array.isArray(col) ? col.join(', ') : String(col ?? '')
+                          return `${row}: ${colLabel}`
+                        })
+                      } else if (typeof ans === 'boolean') {
+                        answerLines = [ans ? 'Sim' : 'Não']
+                      } else if (ans === '__other__') {
+                        answerLines = [`Outro: ${otherText || ''}`]
+                      } else {
+                        answerLines = String(ans).split(/\r?\n/)
+                      }
+
+                      return (
+                        <div key={field.id} style={{ paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                            {idx + 1}. {field.title}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 13.5,
+                              color: '#475569',
+                              marginTop: 6,
+                              fontWeight: 500,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 4,
+                              lineHeight: 1.5,
+                              whiteSpace: 'pre-wrap',
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
+                            {answerLines.map((line, lineIdx) => (
+                              <div key={lineIdx} style={{ minHeight: line === '' ? '0.75em' : undefined }}>
+                                {line}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 13.5, color: '#475569', marginTop: 4, fontWeight: 500 }}>
-                          {displayAns}
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
                 </div>
               )}
             </div>
@@ -1477,6 +1853,28 @@ export function FormRenderer({
                 }}
               >
                 <Edit3 size={17} /> Editar Minhas Respostas
+              </button>
+            )}
+
+            {isPublicForm && !isManualMode && !effectiveUser && !isPreview && (
+              <button
+                type="button"
+                onClick={handleSwitchRespondent}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 18px',
+                  borderRadius: 12,
+                  border: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  color: '#475569',
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                <RefreshCw size={15} /> Não é você? Responder com outro e-mail
               </button>
             )}
 
@@ -3720,22 +4118,46 @@ export function FormRenderer({
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleCancelEditing}
-              style={{
-                padding: '9px 18px',
-                borderRadius: 12,
-                border: '1px solid #bfdbfe',
-                background: '#ffffff',
-                color: '#1d4ed8',
-                fontSize: 13.5,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Cancelar Edição
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {originalSavedAnswersSnapshot && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAnswers({ ...originalSavedAnswersSnapshot })
+                    setAuthSuccessToast('Respostas originais salvas no protocolo foram restauradas.')
+                    setTimeout(() => setAuthSuccessToast(''), 3500)
+                  }}
+                  style={{
+                    padding: '9px 14px',
+                    borderRadius: 12,
+                    border: '1px solid #93c5fd',
+                    background: '#eff6ff',
+                    color: '#1e40af',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Carregar Respostas Originais
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleCancelEditing}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 12,
+                  border: '1px solid #bfdbfe',
+                  background: '#ffffff',
+                  color: '#1d4ed8',
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancelar Edição
+              </button>
+            </div>
           </div>
         )}
         {/* MODE A: FOCUS ONE BY ONE (TYPEFORM STYLE) */}
@@ -3959,26 +4381,500 @@ export function FormRenderer({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAuthModalOpen(true)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {(identifierFields.length > 0 || form.settings?.allowEditOwnResponse !== false) &&
+                !editingSelfResponse && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLookupOpen(prev => !prev)
+                      setLookupError('')
+                      setLookupSuccessMsg('')
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '9px 14px',
+                      borderRadius: 10,
+                      border: '1px solid #4ade80',
+                      background: isLookupOpen ? '#15803d' : '#dcfce7',
+                      color: isLookupOpen ? '#ffffff' : '#14532d',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Search size={14} /> Já respondi • Editar por{' '}
+                    {identifierFields[0]?.type === 'cpf'
+                      ? 'CPF'
+                      : identifierFields[0]?.type === 'telefone'
+                      ? 'Telefone'
+                      : 'E-mail'}
+                  </button>
+                )}
+
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  border: '1px solid #86efac',
+                  background: '#ffffff',
+                  color: '#166534',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                }}
+              >
+                <LogIn size={15} /> Entrar no Sistema
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* COMPACT TRIGGER WHEN USER IS LOGGED IN ON A PUBLIC FORM WITH IDENTIFIER FIELDS */}
+        {effectiveUser &&
+          !isManualMode &&
+          !isPreview &&
+          isPublicForm &&
+          !editingSelfResponse &&
+          identifierFields.length > 0 && (
+            <div
               style={{
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
-                gap: 8,
-                padding: '9px 16px',
-                borderRadius: 10,
-                border: '1px solid #86efac',
-                background: '#ffffff',
-                color: '#166534',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 10,
+                padding: '12px 18px',
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
                 fontSize: 13,
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                color: '#475569',
               }}
             >
-              <LogIn size={15} /> Entrar no Sistema
-            </button>
+              <span>
+                Deseja localizar ou editar uma resposta enviada por{' '}
+                <strong>
+                  {identifierFields.map(f => (f.type === 'cpf' ? 'CPF' : f.type === 'telefone' ? 'Telefone' : 'E-mail válido')).join(' ou ')}
+                </strong>
+                ?
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsLookupOpen(prev => !prev)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 14px',
+                  borderRadius: 9,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: primaryColor,
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                <Search size={14} /> {isLookupOpen ? 'Fechar Busca' : 'Buscar Resposta por Identificador'}
+              </button>
+            </div>
+          )}
+
+        {/* IDENTIFIER RECOVERY & VERIFICATION PANEL (EMAIL / CPF / PROTOCOLO) */}
+        {isLookupOpen && !isManualMode && !isPreview && isPublicForm && !editingSelfResponse && (
+          <div
+            id="gp-public-lookup-panel"
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              border: `1.5px solid ${primaryColor}`,
+              padding: '22px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              boxShadow: '0 10px 28px rgba(15, 23, 42, 0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: accentColor,
+                    color: primaryColor,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <KeyRound size={19} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                    Localizar e Editar Resposta Anterior
+                  </div>
+                  <div style={{ fontSize: 12.5, color: '#64748b' }}>
+                    Busque pelo identificador validado cadastrado (E-mail válido, CPF ou Telefone) para liberar sua resposta com segurança.
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar painel de busca"
+                onClick={() => {
+                  setIsLookupOpen(false)
+                  setLookupPendingDraftApply(false)
+                }}
+                style={{
+                  border: 'none',
+                  background: '#f1f5f9',
+                  borderRadius: 8,
+                  padding: 6,
+                  cursor: 'pointer',
+                  color: '#475569',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              {Array.from(
+                new Map(
+                  (identifierFields.length > 0
+                    ? identifierFields
+                    : [{ type: 'email' as FormIdentifierType, label: 'E-mail' }]
+                  ).map(item => [item.type, item])
+                ).values()
+              ).length > 1 && (
+                <select
+                  aria-label="Tipo de identificador"
+                  value={lookupType}
+                  onChange={e => {
+                    setLookupType(e.target.value as FormIdentifierType)
+                    setLookupResult(null)
+                    setLookupError('')
+                    setLookupOtpSent(false)
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid #cbd5e1',
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                  }}
+                >
+                  {Array.from(new Set(identifierFields.map(f => f.type))).map(t => (
+                    <option key={t} value={t}>
+                      {t === 'email'
+                        ? 'E-mail válido'
+                        : t === 'cpf'
+                        ? 'CPF (11 dígitos)'
+                        : t === 'telefone'
+                        ? 'Telefone com DDD'
+                        : 'Link / URL'}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <input
+                type={lookupType === 'email' ? 'email' : 'text'}
+                value={lookupValue}
+                onChange={e => {
+                  setLookupValue(e.target.value)
+                  setLookupError('')
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleLookupByIdentifier()
+                  }
+                }}
+                placeholder={
+                  lookupType === 'cpf'
+                    ? 'Digite seu CPF (ex.: 000.000.000-00)'
+                    : lookupType === 'telefone'
+                    ? 'Digite seu telefone com DDD'
+                    : 'Digite o e-mail utilizado na resposta (ex.: nome@outlook.com)'
+                }
+                style={{
+                  flex: 1,
+                  minWidth: 220,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 14,
+                  color: '#0f172a',
+                  background: '#ffffff',
+                }}
+              />
+
+              <button
+                type="button"
+                disabled={lookupLoading}
+                onClick={() => handleLookupByIdentifier()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: primaryColor,
+                  color: '#ffffff',
+                  fontSize: 13.5,
+                  fontWeight: 800,
+                  cursor: lookupLoading ? 'not-allowed' : 'pointer',
+                  opacity: lookupLoading ? 0.7 : 1,
+                }}
+              >
+                <Search size={15} /> {lookupLoading ? 'Buscando...' : 'Buscar'}
+              </button>
+            </div>
+
+            {lookupError && (
+              <div
+                role="alert"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#b91c1c',
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                {lookupError}
+              </div>
+            )}
+
+            {lookupSuccessMsg && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: '#ecfdf5',
+                  border: '1px solid #a7f3d0',
+                  color: '#065f46',
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}
+              >
+                {lookupSuccessMsg}
+              </div>
+            )}
+
+            {lookupResult && !lookupResult.found && (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  color: '#475569',
+                  fontSize: 13,
+                }}
+              >
+                Nenhuma resposta registrada encontrada para <strong>{lookupResult.maskedIdentifier}</strong>. Você pode preencher o formulário normalmente abaixo.
+              </div>
+            )}
+
+            {lookupResult?.found && (
+              <div
+                style={{
+                  padding: '16px 18px',
+                  borderRadius: 14,
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>
+                    Resposta localizada para {lookupResult.maskedIdentifier}
+                    {lookupResult.protocolHint ? ` • Protocolo ${lookupResult.protocolHint}` : ''}
+                  </div>
+                  {lookupResult.canSendEmailOtp && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => setLookupMethod('otp')}
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 8,
+                          border: lookupMethod === 'otp' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
+                          background: lookupMethod === 'otp' ? accentColor : '#ffffff',
+                          color: lookupMethod === 'otp' ? primaryColor : '#475569',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Código no E-mail
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLookupMethod('protocol')}
+                        style={{
+                          padding: '5px 10px',
+                          borderRadius: 8,
+                          border: lookupMethod === 'protocol' ? `1.5px solid ${primaryColor}` : '1px solid #cbd5e1',
+                          background: lookupMethod === 'protocol' ? accentColor : '#ffffff',
+                          color: lookupMethod === 'protocol' ? primaryColor : '#475569',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Usar Protocolo
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {lookupResult.allowEditOwnResponse === false ? (
+                  <div style={{ fontSize: 13, color: '#b45309', fontWeight: 600 }}>
+                    Este formulário está configurado para aceitar apenas 1 resposta e não permite alterações posteriores.
+                  </div>
+                ) : lookupMethod === 'otp' && lookupResult.canSendEmailOtp ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        disabled={lookupLoading}
+                        onClick={handleRequestLookupOtp}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '9px 14px',
+                          borderRadius: 10,
+                          border: '1px solid #cbd5e1',
+                          background: '#ffffff',
+                          color: '#0f172a',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          cursor: lookupLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        <Mail size={14} />{' '}
+                        {lookupOtpSent
+                          ? 'Reenviar Código para E-mail'
+                          : `Enviar Código de 6 dígitos para ${lookupResult.maskedEmail}`}
+                      </button>
+                    </div>
+
+                    {lookupOtpSent && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={lookupOtpInput}
+                          onChange={e => setLookupOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleVerifyLookup('otp')
+                            }
+                          }}
+                          placeholder="Código de 6 dígitos"
+                          style={{
+                            width: 170,
+                            padding: '9px 12px',
+                            borderRadius: 10,
+                            border: '1px solid #cbd5e1',
+                            fontSize: 15,
+                            fontWeight: 800,
+                            letterSpacing: 3,
+                            textAlign: 'center',
+                            background: '#ffffff',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={lookupLoading || lookupOtpInput.length < 6}
+                          onClick={() => handleVerifyLookup('otp')}
+                          style={{
+                            padding: '9px 16px',
+                            borderRadius: 10,
+                            border: 'none',
+                            background: '#059669',
+                            color: '#ffffff',
+                            fontSize: 13,
+                            fontWeight: 800,
+                            cursor: lookupLoading || lookupOtpInput.length < 6 ? 'not-allowed' : 'pointer',
+                            opacity: lookupLoading || lookupOtpInput.length < 6 ? 0.6 : 1,
+                          }}
+                        >
+                          Confirmar Código e Liberar Edição
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={lookupProtocolInput}
+                      onChange={e => setLookupProtocolInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleVerifyLookup('protocol')
+                        }
+                      }}
+                      placeholder="Digite seu Protocolo Oficial (ex.: #FORM-2026-123456)"
+                      style={{
+                        flex: 1,
+                        minWidth: 230,
+                        padding: '9px 12px',
+                        borderRadius: 10,
+                        border: '1px solid #cbd5e1',
+                        fontSize: 13.5,
+                        fontWeight: 700,
+                        background: '#ffffff',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={lookupLoading || !lookupProtocolInput.trim()}
+                      onClick={() => handleVerifyLookup('protocol')}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: 10,
+                        border: 'none',
+                        background: '#059669',
+                        color: '#ffffff',
+                        fontSize: 13,
+                        fontWeight: 800,
+                        cursor: lookupLoading || !lookupProtocolInput.trim() ? 'not-allowed' : 'pointer',
+                        opacity: lookupLoading || !lookupProtocolInput.trim() ? 0.6 : 1,
+                      }}
+                    >
+                      Confirmar Protocolo e Liberar Edição
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -1854,5 +1854,166 @@ export async function enviarEmailConvitePrimeiroAcessoApp(
   }
 }
 
+function escapeEmailHtml(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * Dispara código OTP de 6 dígitos para confirmar identidade e liberar edição/visualização
+ * de resposta em Formulários de Gestão de Pessoas.
+ */
+export async function enviarCodigoOtpFormulario(params: {
+  destinatario: string
+  nomeDestinatario?: string
+  formTitle: string
+  codigoOtp: string
+  protocolHint?: string
+}): Promise<{
+  success: boolean
+  simulated?: boolean
+  smtpNotConfigured?: boolean
+  messageId?: string
+  error?: string
+}> {
+  const destLimpo = String(params.destinatario || '').trim().toLowerCase()
+  if (!destLimpo || !destLimpo.includes('@')) {
+    return { success: false, error: 'Destinatário de e-mail inválido.' }
+  }
+
+  if (isNonDeliverableTestEmail(destLimpo)) {
+    console.warn(`[EmailService] [SUPRIMIDO OTP FORMULÁRIO] Destinatário fictício interceptado: ${destLimpo}`)
+    return {
+      success: true,
+      simulated: true,
+      messageId: `suppressed-form-otp-${Date.now()}`,
+    }
+  }
+
+  const cfg = await getSmtpConfig()
+  if (!cfg) {
+    if (isEmailMockMode()) {
+      const mockId = `mock-form-otp-${Date.now()}`
+      capturedEmails.push({
+        id: mockId,
+        to: destLimpo,
+        from: 'noreply@colegioimpacto.net',
+        subject: `Código de Verificação: ${params.codigoOtp} • Formulário ${params.formTitle}`,
+        text: `Código de verificação: ${params.codigoOtp}`,
+        html: `<p>Código: ${params.codigoOtp}</p>`,
+        timestamp: new Date().toISOString(),
+        simulated: true,
+        reason: 'test_environment_mock',
+      })
+      return { success: true, simulated: true, messageId: mockId }
+    }
+    console.warn(`[EmailService] SMTP não configurado para enviar OTP de formulário a ${destLimpo}`)
+    return {
+      success: false,
+      smtpNotConfigured: true,
+      error: 'Serviço de envio de e-mail SMTP não configurado no momento.',
+    }
+  }
+
+  const safeNome = escapeEmailHtml(params.nomeDestinatario || 'Participante')
+  const safeFormTitle = escapeEmailHtml(params.formTitle || 'Formulário Institucional')
+  const safeOtp = escapeEmailHtml(params.codigoOtp)
+  const safeHint = params.protocolHint ? escapeEmailHtml(params.protocolHint) : ''
+
+  const htmlContent = `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Código de Verificação - Colégio Impacto</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; width: 100%; padding: 28px 0;">
+    <tr>
+      <td align="center" style="padding: 0 12px;">
+        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden;">
+          <tr>
+            <td align="center" bgcolor="#0b1f48" style="background-color: #0b1f48; padding: 28px 20px; text-align: center;">
+              <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: 0.6px; text-transform: uppercase;">COLÉGIO IMPACTO</h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #93c5fd;">Formulários Institucionais • Verificação de Identidade</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px 24px; text-align: left; font-size: 14px; line-height: 1.6; color: #475569;">
+              <div style="font-size: 16px; font-weight: 700; margin-bottom: 10px; color: #0f172a;">Olá, ${safeNome}!</div>
+              <div style="margin-bottom: 20px;">
+                Recebemos uma solicitação para acessar e editar sua resposta registrada no formulário <strong style="color: #0f172a;">${safeFormTitle}</strong>.
+              </div>
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
+                <tr>
+                  <td align="center" style="background-color: #f8fafc; border: 2px dashed #4f46e5; border-radius: 12px; padding: 22px;">
+                    <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.06em; margin-bottom: 8px;">Código de Confirmação</div>
+                    <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #312e81;">${safeOtp}</div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Válido pelos próximos 15 minutos</div>
+                  </td>
+                </tr>
+              </table>
+              ${safeHint ? `<div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Protocolo vinculado: <code>${safeHint}</code></div>` : ''}
+              <div style="font-size: 12px; color: #64748b;">
+                Se você não solicitou este acesso, ignore esta mensagem — seus dados permanecem protegidos.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="#f8fafc" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 20px; font-size: 11px; color: #94a3b8;">
+              COLÉGIO IMPACTO • Impacto EDU
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`
+
+  const plainText = `Olá, ${params.nomeDestinatario || 'Participante'}!\n\nSeu código de confirmação para acessar/editar sua resposta no formulário "${params.formTitle}" é:\n\n${params.codigoOtp}\n\n(Válido por 15 minutos)\nColégio Impacto • Impacto EDU`
+
+  try {
+    const antiThreadToken = Date.now().toString().slice(-4)
+    const msgId = `<form-otp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}@colegioimpacto.net>`
+
+    const info = await sendMailWithResilience(
+      cfg,
+      {
+        messageId: msgId,
+        from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
+        to: destLimpo,
+        subject: `Código de Verificação: ${params.codigoOtp} • Formulário Colégio Impacto [${antiThreadToken}]`,
+        text: plainText,
+        html: htmlContent,
+        headers: {
+          Importance: 'high',
+          'X-Entity-Ref-ID': `form-otp-${Date.now()}`,
+        },
+      },
+      2,
+      { useFreshConnection: true }
+    )
+
+    return {
+      success: true,
+      simulated: Boolean((info as any)?.response?.includes('Mocked') || (info as any)?.response?.includes('Suppressed')),
+      messageId: info.messageId,
+    }
+  } catch (err: any) {
+    console.error('[EmailService] Erro ao enviar código OTP de formulário:', err)
+    return {
+      success: false,
+      error: err.message,
+    }
+  }
+}
+
 
 
