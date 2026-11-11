@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
-import { normalizeQuestionImages } from '@/lib/utils'
+import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages } from '@/lib/utils'
 
 export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string; letra?: string; eh_correta?: boolean }
 export interface Questao {
@@ -52,31 +52,9 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
   const [cleanPreviewMode, setCleanPreviewMode] = useState<boolean>(false)
   const [zoom, setZoom] = useState<number>(100)
   const [pagesCount, setPagesCount] = useState<number>(1)
-  const ensureStableIds = (qs: any[], existing?: any[]) => {
-    const existingMap = new Map((existing || []).map((q: any) => [q.id || q._internalId || q.numero, q]));
-    return (qs || []).map((q, qIdx) => {
-      const prev = existingMap.get(q.id || q._internalId || q.numero);
-      const qInternalId = q._internalId || prev?._internalId || q.id || `q-${qIdx}-${q.numero ?? 'x'}`;
-      return {
-        ...q,
-        _internalId: qInternalId,
-        alternativas: (q.alternativas || []).map((alt: any, aIdx: number) => {
-          const prevAlt = prev?.alternativas?.[aIdx];
-          return {
-            ...alt,
-            _uid: alt._uid || prevAlt?._uid || alt.id || `alt-${qInternalId}-${aIdx}-${alt.letter || alt.letra || ''}`
-          };
-        })
-      };
-    });
-  };
+  const ensureStableIds = ensureUniqueQuestionIds;
 
-  const matchQuestion = (q: any, qId: string) => {
-    return (q._internalId && q._internalId === qId) ||
-           (q.id && q.id === qId) ||
-           String(q.id) === String(qId) ||
-           (q.numero !== undefined && (String(q.numero) === String(qId) || `q-${q.numero}` === String(qId)));
-  };
+  const matchQuestion = (q: any, qId: string) => matchQuestionById(q, qId);
 
   const findAlternativeIndex = (alts: any[], aId: string, fallbackIdx?: number, fallbackLetter?: string) => {
     let idx = -1;
@@ -110,9 +88,25 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
 
   const initialLocal = ensureStableIds(questoes);
   const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal);
+  const safeLocalQuestoes = useMemo(
+    () => (hasDuplicateQuestionIds(localQuestoes) ? ensureStableIds(localQuestoes) : localQuestoes),
+    [localQuestoes]
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.map(q => q._internalId)));
 
   useEffect(() => {
+    if (hasDuplicateQuestionIds(localQuestoes)) {
+      const remapped = new Set<string>();
+      localQuestoes.forEach((origQ: any, idx: number) => {
+        const nextId = safeLocalQuestoes[idx]?._internalId;
+        if (nextId && (!origQ?._internalId || selectedIds.has(origQ._internalId))) {
+          remapped.add(nextId);
+        }
+      });
+      setLocalQuestoes(safeLocalQuestoes);
+      setSelectedIds(remapped);
+      return;
+    }
     if (questoes && questoes.length > 0) {
       setLocalQuestoes(prev => {
         if (prev && prev.length > 0) return prev;
@@ -123,7 +117,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         return new Set(ensureStableIds(questoes).map(q => q._internalId));
       });
     }
-  }, [questoes]);
+  }, [questoes, localQuestoes, safeLocalQuestoes]);
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
@@ -501,7 +495,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
   }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, lineHeight, questionSpacing, textAlign, adicionarPaginaRedacao, headerLayout, mounted]);
 
   const mappedQuestoes = useMemo(() => {
-    return localQuestoes.map((rawQ, idx) => {
+    return safeLocalQuestoes.map((rawQ, idx) => {
       const q = normalizeQuestionImages(rawQ)
       let enunciadoHtml = q.enunciado
 
@@ -529,7 +523,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         id_disciplina: null
       }
     })
-  }, [localQuestoes]);
+  }, [safeLocalQuestoes]);
 
   const selectedQuestoes = useMemo(() => {
     return mappedQuestoes.filter(q => selectedIds.has(q.id));
@@ -1059,14 +1053,14 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                 <div style={{ background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
-                      {localQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length} de {localQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length} questões ativas
+                      {safeLocalQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length} de {safeLocalQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length} questões ativas
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>Arraste os itens para reordenar</div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
-                      onClick={() => setSelectedIds(new Set(localQuestoes.map(q => q._internalId)))}
+                      onClick={() => setSelectedIds(new Set(safeLocalQuestoes.map(q => q._internalId)))}
                       style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1', background: 'white', fontSize: 11, fontWeight: 700, color: '#334155', cursor: 'pointer' }}
                     >
                       Todas
@@ -1076,15 +1070,15 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
 
                 {(() => {
                   let displayCount = 0;
-                  const questionNumbersMap = localQuestoes.map((q: any) => {
+                  const questionNumbersMap = safeLocalQuestoes.map((q: any) => {
                     if (q.tipo_questao === 'texto_apoio') return null;
                     displayCount++;
                     return displayCount;
                   });
 
                   return (
-                    <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {localQuestoes.map((q: any, idx) => {
+                    <Reorder.Group axis="y" values={safeLocalQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {safeLocalQuestoes.map((q: any, idx) => {
                         const isSelected = selectedIds.has(q._internalId);
                         const isTextoApoio = q.tipo_questao === 'texto_apoio';
 
@@ -1184,7 +1178,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
               <button 
                 disabled={saving}
                 onClick={async () => {
-                  setQuestoes(localQuestoes)
+                  setQuestoes(safeLocalQuestoes)
                   saveToLocalStorage('simulador_margins', {
                     left: leftMarginOffset,
                     right: rightMarginOffset,
@@ -1214,7 +1208,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
 
                   await saveToDatabaseTables(updatedConfigEstudio)
 
-                  if (onSave) await onSave(localQuestoes, updatedConfigEstudio)
+                  if (onSave) await onSave(safeLocalQuestoes, updatedConfigEstudio)
                   onClose()
                 }} 
                 style={{ flex: 1, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.25)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}

@@ -949,15 +949,14 @@ export function getSimuladoPrintOrderedQuestoes(
 
   // 2. Ordena as questões exatamente como o motor de impressão de simulados
   let orderedQuestions: any[] = []
-  const matchedIds = new Set<string>()
+  const matchedItems = new Set<any>()
 
   if (reqs.length > 0) {
     orderedQuestions = reqs.flatMap((req: any) => {
       const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
       const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
       return matching.map((q: any) => {
-        const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
-        matchedIds.add(idKey)
+        matchedItems.add(q)
         return {
           ...q,
           id_requisicao: req.id,
@@ -971,10 +970,7 @@ export function getSimuladoPrintOrderedQuestoes(
     })
 
     // Adiciona eventuais questões não associadas a nenhuma requisição
-    const unassigned = allQuestions.filter((q: any) => {
-      const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
-      return !matchedIds.has(idKey)
-    })
+    const unassigned = allQuestions.filter((q: any) => !matchedItems.has(q))
     orderedQuestions = [...orderedQuestions, ...unassigned]
   } else {
     orderedQuestions = [...allQuestions]
@@ -1052,3 +1048,173 @@ export async function downloadMediaFile(url: string, defaultName: string = 'mome
 }
 
 export { validarCPF, formatarCPF } from '@/lib/contracts/sealUtils'
+
+function claimUniqueScopedId(
+  baseId: string,
+  used: Set<string>,
+  scopeTag?: unknown,
+  indexHint?: number
+): string {
+  let candidate = baseId
+  if (used.has(candidate) && scopeTag !== undefined && scopeTag !== null && String(scopeTag) !== '') {
+    const scoped = `${baseId}__${String(scopeTag)}`
+    if (!used.has(scoped)) {
+      candidate = scoped
+    }
+  }
+  if (used.has(candidate)) {
+    let dupCounter = 1
+    const prefix = indexHint !== undefined ? `${baseId}__dup-${indexHint}` : `${baseId}__dup`
+    candidate = `${prefix}-${dupCounter}`
+    while (used.has(candidate)) {
+      dupCounter++
+      candidate = `${prefix}-${dupCounter}`
+    }
+  }
+  used.add(candidate)
+  return candidate
+}
+
+/**
+ * Garante identificadores únicos e determinísticos (`_internalId` e `_uid`) para cada questão
+ * e alternativa, evitando colisões de chave React quando questões de diferentes disciplinas
+ * ou uploads são combinadas no mesmo simulado/prova.
+ */
+export function ensureUniqueQuestionIds(qs: any[], existing?: any[]): any[] {
+  const existingBuckets = new Map<string, any[]>()
+  ;(existing || []).forEach((item: any) => {
+    const rawKey = item?.id ?? item?._internalId ?? item?.numero
+    if (rawKey === undefined || rawKey === null || rawKey === '') return
+    const key = String(rawKey)
+    const list = existingBuckets.get(key)
+    if (list) list.push(item)
+    else existingBuckets.set(key, [item])
+  })
+
+  const usedQuestionIds = new Set<string>()
+  const usedAltIds = new Set<string>()
+
+  return (qs || []).map((q, qIdx) => {
+    const rawLookup = q?.id ?? q?._internalId ?? q?.numero
+    const bucket = rawLookup !== undefined && rawLookup !== null && rawLookup !== ''
+      ? existingBuckets.get(String(rawLookup))
+      : undefined
+    const prev = bucket && bucket.length > 0 ? bucket.shift() : undefined
+
+    const rawQId = q?._internalId || prev?._internalId || q?.id || `q-${qIdx}-${q?.numero ?? 'x'}`
+    const scopeTag = q?.id_requisicao || q?.id_disciplina || q?.disciplina_id
+    const qInternalId = claimUniqueScopedId(String(rawQId), usedQuestionIds, scopeTag, qIdx)
+
+    return {
+      ...q,
+      _internalId: qInternalId,
+      alternativas: (q?.alternativas || []).map((alt: any, aIdx: number) => {
+        const prevAlt = prev?.alternativas?.[aIdx]
+        const rawAltId =
+          alt?._uid ||
+          prevAlt?._uid ||
+          alt?.id ||
+          `alt-${qInternalId}-${aIdx}-${alt?.letter || alt?.letra || ''}`
+        const altUid = claimUniqueScopedId(
+          String(rawAltId),
+          usedAltIds,
+          `${qInternalId}-${aIdx}`,
+          aIdx
+        )
+        return {
+          ...alt,
+          _uid: altUid,
+        }
+      }),
+    }
+  })
+}
+
+/**
+ * Faz a correspondência de uma questão pelo `_internalId` único quando disponível,
+ * recorrendo a `id`/`numero` apenas para itens sem `_internalId`.
+ */
+export function matchQuestionById(q: any, qId: string): boolean {
+  if (!q) return false
+  if (q._internalId !== undefined && q._internalId !== null && q._internalId !== '') {
+    return String(q._internalId) === String(qId)
+  }
+  return (
+    (q.id !== undefined && q.id !== null && q.id !== '' && String(q.id) === String(qId)) ||
+    (q.numero !== undefined && (String(q.numero) === String(qId) || `q-${q.numero}` === String(qId)))
+  )
+}
+
+/**
+ * Retorna true caso alguma questão ou alternativa não possua identificador único válido
+ * (ex.: estado em memória preservado antes da deduplicação via Fast Refresh).
+ */
+export function hasDuplicateQuestionIds(qs: any[]): boolean {
+  const seenQIds = new Set<string>()
+  const seenAltIds = new Set<string>()
+  for (const q of qs || []) {
+    const qId = q?._internalId
+    if (!qId || typeof qId !== 'string' || seenQIds.has(qId)) return true
+    seenQIds.add(qId)
+    for (const alt of q?.alternativas || []) {
+      const aId = alt?._uid
+      if (!aId || typeof aId !== 'string' || seenAltIds.has(aId)) return true
+      seenAltIds.add(aId)
+    }
+  }
+  return false
+}
+
+export interface QuestionMeasureMeta {
+  qKey: string
+  altKeys: string[]
+}
+
+/**
+ * Gera chaves únicas por índice para o DOM de medição do PaginationEngine
+ * sem mutar `q.id` nem `a.id` entregues aos callbacks de edição.
+ */
+export function buildQuestionMeasureMeta(questoes: any[]): QuestionMeasureMeta[] {
+  const usedQIds = new Set<string>()
+  return (questoes || []).map((q: any, idx: number) => {
+    const rawQId =
+      q?.id !== undefined && q?.id !== null && q?.id !== ''
+        ? String(q.id)
+        : q?._internalId !== undefined && q?._internalId !== null && q?._internalId !== ''
+          ? String(q._internalId)
+          : `q-idx-${idx}`
+
+    let qKey = rawQId
+    if (usedQIds.has(qKey)) {
+      let suffix = 0
+      do {
+        qKey = suffix === 0 ? `${rawQId}__idx-${idx}` : `${rawQId}__idx-${idx}-${suffix}`
+        suffix++
+      } while (usedQIds.has(qKey))
+    }
+    usedQIds.add(qKey)
+
+    const usedAltIds = new Set<string>()
+    const altKeys = (q?.simulados_alternativas || []).map((a: any, aIdx: number) => {
+      const rawAltId =
+        a?.id !== undefined && a?.id !== null && a?.id !== ''
+          ? String(a.id)
+          : a?._uid !== undefined && a?._uid !== null && a?._uid !== ''
+            ? String(a._uid)
+            : `alt-idx-${aIdx}`
+
+      let altKey = rawAltId
+      if (usedAltIds.has(altKey)) {
+        let suffix = 0
+        do {
+          altKey = suffix === 0 ? `${rawAltId}__idx-${aIdx}` : `${rawAltId}__idx-${aIdx}-${suffix}`
+          suffix++
+        } while (usedAltIds.has(altKey))
+      }
+      usedAltIds.add(altKey)
+      return altKey
+    })
+
+    return { qKey, altKeys }
+  })
+}

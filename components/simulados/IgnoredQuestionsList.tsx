@@ -13,19 +13,27 @@ export function IgnoredQuestionsList({ questoes, onToggle }: { questoes: any[], 
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {questoes.map(q => (
-          <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
-            <div style={{ flex: 1, color: '#64748b', fontSize: 14 }}>
-              <HtmlContent html={q.enunciado} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} />
-            </div>
-            <button
-              onClick={() => onToggle(q.id)}
-              style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, color: '#3b82f6', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
-            >
-              Incluir Novamente
-            </button>
-          </div>
-        ))}
+        {(() => {
+          const seenKeys = new Set<string>();
+          return questoes.map((q, idx) => {
+            const rawKey = q.id !== undefined && q.id !== null && q.id !== '' ? String(q.id) : `ignored-${idx}`;
+            const itemKey = seenKeys.has(rawKey) ? `${rawKey}__idx-${idx}` : rawKey;
+            seenKeys.add(itemKey);
+            return (
+              <div key={itemKey} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
+                <div style={{ flex: 1, color: '#64748b', fontSize: 14 }}>
+                  <HtmlContent html={q.enunciado} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} />
+                </div>
+                <button
+                  onClick={() => onToggle(q.id)}
+                  style={{ padding: '8px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, color: '#3b82f6', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  Incluir Novamente
+                </button>
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   );

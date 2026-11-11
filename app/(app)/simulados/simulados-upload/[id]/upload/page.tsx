@@ -508,22 +508,18 @@ export default function UploadSimuladoPage() {
       // 4. Reconstruct the global list ordered by canonical requisitions (same order as exam print)
       const combined = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
       let orderedMerged: any[] = []
-      const usedIds = new Set<string>()
+      const matchedRefs = new Set<any>()
 
       if (allReqs.length > 0) {
         orderedMerged = allReqs.flatMap((req: any) => {
           const matching = combined.filter((q: any) => isQuestionForRequisicao(q, req, allReqs, false))
           return matching.map((q: any) => {
-            const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
-            usedIds.add(idKey)
+            matchedRefs.add(q)
             return q
           })
         })
 
-        const orphans = combined.filter((q: any) => {
-          const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
-          return !usedIds.has(idKey)
-        })
+        const orphans = combined.filter((q: any) => !matchedRefs.has(q))
         orderedMerged = [...orderedMerged, ...orphans]
       } else {
         orderedMerged = combined

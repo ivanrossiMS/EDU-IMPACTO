@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
-import { normalizeQuestionImages } from '@/lib/utils'
+import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages } from '@/lib/utils'
 
 export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string }
 export interface Questao {
@@ -49,31 +49,9 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
   const [cleanPreviewMode, setCleanPreviewMode] = useState<boolean>(false)
   const [zoom, setZoom] = useState<number>(100)
   const [pagesCount, setPagesCount] = useState<number>(1)
-  const ensureStableIds = (qs: any[], existing?: any[]) => {
-    const existingMap = new Map((existing || []).map((q: any) => [q.id || q._internalId || q.numero, q]));
-    return (qs || []).map((q, qIdx) => {
-      const prev = existingMap.get(q.id || q._internalId || q.numero);
-      const qInternalId = q._internalId || prev?._internalId || q.id || `q-${qIdx}-${q.numero ?? 'x'}`;
-      return {
-        ...q,
-        _internalId: qInternalId,
-        alternativas: (q.alternativas || []).map((alt: any, aIdx: number) => {
-          const prevAlt = prev?.alternativas?.[aIdx];
-          return {
-            ...alt,
-            _uid: alt._uid || prevAlt?._uid || alt.id || `alt-${qInternalId}-${aIdx}-${alt.letter || alt.letra || ''}`
-          };
-        })
-      };
-    });
-  };
+  const ensureStableIds = ensureUniqueQuestionIds;
 
-  const matchQuestion = (q: any, qId: string) => {
-    return (q._internalId && q._internalId === qId) ||
-           (q.id && q.id === qId) ||
-           String(q.id) === String(qId) ||
-           (q.numero !== undefined && (String(q.numero) === String(qId) || `q-${q.numero}` === String(qId)));
-  };
+  const matchQuestion = (q: any, qId: string) => matchQuestionById(q, qId);
 
   const findAlternativeIndex = (alts: any[], aId: string, fallbackIdx?: number, fallbackLetter?: string) => {
     let idx = -1;
@@ -107,9 +85,25 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
 
   const initialLocal = ensureStableIds(questoes);
   const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal);
+  const safeLocalQuestoes = useMemo(
+    () => (hasDuplicateQuestionIds(localQuestoes) ? ensureStableIds(localQuestoes) : localQuestoes),
+    [localQuestoes]
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.map(q => q._internalId)));
 
   useEffect(() => {
+    if (hasDuplicateQuestionIds(localQuestoes)) {
+      const remapped = new Set<string>();
+      localQuestoes.forEach((origQ: any, idx: number) => {
+        const nextId = safeLocalQuestoes[idx]?._internalId;
+        if (nextId && (!origQ?._internalId || selectedIds.has(origQ._internalId))) {
+          remapped.add(nextId);
+        }
+      });
+      setLocalQuestoes(safeLocalQuestoes);
+      setSelectedIds(remapped);
+      return;
+    }
     if (questoes && questoes.length > 0) {
       setLocalQuestoes(prev => {
         if (prev && prev.length > 0) return prev;
@@ -120,7 +114,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         return new Set(ensureStableIds(questoes).map(q => q._internalId));
       });
     }
-  }, [questoes]);
+  }, [questoes, localQuestoes, safeLocalQuestoes]);
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
@@ -389,7 +383,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
   const redacaoSimulado = useMemo(() => ({ ...prova, isRedacao: true }), [prova]);
 
   const mappedQuestoes = useMemo(() => {
-    return localQuestoes.map((rawQ, idx) => {
+    return safeLocalQuestoes.map((rawQ, idx) => {
       const q = normalizeQuestionImages(rawQ)
       let enunciadoHtml = q.enunciado
 
@@ -417,7 +411,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         id_disciplina: null
       }
     })
-  }, [localQuestoes]);
+  }, [safeLocalQuestoes]);
 
   const selectedQuestoes = useMemo(() => {
     return mappedQuestoes.filter(q => selectedIds.has(q.id));
@@ -649,16 +643,16 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Originais</span>
-                <span style={{ fontWeight: 700, color: '#0f172a' }}>{localQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>{safeLocalQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Selecionadas</span>
-                <span style={{ fontWeight: 700, color: '#10b981' }}>{localQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length}</span>
+                <span style={{ fontWeight: 700, color: '#10b981' }}>{safeLocalQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length}</span>
               </div>
-              {localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length > 0 && (
+              {safeLocalQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
                   <span style={{ color: '#9333ea', fontSize: 14, fontWeight: 600 }}>Textos de Apoio</span>
-                  <span style={{ fontWeight: 700, color: '#9333ea' }}>{localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length}</span>
+                  <span style={{ fontWeight: 700, color: '#9333ea' }}>{safeLocalQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length}</span>
                 </div>
               )}
             </div>
@@ -671,15 +665,15 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>Arraste para reordenar (afeta a numeração final).</p>
             {(() => {
               let displayCount = 0;
-              const questionNumbersMap = localQuestoes.map((q: any) => {
+              const questionNumbersMap = safeLocalQuestoes.map((q: any) => {
                 if (q.tipo_questao === 'texto_apoio') return null;
                 displayCount++;
                 return displayCount;
               });
 
               return (
-                <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {localQuestoes.map((q: any, idx) => {
+                <Reorder.Group axis="y" values={safeLocalQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {safeLocalQuestoes.map((q: any, idx) => {
                     const isSelected = selectedIds.has(q._internalId);
                     const isTextoApoio = q.tipo_questao === 'texto_apoio';
 
@@ -777,7 +771,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             <button 
               disabled={saving}
               onClick={async () => {
-                setQuestoes(localQuestoes)
+                setQuestoes(safeLocalQuestoes)
                 saveToLocalStorage('simulador_margins', {
                   left: leftMarginOffset,
                   right: rightMarginOffset,
@@ -801,7 +795,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
 
                 await saveToDatabaseTables(updatedConfigEstudio)
 
-                if (onSave) await onSave(localQuestoes, updatedConfigEstudio)
+                if (onSave) await onSave(safeLocalQuestoes, updatedConfigEstudio)
                 onClose()
               }} 
               style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 12, border: 'none', cursor: saving ? 'wait' : 'pointer', transition: 'all 0.2s', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}

@@ -4,6 +4,7 @@ import { HtmlContent } from '../HtmlContent';
 import { Loader2, X, BookOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { PageContent } from './PageContent';
+import { buildQuestionMeasureMeta } from '@/lib/utils';
 
 export interface PageMargin {
   top?: number;
@@ -340,6 +341,12 @@ export function PaginationEngine({
   lineHeight = 1.5, questionSpacing = 28, textAlign = 'justify',
   showGabarito = true, cleanPreviewMode = false, zoom = 100, onPagesCountChange
 }: PaginationEngineProps) {
+  const measureMeta = useMemo(() => buildQuestionMeasureMeta(questoes), [questoes]);
+  const measureMetaKey = useMemo(
+    () => measureMeta.map((m) => `${m.qKey}:${m.altKeys.join(',')}`).join('|'),
+    [measureMeta]
+  );
+
   // Inject unified, robust print styles into document.head
   useEffect(() => {
     const existing = document.getElementById('pagination-engine-print-styles');
@@ -754,6 +761,9 @@ export function PaginationEngine({
       questoes.forEach((q, idx) => {
         let questionMargin = currentY > 0 ? effectiveBlockSpacing : 0;
         const qIndex = questionDisplayNumbers[idx];
+        const qMeasure = measureMeta[idx];
+        const qKey = qMeasure?.qKey ?? String(q.id || (q as any)._internalId || `q-idx-${idx}`);
+        const altKeys = qMeasure?.altKeys ?? [];
 
         const currentDiscName = q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome;
         const prevDiscName = idx > 0 ? (questoes[idx - 1].disciplina_nome || questoes[idx - 1].disciplina || questoes[idx - 1].simulados_disciplinas?.nome) : null;
@@ -787,20 +797,20 @@ export function PaginationEngine({
         groupedParts.forEach((group, gIdx) => {
           let h = 0;
           if (group.type === 'text') {
-            const fullH = heights[`${q.id}-enun-txt-${group.originalIndex}`];
+            const fullH = heights[`${qKey}-enun-txt-${group.originalIndex}`];
             if (fullH && fullH > 0) {
               h = fullH;
             } else {
               const chunks = splitTextIntoChunks(group.content || '');
               chunks.forEach((chunk, cIdx) => {
-                const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
+                const rawH = heights[`${qKey}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
                 h += rawH;
               });
             }
           } else if (group.type === 'lines') {
             h = group.count * 28; // Each line is 28px tall
           } else {
-            h = heights[`${q.id}-img-group-${gIdx}`] || 0;
+            h = heights[`${qKey}-img-group-${gIdx}`] || 0;
           }
           const margin = gIdx > 0 ? (group.type === 'lines' ? 8 : ALT_SPACING) : 0;
           totalH += h + margin;
@@ -811,12 +821,13 @@ export function PaginationEngine({
         const altColsNum = metaAltColsMatch ? parseInt(metaAltColsMatch[1], 10) : 1;
 
         if (alternativasLayout === 'horizontal' || altColsNum > 1) {
-          const h = heights[`${q.id}-alts-container`] || 0;
+          const h = heights[`${qKey}-alts-container`] || 0;
           totalH += h + ALT_SPACING;
           altsH = [h];
         } else {
-          altsH = (q.simulados_alternativas || []).map((a: any) => {
-            const h = heights[`${q.id}-alt-${a.id}`] || 0;
+          altsH = (q.simulados_alternativas || []).map((a: any, aIdx: number) => {
+            const altKey = altKeys[aIdx] ?? String(a.id || (a as any)._uid || `alt-idx-${aIdx}`);
+            const h = heights[`${qKey}-alt-${altKey}`] || 0;
             totalH += h + ALT_SPACING;
             return h;
           });
@@ -877,7 +888,7 @@ export function PaginationEngine({
               if (group.type === 'text') {
                 const chunks = splitTextIntoChunks(group.content || '');
                 chunks.forEach((chunk, cIdx) => {
-                  const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
+                  const rawH = heights[`${qKey}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
                   const h = rawH > 0 ? rawH : 20;
                   const isFirstChunk = group.originalIndex === 0 && cIdx === 0;
                   renderBlocks.push({ 
@@ -901,7 +912,7 @@ export function PaginationEngine({
                   renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
                 }
               } else {
-                const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
+                const h = heights[`${qKey}-img-group-${gIdx}`] || 0;
                 renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
               }
             });
@@ -1119,6 +1130,7 @@ export function PaginationEngine({
               prevBlock &&
               prevBlock.type === 'part_enun_txt' &&
               block.type === 'part_enun_txt' &&
+              prevBlock.q === block.q &&
               blockQId &&
               blockQId === prevQId &&
               prevBlock.originalIndex === block.originalIndex
@@ -1146,7 +1158,7 @@ export function PaginationEngine({
       setIsPaginating(false);
     }, 300);
     
-  }, [questoesKey, columns, enunciadoFontSize, alternativasFontSize, lineHeight, questionSpacing, textAlign, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
+  }, [questoesKey, measureMetaKey, columns, enunciadoFontSize, alternativasFontSize, lineHeight, questionSpacing, textAlign, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const MM = 3.7795275591;
@@ -1180,11 +1192,14 @@ export function PaginationEngine({
         }}
       >
         {questoes.map((q, idx) => {
+          const qMeasure = measureMeta[idx];
+          const qKey = qMeasure?.qKey ?? String(q.id || (q as any)._internalId || `q-idx-${idx}`);
+          const altKeys = qMeasure?.altKeys ?? [];
           const currentDiscName = q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome;
           const prevDiscName = idx > 0 ? (questoes[idx - 1].disciplina_nome || questoes[idx - 1].disciplina || questoes[idx - 1].simulados_disciplinas?.nome) : null;
           const isNewDisciplina = (idx === 0 && !!currentDiscName) || (!!currentDiscName && currentDiscName !== prevDiscName);
           return (
-            <div key={`shadow-${q.id || (q as any)._internalId || idx}`}>
+            <div key={`shadow-${qKey}`}>
               {isNewDisciplina && currentDiscName && (
                 <div 
                   data-measure 
@@ -1205,7 +1220,7 @@ export function PaginationEngine({
                   <div style={{ flex: 1, height: 2, background: 'linear-gradient(to right, #cbd5e1, transparent)' }} />
                 </div>
               )}
-              <div data-measure data-id={`${q.id}-enunciado`} style={{ display: 'flex', gap: 10 }}>
+              <div data-measure data-id={`${qKey}-enunciado`} style={{ display: 'flex', gap: 10 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: '28px', height: '28px', minWidth: '28px', background: '#1e293b', color: '#ffffff',
@@ -1237,11 +1252,11 @@ export function PaginationEngine({
                         const chunks = splitTextIntoChunks(group.content || '');
                         return (
                           <React.Fragment key={`txt-grp-${group.originalIndex}`}>
-                            <div data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`} style={{ width: '100%', display: 'flow-root' }}>
+                            <div data-measure data-id={`${qKey}-enun-txt-${group.originalIndex}`} style={{ width: '100%', display: 'flow-root' }}>
                               <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
                             </div>
                             {chunks.map((chunk, cIdx) => (
-                              <div key={`txt-${group.originalIndex}-${cIdx}`} data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`} style={{ width: '100%', display: 'flow-root' }}>
+                              <div key={`txt-${group.originalIndex}-${cIdx}`} data-measure data-id={`${qKey}-enun-txt-${group.originalIndex}-c-${cIdx}`} style={{ width: '100%', display: 'flow-root' }}>
                                 <HtmlContent html={chunk} style={{ wordBreak: 'break-word' }} />
                               </div>
                             ))}
@@ -1263,7 +1278,7 @@ export function PaginationEngine({
                           <div 
                             key={`img-group-${gIdx}`} 
                             data-measure 
-                            data-id={`${q.id}-img-group-${gIdx}`} 
+                            data-id={`${qKey}-img-group-${gIdx}`} 
                             style={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, marginTop: gIdx > 0 ? 12 : 0 }}
                           >
                             {group.images.map((imgPart: any) => {
@@ -1310,7 +1325,7 @@ export function PaginationEngine({
                     return (
                       <div 
                         data-measure 
-                        data-id={`${q.id}-alts-container`} 
+                        data-id={`${qKey}-alts-container`} 
                         style={{ 
                           display: colsNum > 1 ? 'grid' : 'flex', 
                           gridTemplateColumns: colsNum > 1 ? `repeat(${colsNum}, 1fr)` : undefined,
@@ -1321,7 +1336,7 @@ export function PaginationEngine({
                           lineHeight: lineHeight || 1.5
                         }}
                       >
-                        {q.simulados_alternativas?.map((a: any) => {
+                        {q.simulados_alternativas?.map((a: any, aIdx: number) => {
                           const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
                           const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
                           const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
@@ -1331,7 +1346,7 @@ export function PaginationEngine({
                           const effectiveWidth = imgWidth || maxImgWidth;
 
                           return (
-                            <div key={`shadow-alt-${a.id}`} style={{ 
+                            <div key={`shadow-alt-${altKeys[aIdx] ?? a.id ?? aIdx}`} style={{ 
                               display: 'flex', gap: 12, alignItems: 'flex-start',
                               flex: colsNum > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
                               fontSize: `${alternativasFontSize}px`
@@ -1381,7 +1396,7 @@ export function PaginationEngine({
                     }) || [];
                   const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                  return q.simulados_alternativas?.map((a: any) => {
+                  return q.simulados_alternativas?.map((a: any, aIdx: number) => {
                     const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
                     const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
                     const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
@@ -1393,7 +1408,7 @@ export function PaginationEngine({
                     const effectiveWidth = imgWidth || maxImgWidth;
                     
                     return (
-                      <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%', fontSize: `${alternativasFontSize}px`, lineHeight: lineHeight || 1.5 }}>
+                      <div key={`shadow-alt-${altKeys[aIdx] ?? a.id ?? aIdx}`} data-measure data-id={`${qKey}-alt-${altKeys[aIdx] ?? a.id ?? aIdx}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%', fontSize: `${alternativasFontSize}px`, lineHeight: lineHeight || 1.5 }}>
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
