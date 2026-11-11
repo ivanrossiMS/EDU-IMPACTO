@@ -2755,8 +2755,8 @@ export function PageContent({
           right: 16,
           padding: '3px 10px',
           borderRadius: 12,
-          background: 'rgba(15, 23, 42, 0.06)',
-          color: '#64748b',
+          background: 'transparent',
+          color: '#000000',
           fontSize: 10.5,
           fontWeight: 700,
           letterSpacing: '0.02em',
@@ -2765,7 +2765,7 @@ export function PageContent({
           zIndex: 5
         }}
       >
-        Página {pIndex + 1} {totalPages ? `de ${totalPages}` : ''}
+        Pág. {pIndex + 1} {totalPages ? `de ${totalPages}` : ''}
       </div>
       
       {showMargins && !cleanPreviewMode && (onPageMarginChange || onTopMarginOffsetChange) && (() => {

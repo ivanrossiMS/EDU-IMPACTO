@@ -1281,31 +1281,11 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             </button>
           )}
 
-          {/* Contador e Navegação de Páginas */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 8, borderRight: '1px solid rgba(255,255,255,0.15)' }}>
+          {/* Contador de Páginas */}
+          <div style={{ display: 'flex', alignItems: 'center', paddingRight: 8, borderRight: '1px solid rgba(255,255,255,0.15)' }}>
             <span style={{ fontSize: 12, fontWeight: 800, color: '#38bdf8', padding: '0 4px' }}>
               📄 {pagesCount} {pagesCount === 1 ? 'pág.' : 'págs.'}
             </span>
-            {pagesCount > 1 && Array.from({ length: Math.min(pagesCount, 8) }).map((_, idx) => (
-              <button
-                key={`jump-${idx}`}
-                type="button"
-                onClick={() => {
-                  const el = document.getElementById(`preview-page-${idx}`);
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#f8fafc', fontSize: 10.5, fontWeight: 700,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}
-                title={`Ir para página ${idx + 1}`}
-              >
-                {idx + 1}
-              </button>
-            ))}
           </div>
 
           {/* Controle de Zoom */}

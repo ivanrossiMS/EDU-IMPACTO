@@ -11,8 +11,8 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
-import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao, normalizeQuestoesList } from '@/lib/utils'
+import { SimuladoPreviewModal, Questao } from '@/components/simulados/SimuladoPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 export default function VerProvaUploadPage() {
@@ -43,7 +43,19 @@ export default function VerProvaUploadPage() {
     try {
       const { data, error } = await (supabase as any).from('simulados_upload').select('*').eq('id', provaId).single()
       if (error) throw error
-      setProva(data)
+
+      let enrichedProva = data
+      if (data?.id_bimestre) {
+        const { data: bimData } = await (supabase as any).from('simulados_bimestres').select('nome').eq('id', data.id_bimestre).maybeSingle()
+        if (bimData?.nome) {
+          enrichedProva = {
+            ...data,
+            bimestre_nome: bimData.nome,
+            simulados_bimestres: { nome: bimData.nome }
+          }
+        }
+      }
+      setProva(enrichedProva)
 
       const { data: rawReqs } = await (supabase as any)
         .from('simulados_upload_requisicoes')
@@ -78,7 +90,7 @@ export default function VerProvaUploadPage() {
       if (cfg) setSimConfig(cfg)
 
       if (data?.questoes_json) {
-        const rawList = Array.isArray(data.questoes_json) ? data.questoes_json : []
+        const rawList = normalizeQuestoesList(Array.isArray(data.questoes_json) ? data.questoes_json : [])
         let enriched: any[] = []
         if (reqs && reqs.length > 0) {
           enriched = reqs.flatMap((req: any) => {
@@ -130,13 +142,16 @@ export default function VerProvaUploadPage() {
     try {
       const toSave = updatedQuestoes || questoes
       const validCount = toSave.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+      const mergedConfig = config_estudio
+        ? { ...(prova?.config_estudio || {}), ...config_estudio }
+        : undefined
       let updatePayload: any = {
         questoes_json: toSave,
         questoes_count: validCount,
         updated_at: new Date().toISOString()
       }
-      if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
+      if (mergedConfig) {
+        updatePayload.config_estudio = mergedConfig
       }
       const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', provaId)
       if (error) throw error
@@ -144,7 +159,7 @@ export default function VerProvaUploadPage() {
         ...prev,
         questoes_json: toSave,
         questoes_count: validCount,
-        ...(config_estudio ? { config_estudio } : {})
+        ...(mergedConfig ? { config_estudio: mergedConfig } : {})
       }))
       setSuccessMessage('Alterações salvas com sucesso!')
       setSuccessModal(true)
@@ -250,23 +265,29 @@ export default function VerProvaUploadPage() {
         </div>
 
         {/* Coordinator Actions */}
-        {isCoord && prova.status === 'em_revisao' && (
+        {isCoord && (questoes.length > 0 || prova.status === 'em_revisao') && (
           <div className="detail-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <motion.button onClick={() => setShowPreview(true)}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>
-              <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
-            </motion.button>
-            <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              <XCircle size={16} /> Reprovar
-            </motion.button>
-            <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
-              <Send size={16} /> Aprovar e Publicar
-            </motion.button>
+            {questoes.length > 0 && (
+              <motion.button onClick={() => setShowPreview(true)}
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>
+                <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
+              </motion.button>
+            )}
+            {prova.status === 'em_revisao' && (
+              <>
+                <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <XCircle size={16} /> Reprovar
+                </motion.button>
+                <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
+                  <Send size={16} /> Aprovar e Publicar
+                </motion.button>
+              </>
+            )}
           </div>
         )}
 
@@ -397,14 +418,15 @@ export default function VerProvaUploadPage() {
 
       <AnimatePresence>
         {showPreview && (
-          <ProvaPreviewModal
+          <SimuladoPreviewModal
             questoes={questoes}
             setQuestoes={setQuestoes}
-            prova={{ 
+            simulado={{ 
               ...prova, 
-              isProva: true,
+              isSimulado: true,
+              simulados_upload_requisicoes: requisicoes,
               formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
-              formattedSeries: prova?.series?.join(', ') || '',
+              formattedSeries: Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || ''),
               formattedDisciplinas: Array.from(new Set(requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
