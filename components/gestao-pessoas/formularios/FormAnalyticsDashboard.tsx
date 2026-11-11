@@ -276,8 +276,6 @@ export function FormAnalyticsDashboard({
         Origem:
           r.source === 'colaborador_logado'
             ? 'Colaborador Logado'
-            : r.source === 'publico_google'
-            ? 'Identificado via Google'
             : r.source === 'link_publico'
             ? 'Link Público'
             : r.source === 'inserido_pelo_gestor'
@@ -2084,16 +2082,12 @@ export function FormAnalyticsDashboard({
                             background:
                               r.source === 'colaborador_logado'
                                 ? '#eef2ff'
-                                : r.source === 'publico_google'
-                                ? '#fef3c7'
                                 : r.source === 'link_publico'
                                 ? '#f1f5f9'
                                 : '#ecfdf5',
                             color:
                               r.source === 'colaborador_logado'
                                 ? '#4f46e5'
-                                : r.source === 'publico_google'
-                                ? '#b45309'
                                 : r.source === 'link_publico'
                                 ? '#475569'
                                 : '#059669',
@@ -2101,8 +2095,6 @@ export function FormAnalyticsDashboard({
                         >
                           {r.source === 'colaborador_logado'
                             ? 'Sistema'
-                            : r.source === 'publico_google'
-                            ? 'Google'
                             : r.source === 'link_publico'
                             ? 'Público'
                             : 'Gestor'}

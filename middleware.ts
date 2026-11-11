@@ -28,7 +28,6 @@ const PUBLIC_PATHS = [
   '/api/auth/update-password',
   '/api/auth/recover-password',
   '/api/auth/first-access',
-  '/api/auth/google-status', // Verificação pública de disponibilidade do provedor Google OAuth
   '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria

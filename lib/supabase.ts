@@ -336,23 +336,9 @@ if (isBrowser) {
       (hashParams.get('error_description') || '').toLowerCase().includes('otp') ||
       (searchParams.get('error_description') || '').toLowerCase().includes('otp')
 
-    const hasStoredRecoveryPending =
-      typeof window !== 'undefined' &&
-      window.sessionStorage?.getItem('edu_password_recovery_pending') === '1'
+    const isRecoveryUrl = isExplicitRecoveryType || isExplicitRecoveryOtpExpired
 
-    const isRecoveryUrl =
-      isExplicitRecoveryType ||
-      (isExplicitRecoveryOtpExpired &&
-        (hasStoredRecoveryPending || !window.location.pathname.startsWith('/gestao-pessoas/formularios')))
-
-    // Verifica se há formulário pendente sendo preenchido
-    const hasFormPending =
-      typeof window !== 'undefined' &&
-      (Boolean(window.sessionStorage?.getItem('gp_form_auth_pending')) ||
-        Boolean(window.localStorage?.getItem('gp_form_auth_pending')) ||
-        window.location.pathname.startsWith('/gestao-pessoas/formularios'))
-
-    if (isRecoveryUrl && !hasFormPending) {
+    if (isRecoveryUrl) {
       ;(window as any).__EDU_IS_PASSWORD_RECOVERY__ = true
       ;(window as any).__EDU_INITIAL_RECOVERY_HASH__ = rawHash
       ;(window as any).__EDU_INITIAL_RECOVERY_SEARCH__ = rawSearch

@@ -40,27 +40,6 @@ import {
   Edit3,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-
-const GoogleIcon = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      fill="#4285F4"
-    />
-    <path
-      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      fill="#34A853"
-    />
-    <path
-      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-      fill="#FBBC05"
-    />
-    <path
-      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-      fill="#EA4335"
-    />
-  </svg>
-)
 import {
   GPForm,
   FormField,
@@ -284,48 +263,6 @@ function SignaturePad({
   )
 }
 
-function decodeGoogleJwt(token: string): any {
-  try {
-    const base64Url = token.split('.')[1]
-    if (!base64Url) return null
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    )
-    return JSON.parse(jsonPayload)
-  } catch {
-    return null
-  }
-}
-
-function loadGoogleGsiScript(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') return reject(new Error('Window not available'))
-    if ((window as any).google?.accounts?.oauth2 || (window as any).google?.accounts?.id) {
-      return resolve((window as any).google)
-    }
-    const existing = document.getElementById('google-gsi-client')
-    if (existing) {
-      existing.addEventListener('load', () => resolve((window as any).google))
-      existing.addEventListener('error', () =>
-        reject(new Error('Falha ao carregar biblioteca de login do Google'))
-      )
-      return
-    }
-    const script = document.createElement('script')
-    script.id = 'google-gsi-client'
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => resolve((window as any).google)
-    script.onerror = () => reject(new Error('Falha ao carregar Google Identity Services'))
-    document.head.appendChild(script)
-  })
-}
-
 export function FormRenderer({
   form,
   currentUser,
@@ -337,7 +274,7 @@ export function FormRenderer({
   onSubmitSuccess,
   onCancel,
 }: FormRendererProps) {
-  // Effective User state (supports login via Google or IMPACTO EDU)
+  // Effective User state (IMPACTO EDU)
   const [sessionUser, setSessionUser] = useState<any>(currentUser || null)
   useEffect(() => {
     if (currentUser) {
@@ -347,7 +284,7 @@ export function FormRenderer({
 
   const effectiveUser = sessionUser || currentUser || null
 
-  // Auth Modal State (Login via Google or IMPACTO EDU)
+  // Auth Modal State (Login do Sistema IMPACTO EDU)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -527,166 +464,9 @@ export function FormRenderer({
     })
   }, [form.sections])
 
-  // Aplica identificação do respondente (via Google ou sessão) sem cadastrar usuário no Supabase
-  const applyGoogleRespondent = (userData: {
-    nome: string
-    email: string
-    sub?: string
-    avatarUrl?: string
-  }) => {
-    const identifiedUser = {
-      id: `google-${userData.sub || Date.now()}`,
-      nome: userData.nome,
-      email: userData.email,
-      cargo: 'Respondente Identificado (Google)',
-      perfil: 'Público / Google',
-      provider: 'google',
-      avatarUrl: userData.avatarUrl || '',
-      verified: true,
-      sub: userData.sub,
-    }
-
-    setSessionUser(identifiedUser)
-    setManualNameOverride(false)
-
-    try {
-      window.sessionStorage.setItem(`gp_form_google_user_${form.id}`, JSON.stringify(identifiedUser))
-      window.localStorage.setItem(`gp_form_google_user_${form.id}`, JSON.stringify(identifiedUser))
-    } catch {}
-
-    setAnswers(prev => {
-      const next = { ...prev }
-      for (const sec of form.sections || []) {
-        for (const f of sec.fields || []) {
-          if (
-            f.type === 'usuario_logado' ||
-            f.autoFillUser === 'nome' ||
-            /nome completo|seu nome/i.test(f.title)
-          ) {
-            next[f.id] = identifiedUser.nome
-          }
-          if (
-            (f.autoFillUser === 'email' ||
-              (f.type === 'texto_curto' && /e-?mail/i.test(f.title))) &&
-            identifiedUser.email
-          ) {
-            next[f.id] = identifiedUser.email
-          }
-        }
-      }
-      return next
-    })
-
-    setIsAuthModalOpen(false)
-    setAuthSuccessToast(`Identificado via Conta Google: ${identifiedUser.nome}`)
-    setTimeout(() => setAuthSuccessToast(''), 4500)
-  }
-
-  // 1. Pré-carrega a biblioteca oficial Google Identity Services (GIS) no background
+  // Verifica se já existe sessão de colaborador do IMPACTO EDU logado no navegador
   useEffect(() => {
-    loadGoogleGsiScript().catch(() => {})
-  }, [])
-
-  // 2. Restaura identificação Google prévia salva no navegador deste formulário
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const savedGoogle =
-        window.sessionStorage?.getItem(`gp_form_google_user_${form.id}`) ||
-        window.localStorage?.getItem(`gp_form_google_user_${form.id}`)
-      if (savedGoogle) {
-        const parsed = JSON.parse(savedGoogle)
-        if (parsed?.email && parsed?.provider === 'google') {
-          setSessionUser(parsed)
-          setAnswers(prev => {
-            const next = { ...prev }
-            let changed = false
-            for (const sec of form.sections || []) {
-              for (const f of sec.fields || []) {
-                if (
-                  (f.type === 'usuario_logado' ||
-                    f.autoFillUser === 'nome' ||
-                    /nome completo|seu nome/i.test(f.title)) &&
-                  !next[f.id]
-                ) {
-                  next[f.id] = parsed.nome
-                  changed = true
-                }
-                if (
-                  (f.autoFillUser === 'email' ||
-                    (f.type === 'texto_curto' && /e-?mail/i.test(f.title))) &&
-                  !next[f.id] &&
-                  parsed.email
-                ) {
-                  next[f.id] = parsed.email
-                  changed = true
-                }
-              }
-            }
-            return changed ? next : prev
-          })
-        }
-      }
-    } catch {}
-  }, [form.id, form.sections])
-
-  // 3. Verifica retorno de token do Google via hash de URL (caso fallback direto tenha sido usado)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const rawHash = window.location.hash || ''
-    if (!rawHash) return
-    const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.slice(1) : rawHash)
-
-    const idToken = hashParams.get('id_token')
-    const accessToken = hashParams.get('access_token')
-
-    if (idToken || accessToken) {
-      try {
-        window.history.replaceState(null, '', window.location.pathname)
-        window.sessionStorage.removeItem('gp_form_auth_pending')
-        window.localStorage.removeItem('gp_form_auth_pending')
-        window.sessionStorage.removeItem('gp_form_return_url')
-        window.localStorage.removeItem('gp_form_return_url')
-      } catch {}
-
-      if (idToken) {
-        const payload = decodeGoogleJwt(idToken)
-        if (payload?.email) {
-          const resolvedName = payload.name || payload.given_name || payload.email.split('@')[0]
-          applyGoogleRespondent({
-            nome: resolvedName,
-            email: payload.email,
-            sub: payload.sub,
-            avatarUrl: payload.picture,
-          })
-          return
-        }
-      }
-
-      if (accessToken) {
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-          .then(r => r.json())
-          .then(profile => {
-            if (profile?.email) {
-              const resolvedName = profile.name || profile.given_name || profile.email.split('@')[0]
-              applyGoogleRespondent({
-                nome: resolvedName,
-                email: profile.email,
-                sub: profile.sub,
-                avatarUrl: profile.picture,
-              })
-            }
-          })
-          .catch(() => {})
-        return
-      }
-    }
-  }, [form.sections])
-
-  // 4. Verifica se já existe sessão de colaborador do IMPACTO EDU logado no navegador
-  useEffect(() => {
+    if (manualNameOverride) return
     async function checkImpactoSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -695,17 +475,14 @@ export function FormRenderer({
           const meta = u.user_metadata || {}
           const resolvedName =
             meta.full_name || meta.name || meta.nome || u.email?.split('@')[0]
-          const isGoogle =
-            u.app_metadata?.provider === 'google' ||
-            (Array.isArray(u.identities) && u.identities.some((i: any) => i.provider === 'google'))
 
           const newUser = {
             id: u.id,
             nome: resolvedName,
             email: u.email,
-            cargo: meta.cargo || (isGoogle ? 'Conta Google' : 'Colaborador'),
+            cargo: meta.cargo || 'Colaborador',
             perfil: meta.perfil || 'Usuário',
-            provider: isGoogle ? 'google' : 'impacto_edu',
+            provider: 'impacto_edu',
           }
           setSessionUser(newUser)
 
@@ -742,105 +519,7 @@ export function FormRenderer({
       }
     }
     checkImpactoSession()
-  }, [form.sections, sessionUser])
-
-  // Login Handler: Identificação direta com a Conta Google (sem cadastrar no Supabase)
-  const handleGoogleLogin = async () => {
-    setAuthLoading(true)
-    setAuthError('')
-    try {
-      if (isPreview) {
-        const simulatedName = 'Usuário Google (Teste)'
-        applyGoogleRespondent({
-          nome: simulatedName,
-          email: 'usuario.google@gmail.com',
-          avatarUrl: '',
-        })
-        setAuthLoading(false)
-        return
-      }
-
-      // 1. Obtém o Client ID do Google
-      let clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
-      if (!clientId) {
-        try {
-          const res = await fetch('/api/auth/google-status', { cache: 'no-store' })
-          const data = await res.json()
-          if (data?.clientId) clientId = data.clientId
-        } catch {}
-      }
-      if (!clientId) {
-        clientId = '805517903971-dage2hg6l432538c9tncgtb37c74jje0.apps.googleusercontent.com'
-      }
-
-      // 2. Carrega biblioteca oficial do Google (GIS)
-      const googleObj = await loadGoogleGsiScript().catch(() => null)
-
-      if (googleObj?.accounts?.oauth2) {
-        const tokenClient = googleObj.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'email profile openid',
-          prompt: 'select_account',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse?.error) {
-              setAuthLoading(false)
-              if (tokenResponse.error === 'popup_closed_by_user') return
-              if (tokenResponse.error === 'access_denied') {
-                setAuthError('Autorização da Conta Google cancelada.')
-                return
-              }
-              setAuthError(
-                `Não foi possível conectar com o Google (${tokenResponse.error}). Você pode preencher seu nome manualmente.`
-              )
-              return
-            }
-
-            if (tokenResponse?.access_token) {
-              try {
-                const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                })
-                if (!userRes.ok) throw new Error('Falha ao obter perfil Google')
-                const profile = await userRes.json()
-                const resolvedName = profile.name || profile.given_name || profile.email?.split('@')[0]
-                applyGoogleRespondent({
-                  nome: resolvedName,
-                  email: profile.email,
-                  sub: profile.sub,
-                  avatarUrl: profile.picture,
-                })
-              } catch (fetchErr) {
-                console.error('[Google Auth] Erro ao buscar userinfo:', fetchErr)
-                setAuthError('Falha ao carregar perfil do Google. Você pode preencher seu nome manualmente.')
-              } finally {
-                setAuthLoading(false)
-              }
-            }
-          },
-        })
-
-        tokenClient.requestAccessToken()
-        return
-      }
-
-      // 3. Fallback: Redirecionamento direto via OAuth2 do Google (caso GIS popup não esteja disponível)
-      try {
-        window.sessionStorage.setItem('gp_form_auth_pending', form.id)
-        window.localStorage.setItem('gp_form_auth_pending', form.id)
-        window.sessionStorage.setItem('gp_form_return_url', window.location.href)
-        window.localStorage.setItem('gp_form_return_url', window.location.href)
-      } catch {}
-      const callbackUrl = `${window.location.origin}/auth/callback`
-      const redirectUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-        callbackUrl
-      )}&response_type=token%20id_token&scope=email%20profile%20openid&nonce=${Date.now()}`
-      window.location.href = redirectUrl
-    } catch (err: any) {
-      console.error('[Google Login Error]:', err)
-      setAuthError(err.message || 'Não foi possível conectar com o Google no momento. Preencha seu nome manualmente.')
-      setAuthLoading(false)
-    }
-  }
+  }, [form.sections, sessionUser, manualNameOverride])
 
   const handleImpactoLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -921,14 +600,6 @@ export function FormRenderer({
   const handleClearUser = () => {
     setSessionUser(null)
     setManualNameOverride(true)
-    try {
-      window.sessionStorage.removeItem(`gp_form_google_user_${form.id}`)
-      window.localStorage.removeItem(`gp_form_google_user_${form.id}`)
-      window.sessionStorage.removeItem('gp_form_auth_pending')
-      window.localStorage.removeItem('gp_form_auth_pending')
-      window.sessionStorage.removeItem('gp_form_return_url')
-      window.localStorage.removeItem('gp_form_return_url')
-    } catch {}
     setAnswers(prev => {
       const next = { ...prev }
       for (const sec of form.sections || []) {
@@ -1279,16 +950,6 @@ export function FormRenderer({
             completionTimeSeconds: elapsedSeconds,
             respondentName: effectiveUser?.nome || undefined,
             respondentEmail: effectiveUser?.email || undefined,
-            googleRespondent:
-              effectiveUser?.provider === 'google'
-                ? {
-                    id: effectiveUser.id,
-                    name: effectiveUser.nome,
-                    email: effectiveUser.email,
-                    avatarUrl: (effectiveUser as any).avatarUrl,
-                    sub: (effectiveUser as any).sub,
-                  }
-                : undefined,
             email: !effectiveUser && !isManualMode && !isPublicForm ? loginEmail : undefined,
             password: !effectiveUser && !isManualMode && !isPublicForm ? loginPassword : undefined,
             manualRespondent: isManualMode
@@ -2647,8 +2308,8 @@ export function FormRenderer({
                     placeholder={
                       field.placeholder ||
                       (!effectiveUser && isPublicForm
-                        ? 'Digite seu nome ou clique para fazer login...'
-                        : 'Clique para fazer login com Google ou IMPACTO EDU...')
+                        ? 'Digite seu nome ou clique para fazer login no sistema...'
+                        : 'Clique para fazer login no sistema IMPACTO EDU...')
                     }
                     required={field.required}
                     readOnly={
@@ -2665,7 +2326,7 @@ export function FormRenderer({
                     }}
                     onChange={e => updateAnswer(field, e.target.value)}
                     onBlur={() => handleFieldBlur(field)}
-                    title="Clique para abrir as opções de login por Conta Google ou IMPACTO EDU"
+                    title="Clique para entrar com seu Login do Sistema IMPACTO EDU"
                     style={{
                       width: '100%',
                       minHeight: 48,
@@ -2703,7 +2364,7 @@ export function FormRenderer({
                         e.stopPropagation()
                         setIsAuthModalOpen(true)
                       }}
-                      title="Clique para abrir as opções de login por Conta Google ou IMPACTO EDU"
+                      title="Clique para entrar com seu Login do Sistema IMPACTO EDU"
                       style={{
                         position: 'absolute',
                         right: 8,
@@ -2729,19 +2390,15 @@ export function FormRenderer({
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      {effectiveUser?.provider === 'google' ? (
-                        <GoogleIcon size={14} />
-                      ) : effectiveUser || isPreview ? (
+                      {effectiveUser || isPreview ? (
                         <Lock size={12} />
                       ) : (
-                        <GoogleIcon size={13} />
+                        <LogIn size={13} />
                       )}
                       <span>
-                        {effectiveUser?.provider === 'google'
-                          ? 'Identificado via Google'
-                          : effectiveUser || isPreview
+                        {effectiveUser || isPreview
                           ? 'Identificado via Login'
-                          : 'Entrar com Google ou Sistema'}
+                          : 'Entrar no Sistema'}
                       </span>
                       {(effectiveUser || isPreview) && (
                         <span style={{ fontSize: 10, opacity: 0.75 }}>• Trocar ▾</span>
@@ -2781,7 +2438,7 @@ export function FormRenderer({
                         : isPreview
                         ? `Preenchido automaticamente com a conta ativa: ${currentUser?.nome || 'Ivan Rossi'}`
                         : isPublicForm
-                        ? 'Informe seu nome ou clique para fazer login com Google ou IMPACTO EDU'
+                        ? 'Informe seu nome ou clique para fazer login no sistema IMPACTO EDU'
                         : 'Preenchido automaticamente com o usuário autenticado'}
                     </span>
                   </div>
@@ -2803,7 +2460,7 @@ export function FormRenderer({
                     >
                       {effectiveUser || isPreview
                         ? 'Trocar de conta / Fazer outro login'
-                        : 'Entrar com Conta Google ou IMPACTO EDU'}
+                        : 'Fazer Login no Sistema IMPACTO EDU'}
                     </button>
                   )}
                 </div>
@@ -3291,14 +2948,14 @@ export function FormRenderer({
                   width: 34,
                   height: 34,
                   borderRadius: 10,
-                  background: effectiveUser.provider === 'google' ? '#eff6ff' : '#ecfdf5',
-                  color: effectiveUser.provider === 'google' ? '#2563eb' : '#059669',
+                  background: '#ecfdf5',
+                  color: '#059669',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                {effectiveUser.provider === 'google' ? <GoogleIcon size={18} /> : <ShieldCheck size={19} />}
+                <ShieldCheck size={19} />
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
@@ -3357,7 +3014,7 @@ export function FormRenderer({
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                 }}
               >
-                <GoogleIcon size={13} /> Fazer Login (Google ou IMPACTO EDU)
+                <LogIn size={13} /> Fazer Login no Sistema
               </button>
             </div>
           )}
@@ -4297,7 +3954,7 @@ export function FormRenderer({
                   Link Público Aberto • Resposta sem Necessidade de Login
                 </div>
                 <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
-                  Você pode responder diretamente preenchendo seu nome ou se identificar com sua Conta Google / IMPACTO EDU.
+                  Você pode responder diretamente preenchendo seu nome ou se identificar com seu login do sistema IMPACTO EDU.
                 </div>
               </div>
             </div>
@@ -4320,7 +3977,7 @@ export function FormRenderer({
                 boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
               }}
             >
-              <GoogleIcon size={15} /> Entrar com Google ou Sistema
+              <LogIn size={15} /> Entrar no Sistema
             </button>
           </div>
         )}
@@ -4622,7 +4279,7 @@ export function FormRenderer({
       </form>
 
       {/* ===================================================================== */}
-      {/* MODAL DE AUTENTICAÇÃO / LOGIN (CONTA GOOGLE OU IMPACTO EDU)          */}
+      {/* MODAL DE AUTENTICAÇÃO / LOGIN (SISTEMA IMPACTO EDU)                   */}
       {/* ===================================================================== */}
       <AnimatePresence>
         {isAuthModalOpen && (
@@ -4698,10 +4355,10 @@ export function FormRenderer({
                       color: '#0f172a',
                     }}
                   >
-                    Opções de Identificação
+                    Entrar no Sistema
                   </h3>
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
-                    Entre com sua Conta Google ou com seu Login do Sistema IMPACTO EDU:
+                    Identifique-se com seu Login do Sistema IMPACTO EDU:
                   </p>
                 </div>
                 <button
@@ -4786,13 +4443,7 @@ export function FormRenderer({
                               gap: 3,
                             }}
                           >
-                            {effectiveUser?.provider === 'google' ? (
-                              <>
-                                <GoogleIcon size={11} /> Google
-                              </>
-                            ) : (
-                              '✓ Conta Ativa'
-                            )}
+                            ✓ Conta Ativa
                           </span>
                         </div>
                         <div style={{ fontSize: 12, color: '#166534', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -4862,62 +4513,10 @@ export function FormRenderer({
                   </div>
                 )}
 
-                {/* OPTION 1: GOOGLE SIGN-IN */}
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                    Opção 1: Identificar-se com Conta Google
-                  </div>
-                  <button
-                    type="button"
-                    disabled={authLoading}
-                    onClick={handleGoogleLogin}
-                    style={{
-                      width: '100%',
-                      padding: '13px 18px',
-                      borderRadius: 14,
-                      border: '1.5px solid #cbd5e1',
-                      background: '#ffffff',
-                      color: '#1e293b',
-                      fontSize: 14.5,
-                      fontWeight: 700,
-                      cursor: authLoading ? 'wait' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 12,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#4285F4'
-                      e.currentTarget.style.boxShadow = '0 4px 14px rgba(66, 133, 244, 0.15)'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = '#cbd5e1'
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <GoogleIcon size={20} />
-                    <span>{authLoading ? 'Conectando ao Google...' : 'Continuar com a Conta Google'}</span>
-                  </button>
-                  <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 6, textAlign: 'center' }}>
-                    Identificação rápida com seu e-mail Google (apenas para preencher o formulário, sem criar acesso no sistema).
-                  </div>
-                </div>
-
-                {/* DIVIDER */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
-                    OU
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                </div>
-
-                {/* OPTION 2: IMPACTO EDU CREDENTIALS */}
+                {/* IMPACTO EDU CREDENTIALS */}
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
-                    Opção 2: Login do Sistema IMPACTO EDU
+                    Login do Sistema IMPACTO EDU
                   </div>
                   <form onSubmit={handleImpactoLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div>

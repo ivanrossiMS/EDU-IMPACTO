@@ -73,15 +73,6 @@ function RootInner() {
         const hashParams = new URLSearchParams(rawHash.startsWith('#') ? rawHash.substring(1) : rawHash)
         const searchParamsObj = new URLSearchParams(rawSearch)
 
-        // Se o usuário estava preenchendo um formulário público ou de Gestão de Pessoas e retornou do OAuth
-        const pendingFormId =
-          window.sessionStorage?.getItem('gp_form_auth_pending') ||
-          window.localStorage?.getItem('gp_form_auth_pending')
-        const pendingFormUrl =
-          window.sessionStorage?.getItem('gp_form_return_url') ||
-          window.localStorage?.getItem('gp_form_return_url') ||
-          (pendingFormId ? `/gestao-pessoas/formularios/${pendingFormId}` : null)
-
         const isRecoveryFlow =
           Boolean((window as any).__EDU_IS_PASSWORD_RECOVERY__) ||
           window.sessionStorage?.getItem('edu_password_recovery_pending') === '1' ||
@@ -91,14 +82,6 @@ function RootInner() {
           Boolean(hashParams.get('token_hash')) ||
           hashParams.get('error_code') === 'otp_expired' ||
           searchParamsObj.get('error_code') === 'otp_expired'
-
-        // Se houver retorno pendente de formulário, redireciona para o formulário levando hash/search (tokens ou erros)
-        if (pendingFormUrl && !isRecoveryFlow) {
-          isRedirectingRef.current = true
-          const cleanFormBase = pendingFormUrl.split('#')[0].split('?')[0]
-          window.location.replace(`${cleanFormBase}${rawSearch}${rawHash}`)
-          return
-        }
 
         if (isRecoveryFlow) {
           isRedirectingRef.current = true

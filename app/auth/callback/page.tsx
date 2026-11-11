@@ -26,22 +26,7 @@ export default function AuthCallbackPage() {
       return;
     }
 
-    // Prioridade 2: Se for retorno de autenticação para um formulário de Gestão de Pessoas
-    const pendingFormId =
-      window.sessionStorage?.getItem('gp_form_auth_pending') ||
-      window.localStorage?.getItem('gp_form_auth_pending');
-    const pendingFormUrl =
-      window.sessionStorage?.getItem('gp_form_return_url') ||
-      window.localStorage?.getItem('gp_form_return_url') ||
-      (pendingFormId ? `/gestao-pessoas/formularios/${pendingFormId}` : null);
-
-    if (pendingFormUrl) {
-      const cleanFormBase = pendingFormUrl.split('#')[0].split('?')[0];
-      window.location.replace(`${cleanFormBase}${search}${hash}`);
-      return;
-    }
-
-    // Prioridade 3: Próxima rota padrão (dashboard) ou rota especificada em ?next=
+    // Prioridade 2: Próxima rota padrão (dashboard) ou rota especificada em ?next=
     const next = params.get('next');
     const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
     window.location.replace(`${safeNext}${search}${hash}`);

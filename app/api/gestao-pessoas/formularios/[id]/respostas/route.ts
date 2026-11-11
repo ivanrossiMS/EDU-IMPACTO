@@ -277,8 +277,7 @@ export async function POST(
         respondentEmail = String(sysUser.email || cleanEmail)
         respondentRole = String(sysUser.cargo || sysUser.perfil || 'Colaborador')
       }
-    } else if (body.googleRespondent?.email || form.settings?.publicLink || form.settings?.requireLogin === false) {
-      const google = body.googleRespondent
+    } else if (form.settings?.publicLink || form.settings?.requireLogin === false) {
       // Procura se o participante preencheu o campo de nome no formulário
       const allFields = (form.sections || []).flatMap(s => s.fields || [])
       let detectedName = ''
@@ -297,17 +296,10 @@ export async function POST(
         }
       }
 
-      if (google?.email) {
-        respondentId = google.id || `google-${Date.now()}`
-        respondentName = google.name || body.respondentName || detectedName || google.email.split('@')[0]
-        respondentEmail = String(google.email).trim().toLowerCase()
-        respondentRole = 'Respondente Verificado (Google)'
-      } else {
-        respondentId = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-        respondentName = detectedName || body.respondentName || 'Participante (Público)'
-        respondentEmail = body.respondentEmail || ''
-        respondentRole = 'Público / Externo'
-      }
+      respondentId = `anon-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      respondentName = detectedName || body.respondentName || 'Participante (Público)'
+      respondentEmail = body.respondentEmail || ''
+      respondentRole = 'Público / Externo'
     } else {
       return NextResponse.json(
         { error: 'Você precisa estar logado no sistema para responder a este formulário.' },
@@ -375,11 +367,7 @@ export async function POST(
       respondentRole,
       respondentDepartment,
       respondentUnit,
-      source: body.googleRespondent?.email
-        ? 'publico_google'
-        : isPublicForm
-        ? 'link_publico'
-        : 'colaborador_logado',
+      source: isPublicForm ? 'link_publico' : 'colaborador_logado',
       answers: answers || {},
       quizScore: computeQuizScore(form, answers || {}),
       completionTimeSeconds: Number(completionTimeSeconds || 0) || undefined,
@@ -445,7 +433,7 @@ export async function PUT(
       (userEmail && targetEmail && userEmail === targetEmail)
     )
 
-    if (!isAdmin && !isOwner && !form.settings?.publicLink) {
+    if (!isAdmin && (!isOwner || form.settings?.allowEditOwnResponse === false)) {
       return NextResponse.json(
         { error: 'Sem permissão para editar esta resposta.' },
         { status: 403 }
