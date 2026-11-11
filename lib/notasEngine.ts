@@ -1303,3 +1303,92 @@ export function calcularMediaAnualDisciplina(bimesters: BimestreNotaInfo[]): Res
   }
 }
 
+/**
+ * Indica se um valor de avaliação ou média está ausente ("---", "-" ou vazio).
+ */
+export function isNotaPendente(val: any): boolean {
+  if (val === null || val === undefined) return true
+  const str = String(val).trim()
+  return !str || str === '---' || str === '-'
+}
+
+/**
+ * Formata uma nota para exibição na Agenda Digital, exibindo "Pendente" quando estiver como "---" ou vazio.
+ */
+export function formatNotaExibicao(val: any): string {
+  return isNotaPendente(val) ? 'Pendente' : String(val).trim()
+}
+
+/**
+ * Resolve a média exibida da disciplina priorizando mediaF, com fallback para mediaG ou "Pendente".
+ */
+export function resolveMediaExibicao(mediaF: any, mediaG: any): string {
+  if (!isNotaPendente(mediaF)) return String(mediaF).trim()
+  if (!isNotaPendente(mediaG)) return String(mediaG).trim()
+  return 'Pendente'
+}
+
+/**
+ * Resolve o valor de bônus (pntBonu ou bonus) quando houver pontuação lançada.
+ */
+export function resolveBonusExibicao(pntBonu: any, bonus: any): string | null {
+  if (!isNotaPendente(pntBonu)) return String(pntBonu).trim()
+  if (!isNotaPendente(bonus)) return String(bonus).trim()
+  return null
+}
+
+export type NotaEvalTone = 'ok' | 'warn' | 'low' | 'falta' | 'pending'
+
+export interface NotaEvalMetrics {
+  isPending: boolean
+  isFalta: boolean
+  display: string
+  score: number | null
+  pct: number
+  tone: NotaEvalTone
+}
+
+/**
+ * Calcula métricas visuais e semânticas (cor, texto e porcentagem 0–100) para uma avaliação individual.
+ */
+export function getNotaEvalMetrics(val: any): NotaEvalMetrics {
+  if (isNotaPendente(val)) {
+    return {
+      isPending: true,
+      isFalta: false,
+      display: 'Pendente',
+      score: null,
+      pct: 0,
+      tone: 'pending',
+    }
+  }
+
+  const display = String(val).trim()
+  const lower = display.toLowerCase()
+
+  if (lower === 'falta') {
+    return {
+      isPending: false,
+      isFalta: true,
+      display,
+      score: null,
+      pct: 0,
+      tone: 'falta',
+    }
+  }
+
+  const score = lower === 'meio' ? 0.5 : parseNotaValor(val)
+  const pct = Math.max(0, Math.min(100, score * 10))
+  const tone: NotaEvalTone = score >= 7.0 ? 'ok' : score >= 5.0 ? 'warn' : 'low'
+
+  return {
+    isPending: false,
+    isFalta: false,
+    display,
+    score,
+    pct,
+    tone,
+  }
+}
+
+

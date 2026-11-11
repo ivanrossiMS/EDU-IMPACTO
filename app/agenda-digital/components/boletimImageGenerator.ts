@@ -8,7 +8,13 @@
  */
 
 import { getInitials } from '@/lib/utils'
-import type { DiagnosticoPedagogico } from '@/lib/notasEngine'
+import {
+  isNotaPendente,
+  formatNotaExibicao,
+  resolveMediaExibicao,
+  resolveBonusExibicao,
+  type DiagnosticoPedagogico,
+} from '@/lib/notasEngine'
 
 export interface BoletimImageDisciplinaBimestre {
   nome: string
@@ -237,18 +243,18 @@ interface EvalToken {
 
 function buildBimestreTokens(d: BoletimImageDisciplinaBimestre): EvalToken[] {
   const tokens: EvalToken[] = [
-    { label: 'AVM:', value: String(d.avm && d.avm !== '---' ? d.avm : '---'), valueColor: '#334155' },
-    { label: 'AVB:', value: String(d.avb && d.avb !== '---' ? d.avb : '---'), valueColor: '#334155' },
+    { label: 'Av. Mensal:', value: formatNotaExibicao(d.avm), valueColor: '#334155' },
+    { label: 'Av. Bimestral:', value: formatNotaExibicao(d.avb), valueColor: '#334155' },
   ]
-  if (d.simulado && d.simulado !== '---' && String(d.simulado).trim() !== '') {
-    tokens.push({ label: 'Sim:', value: String(d.simulado), valueColor: '#334155' })
+  if (!isNotaPendente(d.simulado)) {
+    tokens.push({ label: 'Sim:', value: String(d.simulado).trim(), valueColor: '#334155' })
   }
-  const bonusVal = d.pntBonu || d.bonus
-  if (bonusVal && bonusVal !== '---' && String(bonusVal).trim() !== '') {
-    tokens.push({ label: 'Bônus:', value: String(bonusVal), valueColor: '#334155' })
+  const bonusVal = resolveBonusExibicao(d.pntBonu, d.bonus)
+  if (bonusVal) {
+    tokens.push({ label: 'Bônus:', value: bonusVal, valueColor: '#334155' })
   }
-  if (d.rec && d.rec !== '---' && String(d.rec).trim() !== '') {
-    tokens.push({ label: 'Rec:', value: String(d.rec), valueColor: '#b45309', badgeBg: '#fef3c7', badgeColor: '#b45309' })
+  if (!isNotaPendente(d.rec)) {
+    tokens.push({ label: 'Recuperação:', value: String(d.rec).trim(), valueColor: '#b45309', badgeBg: '#fef3c7', badgeColor: '#b45309' })
   }
   return tokens
 }
@@ -261,11 +267,11 @@ function buildAnualTokens(d: BoletimImageDisciplinaAnual): EvalToken[] {
       value: b.valorStr,
       valueColor: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8',
     })
-    const hasRec = b.rec && b.rec !== '---' && b.rec !== '-' && String(b.rec).trim() !== ''
+    const hasRec = !isNotaPendente(b.rec)
     if (hasRec) {
       tokens.push({
-        label: 'Rec:',
-        value: String(b.rec),
+        label: 'Recuperação:',
+        value: String(b.rec).trim(),
         valueColor: '#b45309',
         badgeBg: '#fef3c7',
         badgeColor: '#b45309',
@@ -697,7 +703,7 @@ export async function generateBoletimImage(
 
     let nome = ''
     let isPassed = true
-    let gradeDisplay = '---'
+    let gradeDisplay = 'Pendente'
     let mediaNum = 0
     let tokens: EvalToken[] = []
     let subGradeLabel = 'Média Final'
@@ -715,7 +721,7 @@ export async function generateBoletimImage(
       nome = item.nome
       mediaNum = item.mediaFNum
       isPassed = mediaNum >= 7.0
-      gradeDisplay = item.mediaF && item.mediaF !== '---' ? String(item.mediaF) : String(item.mediaG || '---')
+      gradeDisplay = resolveMediaExibicao(item.mediaF, item.mediaG)
       tokens = buildBimestreTokens(item)
       subGradeLabel = 'Média'
     }
@@ -822,8 +828,8 @@ export async function generateBoletimImage(
     ctx.textAlign = 'right'
     ctx.textBaseline = 'top'
     ctx.fillStyle = isPassed ? '#059669' : '#dc2626'
-    ctx.font = `900 21px ${fontMain}`
-    ctx.fillText(gradeDisplay, rightX, cy + (discCardH / 2) - 17)
+    ctx.font = `900 ${gradeDisplay === 'Pendente' ? 13 : 21}px ${fontMain}`
+    ctx.fillText(gradeDisplay, rightX, cy + (discCardH / 2) - (gradeDisplay === 'Pendente' ? 12 : 17))
 
     ctx.fillStyle = '#64748b'
     ctx.font = `700 9px ${fontMain}`

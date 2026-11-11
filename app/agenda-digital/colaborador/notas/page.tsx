@@ -14,11 +14,22 @@ import { useApiQuery } from '@/hooks/useApi'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
-import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto, calcularMediaAnualDisciplina, type DiagnosticoPedagogico } from '@/lib/notasEngine'
+import {
+  parseNotaValor,
+  calcularDiagnosticoPedagogico,
+  arredondarMediaImpacto,
+  calcularMediaAnualDisciplina,
+  type DiagnosticoPedagogico,
+} from '@/lib/notasEngine'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { BoletimImageModal } from '../../components/BoletimImageModal'
 import { generateBoletimImage, type GeneratedBoletimImage } from '../../components/boletimImageGenerator'
+import {
+  DisciplinaBimestreCard,
+  DisciplinaAnualCard,
+  DisciplinaNotaCardStyles,
+} from '../../components/DisciplinaNotaCard'
 import { toast } from 'sonner'
 
 function getBimestreNumber(val: any): number {
@@ -1871,108 +1882,17 @@ export default function ColaboradorNotasPage() {
 
                         <div className="notas-modal-disciplinas-grid" style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))',
                           gap: 14
                         }}>
-                          {modalDisciplinasAnuais.map((d: any, i: number) => {
-                            const isPassed = d.isPassed
-                            return (
-                              <motion.div
-                                key={d.nome}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.2, delay: i * 0.02 }}
-                                className="notas-modal-disciplina-item"
-                                style={{
-                                  padding: '14px 16px',
-                                  background: isPassed ? '#f8fafc' : '#fff8f8',
-                                  borderRadius: 16,
-                                  border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  boxShadow: isPassed ? 'none' : '0 2px 8px rgba(239,68,68,0.06)'
-                                }}
-                              >
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0, paddingRight: 12 }}>
-                                  <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                    <span>{d.nome}</span>
-                                    {!isPassed ? (
-                                      <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
-                                        Abaixo
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 5px', borderRadius: 4 }}>
-                                        Na Média
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Bimestres lançados da disciplina */}
-                                  <div className="notas-disciplina-evals" style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
-                                    {d.bimesters.map((b: any, bIdx: number) => {
-                                      const hasRec = b.rec && b.rec !== '---' && b.rec !== '-' && String(b.rec).trim() !== ''
-                                      return (
-                                        <React.Fragment key={b.bimNum}>
-                                          {bIdx > 0 && <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />}
-                                          <span style={{ color: b.lancado ? '#334155' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                            <span>{b.bimNum}º Bim:</span>
-                                            <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
-                                            {hasRec && (
-                                              <span 
-                                                style={{ 
-                                                  fontSize: 10, 
-                                                  fontWeight: 700, 
-                                                  color: '#b45309', 
-                                                  background: '#fef3c7', 
-                                                  padding: '1px 5px', 
-                                                  borderRadius: 4,
-                                                  marginLeft: 2
-                                                }}
-                                                title={b.bimNum === 2 ? `Recuperação do 1º Semestre: ${b.rec}` : b.bimNum === 4 ? `Recuperação do 2º Semestre: ${b.rec}` : `Recuperação: ${b.rec}`}
-                                              >
-                                                Rec: {b.rec}
-                                              </span>
-                                            )}
-                                          </span>
-                                        </React.Fragment>
-                                      )
-                                    })}
-                                  </div>
-
-                                  {/* Progress bar */}
-                                  <div className="notas-disciplina-prog-bar" style={{ marginTop: 2, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
-                                    <div 
-                                      style={{
-                                        width: `${Math.min(d.mediaFNum * 10, 100)}%`,
-                                        height: '100%',
-                                        background: isPassed ? '#10b981' : '#ef4444',
-                                        borderRadius: 2
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="notas-disciplina-grade-box" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-                                  <div className="notas-disciplina-grade-val" style={{
-                                    fontSize: 22,
-                                    fontWeight: 900,
-                                    fontFamily: 'Outfit, sans-serif',
-                                    color: isPassed ? '#059669' : '#dc2626',
-                                    lineHeight: 1
-                                  }}>
-                                    {d.mediaAnualFormatada}
-                                  </div>
-                                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
-                                    Média Anual
-                                  </div>
-                                  <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
-                                    ({d.lancadosCount} {d.lancadosCount === 1 ? 'bimestre' : 'bimestres'})
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )
-                          })}
+                          {modalDisciplinasAnuais.map((d: any, i: number) => (
+                            <DisciplinaAnualCard
+                              key={d.nome}
+                              disciplina={d}
+                              index={i}
+                              printClass="notas-modal-disciplina-item"
+                            />
+                          ))}
                         </div>
                       </div>
 
@@ -2167,88 +2087,17 @@ export default function ColaboradorNotasPage() {
 
                       <div className="notas-modal-disciplinas-grid" style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 290px), 1fr))',
                         gap: 14
                       }}>
-                        {modalDisciplinas.map((d: any, i: number) => {
-                          const isPassed = d.mediaFNum >= 7.0
-                          return (
-                            <motion.div
-                              key={i}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.2, delay: i * 0.03 }}
-                              className="notas-modal-disciplina-item"
-                              style={{
-                                padding: '14px 16px',
-                                background: isPassed ? '#f8fafc' : '#fff8f8',
-                                borderRadius: 16,
-                                border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                boxShadow: isPassed ? 'none' : '0 2px 8px rgba(239,68,68,0.06)'
-                              }}
-                            >
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-                                <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <span>{d.nome}</span>
-                                  {!isPassed && (
-                                    <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
-                                      Abaixo
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="notas-disciplina-evals" style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
-                                  <span>AVM: <strong style={{ color: '#334155' }}>{d.avm ?? '-'}</strong></span>
-                                  <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                  <span>AVB: <strong style={{ color: '#334155' }}>{d.avb ?? '-'}</strong></span>
-                                  {d.simulado && d.simulado !== '---' && (
-                                    <>
-                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                      <span>Simulado: <strong style={{ color: '#334155' }}>{d.simulado}</strong></span>
-                                    </>
-                                  )}
-                                  {(d.pntBonu || d.bonus) && d.pntBonu !== '---' && d.bonus !== '---' && (
-                                    <>
-                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                      <span>Bônus: <strong style={{ color: '#334155' }}>{d.pntBonu || d.bonus}</strong></span>
-                                    </>
-                                  )}
-                                  {d.rec && d.rec !== '---' && (
-                                    <>
-                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                      <span>Rec: <strong style={{ color: '#d97706' }}>{d.rec}</strong></span>
-                                    </>
-                                  )}
-                                </div>
-                                {/* Progress bar */}
-                                <div className="notas-disciplina-prog-bar" style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '80%' }}>
-                                  <div 
-                                    style={{
-                                      width: `${Math.min(d.mediaFNum * 10, 100)}%`,
-                                      height: '100%',
-                                      background: isPassed ? '#10b981' : '#ef4444',
-                                      borderRadius: 2
-                                    }}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="notas-disciplina-grade-box" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-                                <div className="notas-disciplina-grade-val" style={{
-                                  fontSize: 20,
-                                  fontWeight: 900,
-                                  fontFamily: 'Outfit, sans-serif',
-                                  color: isPassed ? '#059669' : '#dc2626',
-                                  lineHeight: 1
-                                }}>
-                                  {d.mediaF && d.mediaF !== '---' ? d.mediaF : (d.mediaG ?? '-')}
-                                </div>
-                              </div>
-                            </motion.div>
-                          )
-                        })}
+                        {modalDisciplinas.map((d: any, i: number) => (
+                          <DisciplinaBimestreCard
+                            key={`${d.nome}-${i}`}
+                            disciplina={d}
+                            index={i}
+                            printClass="notas-modal-disciplina-item"
+                          />
+                        ))}
                       </div>
                     </div>
 
@@ -2721,44 +2570,8 @@ export default function ColaboradorNotasPage() {
 
           /* Discipline Item Card */
           .notas-modal-disciplina-item {
-            padding: 6px 10px !important;
-            border-radius: 8px !important;
-            border: 1px solid #e2e8f0 !important;
-            background: #f8fafc !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            transform: none !important;
-            box-shadow: none !important;
-          }
-          .notas-disciplina-nome {
-            font-size: 11px !important;
-            line-height: 1.2 !important;
-          }
-          .notas-disciplina-evals {
-            font-size: 8.5px !important;
-            gap: 4px !important;
-            line-height: 1.2 !important;
-          }
-          .notas-disciplina-evals strong {
-            color: #1e293b !important;
-          }
-          .dot-sep {
-            width: 2.5px !important;
-            height: 2.5px !important;
-          }
-
-          /* Hide progress bar on print to save space and keep it super crisp */
-          .notas-disciplina-prog-bar {
-            display: none !important;
-          }
-
-          /* Final Grade Typography */
-          .notas-disciplina-grade-val {
-            font-size: 15px !important;
-            line-height: 1 !important;
-          }
-          .notas-disciplina-grade-final {
-            font-size: 8px !important;
           }
 
           /* Print Footer */
@@ -2776,6 +2589,8 @@ export default function ColaboradorNotasPage() {
           }
         }
       `}} />
+
+      <DisciplinaNotaCardStyles />
 
       <BoletimImageModal
         isOpen={boletimImageModalOpen}

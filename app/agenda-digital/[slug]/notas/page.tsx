@@ -18,7 +18,17 @@ import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto, calcularMediaAnualDisciplina } from '@/lib/notasEngine'
+import {
+  parseNotaValor,
+  calcularDiagnosticoPedagogico,
+  arredondarMediaImpacto,
+  calcularMediaAnualDisciplina,
+} from '@/lib/notasEngine'
+import {
+  DisciplinaBimestreCard,
+  DisciplinaAnualCard,
+  DisciplinaNotaCardStyles,
+} from '../../components/DisciplinaNotaCard'
 
 export default function ADNotasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital();
@@ -970,103 +980,15 @@ export default function ADNotasPage({ params }: { params: any }) {
                   </span>
                 </div>
 
-                <div className="print-disciplinas-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                  {disciplinasAnuais.map((d: any, i: number) => {
-                    const isPassed = d.isPassed
-                    return (
-                      <motion.div
-                        key={d.nome}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2, delay: i * 0.02 }}
-                        whileHover={{ y: -2, boxShadow: '0 8px 20px rgba(0,0,0,0.04)' }}
-                        className="print-disciplina-item"
-                        style={{
-                          padding: '16px',
-                          background: isPassed ? '#f8fafc' : '#fff8f8',
-                          borderRadius: 16,
-                          border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          boxShadow: isPassed ? '0 2px 10px rgba(0,0,0,0.02)' : '0 2px 10px rgba(239,68,68,0.06)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0, paddingRight: 12 }}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span>{d.nome}</span>
-                            {!isPassed ? (
-                              <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
-                                Abaixo
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 5px', borderRadius: 4 }}>
-                                Na Média
-                              </span>
-                            )}
-                          </div>
-
-                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
-                            {d.bimesters.map((b: any, bIdx: number) => {
-                              const hasRec = b.rec && b.rec !== '---' && b.rec !== '-' && String(b.rec).trim() !== ''
-                              return (
-                                <span key={b.bimNum} style={{ color: b.lancado ? '#334155' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                  {bIdx > 0 && <span style={{ marginRight: 3, color: '#cbd5e1' }}>•</span>}
-                                  <span>{b.bimNum}º Bim:</span>
-                                  <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
-                                  {hasRec && (
-                                    <span 
-                                      style={{ 
-                                        fontSize: 10, 
-                                        fontWeight: 700, 
-                                        color: '#b45309', 
-                                        background: '#fef3c7', 
-                                        padding: '1px 5px', 
-                                        borderRadius: 4,
-                                        marginLeft: 2
-                                      }}
-                                      title={b.bimNum === 2 ? `Recuperação do 1º Semestre: ${b.rec}` : b.bimNum === 4 ? `Recuperação do 2º Semestre: ${b.rec}` : `Recuperação: ${b.rec}`}
-                                    >
-                                      Rec: {b.rec}
-                                    </span>
-                                  )}
-                                </span>
-                              )
-                            })}
-                          </div>
-
-                          <div style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
-                            <div
-                              style={{
-                                width: `${Math.min(d.mediaFNum * 10, 100)}%`,
-                                height: '100%',
-                                background: isPassed ? '#10b981' : '#ef4444',
-                                borderRadius: 2
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-                          <div style={{
-                            fontSize: 22,
-                            fontWeight: 900,
-                            fontFamily: 'Outfit, sans-serif',
-                            color: isPassed ? '#059669' : '#dc2626',
-                            lineHeight: 1
-                          }}>
-                            {d.mediaAnualFormatada}
-                          </div>
-                          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
-                            Média Anual
-                          </div>
-                          <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
-                            ({d.lancadosCount} {d.lancadosCount === 1 ? 'bimestre' : 'bimestres'})
-                          </div>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
+                <div className="print-disciplinas-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))', gap: 16 }}>
+                  {disciplinasAnuais.map((d: any, i: number) => (
+                    <DisciplinaAnualCard
+                      key={d.nome}
+                      disciplina={d}
+                      index={i}
+                      printClass="print-disciplina-item"
+                    />
+                  ))}
                 </div>
               </div>
             </div>
@@ -1202,91 +1124,16 @@ export default function ADNotasPage({ params }: { params: any }) {
                   exit={{ opacity: 0 }} 
                   transition={{ duration: 0.3 }}
                   className="print-disciplinas-grid"
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))', gap: 16 }}
                 >
-                  {disciplinas.map((d: any, i: number) => {
-                    const isPassed = d.mediaFNum >= 7.0
-                    return (
-                      <motion.div 
-                        key={i}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: i * 0.05 }}
-                        whileHover={{ y: -2, boxShadow: '0 8px 20px rgba(0,0,0,0.04)' }}
-                        className="print-disciplina-item"
-                        style={{ 
-                          padding: '16px', 
-                          background: isPassed ? '#f8fafc' : '#fff8f8', 
-                          borderRadius: 16, 
-                          border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          boxShadow: isPassed ? '0 2px 10px rgba(0,0,0,0.02)' : '0 2px 10px rgba(239,68,68,0.06)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span>{d.nome}</span>
-                            {!isPassed && (
-                              <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
-                                Abaixo
-                              </span>
-                            )}
-                          </div>
-                          
-                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, flexWrap: 'wrap' }}>
-                            <span>AVM: <strong style={{ color: '#475569' }}>{d.avm || '---'}</strong></span>
-                            <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                            <span>AVB: <strong style={{ color: '#475569' }}>{d.avb || '---'}</strong></span>
-                            {d.simulado && d.simulado !== '---' && (
-                              <>
-                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                <span>Simulado: <strong style={{ color: '#475569' }}>{d.simulado}</strong></span>
-                              </>
-                            )}
-                            {(d.pntBonu || d.bonus) && d.pntBonu !== '---' && d.bonus !== '---' && (
-                              <>
-                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                <span>Bônus: <strong style={{ color: '#475569' }}>{d.pntBonu || d.bonus}</strong></span>
-                              </>
-                            )}
-                            {d.rec && d.rec !== '---' && (
-                              <>
-                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
-                                <span>Rec: <strong style={{ color: '#d97706' }}>{d.rec}</strong></span>
-                              </>
-                            )}
-                          </div>
-                          
-                          <div style={{ marginTop: 6, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${Math.min(d.mediaFNum * 10, 100)}%` }}
-                              transition={{ duration: 1, ease: "easeOut", delay: 0.2 + (i * 0.05) }}
-                              style={{ 
-                                height: '100%', 
-                                background: isPassed ? '#10b981' : '#ef4444', 
-                                borderRadius: 2 
-                              }} 
-                            />
-                          </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                          <div style={{ 
-                            fontSize: 22, 
-                            fontWeight: 900, 
-                            fontFamily: 'Outfit, sans-serif',
-                            color: isPassed ? '#059669' : '#dc2626',
-                            lineHeight: 1
-                          }}>
-                            {d.mediaF && d.mediaF !== '---' ? d.mediaF : (d.mediaG || '---')}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
+                  {disciplinas.map((d: any, i: number) => (
+                    <DisciplinaBimestreCard
+                      key={`${d.nome}-${i}`}
+                      disciplina={d}
+                      index={i}
+                      printClass="print-disciplina-item"
+                    />
+                  ))}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -1396,37 +1243,14 @@ export default function ADNotasPage({ params }: { params: any }) {
           }
           
           .print-disciplina-item {
-            padding: 6px 10px !important;
-            border-width: 1px !important;
             border-radius: 8px !important;
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
-          
-          /* Ajustes de fontes internas para caber melhor */
-          .print-disciplina-item > div:first-child > div:first-child {
-            font-size: 11px !important;
-            line-height: 1.2 !important;
-            margin-bottom: 2px !important;
-          }
-
-          .print-disciplina-item > div:first-child > div:nth-child(2) {
-            font-size: 8.5px !important;
-            gap: 4px !important;
-            line-height: 1.2 !important;
-          }
-
-          /* Esconde barra de progresso na impressão */
-          .print-disciplina-item > div:first-child > div:last-child {
-            display: none !important;
-          }
-
-          .print-disciplina-item > div:last-child > div:first-child {
-            font-size: 15px !important;
-            line-height: 1 !important;
-          }
         }
       `}} />
+
+      <DisciplinaNotaCardStyles />
 
       <BoletimImageModal
         isOpen={boletimImageModalOpen}
