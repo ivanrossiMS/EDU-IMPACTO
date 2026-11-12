@@ -618,7 +618,7 @@ export default function CalendarioPage() {
         const mesView = month + 1
         const [resAlunos, resProfs] = await Promise.all([
           fetch(`/api/alunos/aniversariantes?mes=${mesView}`).then(r => r.json()),
-          fetch('/api/rh/funcionarios?lightweight=true').then(r => r.json())
+          fetch('/api/rh/funcionarios?lightweight=true&activeOnly=true').then(r => r.json())
         ])
         
         // Alunos (A API de aniversariantes retorna dataNascimento com N maiúsculo)
@@ -628,7 +628,9 @@ export default function CalendarioPage() {
         })
 
         // Funcionários
-        const funcionariosArray = Array.isArray(resProfs) ? resProfs : []
+        const funcionariosArray = (Array.isArray(resProfs) ? resProfs : []).filter(
+          (p: any) => String(p?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+        )
         const funcionariosAniversariantes = funcionariosArray.filter((p: any) => {
           const data = p.data_nascimento || p.dataNascimento
           if (!data) return false

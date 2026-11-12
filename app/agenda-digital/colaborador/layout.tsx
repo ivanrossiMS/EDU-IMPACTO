@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { isFamilyOrStudent, getAgendaDigitalDestination } from '@/lib/auth/moduleRouting'
 
 export default function AgendaDigitalColaboradorLayout({ 
   children 
@@ -29,7 +30,12 @@ export default function AgendaDigitalColaboradorLayout({
   const [isLoading, setIsLoading] = useState(true)
 
   const espelharId = searchParams.get('espelhar_colaborador')
-  const isMirrorMode = currentUser && !!espelharId
+  const isUserActiveStaff = Boolean(
+    currentUser &&
+    !isFamilyOrStudent(currentUser) &&
+    String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+  )
+  const isMirrorMode = Boolean(isUserActiveStaff && !!espelharId)
 
   
   const espelharNome = searchParams.get('espelhar_nome')
@@ -54,9 +60,16 @@ export default function AgendaDigitalColaboradorLayout({
 
   useEffect(() => {
     if (!hydrated || !currentUser) return
+    if (!isMirrorMode && !isUserActiveStaff) {
+      const dest = isFamilyOrStudent(currentUser)
+        ? getAgendaDigitalDestination(currentUser)
+        : '/login'
+      router.replace(dest)
+      return
+    }
     setIsLoading(false)
     hideSplashScreen(300)
-  }, [hydrated, currentUser])
+  }, [hydrated, currentUser, isMirrorMode, isUserActiveStaff, router])
 
   useEffect(() => {
     if (setAdLoading) setAdLoading(isLoading);
@@ -83,7 +96,7 @@ export default function AgendaDigitalColaboradorLayout({
     { label: 'Meu Perfil', href: '/agenda-digital/colaborador/perfil', icon: <UserCog size={18} /> },
   ]
 
-  if (isLoading || !currentUser || currentUser.cargo === 'Aluno') {
+  if (isLoading || !currentUser || currentUser.cargo === 'Aluno' || (!isMirrorMode && !isUserActiveStaff)) {
     return <LoadingGlass />
   }
 
@@ -412,7 +425,7 @@ export default function AgendaDigitalColaboradorLayout({
               overflow: 'hidden'
             }}>
               <UserAvatar 
-                userId={effectiveUser?.id} 
+                userId={effectiveUser?.id ?? undefined} 
                 name={effectiveUser?.nome || 'Colaborador'} 
                 fotoUrl={effectiveUser?.foto}
                 size={96}

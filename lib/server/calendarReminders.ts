@@ -171,6 +171,7 @@ export async function resolveEventTargets(
       .from('system_users')
       .select('id')
       .ilike('nome', visibilidadeUsuario)
+      .or('status.is.null,status.not.ilike.inativo')
       .maybeSingle()
     if (sysUser?.id) {
       directColaboradores.push(String(sysUser.id))

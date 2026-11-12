@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { requireStaff, requireAdminOrDirecao, clearAuthGuardCache } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
+import { syncCollaboratorAccessStatus } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +23,11 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   }
   
   const fixedBody = prepare(body)
-  const { data: oldUser } = await supabaseAdmin.from('system_users').select('id, auth_id, email, nome, cargo, perfil').eq('id', id).maybeSingle()
+  const { data: oldUser } = await supabaseAdmin
+    .from('system_users')
+    .select('id, auth_id, email, nome, cargo, perfil, status, dados')
+    .eq('id', id)
+    .maybeSingle()
 
   const { data, error } = await supabaseAdmin.from('system_users').update(fixedBody).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -37,6 +41,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
   const emailChanged = Boolean(oldEmail && newEmail && oldEmail !== newEmail)
   const authId = oldUser?.auth_id || oldUser?.id || id
   const isAuthUuid = Boolean(authId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authId))
+  const effectiveStatus = String(data?.status ?? fixedBody.status ?? oldUser?.status ?? 'ativo').trim().toLowerCase()
+  const isInactive = effectiveStatus === 'inativo'
 
   if (emailChanged) {
     // 1. Atualizar e-mail no Supabase Auth mantendo a mesma conta
@@ -46,12 +52,14 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       await supabaseAdmin.auth.admin.updateUserById(authId, {
         email: newEmail,
         email_confirm: true,
-        user_metadata: {
-          ...existingMeta,
-          nome: fixedBody.nome ?? oldUser?.nome ?? existingMeta.nome,
-          cargo: fixedBody.cargo ?? oldUser?.cargo ?? existingMeta.cargo,
-          perfil: fixedBody.perfil ?? oldUser?.perfil ?? existingMeta.perfil
-        }
+        ...(!isInactive ? {
+          user_metadata: {
+            ...existingMeta,
+            nome: fixedBody.nome ?? oldUser?.nome ?? existingMeta.nome,
+            cargo: fixedBody.cargo ?? oldUser?.cargo ?? existingMeta.cargo,
+            perfil: fixedBody.perfil ?? oldUser?.perfil ?? existingMeta.perfil
+          }
+        } : {})
       }).catch((err: any) => console.error('[PUT usuario] Erro ao atualizar Auth email:', err?.message))
     }
 
@@ -66,7 +74,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       }).ilike('email', oldEmail)
     }
   } else {
-    if (isAuthUuid && (fixedBody.nome !== undefined || fixedBody.cargo !== undefined || fixedBody.perfil !== undefined)) {
+    if (!isInactive && isAuthUuid && (fixedBody.nome !== undefined || fixedBody.cargo !== undefined || fixedBody.perfil !== undefined)) {
       const { data: authRes } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }))
       const existingMeta = authRes?.user?.user_metadata || {}
       await supabaseAdmin.auth.admin.updateUserById(authId, {
@@ -89,6 +97,27 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     }
   }
 
+  // Sincroniza acesso no Auth (downgrade se dual-role inativo / ban se inativo / restaura se ativo) e grupos/chat
+  if (
+    fixedBody.status !== undefined ||
+    emailChanged ||
+    fixedBody.cargo !== undefined ||
+    fixedBody.perfil !== undefined ||
+    fixedBody.nome !== undefined
+  ) {
+    await syncCollaboratorAccessStatus({
+      userId: data?.id || id,
+      authId: data?.auth_id || oldUser?.auth_id,
+      email: newEmail || oldEmail,
+      status: data?.status ?? fixedBody.status ?? oldUser?.status,
+      nome: data?.nome ?? fixedBody.nome ?? oldUser?.nome,
+      cargo: data?.cargo ?? fixedBody.cargo ?? oldUser?.cargo,
+      perfil: data?.perfil ?? fixedBody.perfil ?? oldUser?.perfil,
+      systemUserDados: data?.dados || oldUser?.dados,
+      supabaseClient: supabaseAdmin,
+    })
+  }
+
   return NextResponse.json(data)
 }
 
@@ -98,12 +127,16 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   const { errorResponse: adminErr } = await requireAdminOrDirecao(req)
   if (adminErr) return adminErr
 
-  const supabase = await createProtectedClient()
+  const supabaseAdmin = getAdminClient()
   const { id } = await context.params
-  
-  const { data: userRow } = await supabase.from('system_users').select('email').eq('id', id).maybeSingle()
 
-  const { error } = await supabase.from('system_users').delete().eq('id', id)
+  const { data: userRow } = await supabaseAdmin
+    .from('system_users')
+    .select('id, auth_id, email, nome, dados')
+    .eq('id', id)
+    .maybeSingle()
+
+  const { error } = await supabaseAdmin.from('system_users').delete().eq('id', id)
   if (error) {
     if (error.code === '23503') {
       return NextResponse.json({ error: 'Este usuário não pode ser excluído permanentemente porque possui registros vinculados a ele (como turmas, disciplinas, simulados, etc). Por favor, inative o usuário ao invés de excluí-lo.' }, { status: 400 })
@@ -115,8 +148,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   clearAuthGuardCache()
   invalidateAuthUsersCache()
 
-  const supabaseAdmin = getAdminClient()
-  
   // Verifica se o usuário também é Responsável ou Aluno (para não excluir a conta de acesso da família)
   let isResponsavelOrAluno = false
   if (userRow?.email) {
@@ -126,21 +157,20 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     isResponsavelOrAluno = Boolean((respCheck && respCheck.length > 0) || (alunoCheck && alunoCheck.length > 0))
   }
 
-  if (id.length > 10) {
-    if (isResponsavelOrAluno) {
-      // Preserva a conta no Auth (usada como Responsável/Aluno), apenas remove acesso de colaborador
-      await supabaseAdmin.auth.admin.updateUserById(id, {
-        user_metadata: {
-          colaborador_id: null,
-          system_user_id: null,
-          hasDualRole: false,
-          perfil: 'Família',
-          cargo: 'Responsável'
-        }
-      }).catch((e: any) => console.error(e))
-    } else {
-      await supabaseAdmin.auth.admin.deleteUser(id).catch((e: any) => console.error(e))
-    }
+  // Downgrade no Auth se tiver vínculo familiar ativo + limpeza de grupos/chats de colaborador
+  await syncCollaboratorAccessStatus({
+    userId: id,
+    authId: userRow?.auth_id,
+    email: userRow?.email,
+    status: 'inativo',
+    nome: userRow?.nome,
+    systemUserDados: userRow?.dados,
+    supabaseClient: supabaseAdmin,
+  })
+
+  const deleteAuthId = userRow?.auth_id || id
+  if (!isResponsavelOrAluno && deleteAuthId && /^[0-9a-f-]{36}$/i.test(deleteAuthId)) {
+    await supabaseAdmin.auth.admin.deleteUser(deleteAuthId).catch((e: any) => console.error(e))
   }
 
   if (userRow?.email) {

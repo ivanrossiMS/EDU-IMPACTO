@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkIsAdmin } from '@/lib/chatPermissions'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -19,20 +20,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'conversation_id é obrigatório' }, { status: 400 })
     }
 
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, perfil, cargo, dados, auth_id')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    const { dbUser, perfil, cargo } = await resolveChatSystemUser(supabase, user, 'id, perfil, cargo, status, dados, auth_id')
     const isAdmin = checkIsAdmin(perfil, cargo)
 
     const isFamilyContext = 
+      !dbUser ||
       context === 'familia' ||
       !!overrideAlunoId ||
       perfil.toLowerCase().includes('família') || 

@@ -20,11 +20,12 @@ export async function resolveCollaboratorUsers(
   const cleanTargetIds = Array.from(new Set(rawTargetIds.map(id => String(id).trim()).filter(Boolean)))
   if (cleanTargetIds.length === 0) return []
 
-  // 1. Buscar por id (coluna texto: aceita master-dziia1l, UUIDs, códigos, etc.)
+  // 1. Buscar por id (coluna texto: aceita master-dziia1l, UUIDs, códigos, etc.) — somente colaboradores ativos
   const { data: usersById } = await supabaseService
     .from('system_users')
-    .select('id, auth_id, nome, email, perfil, cargo')
+    .select('id, auth_id, nome, email, perfil, cargo, status')
     .in('id', cleanTargetIds)
+    .or('status.is.null,status.not.ilike.inativo')
 
   const effectiveUsers: CollaboratorUser[] = usersById ? [...usersById] : []
   const foundIds = new Set(effectiveUsers.flatMap(u => [String(u.id), String(u.auth_id)].filter(Boolean)))
@@ -34,8 +35,9 @@ export async function resolveCollaboratorUsers(
   if (uuidTargets.length > 0) {
     const { data: usersByAuthId } = await supabaseService
       .from('system_users')
-      .select('id, auth_id, nome, email, perfil, cargo')
+      .select('id, auth_id, nome, email, perfil, cargo, status')
       .in('auth_id', uuidTargets)
+      .or('status.is.null,status.not.ilike.inativo')
     if (usersByAuthId && usersByAuthId.length > 0) {
       usersByAuthId.forEach((u: any) => {
         if (!foundIds.has(String(u.id))) {
@@ -52,8 +54,9 @@ export async function resolveCollaboratorUsers(
   if (missingIds.length > 0) {
     const { data: funcs } = await supabaseService
       .from('funcionarios')
-      .select('id, nome, email, cargo')
+      .select('id, nome, email, cargo, status')
       .in('id', missingIds)
+      .or('status.is.null,status.not.ilike.inativo')
     if (funcs && funcs.length > 0) {
       funcs.forEach((f: any) => {
         effectiveUsers.push({

@@ -38,7 +38,8 @@ export default function AgendaDigitalAdminLayout({
   const allowed = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
   const p = currentUser?.perfil
   const cargo = currentUser?.cargo
-  const isAllowed = Boolean(currentUser && (allowed.includes(p as string) || allowed.includes(cargo as string)))
+  const isActiveStatus = String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+  const isAllowed = Boolean(currentUser && isActiveStatus && (allowed.includes(p as string) || allowed.includes(cargo as string)))
 
   useEffect(() => {
     if (!hydrated) return;

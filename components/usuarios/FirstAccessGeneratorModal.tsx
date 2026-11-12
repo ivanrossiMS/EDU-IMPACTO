@@ -129,11 +129,13 @@ export function FirstAccessGeneratorModal({
         const q = searchQuery.trim()
         if (selectorType === 'system_user') {
           const res = await fetch(
-            `/api/configuracoes/usuarios?type=colaboradores&page=1&limit=25&search=${encodeURIComponent(q)}`
+            `/api/configuracoes/usuarios?type=colaboradores&activeOnly=true&page=1&limit=25&search=${encodeURIComponent(q)}`
           )
           const data = await res.json().catch(() => ({}))
           if (!active) return
-          const rows = Array.isArray(data?.data) ? data.data : []
+          const rows = (Array.isArray(data?.data) ? data.data : []).filter(
+            (r: any) => String(r?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+          )
           setSearchResults(
             rows.map((r: any) => ({
               type: 'system_user',

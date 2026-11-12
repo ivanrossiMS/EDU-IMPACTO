@@ -68,7 +68,7 @@ export default function ManutencaoPage() {
   const filteredFuncs = useMemo(() => {
     const b = buscaFunc.toLowerCase()
     return funcionariosArr.filter(f => 
-      f && f.nome && (
+      f && f.nome && String(f.status || 'ativo').trim().toLowerCase() !== 'inativo' && (
         f.nome.toLowerCase().includes(b) || 
         f.cargo?.toLowerCase().includes(b) || 
         f.departamento?.toLowerCase().includes(b)

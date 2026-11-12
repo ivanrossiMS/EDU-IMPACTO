@@ -27,7 +27,7 @@ export default function GestaoPessoasColaboradores() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/rh/funcionarios').then(res => res.ok ? res.json() : []),
+      fetch('/api/rh/funcionarios?activeOnly=true').then(res => res.ok ? res.json() : []),
       fetch('/api/rh/ausencias').then(res => res.ok ? res.json() : [])
     ]).then(([funcs, aus]) => {
       setFuncionarios(Array.isArray(funcs) ? funcs : [])
@@ -40,9 +40,11 @@ export default function GestaoPessoasColaboradores() {
   }, [])
 
   const filtered = funcionarios.filter(f => 
-    f.nome?.toLowerCase().includes(busca.toLowerCase()) || 
-    f.cpf?.includes(busca) || 
-    f.cargo?.toLowerCase().includes(busca.toLowerCase())
+    String((f as any).status || 'ativo').trim().toLowerCase() !== 'inativo' && (
+      f.nome?.toLowerCase().includes(busca.toLowerCase()) || 
+      f.cpf?.includes(busca) || 
+      f.cargo?.toLowerCase().includes(busca.toLowerCase())
+    )
   )
 
   const getAusenciasFuncionario = (id: string) => ausencias.filter(a => a.funcionario_id === id)

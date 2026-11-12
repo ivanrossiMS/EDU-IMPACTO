@@ -236,12 +236,49 @@ export async function POST(request: Request) {
       const confirmedIso = new Date().toISOString()
 
       if (existing) {
+        const { data: activeStaffRows } = await supabaseAdmin
+          .from('system_users')
+          .select('id, perfil, cargo, status')
+          .ilike('email', finalEmail)
+          .or('status.is.null,status.not.ilike.inativo')
+          .limit(1)
+        const activeStaff = activeStaffRows?.[0] || null
+
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
           password: newPass,
-          user_metadata: {
-            ...(existing.user_metadata || {}),
-            password_confirmed_at: confirmedIso,
-          },
+          ...(activeStaff
+            ? {
+                user_metadata: {
+                  ...(existing.user_metadata || {}),
+                  responsavel_id: resp.id,
+                  colaborador_id: activeStaff.id,
+                  system_user_id: activeStaff.id,
+                  hasDualRole: true,
+                  password_confirmed_at: confirmedIso,
+                },
+              }
+            : {
+                app_metadata: {
+                  ...(existing.app_metadata || {}),
+                  role_type: 'responsavel',
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: resp.id,
+                  system_user_id: null,
+                  colaborador_id: null,
+                },
+                user_metadata: {
+                  ...(existing.user_metadata || {}),
+                  nome: resp.nome || existing.user_metadata?.nome,
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: resp.id,
+                  colaborador_id: null,
+                  system_user_id: null,
+                  hasDualRole: false,
+                  password_confirmed_at: confirmedIso,
+                },
+              }),
         })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
         resolvedAuthId = existing.id

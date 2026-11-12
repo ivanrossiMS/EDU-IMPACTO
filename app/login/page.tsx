@@ -400,8 +400,16 @@ export default function LoginPage() {
             }
             if (meRes.ok) {
               const meData = await meRes.json().catch(() => null)
-              if (meData?.user?.foto && (!storedUser.foto || storedUser.foto !== meData.user.foto)) {
-                storedUser.foto = meData.user.foto
+              if (meData?.user?.id) {
+                storedUser = {
+                  ...storedUser,
+                  ...meData.user,
+                  ...(meData.user.foto ? { foto: meData.user.foto } : {}),
+                }
+                try {
+                  saveSetting('edu-current-user', storedUser)
+                  if (storedUser.perfil) saveSetting('edu-current-perfil', storedUser.perfil)
+                } catch {}
               }
             }
           } catch (netErr: any) {
@@ -411,6 +419,13 @@ export default function LoginPage() {
 
           // Restaura o usuário no contexto
           setCurrentUser(storedUser)
+
+          // Família/Responsável/Aluno nunca pode acessar seleção de módulo (choose_system): vai direto para a Agenda Digital
+          if (isFamilyOrStudent(storedUser)) {
+            const dest = getAgendaDigitalDestination(storedUser)
+            router.replace(dest)
+            return
+          }
 
           // Se a URL solicitar explicitamente troca de módulo ou perfil de agenda:
           if (stepParam === 'choose_system' || stepParam === 'choose_agenda_role') {
@@ -522,6 +537,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (step === 'choose_system' && pendingAuth?.perfil) {
+      if (isFamilyOrStudent(pendingAuth) || isFamilyOrStudent(currentUser)) {
+        router.replace(getAgendaDigitalDestination(pendingAuth || currentUser))
+        return
+      }
       setIsProfileLoading(true)
       fetchPerfisWithCache(2000)
         .then(data => {

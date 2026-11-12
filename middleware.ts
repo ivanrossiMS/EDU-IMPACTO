@@ -518,6 +518,8 @@ export async function middleware(request: NextRequest) {
   // Família/Aluno só pode acessar /agenda-digital e suas APIs
   if (isFamilyOrStudent) {
     const blockedForFamily = [
+      '/agenda-digital/colaborador',
+      '/agenda-digital/admin',
       '/api/auth/reset-access',
       '/api/auth/migrate',
       '/api/auth/debug-db',

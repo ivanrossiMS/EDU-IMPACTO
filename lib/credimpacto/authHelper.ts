@@ -25,7 +25,9 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
   const uid = authUser.id
   const email = (authUser.email || '').trim().toLowerCase()
 
-  // 1. Busca dados em system_users
+  const isActiveRecord = (rec: any) => Boolean(rec && String(rec.status || 'ativo').trim().toLowerCase() !== 'inativo')
+
+  // 1. Busca dados ativos em system_users
   let dbUser: any = null
   try {
     const { data } = await sb
@@ -33,10 +35,10 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
       .select('*')
       .or(`id.eq.${uid},auth_id.eq.${uid},email.ilike.${email}`)
       .maybeSingle()
-    dbUser = data
+    dbUser = isActiveRecord(data) ? data : null
   } catch (e) {}
 
-  // 2. Busca dados em funcionarios
+  // 2. Busca dados ativos em funcionarios
   let dbFunc: any = null
   try {
     const { data: func1 } = await sb
@@ -44,7 +46,7 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
       .select('*')
       .or(`id.eq.${uid},email.ilike.${email}`)
       .maybeSingle()
-    dbFunc = func1
+    dbFunc = isActiveRecord(func1) ? func1 : null
 
     // Se não achou e dbUser tiver colaborador_id
     const dbUserColabId = dbUser?.colaborador_id || dbUser?.dados?.colaborador_id
@@ -54,7 +56,7 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
         .select('*')
         .eq('id', dbUserColabId)
         .maybeSingle()
-      if (func2) dbFunc = func2
+      if (isActiveRecord(func2)) dbFunc = func2
     }
 
     // Se ainda não achou e temos nome confiável vindo do registro em system_users (não de user_metadata editável)
@@ -66,8 +68,8 @@ export async function resolveCredImpactoUser(authUser: any): Promise<ResolvedUse
           .select('*')
           .ilike('nome', targetName)
           .limit(2)
-        // Somente vincula por nome quando houver exatamente 1 homônimo
-        if (Array.isArray(func3) && func3.length === 1) dbFunc = func3[0]
+        // Somente vincula por nome quando houver exatamente 1 homônimo ativo
+        if (Array.isArray(func3) && func3.length === 1 && isActiveRecord(func3[0])) dbFunc = func3[0]
       }
     }
   } catch (e) {}

@@ -3,13 +3,19 @@ import { requireAuth, requireStaff, requireAdminOrDirecao, clearAuthGuardCache }
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getAdminClient, findAuthUserByEmail, getAllAuthUsersCached, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
-import { getCachedColaboradores, setCachedColaboradores, invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
-import { isStudentInactiveStatus, isStudentAccessBlocked, isResponsavelAccessBlocked } from '@/lib/server/studentStatusHelper'
+import {
+  getCachedColaboradores,
+  setCachedColaboradores,
+  invalidateColaboradoresCache,
+  getFullUsersReportCache,
+  setFullUsersReportCache,
+  invalidateFullUsersReportCache,
+} from '@/lib/server/colaboradoresCache'
+import { isStudentInactiveStatus, isStudentAccessBlocked, isResponsavelAccessBlocked, syncCollaboratorAccessStatus } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-let fullUsersReportCache: { data: any[], stats: any, expires: number } | null = null
 let inflightFullUsersReport: Promise<{ data: any[], stats: any, expires: number }> | null = null
 
 export async function GET(req: Request) {
@@ -44,12 +50,17 @@ export async function GET(req: Request) {
       // FIX E: Modo "dropdown" — quando limit=1000, as páginas só precisam de dados de system_users
       // sem chamar o Supabase Auth API 10.000 vezes.
       const isDropdownMode = limit >= 500
+      const includeInactive = url.searchParams.get('includeInactive') === 'true'
+      const activeOnly = url.searchParams.get('activeOnly') === 'true' || (isDropdownMode && !includeInactive)
       const supabaseAdmin = getAdminClient()
 
       let query = supabaseAdmin.from('system_users').select(
         '*',
         { count: 'exact' }
       )
+      if (activeOnly) {
+        query = query.or('status.is.null,status.not.ilike.inativo')
+      }
       if (search) {
         query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%,cargo.ilike.%${search}%,perfil.ilike.%${search}%`)
       }
@@ -58,8 +69,12 @@ export async function GET(req: Request) {
         .order('nome')
         .range(from, isDropdownMode ? 999 : to)
 
+      const filteredSysUsers = activeOnly
+        ? (sysUsers || []).filter((u: any) => String(u.status || 'ativo').trim().toLowerCase() !== 'inativo')
+        : (sysUsers || [])
+
       if (isDropdownMode) {
-        const mappedDropdown = (sysUsers || []).map((u: any) => ({
+        const mappedDropdown = filteredSysUsers.map((u: any) => ({
           id: u.id,
           auth_id: u.auth_id || u.dados?.auth_id || null,
           uid_legacy: u.dados?.uid_legacy || null,
@@ -76,7 +91,7 @@ export async function GET(req: Request) {
           dados: u.dados || {},
           ultimoAcesso: u.ultimoacesso || u.ultimoAcesso || 'N/A'
         }))
-        const result = { data: mappedDropdown, total: count || 0, page: 1, limit }
+        const result = { data: mappedDropdown, total: count || mappedDropdown.length, page: 1, limit }
         return NextResponse.json(result, {
           headers: {
             'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -86,7 +101,7 @@ export async function GET(req: Request) {
 
       // Modo administração (limit <= 20): enriquecer com dados do Supabase Auth
       const authMap = new Map<string, any>()
-      const usersList: any[] = (sysUsers as any[]) || []
+      const usersList: any[] = filteredSysUsers
       if (usersList.length > 0) {
         // Busca em paralelo apenas os usuários desta página (máx 20 por vez)
         // Prioriza auth_id caso seja diferente de id
@@ -153,9 +168,9 @@ export async function GET(req: Request) {
     }
 
     const isSummaryOnly = url.searchParams.get('summary') === 'true'
-    const nowMs = Date.now()
-    if (fullUsersReportCache && fullUsersReportCache.expires > nowMs) {
-      const payload = isSummaryOnly ? { stats: fullUsersReportCache.stats, data: [] } : fullUsersReportCache.data
+    const cachedReport = getFullUsersReportCache()
+    if (cachedReport) {
+      const payload = isSummaryOnly ? { stats: cachedReport.stats, data: [] } : cachedReport.data
       return NextResponse.json(payload, {
         headers: {
           'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
@@ -232,13 +247,18 @@ export async function GET(req: Request) {
             perfilStr = u.perfil
           }
 
+          const dbStatusStr = String(u.status || 'ativo').trim().toLowerCase()
+          const isDbActive = dbStatusStr !== 'inativo'
+
           return {
             id: u.id,
             nome: u.nome,
             email: email,
             cargo: u.cargo || 'Não definido',
             perfil: perfilStr,
-            status: authUser ? 'ativo' : 'inativo',
+            status: isDbActive && authUser ? 'ativo' : 'inativo',
+            colabStatus: u.status || 'ativo',
+            vinculoAtivo: isDbActive,
             foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
             dados: u.dados || {},
             telefone: u.dados?.telefone || u.telefone || '',
@@ -354,7 +374,7 @@ export async function GET(req: Request) {
         }
 
         const entry = { data: combined, stats, expires: Date.now() + 60_000 }
-        fullUsersReportCache = entry
+        setFullUsersReportCache(entry)
         return entry
       })().finally(() => {
         inflightFullUsersReport = null
@@ -476,8 +496,8 @@ export async function POST(req: Request) {
         authUserIdToLink = existingAuthUser.id
       }
 
-      // Se encontrou usuário no Auth (inclusive pré-existente como Responsável), atualiza metadados com dual role
-      if (authUserIdToLink) {
+      // Se encontrou usuário no Auth (inclusive pré-existente como Responsável), atualiza metadados apenas se colaborador ativo
+      if (authUserIdToLink && String(singleBody.status || 'ativo').trim().toLowerCase() !== 'inativo') {
         const existingMeta = existingAuthUser?.user_metadata || {}
         const hasDual = Boolean(respMatch?.id || existingMeta.responsavel_id)
         await supabaseAdmin.auth.admin.updateUserById(authUserIdToLink, {
@@ -523,9 +543,9 @@ export async function POST(req: Request) {
     invalidateColaboradoresCache()
     clearAuthGuardCache()
     invalidateAuthUsersCache()
-    fullUsersReportCache = null
+    invalidateFullUsersReportCache()
 
-    // Sync to funcionarios
+    // Sync to funcionarios and Auth/Grupos/Chat
     for (const row of (data || [])) {
       if (row.email && row.status !== undefined) {
         await supabaseAdmin.from('funcionarios').update({
@@ -533,6 +553,17 @@ export async function POST(req: Request) {
           ...(row.perfil ? { perfil_sistema: row.perfil } : {})
         }).ilike('email', row.email)
       }
+      await syncCollaboratorAccessStatus({
+        userId: row.id,
+        authId: row.auth_id,
+        email: row.email,
+        status: row.status,
+        nome: row.nome,
+        cargo: row.cargo,
+        perfil: row.perfil,
+        systemUserDados: row.dados,
+        supabaseClient: supabaseAdmin,
+      })
     }
 
     return NextResponse.json(Array.isArray(body) ? data : data[0])

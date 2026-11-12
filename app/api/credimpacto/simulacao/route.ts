@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { dbGetConfiguracao } from '@/lib/credimpacto/db'
 import { simulateLoan } from '@/lib/credimpacto/engine'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
@@ -8,7 +8,7 @@ import { MetodoCalculo } from '@/types/credimpacto'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

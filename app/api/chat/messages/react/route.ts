@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -18,12 +19,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'message_id e emoji são obrigatórios' }, { status: 400 })
     }
 
-    // 1. Obter usuário do banco
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, nome, cargo, perfil')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
+    // 1. Obter usuário ativo do banco (inativo usa apenas identidade de Família/Responsável)
+    const { dbUser } = await resolveChatSystemUser(supabase, user, 'id, nome, cargo, perfil, status, dados, auth_id')
 
     const userId = aluno_id || dbUser?.id || user.id
     const userName = dbUser?.nome || user.user_metadata?.nome || user.email || 'Usuário'

@@ -17,6 +17,7 @@ import { apiFetch } from '@/lib/api/apiClient'
 import { getMeusAlunosDedup } from '@/lib/api/meusAlunosClient'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 import { triggerHaptic } from '@/lib/utils/haptics'
+import { isFamilyOrStudent } from '@/lib/auth/moduleRouting'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -1284,22 +1285,46 @@ function SelecionarAlunoContent() {
     setMounted(true)
   }, [])
 
-  // 1. Sincronizar dados mais recentes do perfil e foto/avatar via /api/auth/me
+  // 1. Sincronizar dados autoritativos do usuário (perfil, cargo, papéis, status e foto) via /api/auth/me
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : null)
+    let active = true
+    fetch('/api/auth/me', {
+      cache: 'no-store',
+      credentials: 'include',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    })
+      .then(r => (r.ok ? r.json() : null))
       .then(data => {
-        if (data?.user?.foto && data.user.foto !== currentUser?.foto) {
-          setCurrentUser({ ...currentUser, ...data.user, foto: data.user.foto } as any)
-          if (typeof window !== 'undefined') {
-            try {
-              if (currentUser?.id) localStorage.setItem(`edu-user-photo-${currentUser.id}`, data.user.foto)
-              if (data.user.responsavel_id) localStorage.setItem(`edu-user-photo-${data.user.responsavel_id}`, data.user.foto)
-            } catch (_) {}
-          }
+        if (!active || !data?.user?.id) return
+        const su = data.user
+        const changed =
+          su.perfil !== currentUser?.perfil ||
+          su.cargo !== currentUser?.cargo ||
+          su.nome !== currentUser?.nome ||
+          (su.status || '') !== ((currentUser as any)?.status || '') ||
+          Boolean(su.hasDualRole) !== Boolean((currentUser as any)?.hasDualRole) ||
+          (su.colaborador_id || '') !== ((currentUser as any)?.colaborador_id || '') ||
+          (su.system_user_id || '') !== ((currentUser as any)?.system_user_id || '') ||
+          (su.responsavel_id || '') !== ((currentUser as any)?.responsavel_id || '') ||
+          (su.aluno_id || '') !== ((currentUser as any)?.aluno_id || '') ||
+          (su.foto && su.foto !== currentUser?.foto)
+
+        if (changed) {
+          setCurrentUser({
+            ...currentUser,
+            ...su,
+            ...(su.foto ? { foto: su.foto } : {}),
+          } as any)
+        }
+        if (su.foto && typeof window !== 'undefined') {
+          try {
+            if (su.id) localStorage.setItem(`edu-user-photo-${su.id}`, su.foto)
+            if (su.responsavel_id) localStorage.setItem(`edu-user-photo-${su.responsavel_id}`, su.foto)
+          } catch (_) {}
         }
       })
       .catch(() => {})
+    return () => { active = false }
   }, [currentUser?.id])
 
   // 2. Obter metadados do responsável autenticado
@@ -1508,8 +1533,12 @@ function SelecionarAlunoContent() {
         if (match) {
           const targetSlug = match[1]
           if (targetSlug !== 'selecionar-aluno') {
-            // Se for colaborador e o perfil for institucional
-            const isColabUser = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
+            // Se for colaborador ativo e o perfil for institucional
+            const isColabUser = Boolean(
+              currentUser &&
+              !isFamilyOrStudent(currentUser) &&
+              String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+            )
             if (targetSlug === 'colaborador' && isColabUser) {
               if (typeof window !== 'undefined') {
                 (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
@@ -1586,7 +1615,11 @@ function SelecionarAlunoContent() {
 
       // Se o usuário é Família e não veio com intenção explícita de trocar
       const isManual = searchParams.get('manual') === 'true' || searchParams.get('trocar') === 'true'
-      const isColab = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
+      const isColab = Boolean(
+        currentUser &&
+        !isFamilyOrStudent(currentUser) &&
+        String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo'
+      )
       if (!isManual && !isColab && meusAlunos.length > 0) {
         // Se houver parâmetro de conversa (push de chat direto ou grupo), direcionar para o aluno correto
         const paramConvId = searchParams.get('conversation_id')
@@ -1698,8 +1731,8 @@ function SelecionarAlunoContent() {
 
       {/* Main content Area */}
       <main className="portal-sections-grid">
-        {/* SECTION 1: COLABORADOR / STAFF (Somente visível se o usuário for colaborador) */}
-        {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
+        {/* SECTION 1: COLABORADOR / STAFF (Somente visível se o usuário for colaborador ativo) */}
+        {currentUser && !isFamilyOrStudent(currentUser) && String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo' && (
           <section className="animate-reveal delay-1">
             <div className="portal-section-header">
               <h2 className="portal-section-title">
@@ -1812,7 +1845,7 @@ function SelecionarAlunoContent() {
       </main>
 
       <footer className="ad-footer-actions">
-        {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
+        {currentUser && !isFamilyOrStudent(currentUser) && String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo' && (
           <button 
             onClick={() => window.location.href = '/login?step=choose_system'}
             className="ad-action-btn ad-btn-switch"

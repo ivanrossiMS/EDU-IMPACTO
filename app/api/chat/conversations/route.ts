@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 import { checkIsAdmin, checkIsStaffManagement, checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
+import { isRecordInactive, resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -20,20 +21,10 @@ export async function GET(request: Request) {
     const rawEspelharColabId = searchParams.get('espelhar_colaborador')
     const rawEspelharAluno = searchParams.get('espelhar_aluno') === 'true'
 
-    // Resolver usuário local
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, nome, cargo, perfil, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    // Resolver usuário ativo local (colaboradores inativos atuam somente como Família/Aluno)
+    const { dbUser, perfil, cargo } = await resolveChatSystemUser(supabase, user, 'id, auth_id, nome, cargo, perfil, status, dados')
     const isAdmin = checkIsAdmin(perfil, cargo)
-    const isSchoolStaff = checkIsCollaboratorOrTeacher(cargo, perfil, dbUser) || checkIsStaffManagement(cargo, perfil)
+    const isSchoolStaff = Boolean(dbUser) && (checkIsCollaboratorOrTeacher(cargo, perfil, dbUser) || checkIsStaffManagement(cargo, perfil))
 
     if (!isAdmin && (rawEspelharRespId || rawEspelharColabId || rawEspelharAluno)) {
       return NextResponse.json(
@@ -525,18 +516,17 @@ export async function POST(request: Request) {
       colaboradorId
     } = body
 
-    // 1. Obter dados do usuário que está chamando
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, nome, cargo, perfil, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
+    // 1. Obter dados ativos do usuário que está chamando
+    const { dbUser } = await resolveChatSystemUser(supabase, user, 'id, nome, cargo, perfil, status, dados')
 
     const reqContext = body.context || (colaboradorId ? 'colaborador' : undefined)
-    const isColabAction = reqContext === 'colaborador' || (Boolean(dbUser) && !body.isFamilyInitiated && reqContext !== 'familia')
+    if (!dbUser && (reqContext === 'colaborador' || colaboradorId)) {
+      return NextResponse.json(
+        { error: 'Acesso negado: sua conta não está ativa como colaborador.' },
+        { status: 403 }
+      )
+    }
+    const isColabAction = Boolean(dbUser) && (reqContext === 'colaborador' || (!body.isFamilyInitiated && reqContext !== 'familia'))
 
     let currentUserId = user.id
     let currentUserName = user.user_metadata?.nome || user.email || 'Usuário'
@@ -702,13 +692,23 @@ export async function POST(request: Request) {
     if (!resolvedTargetName) {
       const { data: targetUserObj } = await supabase
         .from('system_users')
-        .select('nome, cargo, perfil')
+        .select('nome, cargo, perfil, status')
         .eq('id', targetUserId)
         .maybeSingle()
 
-      if (targetUserObj) {
+      if (targetUserObj && !isRecordInactive(targetUserObj)) {
         resolvedTargetName = targetUserObj.nome
         resolvedTargetPerfil = targetUserObj.cargo || targetUserObj.perfil
+      } else if (
+        targetUserObj &&
+        isRecordInactive(targetUserObj) &&
+        resolvedTargetPerfil !== 'Família' &&
+        resolvedTargetPerfil !== 'Responsável'
+      ) {
+        return NextResponse.json(
+          { error: 'Este colaborador está inativo no momento e não pode receber novas conversas.' },
+          { status: 400 }
+        )
       }
     }
 

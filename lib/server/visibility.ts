@@ -51,14 +51,19 @@ async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean
       : `id.eq."${userId}",email.eq."${email}"`
 
     const adminClient = getAdminClient()
-    const { data: dbUser } = await adminClient
+    const { data: rawDbUser } = await adminClient
       .from('system_users')
-      .select('perfil, cargo, created_at, dados')
+      .select('perfil, cargo, status, created_at, dados')
       .or(visFilter)
       .maybeSingle()
 
-    const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
-    const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
+    const isInactiveStaff = Boolean(rawDbUser && String(rawDbUser.status || 'ativo').trim().toLowerCase() === 'inativo')
+    const dbUser = isInactiveStaff ? null : rawDbUser
+    const appRoleType = String(user.app_metadata?.role_type || '').toLowerCase()
+    const isFamilyRole = isInactiveStaff || appRoleType === 'responsavel' || appRoleType === 'aluno'
+
+    const perfil = isFamilyRole ? 'Família' : (dbUser?.perfil || user.user_metadata?.perfil || '')
+    const cargo = isFamilyRole ? (appRoleType === 'aluno' ? 'Aluno' : 'Responsável') : (dbUser?.cargo || user.user_metadata?.cargo || '')
 
     // 1. ADMIN MASTER: Visualização total, sem restrições
     if (
@@ -142,6 +147,7 @@ async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean
         .from('funcionarios')
         .select('admissao, created_at')
         .eq('email', email)
+        .or('status.is.null,status.not.ilike.inativo')
         .maybeSingle()
       if (func) {
         const dateStr = func.admissao || func.created_at

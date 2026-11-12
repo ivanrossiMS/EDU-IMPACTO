@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { dbGetEmprestimoById, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/credimpacto/db'
 import { resolveCredImpactoUser, isLoanOwnedByUser } from '@/lib/credimpacto/authHelper'
 import { simulateLoan } from '@/lib/credimpacto/engine'
@@ -10,7 +10,7 @@ import crypto from 'crypto'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -34,7 +34,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

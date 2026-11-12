@@ -6,6 +6,7 @@ import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { ALL_NAV_GROUPS } from './Sidebar'
 import { useEffect, useState } from 'react'
+import { isFamilyOrStudent } from '@/lib/auth/moduleRouting'
 
 const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
 
@@ -342,8 +343,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   }
 
   const userPerms = userPerfilObj?.permissoes || []
-  const isFamilyOrStudentUser = ['familia', 'aluno', 'responsavel'].includes(normalize(activePerfilName))
+  const isFamilyOrStudentUser =
+    ['familia', 'aluno', 'responsavel'].includes(normalize(activePerfilName)) ||
+    isFamilyOrStudent(currentUser)
   const perfisFailedOrEmpty = (!perfis || perfis.length === 0) && !userPerfilObj && !isFamilyOrStudentUser
+
+  // Família, Responsável e Aluno nunca acessam rotas administrativas/ERP
+  if (isFamilyOrStudentUser) {
+    return <AccessDeniedPage pathname={pathname} isFamilyOrStudent />
+  }
 
   // ── Step 2.4: Check for CredImpacto Module Access ──
   const isCredImpactoRoute = pathname.startsWith('/credimpacto')

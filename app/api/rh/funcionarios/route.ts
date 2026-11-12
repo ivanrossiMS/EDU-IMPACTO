@@ -3,6 +3,7 @@ import { requireStaff, resolveUserRole, clearAuthGuardCache } from '@/lib/server
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient, findAuthUserByEmail, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
+import { syncCollaboratorAccessStatus } from '@/lib/server/studentStatusHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -162,6 +163,7 @@ export async function GET(request: Request) {
     const status = searchParams.get('status')
     const q = searchParams.get('q')
     const lightweight = searchParams.get('lightweight') === 'true'
+    const activeOnly = searchParams.get('activeOnly') === 'true'
 
     // Lightweight: campos essenciais para seleção de funcionários em dropdowns e envio de WhatsApp
     // NOTA: coluna 'foto' não existe na tabela funcionarios; usar dados->>'foto' como fallback
@@ -177,8 +179,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    const filteredRows = activeOnly
+      ? ((data || []) as any[]).filter(r => String(r.status || 'ativo').trim().toLowerCase() !== 'inativo')
+      : ((data || []) as any[])
+
     if (lightweight) {
-      return NextResponse.json(((data || []) as any[]).map(r => {
+      return NextResponse.json(filteredRows.map(r => {
         const item = {
           id: r.id,
           nome: r.nome,
@@ -198,7 +204,7 @@ export async function GET(request: Request) {
       }))
     }
 
-    return NextResponse.json(((data || []) as any[]).map(r => formatFuncionarioRow(r, canSeeSensitive)))
+    return NextResponse.json(filteredRows.map(r => formatFuncionarioRow(r, canSeeSensitive)))
   } catch (e: any) {
     console.error('[funcionarios GET] unexpected:', e?.message)
     return NextResponse.json({ error: e?.message || 'Erro interno' }, { status: 500 })
@@ -283,15 +289,22 @@ async function syncFuncionarioAccess(
         await supabaseAdmin.auth.admin.updateUserById(authId, {
           email: newEmail,
           email_confirm: true,
-          user_metadata: {
-            nome: row.nome,
-            cargo: row.cargo,
-            perfil: row.perfil_sistema || existingOldUser.perfil
-          }
         }).catch((err: any) => {
           console.error('[syncFuncionarioAccess] Erro ao atualizar Auth email:', err?.message);
         });
       }
+
+      await syncCollaboratorAccessStatus({
+        userId: existingOldUser.id,
+        authId: existingOldUser.auth_id,
+        email: newEmail,
+        status: row.status,
+        nome: row.nome,
+        cargo: row.cargo,
+        perfil: row.perfil_sistema || existingOldUser.perfil,
+        systemUserDados: { funcionario_id: row.id },
+        supabaseClient: supabaseAdmin,
+      });
 
       return;
     }
@@ -342,26 +355,17 @@ async function syncFuncionarioAccess(
             })
             .eq('id', existing.id);
 
-          const authId = existing.auth_id || existing.id;
-          const isAuthUuid = authId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authId);
-          if (isAuthUuid && (existing.nome !== row.nome || existing.cargo !== row.cargo || existing.perfil !== row.perfil_sistema)) {
-            const { data: authUserRes } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }));
-            const existingMeta = authUserRes?.user?.user_metadata || {};
-            const hasDual = Boolean(respMatch?.id || existingMeta.responsavel_id);
-
-            await supabaseAdmin.auth.admin.updateUserById(authId, {
-              user_metadata: {
-                ...existingMeta,
-                nome: row.nome,
-                cargo: row.cargo,
-                perfil: row.perfil_sistema,
-                colaborador_id: authId,
-                system_user_id: authId,
-                ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
-                hasDualRole: hasDual || Boolean(existingMeta.hasDualRole),
-              }
-            }).catch(() => {});
-          }
+          await syncCollaboratorAccessStatus({
+            userId: existing.id,
+            authId: existing.auth_id,
+            email: newEmail,
+            status: expectedStatus,
+            nome: row.nome,
+            cargo: row.cargo,
+            perfil: row.perfil_sistema,
+            systemUserDados: updatedDados,
+            supabaseClient: supabaseAdmin,
+          });
         }
       } else {
         // Tenta localizar conta já existente no Supabase Auth (ex: era apenas Responsável)
@@ -394,24 +398,10 @@ async function syncFuncionarioAccess(
         const isAuthUuid = authUserId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authUserId);
         const targetId = isAuthUuid ? authUserId : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `U${Date.now()}-${Math.random().toString(36).substr(2, 6)}`);
         const targetAuthId = isAuthUuid ? authUserId : null; // Nunca inserir string não-UUID no campo auth_id
-
-        const hasDual = Boolean(respMatch?.id || foundAuthUser?.user_metadata?.responsavel_id);
-
-        if (isAuthUuid) {
-          const existingMeta = foundAuthUser?.user_metadata || {};
-          await supabaseAdmin.auth.admin.updateUserById(authUserId, {
-            user_metadata: {
-              ...existingMeta,
-              nome: row.nome,
-              cargo: row.cargo,
-              perfil: row.perfil_sistema,
-              colaborador_id: authUserId,
-              system_user_id: authUserId,
-              ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
-              hasDualRole: hasDual,
-            }
-          }).catch((err: any) => console.warn('[syncFuncionarioAccess] Auth metadata update failed:', err?.message));
-        }
+        const newDados = {
+          ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
+          funcionario_id: row.id,
+        };
 
         await supabaseAdmin.from('system_users').upsert({
           id: targetId,
@@ -421,10 +411,19 @@ async function syncFuncionarioAccess(
           cargo: row.cargo,
           perfil: row.perfil_sistema,
           status: row.status || 'ativo',
-          dados: {
-            ...(respMatch?.id ? { responsavel_id: String(respMatch.id) } : {}),
-            funcionario_id: row.id,
-          }
+          dados: newDados
+        });
+
+        await syncCollaboratorAccessStatus({
+          userId: targetId,
+          authId: targetAuthId,
+          email: newEmail,
+          status: row.status || 'ativo',
+          nome: row.nome,
+          cargo: row.cargo,
+          perfil: row.perfil_sistema,
+          systemUserDados: newDados,
+          supabaseClient: supabaseAdmin,
         });
       }
 
@@ -434,8 +433,28 @@ async function syncFuncionarioAccess(
       if (oldFunc?.perfil_sistema) {
         // Perfil de sistema foi removido explicitamente ("Sem acesso ao sistema")
         await supabaseAdmin.from('system_users').delete().eq('id', existing.id);
+        await syncCollaboratorAccessStatus({
+          userId: existing.id,
+          authId: existing.auth_id,
+          email: newEmail,
+          status: 'inativo',
+          nome: row.nome,
+          systemUserDados: existing.dados,
+          supabaseClient: supabaseAdmin,
+        });
       } else if (existing.status !== row.status) {
         await supabaseAdmin.from('system_users').update({ status: row.status }).eq('id', existing.id);
+        await syncCollaboratorAccessStatus({
+          userId: existing.id,
+          authId: existing.auth_id,
+          email: newEmail,
+          status: row.status,
+          nome: row.nome,
+          cargo: existing.cargo,
+          perfil: existing.perfil,
+          systemUserDados: existing.dados,
+          supabaseClient: supabaseAdmin,
+        });
       }
       invalidateColaboradoresCache();
     }
@@ -495,22 +514,34 @@ export async function POST(request: Request) {
         
         await supabaseAdmin.from('funcionarios').delete().in('id', toDelete)
 
-        // SYNC Delete to system_users and Auth
+        // SYNC Delete to system_users and Auth (preservando contas que também são Responsável/Aluno)
         if (deletedEmails.length > 0) {
-          const { data: sysUsers } = await supabaseAdmin.from('system_users').select('id, email, auth_id')
+          const { data: sysUsers } = await supabaseAdmin.from('system_users').select('id, email, auth_id, nome, dados')
           const matchedSysUsers = (sysUsers || []).filter(su => su.email && deletedEmails.includes(su.email.trim().toLowerCase()))
           if (matchedSysUsers.length > 0) {
             const idsToDelete = matchedSysUsers.map(su => su.id)
             await supabaseAdmin.from('system_users').delete().in('id', idsToDelete)
-            await Promise.all(
-              matchedSysUsers.map(su => {
-                const aId = su.auth_id || su.id
-                if (aId && aId.length > 10) {
-                  return supabaseAdmin.auth.admin.deleteUser(aId).catch(console.error)
-                }
-                return Promise.resolve()
+            for (const su of matchedSysUsers) {
+              const em = su.email.trim().toLowerCase()
+              const [{ data: rc }, { data: ac }] = await Promise.all([
+                supabaseAdmin.from('responsaveis').select('id').ilike('email', em).limit(1),
+                supabaseAdmin.from('alunos').select('id').ilike('email', em).limit(1),
+              ])
+              const isFam = Boolean((rc && rc.length > 0) || (ac && ac.length > 0))
+              await syncCollaboratorAccessStatus({
+                userId: su.id,
+                authId: su.auth_id,
+                email: em,
+                status: 'inativo',
+                nome: su.nome,
+                systemUserDados: su.dados,
+                supabaseClient: supabaseAdmin,
               })
-            )
+              const aId = su.auth_id || su.id
+              if (!isFam && aId && /^[0-9a-f-]{36}$/i.test(aId)) {
+                await supabaseAdmin.auth.admin.deleteUser(aId).catch(console.error)
+              }
+            }
           }
         }
       }
@@ -658,11 +689,25 @@ export async function DELETE(request: Request) {
 
   if (funcRow?.email) {
     const emailNorm = funcRow.email.trim().toLowerCase()
-    const { data: sysUser } = await supabaseAdmin.from('system_users').select('id, auth_id').ilike('email', emailNorm).maybeSingle()
+    const { data: sysUser } = await supabaseAdmin.from('system_users').select('id, auth_id, nome, dados').ilike('email', emailNorm).maybeSingle()
     if (sysUser) {
       await supabaseAdmin.from('system_users').delete().eq('id', sysUser.id)
+      const [{ data: rc }, { data: ac }] = await Promise.all([
+        supabaseAdmin.from('responsaveis').select('id').ilike('email', emailNorm).limit(1),
+        supabaseAdmin.from('alunos').select('id').ilike('email', emailNorm).limit(1),
+      ])
+      const isFam = Boolean((rc && rc.length > 0) || (ac && ac.length > 0))
+      await syncCollaboratorAccessStatus({
+        userId: sysUser.id,
+        authId: sysUser.auth_id,
+        email: emailNorm,
+        status: 'inativo',
+        nome: sysUser.nome,
+        systemUserDados: sysUser.dados,
+        supabaseClient: supabaseAdmin,
+      })
       const aId = sysUser.auth_id || sysUser.id
-      if (aId && aId.length > 10) {
+      if (!isFam && aId && /^[0-9a-f-]{36}$/i.test(aId)) {
         await supabaseAdmin.auth.admin.deleteUser(aId).catch(console.error)
       }
     }

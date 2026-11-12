@@ -142,10 +142,11 @@ export default function ADAdminTurmas() {
     };
   }, [showVincularMassa]);
 
-  // Filtro seguro exclusivo para colaboradores (garante que alunos e responsáveis jamais apareçam)
+  // Filtro seguro exclusivo para colaboradores ativos (garante que alunos, responsáveis e inativos jamais apareçam)
   const apenasColaboradores = useMemo(() => {
     return (funcionarios || []).filter((f: any) => {
       if (!f || !f.id || !f.nome) return false;
+      if (String(f.status || 'ativo').trim().toLowerCase() === 'inativo') return false;
       const idStr = String(f.id);
       if (idStr.startsWith('virtual-') || idStr.startsWith('resp-')) return false;
       const p = String(f.perfil || '').toLowerCase();

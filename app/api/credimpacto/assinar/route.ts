@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { dbGetEmprestimoById, dbSaveEmprestimo } from '@/lib/credimpacto/db'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { generateContractHtml } from '@/lib/credimpacto/contractTemplate'
@@ -9,7 +9,7 @@ import crypto from 'crypto'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

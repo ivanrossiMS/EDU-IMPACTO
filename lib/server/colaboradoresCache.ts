@@ -7,6 +7,23 @@
 const _colaboradoresCache = new Map<string, { data: any; ts: number }>()
 const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutos
 
+let _fullUsersReportCache: { data: any[]; stats: any; expires: number } | null = null
+
+export function getFullUsersReportCache() {
+  if (_fullUsersReportCache && _fullUsersReportCache.expires > Date.now()) {
+    return _fullUsersReportCache
+  }
+  return null
+}
+
+export function setFullUsersReportCache(entry: { data: any[]; stats: any; expires: number }) {
+  _fullUsersReportCache = entry
+}
+
+export function invalidateFullUsersReportCache() {
+  _fullUsersReportCache = null
+}
+
 export function getCachedColaboradores(key: string) {
   const entry = _colaboradoresCache.get(key)
   if (!entry) return null
@@ -26,6 +43,7 @@ import { invalidateUsersCache } from '@/lib/server/turmasGruposCache'
 
 export function invalidateColaboradoresCache() {
   _colaboradoresCache.clear()
+  _fullUsersReportCache = null
   invalidateAccessStartDateCache()
   invalidateUsersCache()
 }

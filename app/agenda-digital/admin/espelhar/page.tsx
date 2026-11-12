@@ -70,12 +70,16 @@ export default function EspelharAgendaPage() {
         try {
           const params = new URLSearchParams({
             type: 'colaboradores',
+            activeOnly: 'true',
             search: q,
             limit: '50'
           })
           const res = await fetch(`/api/configuracoes/usuarios?${params.toString()}`)
           const json = await res.json()
-          setColaboradores(json.data || (Array.isArray(json) ? json : []))
+          const rows = json.data || (Array.isArray(json) ? json : [])
+          setColaboradores(
+            rows.filter((c: any) => String(c?.status || 'ativo').trim().toLowerCase() !== 'inativo')
+          )
         } catch (e) {
           console.error("Erro ao buscar colaboradores:", e)
           setColaboradores([])

@@ -190,8 +190,8 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
     ))
   }
 
-  // Professores disponíveis
-  const professores = useMemo(() => funcionarios.filter(f => f.cargo?.toLowerCase().includes('prof') || f.departamento?.toLowerCase().includes('pedagog')), [funcionarios])
+  // Professores disponíveis (somente ativos)
+  const professores = useMemo(() => funcionarios.filter(f => String(f.status || 'ativo').trim().toLowerCase() !== 'inativo' && (f.cargo?.toLowerCase().includes('prof') || f.departamento?.toLowerCase().includes('pedagog'))), [funcionarios])
 
   // All active disciplines from configuration — show ALL, no segment filter
   // (segment is shown as a badge for reference only, not a hard filter)

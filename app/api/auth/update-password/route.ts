@@ -205,12 +205,52 @@ export async function POST(request: Request) {
         if (existing.last_sign_in_at || existing.user_metadata?.password_confirmed_at || (existingByStored && registeredEmail && registeredEmail.trim().toLowerCase() !== storedRespEmail)) {
           return NextResponse.json({ error: "Sua senha já foi configurada. Use o Login normal ou 'Esqueci minha senha' para receber um link por e-mail." }, { status: 409 })
         }
+        const targetRespEmail = (existing.email || storedRespEmail || registeredEmail || '').trim().toLowerCase()
+        const { data: activeStaffRows } = targetRespEmail
+          ? await supabaseAdmin
+              .from('system_users')
+              .select('id, perfil, cargo, status')
+              .ilike('email', targetRespEmail)
+              .or('status.is.null,status.not.ilike.inativo')
+              .limit(1)
+          : { data: [] }
+        const activeStaff = activeStaffRows?.[0] || null
+
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
           password: newPass,
-          user_metadata: {
-            ...(existing.user_metadata || {}),
-            password_confirmed_at: confirmedIso,
-          },
+          ...(activeStaff
+            ? {
+                user_metadata: {
+                  ...(existing.user_metadata || {}),
+                  responsavel_id: resp.id,
+                  colaborador_id: activeStaff.id,
+                  system_user_id: activeStaff.id,
+                  hasDualRole: true,
+                  password_confirmed_at: confirmedIso,
+                },
+              }
+            : {
+                app_metadata: {
+                  ...(existing.app_metadata || {}),
+                  role_type: 'responsavel',
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: resp.id,
+                  system_user_id: null,
+                  colaborador_id: null,
+                },
+                user_metadata: {
+                  ...(existing.user_metadata || {}),
+                  nome: resp.nome || existing.user_metadata?.nome,
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: resp.id,
+                  colaborador_id: null,
+                  system_user_id: null,
+                  hasDualRole: false,
+                  password_confirmed_at: confirmedIso,
+                },
+              }),
         })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
         resolvedAuthId = existing.id

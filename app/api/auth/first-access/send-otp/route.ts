@@ -49,13 +49,23 @@ export async function POST(request: Request) {
       .limit(1)
 
     const sysUser = sysUserRows?.[0]
-    if (sysUser) {
-      if (sysUser.status === 'inativo') {
+    const isSysInactive = Boolean(sysUser && String(sysUser.status || '').trim().toLowerCase() === 'inativo')
+
+    if (sysUser && isSysInactive) {
+      // Se o colaborador está inativo, só permite continuar se possuir cadastro de Responsável ou Aluno
+      const [{ data: rFallback }, { data: aFallback }] = await Promise.all([
+        supabaseAdmin.from('responsaveis').select('id').ilike('email', q).limit(1),
+        supabaseAdmin.from('alunos').select('id').or(`email.ilike.${q},dados->>email.ilike.${q}`).limit(1),
+      ])
+      if ((!rFallback || rFallback.length === 0) && (!aFallback || aFallback.length === 0)) {
         return NextResponse.json(
           { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
           { status: 403 }
         )
       }
+    }
+
+    if (sysUser && !isSysInactive) {
 
       const userPayload: FirstAccessUserPayload = {
         userId: sysUser.id,

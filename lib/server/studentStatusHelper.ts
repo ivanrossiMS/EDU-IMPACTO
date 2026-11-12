@@ -2,6 +2,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient, getAllAuthUsersCached, invalidateAuthUsersCache } from '@/lib/server/supabaseAdminSingleton'
 import { clearAuthGuardCache } from '@/lib/server/authGuard'
 import { invalidateAlunosCache, invalidateGruposCache } from '@/lib/server/turmasGruposCache'
+import { invalidateColaboradoresCache } from '@/lib/server/colaboradoresCache'
 
 export const INACTIVE_STUDENT_STATUSES = [
   'inativo',
@@ -479,5 +480,365 @@ export async function syncStudentAndGuardiansAccess(studentId: string): Promise<
     clearAuthGuardCache()
   } catch (err: any) {
     console.error('[syncStudentAndGuardiansAccess] Error:', err?.message || err)
+  }
+}
+
+/**
+ * Sincroniza o acesso de um colaborador no Supabase Auth, grupos da Agenda Digital e chats
+ * quando ele é inativado ou reativado (por /configuracoes/usuarios ou /rh/funcionarios).
+ * - Se inativo E possuir vínculo ativo como Responsável ou Aluno: faz downgrade estrito para
+ *   Família/Responsável (ou Aluno), removendo hasDualRole, system_user_id, colaborador_id e staff metadata,
+ *   e remove vínculos operacionais de staff em agenda_grupos e chat_participants.
+ * - Se inativo SEM vínculo familiar/estudantil ativo: bloqueia (ban_duration: '876000h') e encerra sessões globais.
+ * - Se ativo: restaura metadata institucional (role_type: 'staff') e recalcula hasDualRole.
+ */
+export async function syncCollaboratorAccessStatus(params: {
+  userId?: string | null
+  authId?: string | null
+  email?: string | null
+  status?: string | null
+  nome?: string | null
+  cargo?: string | null
+  perfil?: string | null
+  systemUserDados?: any
+  supabaseClient?: any
+}) {
+  try {
+    const admin = getAdminClient()
+    const client = params.supabaseClient || admin || supabaseServer
+    if (!client) return
+
+    let effectiveUserId = String(params.userId || '').trim()
+    let effectiveAuthId = String(params.authId || '').trim()
+    let effectiveEmail = String(params.email || '').trim().toLowerCase()
+    let effectiveStatus = params.status
+    let effectiveNome = params.nome || ''
+    let effectiveCargo = params.cargo || ''
+    let effectivePerfil = params.perfil || ''
+    let sysDados = params.systemUserDados
+
+    // Completar dados a partir de system_users caso faltem informações
+    if (effectiveUserId || effectiveEmail || effectiveAuthId) {
+      const safeUid = effectiveUserId.replace(/"/g, '')
+      const safeAid = effectiveAuthId.replace(/"/g, '')
+      const safeEmail = effectiveEmail.replace(/"/g, '')
+      const orParts: string[] = []
+      if (safeUid) orParts.push(`id.eq."${safeUid}"`)
+      if (safeAid) orParts.push(`auth_id.eq."${safeAid}"`)
+      if (safeEmail) orParts.push(`email.ilike."${safeEmail}"`)
+
+      if (orParts.length > 0) {
+        const { data: sysRow } = await client
+          .from('system_users')
+          .select('id, auth_id, nome, email, cargo, perfil, status, dados')
+          .or(orParts.join(','))
+          .limit(1)
+          .maybeSingle()
+
+        if (sysRow) {
+          effectiveUserId = effectiveUserId || String(sysRow.id || '').trim()
+          effectiveAuthId = effectiveAuthId || String(sysRow.auth_id || '').trim()
+          effectiveEmail = effectiveEmail || String(sysRow.email || '').trim().toLowerCase()
+          if (effectiveStatus === undefined || effectiveStatus === null || effectiveStatus === '') {
+            effectiveStatus = sysRow.status
+          }
+          effectiveNome = effectiveNome || String(sysRow.nome || '')
+          effectiveCargo = effectiveCargo || String(sysRow.cargo || '')
+          effectivePerfil = effectivePerfil || String(sysRow.perfil || '')
+          sysDados = sysDados || sysRow.dados
+        }
+      }
+    }
+
+    const isInactive = String(effectiveStatus || 'ativo').trim().toLowerCase() === 'inativo'
+    const funcId = String(sysDados?.funcionario_id || sysDados?.funcId || '').trim()
+    const linkedRespId = String(sysDados?.responsavel_id || '').trim()
+
+    // 1. Verificar se existe vínculo familiar/estudantil ativo (ex.: responsável com alunos ativos)
+    let activeResp: any = null
+    let activeAluno: any = null
+
+    const respOrParts: string[] = []
+    if (effectiveEmail) respOrParts.push(`email.ilike."${effectiveEmail.replace(/"/g, '')}"`)
+    if (effectiveAuthId) respOrParts.push(`auth_id.eq."${effectiveAuthId.replace(/"/g, '')}"`)
+    if (linkedRespId) respOrParts.push(`id.eq."${linkedRespId.replace(/"/g, '')}"`)
+
+    if (respOrParts.length > 0) {
+      const { data: respRows } = await client
+        .from('responsaveis')
+        .select('id, nome, email, auth_id, proibido, dados')
+        .or(respOrParts.join(','))
+        .limit(10)
+
+      for (const r of respRows || []) {
+        if (isResponsavelAccessBlocked(r)) continue
+        const { hasActiveStudent } = await checkResponsavelHasActiveStudent(String(r.id).trim(), {
+          requireFinOrPed: true,
+          supabaseClient: client,
+        })
+        if (hasActiveStudent) {
+          activeResp = r
+          break
+        }
+      }
+    }
+
+    if (!activeResp && effectiveEmail) {
+      const { data: alunoRows } = await client
+        .from('alunos')
+        .select('id, nome, matricula, status, email, dados')
+        .ilike('email', effectiveEmail)
+        .limit(10)
+
+      for (const a of alunoRows || []) {
+        if (!isStudentAccessBlocked(a)) {
+          activeAluno = a
+          break
+        }
+      }
+    }
+
+    // 2. Localizar todas as contas Auth correspondentes e sincronizar metadata/ban
+    const authUsers = admin ? await getAllAuthUsersCached().catch(() => []) : []
+    const matchedMap = new Map<string, any>()
+
+    for (const u of authUsers) {
+      const uEmail = String(u.email || '').trim().toLowerCase()
+      const uSysId = String(u.user_metadata?.system_user_id || u.app_metadata?.system_user_id || '').trim()
+      const uColabId = String(u.user_metadata?.colaborador_id || u.app_metadata?.colaborador_id || '').trim()
+      const matchesId =
+        (effectiveAuthId && u.id === effectiveAuthId) ||
+        (effectiveUserId && (u.id === effectiveUserId || uSysId === effectiveUserId || uColabId === effectiveUserId))
+      const matchesEmail = Boolean(effectiveEmail && uEmail === effectiveEmail)
+      if (matchesId || matchesEmail) {
+        matchedMap.set(u.id, u)
+      }
+    }
+
+    if (admin && matchedMap.size === 0 && (effectiveAuthId || effectiveUserId)) {
+      const candidateId = effectiveAuthId || effectiveUserId
+      if (/^[0-9a-f-]{36}$/i.test(candidateId)) {
+        const { data: singleRes } = await admin.auth.admin.getUserById(candidateId).catch(() => ({ data: { user: null } }))
+        if (singleRes?.user) {
+          matchedMap.set(singleRes.user.id, singleRes.user)
+        }
+      }
+    }
+
+    const matchedAuthIds: string[] = Array.from(matchedMap.keys())
+
+    if (admin) {
+      for (const au of matchedMap.values()) {
+        const existingAppMeta = { ...(au.app_metadata || {}) }
+        const existingUserMeta = { ...(au.user_metadata || {}) }
+
+        if (isInactive) {
+          if (activeResp) {
+            await admin.auth.admin
+              .updateUserById(au.id, {
+                ban_duration: 'none',
+                app_metadata: {
+                  ...existingAppMeta,
+                  role_type: 'responsavel',
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: String(activeResp.id),
+                  system_user_id: null,
+                  colaborador_id: null,
+                },
+                user_metadata: {
+                  ...existingUserMeta,
+                  nome: activeResp.nome || existingUserMeta.nome || effectiveNome,
+                  perfil: 'Família',
+                  cargo: 'Responsável',
+                  responsavel_id: String(activeResp.id),
+                  colaborador_id: null,
+                  system_user_id: null,
+                  hasDualRole: false,
+                  status: 'ativo',
+                  acesso_bloqueado: false,
+                },
+              })
+              .catch((e: any) => console.warn('[syncCollaboratorAccessStatus] Resp downgrade failed:', e?.message))
+          } else if (activeAluno) {
+            await admin.auth.admin
+              .updateUserById(au.id, {
+                ban_duration: 'none',
+                app_metadata: {
+                  ...existingAppMeta,
+                  role_type: 'aluno',
+                  perfil: 'Família',
+                  cargo: 'Aluno',
+                  aluno_id: String(activeAluno.id),
+                  system_user_id: null,
+                  colaborador_id: null,
+                },
+                user_metadata: {
+                  ...existingUserMeta,
+                  nome: activeAluno.nome || existingUserMeta.nome || effectiveNome,
+                  perfil: 'Família',
+                  cargo: 'Aluno',
+                  aluno_id: String(activeAluno.id),
+                  ...(activeAluno.matricula ? { matricula: activeAluno.matricula } : {}),
+                  colaborador_id: null,
+                  system_user_id: null,
+                  hasDualRole: false,
+                  status: 'ativo',
+                  acesso_bloqueado: false,
+                },
+              })
+              .catch((e: any) => console.warn('[syncCollaboratorAccessStatus] Aluno downgrade failed:', e?.message))
+          } else {
+            await admin.auth.admin
+              .updateUserById(au.id, {
+                ban_duration: '876000h',
+                app_metadata: {
+                  ...existingAppMeta,
+                  role_type: 'staff',
+                  ...(effectivePerfil ? { perfil: effectivePerfil } : {}),
+                  ...(effectiveCargo ? { cargo: effectiveCargo } : {}),
+                },
+                user_metadata: {
+                  ...existingUserMeta,
+                  status: 'inativo',
+                  acesso_bloqueado: true,
+                  hasDualRole: false,
+                },
+              })
+              .catch((e: any) => console.warn('[syncCollaboratorAccessStatus] Staff ban failed:', e?.message))
+            await admin.auth.admin.signOut(au.id, 'global').catch(() => {})
+          }
+        } else {
+          const staffSysId = effectiveUserId || existingUserMeta.system_user_id || existingAppMeta.system_user_id || au.id
+          const hasDual = Boolean(activeResp || activeAluno)
+          const resolvedPerfil = effectivePerfil || existingAppMeta.perfil || existingUserMeta.perfil || 'Colaborador'
+          const resolvedCargo = effectiveCargo || existingAppMeta.cargo || existingUserMeta.cargo || 'Colaborador'
+
+          await admin.auth.admin
+            .updateUserById(au.id, {
+              ban_duration: 'none',
+              app_metadata: {
+                ...existingAppMeta,
+                role_type: 'staff',
+                perfil: resolvedPerfil,
+                cargo: resolvedCargo,
+                system_user_id: String(staffSysId),
+                ...(activeResp ? { responsavel_id: String(activeResp.id) } : {}),
+                ...(activeAluno ? { aluno_id: String(activeAluno.id) } : {}),
+              },
+              user_metadata: {
+                ...existingUserMeta,
+                ...(effectiveNome ? { nome: effectiveNome } : {}),
+                perfil: resolvedPerfil,
+                cargo: resolvedCargo,
+                colaborador_id: String(staffSysId),
+                system_user_id: String(staffSysId),
+                ...(activeResp ? { responsavel_id: String(activeResp.id) } : {}),
+                ...(activeAluno ? { aluno_id: String(activeAluno.id) } : {}),
+                hasDualRole: hasDual,
+                status: 'ativo',
+                acesso_bloqueado: false,
+              },
+            })
+            .catch((e: any) => console.warn('[syncCollaboratorAccessStatus] Staff restore failed:', e?.message))
+        }
+      }
+    }
+
+    // 3. Se inativo, remover de grupos operacionais da Agenda Digital e encerrar participações de staff no Chat
+    if (isInactive) {
+      const rawIds = [
+        effectiveUserId,
+        effectiveAuthId,
+        funcId,
+        sysDados?.colaborador_id,
+        sysDados?.uid_legacy,
+        ...matchedAuthIds,
+      ]
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+      const colabIdVariants = new Set<string>()
+      for (const id of rawIds) {
+        colabIdVariants.add(id)
+        if (id.startsWith('f_')) {
+          colabIdVariants.add(id.slice(2))
+        } else {
+          colabIdVariants.add(`f_${id}`)
+        }
+      }
+
+      if (colabIdVariants.size > 0) {
+        const { data: groups } = await client.from('agenda_grupos').select('id, dados')
+        if (Array.isArray(groups)) {
+          for (const grp of groups) {
+            const gDados = grp.dados || {}
+            const gColabs: string[] = Array.isArray(gDados.colaboradoresIds) ? gDados.colaboradoresIds.map(String) : []
+            const gFuncs: string[] = Array.isArray(gDados.funcionariosIds) ? gDados.funcionariosIds.map(String) : []
+            const nextColabs = gColabs.filter(id => !colabIdVariants.has(id.trim()))
+            const nextFuncs = gFuncs.filter(id => !colabIdVariants.has(id.trim()))
+
+            if (nextColabs.length !== gColabs.length || nextFuncs.length !== gFuncs.length) {
+              const updatedDados: any = { ...gDados }
+              if (Array.isArray(gDados.colaboradoresIds)) updatedDados.colaboradoresIds = nextColabs
+              if (Array.isArray(gDados.funcionariosIds)) updatedDados.funcionariosIds = nextFuncs
+              await client
+                .from('agenda_grupos')
+                .update({ dados: updatedDados })
+                .eq('id', grp.id)
+            }
+          }
+        }
+
+        const nowIso = new Date().toISOString()
+        const chatIds = Array.from(colabIdVariants)
+        if (!activeResp && !activeAluno) {
+          try {
+            await client
+              .from('chat_participants')
+              .update({ left_at: nowIso, unread_count: 0 })
+              .in('user_id', chatIds)
+              .is('left_at', null)
+          } catch {}
+        } else {
+          // Usuário continua ativo como Família/Aluno: encerrar apenas participações explicitamente de colaborador/staff
+          try {
+            const { data: parts } = await client
+              .from('chat_participants')
+              .select('id, user_perfil')
+              .in('user_id', chatIds)
+              .is('left_at', null)
+
+            const staffPartIds = (parts || [])
+              .filter((p: any) => {
+                const perfilStr = String(p.user_perfil || '').trim().toLowerCase()
+                if (!perfilStr) return false
+                const isFamilyPart = ['família', 'familia', 'responsável', 'responsavel', 'aluno'].some(k =>
+                  perfilStr.includes(k)
+                )
+                return !isFamilyPart
+              })
+              .map((p: any) => p.id)
+
+            if (staffPartIds.length > 0) {
+              await client
+                .from('chat_participants')
+                .update({ left_at: nowIso, unread_count: 0 })
+                .in('id', staffPartIds)
+            }
+          } catch {}
+        }
+      }
+    }
+
+    invalidateAuthUsersCache()
+    invalidateColaboradoresCache()
+    invalidateGruposCache()
+    for (const auId of matchedAuthIds) {
+      clearAuthGuardCache(auId)
+    }
+    if (effectiveUserId) clearAuthGuardCache(effectiveUserId)
+    if (effectiveAuthId) clearAuthGuardCache(effectiveAuthId)
+  } catch (err: any) {
+    console.error('[syncCollaboratorAccessStatus] Error:', err?.message || err)
   }
 }

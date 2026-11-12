@@ -64,6 +64,74 @@ export interface FamilyScope {
   candidateUserIds: string[]
 }
 
+const INACTIVE_STATUS = 'inativo'
+
+export function isRecordInactive(record: any): boolean {
+  return Boolean(record && String(record.status || 'ativo').trim().toLowerCase() === INACTIVE_STATUS)
+}
+
+/**
+ * Resolve o registro ATIVO do colaborador em `system_users` para o Chat.
+ * Caso o colaborador esteja inativo (ou possua `app_metadata.role_type` familiar/aluno),
+ * retorna `dbUser = null` e força perfil/cargo de Família/Aluno para evitar escalação via metadados legados.
+ */
+export async function resolveChatSystemUser(
+  supabase: any,
+  user: any,
+  selectColumns = 'id, nome, email, cargo, perfil, status, dados, auth_id'
+): Promise<{
+  dbUser: any | null
+  isInactiveStaff: boolean
+  isFamilyAccount: boolean
+  perfil: string
+  cargo: string
+}> {
+  const appRoleType = String(user?.app_metadata?.role_type || '').trim().toLowerCase()
+  const isMetaFamily = appRoleType === 'responsavel' || appRoleType === 'aluno'
+  const email = String(user?.email || '').trim()
+  const orClause = `id.eq."${user.id}",auth_id.eq."${user.id}"${email ? `,email.ilike."${email}"` : ''}`
+  const cols = selectColumns.split(',').map(s => s.trim()).filter(Boolean)
+  if (!cols.includes('status')) cols.push('status')
+
+  const { data: rows } = await supabase
+    .from('system_users')
+    .select(cols.join(', '))
+    .or(orClause)
+    .limit(5)
+
+  const list = Array.isArray(rows) ? rows : []
+  const activeUser = list.find((r: any) => !isRecordInactive(r)) || null
+  const hasInactiveUser = !activeUser && list.some((r: any) => isRecordInactive(r))
+
+  if (activeUser && !isMetaFamily) {
+    return {
+      dbUser: activeUser,
+      isInactiveStaff: false,
+      isFamilyAccount: false,
+      perfil: String(activeUser.perfil || user?.user_metadata?.perfil || '').trim(),
+      cargo: String(activeUser.cargo || user?.user_metadata?.cargo || '').trim(),
+    }
+  }
+
+  if (hasInactiveUser || isMetaFamily) {
+    return {
+      dbUser: null,
+      isInactiveStaff: hasInactiveUser,
+      isFamilyAccount: true,
+      perfil: 'Família',
+      cargo: appRoleType === 'aluno' ? 'Aluno' : 'Responsável',
+    }
+  }
+
+  return {
+    dbUser: null,
+    isInactiveStaff: false,
+    isFamilyAccount: false,
+    perfil: String(user?.user_metadata?.perfil || '').trim(),
+    cargo: String(user?.user_metadata?.cargo || '').trim(),
+  }
+}
+
 /**
  * Resolve todos os alunos vinculados a um responsável/familiar ou aluno autenticado,
  * bem como suas turmas, grupos oficiais e educadores específicos de cada aluno.
@@ -85,19 +153,21 @@ export async function resolveFamilyScope(
   const contextParam = options?.context || null
 
   // 1. Resolver usuário no system_users (reutiliza se já fornecido pelo caller)
-  let dbUser: any = options?.dbUser || null
-  if (!dbUser) {
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, nome, email, cargo, perfil, dados, auth_id')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
+  let dbUser: any = options?.dbUser && !isRecordInactive(options.dbUser) ? options.dbUser : null
+  let resolvedPerfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
+  let resolvedCargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
 
-    dbUser = foundUser
+  if (!dbUser) {
+    const resolvedChatUser = await resolveChatSystemUser(supabase, user, 'id, nome, email, cargo, perfil, status, dados, auth_id')
+    dbUser = resolvedChatUser.dbUser
+    if (resolvedChatUser.dbUser || resolvedChatUser.isInactiveStaff || resolvedChatUser.isFamilyAccount) {
+      resolvedPerfil = resolvedChatUser.perfil
+      resolvedCargo = resolvedChatUser.cargo
+    }
   }
 
-  const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-  const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+  const perfil = resolvedPerfil
+  const cargo = resolvedCargo
   const isAdmin = checkIsAdmin(perfil, cargo)
   const espelharRespId = isAdmin ? (options?.espelharRespId || null) : null
   const espelharColabId = isAdmin ? (options?.espelharColabId || null) : null

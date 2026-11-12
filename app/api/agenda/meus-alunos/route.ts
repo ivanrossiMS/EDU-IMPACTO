@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { resolveUserRole } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
@@ -9,8 +9,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse) return roleCtx.errorResponse
+  const user = roleCtx.user!
 
   try {
     // ── CORREÇÃO IDOR: Identidade derivada 100% da sessão autenticada ──────────
@@ -24,10 +25,12 @@ export async function GET(request: Request) {
     // 3. Retornar apenas os alunos vinculados a esse responsável autenticado.
     // ──────────────────────────────────────────────────────────────────────────
 
-    const perfil = user.user_metadata?.perfil || ''
-    const cargo  = user.user_metadata?.cargo  || ''
-    const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id)
+    const perfil = roleCtx.perfil || user.user_metadata?.perfil || ''
+    const cargo  = roleCtx.cargo  || user.user_metadata?.cargo  || ''
+    const hasDualRole = Boolean(roleCtx.isStaff && (user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id))
     const isFamilyOrStudent =
+      !roleCtx.isStaff ||
+      roleCtx.isFamilyOrStudent ||
       perfil === 'Família'     ||
       perfil === 'Responsável' ||
       perfil === 'Aluno'       ||
@@ -35,11 +38,11 @@ export async function GET(request: Request) {
       cargo  === 'Aluno'       ||
       hasDualRole
 
-    // ─── Admins/Colaboradores: acesso por aluno_id explícito (opcional) ────────
+    // ─── Admins/Colaboradores ativos: acesso por aluno_id explícito (opcional) ────────
     const url = new URL(request.url)
     const queryAlunoId = url.searchParams.get('aluno_id') || ''
 
-    if (!isFamilyOrStudent && queryAlunoId) {
+    if (roleCtx.isStaff && !isFamilyOrStudent && queryAlunoId) {
       const { data: aluno } = await supabase
         .from('alunos')
         .select('id,nome,turma,status,foto,serie,unidade,matricula,dados')
@@ -129,7 +132,12 @@ export async function GET(request: Request) {
           ? supabase.from('responsaveis').select('id').or(respOrConds.join(',')).limit(10)
           : Promise.resolve({ data: [] }),
         sysConds.length > 0
-          ? supabase.from('system_users').select('id, dados').or(sysConds.join(',')).limit(5)
+          ? supabase
+              .from('system_users')
+              .select('id, dados')
+              .or(sysConds.join(','))
+              .or('status.is.null,status.not.ilike.inativo')
+              .limit(5)
           : Promise.resolve({ data: [] })
       ])
 

@@ -110,8 +110,10 @@ export async function POST(request: NextRequest) {
 
       if (activePreResp) {
         responsavelRecord = activePreResp
+        userType = 'responsavel'
       } else if (activePreAlunos.length > 0) {
         alunoRecord = activePreAlunos[0]
+        userType = 'aluno'
       }
     }
 
@@ -281,25 +283,34 @@ export async function POST(request: NextRequest) {
       dbSystemUser = dbSystemUserRows?.[0] || null
 
       if (dbSystemUser) {
-        dbRecordExists = true
-        if (dbSystemUser.status === 'inativo') {
-          const supabaseSignOut = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-              cookies: {
-                getAll() { return cookieStore.getAll() },
-                setAll(cookiesToSet) {
-                  cookiesToSet.forEach(({ name, value, options }) => {
-                    cookieStore.set({ name, value, ...options, maxAge: 0 })
-                  })
+        if (String(dbSystemUser.status || '').trim().toLowerCase() === 'inativo') {
+          if (responsavelRecord || alunoRecord) {
+            // Colaborador inativo, mas mantém vínculo ativo como Responsável/Aluno:
+            // ignora acesso de colaborador e segue no fluxo estrito de Família/Aluno.
+            dbSystemUser = null
+          } else {
+            const supabaseSignOut = createServerClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              {
+                cookies: {
+                  getAll() { return cookieStore.getAll() },
+                  setAll(cookiesToSet) {
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                      cookieStore.set({ name, value, ...options, maxAge: 0 })
+                    })
+                  },
                 },
-              },
-            }
-          )
-          await supabaseSignOut.auth.signOut()
-          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
+              }
+            )
+            await supabaseSignOut.auth.signOut()
+            return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
+          }
         }
+      }
+
+      if (dbSystemUser) {
+        dbRecordExists = true
         if (dbSystemUser.senha_definida !== true) {
           supabaseAdmin
             .from('system_users')
@@ -503,13 +514,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist enriched metadata if changed
-    const userMetadataUpdate: any = { nome, cargo, perfil }
+    const userMetadataUpdate: any = {
+      nome,
+      cargo,
+      perfil,
+      colaborador_id: dbSystemUser?.id || null,
+      system_user_id: dbSystemUser?.id || null,
+    }
     if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
     if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
-    if (dbSystemUser?.id) {
-      userMetadataUpdate.colaborador_id = dbSystemUser.id
-      userMetadataUpdate.system_user_id = dbSystemUser.id
-    }
     userMetadataUpdate.hasDualRole = Boolean(hasDualRole)
     // Only store short/hosted URLs in user_metadata to avoid overflowing JWT headers and cookies (>16KB)
     if (resolvedFoto && !resolvedFoto.startsWith('data:') && resolvedFoto.length <= 500) {
@@ -522,8 +535,14 @@ export async function POST(request: NextRequest) {
     if (user) {
       const currentMeta = user.user_metadata || {}
       const currentAppMeta = user.app_metadata || {}
-      const expectedRoleType = dbSystemUser ? 'staff' : (userType === 'aluno' ? 'aluno' : 'responsavel')
-      let hasChanges = currentAppMeta.role_type !== expectedRoleType
+      const expectedRoleType = dbSystemUser ? 'staff' : (userType === 'aluno' || (!responsavel_id && aluno_id) ? 'aluno' : 'responsavel')
+      const expectedSysId = dbSystemUser?.id || null
+      let hasChanges =
+        currentAppMeta.role_type !== expectedRoleType ||
+        currentAppMeta.perfil !== perfil ||
+        currentAppMeta.cargo !== cargo ||
+        (currentAppMeta.system_user_id || null) !== expectedSysId ||
+        (currentAppMeta.colaborador_id || null) !== expectedSysId
       for (const key of Object.keys(userMetadataUpdate)) {
         if (currentMeta[key] !== userMetadataUpdate[key]) hasChanges = true
       }
@@ -534,7 +553,8 @@ export async function POST(request: NextRequest) {
             role_type: expectedRoleType,
             perfil,
             cargo,
-            ...(dbSystemUser?.id ? { system_user_id: dbSystemUser.id } : {}),
+            system_user_id: expectedSysId,
+            colaborador_id: expectedSysId,
             ...(responsavel_id ? { responsavel_id } : {}),
             ...(aluno_id ? { aluno_id } : {}),
           },

@@ -292,9 +292,15 @@ export async function GET(request: Request) {
   }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
-  const hasStaffRole = Boolean(dbUser && (dbUser.perfil || dbUser.cargo) && dbUser.status !== 'inativo');
+  const hasStaffRole = Boolean(dbUser && (dbUser.perfil || dbUser.cargo) && String(dbUser.status || 'ativo').trim().toLowerCase() !== 'inativo');
   const hasFamilyRole = Boolean(dbResp || dbAluno);
   const isDualRole = Boolean(hasStaffRole && hasFamilyRole);
+  const effectivePerfil = hasStaffRole && dbUser?.perfil
+    ? dbUser.perfil
+    : (dbResp || dbAluno ? 'Família' : (user.user_metadata?.perfil || 'Família'));
+  const effectiveCargo = hasStaffRole && dbUser?.cargo
+    ? dbUser.cargo
+    : (dbResp ? 'Responsável' : (dbAluno ? 'Aluno' : (user.user_metadata?.cargo || 'Responsável')));
 
   const userData = {
     ...user.user_metadata,
@@ -302,20 +308,57 @@ export async function GET(request: Request) {
     email: user.email,
     nome: dbResp?.nome || dbAluno?.nome || dbUser?.nome || user.user_metadata?.nome || user.email?.split('@')[0],
     foto: resolvedPhoto,
-    perfil: dbUser?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Família' : user.user_metadata?.perfil)),
-    cargo: dbUser?.cargo || (dbResp ? 'Responsável' : (dbAluno ? 'Aluno' : user.user_metadata?.cargo)),
-    status: dbUser?.status || (dbAluno?.status ? dbAluno.status : 'ativo'),
-    colaborador_id: dbUser?.id || '',
-    system_user_id: dbUser?.id || '',
+    perfil: effectivePerfil,
+    cargo: effectiveCargo,
+    status: hasStaffRole ? (dbUser?.status || 'ativo') : (dbAluno?.status ? dbAluno.status : 'ativo'),
+    colaborador_id: hasStaffRole && dbUser?.id ? dbUser.id : '',
+    system_user_id: hasStaffRole && dbUser?.id ? dbUser.id : '',
     hasDualRole: isDualRole,
     responsavel_id: dbResp?.id || '',
     aluno_id: dbAluno?.id || '',
   };
 
-  // Corrige metadados no Supabase se hasDualRole estiver dessincronizado
-  if (user.user_metadata?.hasDualRole !== isDualRole) {
+  // Corrige app_metadata e user_metadata no Supabase Auth sempre que houver dessincronização (ex: colaborador inativado)
+  const expectedRoleType = hasStaffRole ? 'staff' : (dbAluno && !dbResp ? 'aluno' : 'responsavel');
+  const expectedSysId = hasStaffRole && dbUser?.id ? dbUser.id : null;
+  const currentMeta = user.user_metadata || {};
+  const currentAppMeta = user.app_metadata || {};
+  const metadataOutOfSync =
+    currentMeta.hasDualRole !== isDualRole ||
+    currentMeta.perfil !== effectivePerfil ||
+    currentMeta.cargo !== effectiveCargo ||
+    (currentMeta.colaborador_id || null) !== expectedSysId ||
+    (currentMeta.system_user_id || null) !== expectedSysId ||
+    currentAppMeta.role_type !== expectedRoleType ||
+    currentAppMeta.perfil !== effectivePerfil ||
+    currentAppMeta.cargo !== effectiveCargo ||
+    (currentAppMeta.system_user_id || null) !== expectedSysId ||
+    (currentAppMeta.colaborador_id || null) !== expectedSysId;
+
+  if (metadataOutOfSync) {
     void supabaseAdmin.auth.admin
-      .updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), hasDualRole: isDualRole } })
+      .updateUserById(user.id, {
+        app_metadata: {
+          ...currentAppMeta,
+          role_type: expectedRoleType,
+          perfil: effectivePerfil,
+          cargo: effectiveCargo,
+          system_user_id: expectedSysId,
+          colaborador_id: expectedSysId,
+          ...(dbResp?.id ? { responsavel_id: dbResp.id } : {}),
+          ...(dbAluno?.id ? { aluno_id: dbAluno.id } : {}),
+        },
+        user_metadata: {
+          ...currentMeta,
+          perfil: effectivePerfil,
+          cargo: effectiveCargo,
+          colaborador_id: expectedSysId,
+          system_user_id: expectedSysId,
+          hasDualRole: isDualRole,
+          ...(dbResp?.id ? { responsavel_id: dbResp.id } : {}),
+          ...(dbAluno?.id ? { aluno_id: dbAluno.id } : {}),
+        },
+      })
       .catch(() => {});
   }
 

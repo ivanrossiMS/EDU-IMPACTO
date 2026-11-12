@@ -117,6 +117,12 @@ export async function POST(request: Request) {
       if (!sysUser) {
         return NextResponse.json({ error: 'Colaborador não encontrado.' }, { status: 404 })
       }
+      if (String(sysUser.status || 'ativo').trim().toLowerCase() === 'inativo') {
+        return NextResponse.json(
+          { error: 'Colaborador inativo. Reative o cadastro antes de gerar acesso institucional.' },
+          { status: 403 }
+        )
+      }
 
       const storedEmail = (sysUser.email || '').trim().toLowerCase()
       const finalEmail = customEmail || storedEmail
@@ -281,21 +287,57 @@ export async function POST(request: Request) {
       let resolvedAuthId: string | null = resp.auth_id || null
 
       if (existing) {
+        const { data: activeStaffRows } = await supabaseAdmin
+          .from('system_users')
+          .select('id, perfil, cargo, status')
+          .ilike('email', finalEmail)
+          .or('status.is.null,status.not.ilike.inativo')
+          .limit(1)
+        const activeStaff = activeStaffRows?.[0] || null
+
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, {
           email: finalEmail,
           password: finalPassword,
           email_confirm: true,
-          app_metadata: {
-            ...(existing.app_metadata || {}),
-            role_type: existing.app_metadata?.role_type || 'responsavel',
-            responsavel_id: resp.id,
-          },
-          user_metadata: {
-            ...(existing.user_metadata || {}),
-            nome: existing.user_metadata?.nome || resp.nome,
-            responsavel_id: resp.id,
-            password_confirmed_at: confirmedIso,
-          },
+          app_metadata: activeStaff
+            ? {
+                ...(existing.app_metadata || {}),
+                role_type: 'staff',
+                perfil: activeStaff.perfil || existing.app_metadata?.perfil,
+                cargo: activeStaff.cargo || existing.app_metadata?.cargo,
+                system_user_id: activeStaff.id,
+                responsavel_id: resp.id,
+              }
+            : {
+                ...(existing.app_metadata || {}),
+                role_type: 'responsavel',
+                perfil: 'Família',
+                cargo: 'Responsável',
+                responsavel_id: resp.id,
+                system_user_id: null,
+                colaborador_id: null,
+              },
+          user_metadata: activeStaff
+            ? {
+                ...(existing.user_metadata || {}),
+                nome: existing.user_metadata?.nome || resp.nome,
+                responsavel_id: resp.id,
+                colaborador_id: activeStaff.id,
+                system_user_id: activeStaff.id,
+                hasDualRole: true,
+                password_confirmed_at: confirmedIso,
+              }
+            : {
+                ...(existing.user_metadata || {}),
+                nome: resp.nome || existing.user_metadata?.nome,
+                perfil: 'Família',
+                cargo: 'Responsável',
+                responsavel_id: resp.id,
+                colaborador_id: null,
+                system_user_id: null,
+                hasDualRole: false,
+                password_confirmed_at: confirmedIso,
+              },
         })
         if (upErr && !isSamePasswordError(upErr)) throw upErr
         resolvedAuthId = existing.id

@@ -389,6 +389,7 @@ export async function dispatchChatPushNotification({
           .from('system_users')
           .select('id, auth_id, email')
           .or(`id.in.(${colabArr.map(c => `"${c}"`).join(',')}),auth_id.in.(${colabArr.map(c => `"${c}"`).join(',')})`)
+          .or('status.is.null,status.not.ilike.inativo')
 
         colabUsers?.forEach(cu => {
           if (cu.id) colabTargetIds.add(String(cu.id))

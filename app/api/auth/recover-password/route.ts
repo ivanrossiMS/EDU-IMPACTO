@@ -127,14 +127,17 @@ export async function POST(request: Request) {
       )
     }
 
-    if (sysUser && sysUser.status === 'inativo') {
+    const isSysInactive = Boolean(sysUser && String(sysUser.status || '').trim().toLowerCase() === 'inativo')
+    if (isSysInactive && !respUser && !alunoUser) {
       return NextResponse.json(
         { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
         { status: 403 }
       )
     }
 
-    if (!sysUser && respUser) {
+    const effectiveSysUser = sysUser && !isSysInactive ? sysUser : null
+
+    if (!effectiveSysUser && respUser) {
       if (isResponsavelAccessBlocked(respUser)) {
         return NextResponse.json(
           { error: 'Acesso bloqueado: Conta de responsável inativa. Contate a secretaria escolar.' },
@@ -177,7 +180,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!sysUser && !respUser && alunoUser) {
+    if (!effectiveSysUser && !respUser && alunoUser) {
       if (isStudentAccessBlocked(alunoUser)) {
         return NextResponse.json(
           { error: 'Acesso bloqueado: Matrícula inativa. Por favor, verifique com a secretaria escolar.' },
@@ -187,7 +190,7 @@ export async function POST(request: Request) {
     }
 
     const nomeDestinatario =
-      sysUser?.nome ||
+      effectiveSysUser?.nome ||
       respUser?.nome ||
       alunoUser?.nome ||
       existingAuthUser?.user_metadata?.nome ||
@@ -201,10 +204,10 @@ export async function POST(request: Request) {
           existingAuthUser.user_metadata?.password_confirmed_at)
     )
 
-    const hasCompletedFirstAccess = sysUser
+    const hasCompletedFirstAccess = effectiveSysUser
       ? Boolean(
           existingAuthUser &&
-            (sysUser.senha_definida === true || hasAuthSignInOrConfirmation)
+            (effectiveSysUser.senha_definida === true || hasAuthSignInOrConfirmation)
         )
       : hasAuthSignInOrConfirmation
 
@@ -217,7 +220,7 @@ export async function POST(request: Request) {
           user: {
             nome: nomeDestinatario || '',
             email: cleanEmail,
-            cargo: sysUser?.cargo || (respUser ? 'Responsável' : alunoUser ? 'Aluno' : 'Usuário'),
+            cargo: effectiveSysUser?.cargo || (respUser ? 'Responsável' : alunoUser ? 'Aluno' : 'Usuário'),
           },
         },
         { status: 403 }
@@ -362,15 +365,18 @@ export async function PUT(request: Request) {
       const sysCheck = sysRowsRes.data?.[0]
       const respCheck = respRowsRes.data?.[0]
       const alunoCheck = alunoRowsRes.data?.[0]
+      const isSysCheckInactive = Boolean(sysCheck && String(sysCheck.status || '').trim().toLowerCase() === 'inativo')
+      const effectiveSysCheck = sysCheck && !isSysCheckInactive ? sysCheck : null
 
-      if (sysCheck) {
-        if (sysCheck.status === 'inativo') {
-          return NextResponse.json(
-            { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
-            { status: 403 }
-          )
-        }
-        if (sysCheck.senha_definida !== true && !targetUser.user_metadata?.password_confirmed_at) {
+      if (isSysCheckInactive && !respCheck && !alunoCheck) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado: Usuário inativo. Contate o suporte ou a secretaria.' },
+          { status: 403 }
+        )
+      }
+
+      if (effectiveSysCheck) {
+        if (effectiveSysCheck.senha_definida !== true && !targetUser.user_metadata?.password_confirmed_at) {
           return NextResponse.json(
             {
               error:
@@ -408,13 +414,45 @@ export async function PUT(request: Request) {
     }
 
     let mantemMesmaSenha = false
+    const { data: activeStaffCheck } = userEmail
+      ? await supabaseAdmin
+          .from('system_users')
+          .select('id')
+          .ilike('email', userEmail)
+          .or('status.is.null,status.not.ilike.inativo')
+          .limit(1)
+      : { data: [] }
+    const hasActiveStaff = Boolean(activeStaffCheck && activeStaffCheck.length > 0)
+
     const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
       password: newPassword,
       email_confirm: true,
-      user_metadata: {
-        ...(targetUser.user_metadata || {}),
-        password_confirmed_at: new Date().toISOString(),
-      },
+      ...(!hasActiveStaff
+        ? {
+            app_metadata: {
+              ...(targetUser.app_metadata || {}),
+              role_type: targetUser.app_metadata?.role_type === 'aluno' ? 'aluno' : 'responsavel',
+              perfil: 'Família',
+              cargo: targetUser.app_metadata?.role_type === 'aluno' ? 'Aluno' : 'Responsável',
+              system_user_id: null,
+              colaborador_id: null,
+            },
+            user_metadata: {
+              ...(targetUser.user_metadata || {}),
+              perfil: 'Família',
+              cargo: targetUser.app_metadata?.role_type === 'aluno' ? 'Aluno' : 'Responsável',
+              colaborador_id: null,
+              system_user_id: null,
+              hasDualRole: false,
+              password_confirmed_at: new Date().toISOString(),
+            },
+          }
+        : {
+            user_metadata: {
+              ...(targetUser.user_metadata || {}),
+              password_confirmed_at: new Date().toISOString(),
+            },
+          }),
     })
 
     if (upErr) {
@@ -430,10 +468,14 @@ export async function PUT(request: Request) {
 
     if (userEmail) {
       await Promise.all([
-        supabaseAdmin
-          .from('system_users')
-          .update({ senha_definida: true, auth_id: targetUser.id })
-          .or(`auth_id.eq.${targetUser.id},email.ilike.${userEmail}`),
+        ...(hasActiveStaff
+          ? [
+              supabaseAdmin
+                .from('system_users')
+                .update({ senha_definida: true, auth_id: targetUser.id })
+                .or(`auth_id.eq.${targetUser.id},email.ilike.${userEmail}`),
+            ]
+          : []),
         supabaseAdmin
           .from('responsaveis')
           .update({ auth_id: targetUser.id })

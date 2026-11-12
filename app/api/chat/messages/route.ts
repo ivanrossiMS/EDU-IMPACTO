@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { checkIsAdmin, checkIsStaffManagement, checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -34,14 +35,10 @@ export async function GET(request: Request) {
       query = query.lt('created_at', before)
     }
 
-    // Executa em PARALELO: busca de mensagens, dados do usuário e metadados da conversa
-    const [messagesRes, foundUserRes, convInfoRes] = await Promise.all([
+    // Executa em PARALELO: busca de mensagens, dados do usuário ativo e metadados da conversa
+    const [messagesRes, resolvedUserRes, convInfoRes] = await Promise.all([
       query,
-      supabase
-        .from('system_users')
-        .select('id, cargo, perfil, auth_id, dados')
-        .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-        .maybeSingle(),
+      resolveChatSystemUser(supabase, user, 'id, cargo, perfil, status, auth_id, dados'),
       supabase
         .from('chat_conversations')
         .select('id, type, grupo_id, turma_id')
@@ -51,11 +48,11 @@ export async function GET(request: Request) {
 
     if (messagesRes.error) throw messagesRes.error
 
-    const dbUser = foundUserRes.data
-    const perfilUser = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargoUser = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    const dbUser = resolvedUserRes.dbUser
+    const perfilUser = resolvedUserRes.perfil
+    const cargoUser = resolvedUserRes.cargo
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
-    const isColabUser = checkIsCollaboratorOrTeacher(cargoUser, perfilUser)
+    const isColabUser = Boolean(dbUser) && checkIsCollaboratorOrTeacher(cargoUser, perfilUser)
     const isFamilyUser = 
       (perfilUser && ['família', 'familia', 'responsável', 'responsavel', 'aluno'].some(k => perfilUser.toLowerCase().includes(k))) ||
       (cargoUser && ['responsável', 'responsavel', 'aluno'].some(k => cargoUser.toLowerCase().includes(k)))
@@ -275,18 +272,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Conteúdo ou anexo é obrigatório' }, { status: 400 })
     }
 
-    // 1. Obter dados do usuário no system_users
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, nome, cargo, perfil, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfilUser = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargoUser = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    // 1. Obter dados ativos do usuário no system_users (inativos atuam somente como Família/Aluno)
+    const { dbUser, perfil: perfilUser, cargo: cargoUser } = await resolveChatSystemUser(
+      supabase,
+      user,
+      'id, auth_id, nome, cargo, perfil, status, dados'
+    )
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
 
     // Validar overrideSenderId para evitar falsificação de identidade por usuários não-admin
@@ -712,16 +703,13 @@ export async function DELETE(request: Request) {
     }
 
     // 1. Obter usuário do banco para verificar cargo/perfil
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, nome, cargo, perfil, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    const perfilUser = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargoUser = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    const { dbUser, perfil: perfilUser, cargo: cargoUser } = await resolveChatSystemUser(
+      supabase,
+      user,
+      'id, auth_id, nome, cargo, perfil, status, dados'
+    )
     const isAdmin = checkIsAdmin(perfilUser, cargoUser)
-    const isColabOrTeacher = checkIsCollaboratorOrTeacher(cargoUser, perfilUser, dbUser || user)
+    const isColabOrTeacher = Boolean(dbUser) && checkIsCollaboratorOrTeacher(cargoUser, perfilUser, dbUser)
 
     // Regra: Apenas colaboradores, professores e administradores podem excluir mensagens. Famílias e alunos não podem.
     if (!isColabOrTeacher && !isAdmin) {

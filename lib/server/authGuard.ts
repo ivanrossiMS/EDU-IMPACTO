@@ -307,6 +307,23 @@ export async function resolveUserRole(req?: Request) {
   const dbUser = await fetchAuthoritativeSystemUser(user)
   if (dbUser) {
     if (dbUser.status.toLowerCase() === 'inativo') {
+      const metaCargo = String(user.user_metadata?.cargo || '')
+      const familyScope = await resolveFamilyScope(user)
+      if (familyScope.alunoIds.size > 0) {
+        const fallbackCargo =
+          familyScope.responsavelIds.size > 0
+            ? 'Responsável'
+            : (metaCargo === 'Aluno' || familyScope.alunoIds.size > 0 ? 'Aluno' : 'Responsável')
+        return {
+          user,
+          dbUser: null,
+          isStaff: false,
+          isFamilyOrStudent: true,
+          perfil: 'Família',
+          cargo: fallbackCargo,
+          errorResponse: null,
+        }
+      }
       return {
         user,
         dbUser,

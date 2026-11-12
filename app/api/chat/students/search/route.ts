@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkIsAdmin } from '@/lib/chatPermissions'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -31,18 +32,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ students: [] })
     }
 
-    // 1. Obter usuário e verificar se é admin
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, auth_id, nome, email, cargo, perfil, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    // 1. Obter colaborador ativo e verificar se é admin
+    const { dbUser, perfil, cargo } = await resolveChatSystemUser(supabase, user, 'id, auth_id, nome, email, cargo, perfil, status, dados')
+    if (!dbUser) {
+      return NextResponse.json({ error: 'Acesso restrito a colaboradores ativos.' }, { status: 403 })
+    }
     const isAdmin = checkIsAdmin(perfil, cargo)
 
     // 2. Determinar escopo de turmas/alunos permitidos

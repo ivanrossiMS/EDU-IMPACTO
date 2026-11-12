@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import {
   dbGetEmprestimoById,
@@ -21,7 +21,7 @@ function cleanCpf(cpf?: string | null): string {
 }
 
 export async function GET(request: Request) {
-  const { user: authUser, errorResponse } = await requireAuth(request)
+  const { user: authUser, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -148,7 +148,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user: authUser, errorResponse } = await requireAuth(request)
+  const { user: authUser, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

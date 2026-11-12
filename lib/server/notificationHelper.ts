@@ -474,7 +474,9 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
     const sysColabs = sysRes.status === 'fulfilled' && Array.isArray(sysRes.value)
       ? sysRes.value.filter((u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo')
       : []
-    const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value) ? funcRes.value : []
+    const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value)
+      ? funcRes.value.filter((f: any) => !f.status || String(f.status).trim().toLowerCase() !== 'inativo')
+      : []
 
     const matchedEmails = new Set<string>()
     const matchedUserIds = new Set<string>()
@@ -1060,7 +1062,9 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         const sysColabs = sysRes.status === 'fulfilled' && Array.isArray(sysRes.value)
           ? sysRes.value.filter((u: any) => !u.status || String(u.status).toLowerCase() !== 'inativo')
           : []
-        const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value) ? funcRes.value : []
+        const funcRows = funcRes.status === 'fulfilled' && Array.isArray(funcRes.value)
+      ? funcRes.value.filter((f: any) => !f.status || String(f.status).trim().toLowerCase() !== 'inativo')
+      : []
 
         const matchedEmails = new Set<string>()
         const matchedUserIds = new Set<string>()

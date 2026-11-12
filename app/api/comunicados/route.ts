@@ -3,7 +3,7 @@ import { createProtectedClient } from '@/lib/server/supabaseServerFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff, resolveUserRole } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification, getComentariosComunicadosConfig } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship, cleanEntityPrefix } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
@@ -81,8 +81,9 @@ function normalizeRow(row: any) {
   return merged
 }
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const roleCtx = await resolveUserRole(request)
+  if (roleCtx.errorResponse || !roleCtx.user) return roleCtx.errorResponse!
+  const user = roleCtx.user
 
   // Usa supabaseServer pois a rota aplica validação estrita de autenticação (requireAuth) e blindagem anti-IDOR abaixo,
   // evitando overhead de avaliação de RLS linha a linha e statement timeout (57014) em tabelas grandes.
@@ -105,67 +106,23 @@ export async function GET(request: Request) {
   const tipoParam = searchParams.get('tipo');
   const filtroRelatorioParam = searchParams.get('filtro_relatorio');
   
-  // VERIFICAÇÃO DE PERFIL — usa user_metadata/app_metadata para evitar round-trip ao banco na maioria dos casos
-  let isFamilyOrStudent = false;
-  const perfil = user.user_metadata?.perfil || user.app_metadata?.perfil || '';
-  const cargo = user.user_metadata?.cargo || user.app_metadata?.cargo || '';
+  // VERIFICAÇÃO DE PERFIL — usa resolveUserRole autoritativo (ignora metadados legados se colaborador estiver inativo)
+  const perfil = roleCtx.perfil || user.user_metadata?.perfil || user.app_metadata?.perfil || '';
+  const cargo = roleCtx.cargo || user.user_metadata?.cargo || user.app_metadata?.cargo || '';
   const hasDualRole = Boolean(user.user_metadata?.hasDualRole || user.user_metadata?.responsavel_id);
-
-  if (
-    perfil === 'Família' || 
-    perfil === 'Responsável' || 
-    cargo === 'Responsável' || 
-    cargo === 'Aluno' || 
-    perfil === 'Aluno' ||
-    (Boolean(alunoId) && hasDualRole)
-  ) {
-    isFamilyOrStudent = true;
-  } else if (!perfil && !cargo) {
-    // Só consulta o banco se os metadados estão vazios (caso raro)
-    const { data: dbUser } = await supabaseServer
-      .from('system_users')
-      .select('perfil, cargo, dados')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"`)
-      .limit(1)
-      .maybeSingle();
-    
-    const dbPerfil = dbUser?.perfil || '';
-    const dbCargo = dbUser?.cargo || '';
-    const dbHasResp = Boolean(dbUser?.dados?.responsavel_id || dbUser?.dados?.responsavelId);
-
-    if (
-      dbPerfil === 'Família' || 
-      dbPerfil === 'Responsável' || 
-      dbCargo === 'Responsável' || 
-      dbCargo === 'Aluno' || 
-      dbPerfil === 'Aluno' ||
-      (Boolean(alunoId) && dbHasResp)
-    ) {
-      isFamilyOrStudent = true;
-    }
-  }
-
-  let isAdmin = false;
+  const isFamilyOrStudent = roleCtx.isFamilyOrStudent || (Boolean(alunoId) && hasDualRole);
   const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Gestor', 'Direção', 'Diretor(a)', 'ADM'];
   const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Auxiliar Administrativo', 'Coordenador(a) Pedagógico(a)', 'Direção', 'Diretor(a)', 'Administrador', 'ADM'];
-  
-  if (perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo)) {
-    isAdmin = true;
-  } else if (!perfil && !cargo) {
-    // Buscar banco se metadata falhar para checar admin
-    const { data: dbUserAdmin } = await supabaseServer
-      .from('system_users')
-      .select('perfil, cargo')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"`)
-      .limit(1)
-      .maybeSingle();
-    
-    if (dbUserAdmin && (perfisAdmin.includes(dbUserAdmin.perfil) || cargosAdmin.includes(dbUserAdmin.cargo))) {
-      isAdmin = true;
-    }
-  }
+  const isAdmin = Boolean(
+    !isFamilyOrStudent &&
+    roleCtx.isStaff &&
+    (perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo))
+  );
 
-  // BLINDAGEM IDOR: Se for colaborador_id solicitado por não-admin
+  // BLINDAGEM IDOR: Famílias/Alunos ou colaboradores inativos não podem consultar feeds de colaborador
+  if (colaboradorId && (roleCtx.isFamilyOrStudent || !roleCtx.isStaff)) {
+    return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados de colaboradores.' }, { status: 403 });
+  }
   if (colaboradorId && !isAdmin) {
     const myIds = [user.id, user.user_metadata?.id, user.user_metadata?.auth_id, user.user_metadata?.colaborador_id].filter(Boolean).map(String);
     if (!myIds.includes(colaboradorId)) {
@@ -426,8 +383,9 @@ export async function GET(request: Request) {
       candidateUserIds.add(String(colaboradorId));
       const { data: colabUsers } = await supabaseServer
         .from('system_users')
-        .select('id, email, nome, auth_id, dados')
+        .select('id, email, nome, auth_id, status, dados')
         .or(`id.eq."${colaboradorId}",auth_id.eq."${colaboradorId}"`)
+        .or('status.is.null,status.not.ilike.inativo')
         .limit(5);
 
       if (colabUsers && colabUsers.length > 0) {
@@ -454,14 +412,17 @@ export async function GET(request: Request) {
       if (cachedSys && Date.now() - cachedSys.timestamp < 60000) {
         sysUsers = cachedSys.users;
       } else {
-        let sysUserQuery = supabaseServer.from('system_users').select('id, email, nome, auth_id, dados');
+        let sysUserQuery = supabaseServer
+          .from('system_users')
+          .select('id, email, nome, auth_id, status, dados')
+          .or('status.is.null,status.not.ilike.inativo');
         if (userEmail) {
           sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`);
         } else {
           sysUserQuery = sysUserQuery.eq('id', user.id);
         }
         const { data: fetchedSysUsers } = await sysUserQuery.limit(5);
-        sysUsers = fetchedSysUsers || [];
+        sysUsers = (fetchedSysUsers || []).filter((su: any) => String(su?.status || 'ativo').trim().toLowerCase() !== 'inativo');
         sysUsersCache.set(cacheKey, { users: sysUsers, timestamp: Date.now() });
       }
 
@@ -939,7 +900,7 @@ export async function GET(request: Request) {
   // Resolver registro do colaborador/admin logado (ou espelhado) em cachedSysUsers (0ms em memória)
   const userEmailLower = String(user.email || user.user_metadata?.email || '').trim().toLowerCase();
   const matchedSysUsersForViewer = (cachedSysUsers || []).filter((su: any) => {
-    if (!su) return false;
+    if (!su || String(su.status || 'ativo').trim().toLowerCase() === 'inativo') return false;
     if (colaboradorId) {
       const cleanColab = String(colaboradorId).replace(/^f_?/, '').trim().toLowerCase();
       return (
@@ -1507,8 +1468,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   const authHeader = request.headers.get('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : undefined
@@ -1906,14 +1867,14 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, perfil: authPerfil, cargo: authCargo, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   const authClient = await createProtectedClient();
   const supabase = authClient;
 
-  const perfil = user.user_metadata?.perfil || '';
-  const cargo = user.user_metadata?.cargo || '';
+  const perfil = authPerfil || '';
+  const cargo = authCargo || '';
   if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
     return NextResponse.json({ error: 'Acesso negado: Permissão insuficiente.' }, { status: 403 });
   }
@@ -1978,7 +1939,10 @@ export async function PUT(request: Request) {
       if (!isAuthor) {
         // Fallback: buscar vínculo em system_users caso user_metadata não tenha o ID legado do colaborador
         const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase();
-        let sysQuery = supabaseServer.from('system_users').select('id, email, nome, perfil, cargo, auth_id, dados');
+        let sysQuery = supabaseServer
+          .from('system_users')
+          .select('id, email, nome, perfil, cargo, status, auth_id, dados')
+          .or('status.is.null,status.not.ilike.inativo');
         if (userEmail) {
           sysQuery = sysQuery.or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.ilike."${userEmail}"`);
         } else {
@@ -1986,6 +1950,7 @@ export async function PUT(request: Request) {
         }
         const { data: sysRows } = await sysQuery.limit(5);
         for (const su of sysRows || []) {
+          if (String(su.status || 'ativo').trim().toLowerCase() === 'inativo') continue;
           const suPerfil = normalize(su.perfil);
           const suCargo = normalize(su.cargo);
           if (adminRoles.some(r => suPerfil === r || suCargo === r || suPerfil.includes('administrador') || suCargo.includes('administrador master') || suPerfil.includes('diretor geral') || suCargo.includes('diretor geral') || suPerfil.includes('coordenad') || suCargo.includes('coordenad'))) {
@@ -2551,11 +2516,11 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, perfil: authPerfil, cargo: authCargo, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
-  const perfil = user.user_metadata?.perfil || '';
-  const cargo = user.user_metadata?.cargo || '';
+  const perfil = authPerfil || '';
+  const cargo = authCargo || '';
   if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
     return NextResponse.json({ error: 'Acesso negado: Permissão insuficiente.' }, { status: 403 });
   }

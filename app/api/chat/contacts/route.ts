@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkIsAdmin, checkIsStaffManagement, checkIsCollaboratorOrTeacher, sortTurmasByName } from '@/lib/chatPermissions'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -19,18 +20,8 @@ export async function GET(request: Request) {
     const rawEspelharColabId = searchParams.get('espelhar_colaborador')
     const rawEspelharAluno = searchParams.get('espelhar_aluno') === 'true'
 
-    // 1. Resolver usuário no system_users
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, nome, email, cargo, perfil, dados, auth_id')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    // 1. Resolver usuário ativo no system_users (inativos são tratados estritamente como Família/Aluno)
+    const { dbUser, perfil, cargo } = await resolveChatSystemUser(supabase, user, 'id, nome, email, cargo, perfil, status, dados, auth_id')
     const isAdmin = checkIsAdmin(perfil, cargo)
 
     const espelharRespId = isAdmin ? rawEspelharRespId : null

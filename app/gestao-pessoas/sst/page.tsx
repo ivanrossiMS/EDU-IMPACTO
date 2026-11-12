@@ -54,10 +54,11 @@ export default function GestaoSST() {
         setAsos(processedAsos);
       }
       
-      const resFunc = await fetch('/api/rh/funcionarios')
+      const resFunc = await fetch('/api/rh/funcionarios?activeOnly=true')
       if (resFunc.ok) {
         const f = await resFunc.json()
-        setFuncionarios(Array.isArray(f) ? f : (f.data || []))
+        const rawList = Array.isArray(f) ? f : (f.data || [])
+        setFuncionarios(rawList.filter((item: any) => String(item?.status || 'ativo').trim().toLowerCase() !== 'inativo'))
       } else {
         console.error('Failed to fetch funcionarios:', resFunc.status)
       }

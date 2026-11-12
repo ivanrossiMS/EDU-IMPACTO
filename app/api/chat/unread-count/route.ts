@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkIsAdmin, checkIsCollaboratorOrTeacher } from '@/lib/chatPermissions'
+import { resolveChatSystemUser } from '@/lib/server/chatFamilyHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -18,22 +19,12 @@ export async function GET(request: Request) {
     const rawEspelharRespId = searchParams.get('espelhar_responsavel')
     const rawEspelharColabId = searchParams.get('espelhar_colaborador')
 
-    let dbUser: any = null
-    const { data: foundUser } = await supabase
-      .from('system_users')
-      .select('id, cargo, perfil, auth_id')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    dbUser = foundUser
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
+    const { dbUser, perfil, cargo } = await resolveChatSystemUser(supabase, user, 'id, cargo, perfil, status, auth_id, dados')
     const isAdmin = checkIsAdmin(perfil, cargo)
     const espelharRespId = isAdmin ? rawEspelharRespId : null
     const espelharColabId = isAdmin ? rawEspelharColabId : null
 
-    const isColabMode = contextParam === 'colaborador' || (!alunoIdParam && !espelharRespId && !isAdmin && dbUser && contextParam !== 'familia')
+    const isColabMode = Boolean(dbUser) && (contextParam === 'colaborador' || (!alunoIdParam && !espelharRespId && !isAdmin && contextParam !== 'familia'))
 
     // Se for modo colaborador ou admin sem filtro familiar
     if (isColabMode || (isAdmin && !alunoIdParam && contextParam !== 'familia')) {

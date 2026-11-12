@@ -17,6 +17,7 @@ import { Menu } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { restoreSessionSecurely, refreshSessionCentralized, isNetworkOrTransientError, isPermanentTokenRevocation } from '@/lib/auth/secureSession'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { isFamilyOrStudent, getAgendaDigitalDestination } from '@/lib/auth/moduleRouting'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, toggleSidebar, setCurrentUser, currentUser, setLoadingPath } = useApp()
@@ -42,6 +43,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             const rawLocal = window.localStorage.getItem('edu-current-user')
             if (rawLocal) {
               const parsedLocal = JSON.parse(rawLocal)
+              if (parsedLocal?.id && isFamilyOrStudent(parsedLocal)) {
+                router.replace(getAgendaDigitalDestination(parsedLocal))
+                return
+              }
               if (parsedLocal?.id && parsedLocal?.status !== 'inativo' && parsedLocal?.status !== 'bloqueado') {
                 setAuthState('authorized')
               }
@@ -211,6 +216,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (serverUser.status === 'inativo' || serverUser.status === 'bloqueado') {
           setCurrentUser(serverUser)
           setAuthState('blocked')
+          return
+        }
+
+        if (isFamilyOrStudent(serverUser)) {
+          setCurrentUser(serverUser)
+          setAuthState('restoring')
+          router.replace(getAgendaDigitalDestination(serverUser))
           return
         }
 

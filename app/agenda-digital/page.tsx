@@ -135,8 +135,9 @@ function AgendaDigitalIndexContent() {
         return;
       }
 
-      // Para colaboradores que NÃO são alunos nem família
-      const isStaff = !['Família', 'Responsável', 'Aluno'].includes(perfil) && !['Responsável', 'Aluno'].includes(cargo);
+      // Para colaboradores ativos que NÃO são alunos nem família
+      const isActiveStatus = String((currentUser as any)?.status || 'ativo').trim().toLowerCase() !== 'inativo';
+      const isStaff = isActiveStatus && !['Família', 'Responsável', 'Aluno'].includes(perfil) && !['Responsável', 'Aluno'].includes(cargo);
       const hasDualRole = isStaff && Boolean(currentUser.hasDualRole || currentUser.responsavel_id);
 
       // Se é colaborador puro (sem filhos/responsável vinculados), vai direto para colaborador sem esperar

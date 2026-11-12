@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkIsAdmin } from '@/lib/chatPermissions'
 
@@ -7,22 +7,14 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, perfil, cargo, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const supabase = getAdminClient()
 
     // 1. Validar permissão de Administrador Escolar
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, nome, cargo, perfil')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
-    const isAdmin = checkIsAdmin(perfil, cargo)
+    const isAdmin = checkIsAdmin(perfil || '', cargo || '')
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -209,22 +201,14 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
-  if (errorResponse) return errorResponse
+  const { user, perfil, cargo, errorResponse } = await requireStaff(request)
+  if (errorResponse || !user) return errorResponse!
 
   try {
     const supabase = getAdminClient()
 
     // 1. Validar Administrador Escolar
-    const { data: dbUser } = await supabase
-      .from('system_users')
-      .select('id, nome, cargo, perfil')
-      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
-      .maybeSingle()
-
-    const perfil = (dbUser?.perfil || user.user_metadata?.perfil || '').trim()
-    const cargo = (dbUser?.cargo || user.user_metadata?.cargo || '').trim()
-    const isAdmin = checkIsAdmin(perfil, cargo)
+    const isAdmin = checkIsAdmin(perfil || '', cargo || '')
 
     if (!isAdmin) {
       return NextResponse.json(

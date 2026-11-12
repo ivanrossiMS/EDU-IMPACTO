@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { dbGetEmprestimoById, dbSaveEmprestimo, dbGetConfiguracao } from '@/lib/credimpacto/db'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import { calculateTerminationSeverance, roundMoney } from '@/lib/credimpacto/engine'
@@ -7,7 +7,7 @@ import { calculateTerminationSeverance, roundMoney } from '@/lib/credimpacto/eng
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/server/authGuard'
+import { requireStaff } from '@/lib/server/authGuard'
 import { dbGetParcelasFolha } from '@/lib/credimpacto/db'
 import { resolveCredImpactoUser } from '@/lib/credimpacto/authHelper'
 import * as XLSX from 'xlsx'
@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth(request)
+  const { user, errorResponse } = await requireStaff(request)
   if (errorResponse) return errorResponse
 
   try {

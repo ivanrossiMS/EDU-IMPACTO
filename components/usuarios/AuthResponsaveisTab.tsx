@@ -214,7 +214,7 @@ export function AuthResponsaveisTab() {
       if(g.tipos.size === 0) g.tipos.add('Outro')
     }
 
-    const colabUser = searchEmail ? (usersData || []).find((u: any) => u.email && u.email.toLowerCase() === searchEmail && u.cargo !== 'Responsáveis' && u.cargo !== 'Alunos') : null
+    const colabUser = searchEmail ? (usersData || []).find((u: any) => u.email && u.email.toLowerCase() === searchEmail && u.cargo !== 'Responsáveis' && u.cargo !== 'Alunos' && u.vinculoAtivo !== false && String(u.colabStatus || u.status || 'ativo').trim().toLowerCase() !== 'inativo') : null
     const cleanEmailKey = (effectiveEmail || '').trim().toLowerCase()
     const inviteSentInfo = cleanEmailKey ? inviteHistoryMap[cleanEmailKey] || null : null
 
@@ -467,7 +467,7 @@ export function AuthResponsaveisTab() {
                               {Array.from(g.tipos || [g.tipo || 'Outro']).map((t: any) => (
                                 <span key={t} style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{t}</span>
                               ))}
-                              {g.colabUser && (
+                              {g.colabUser && g.colabUser.vinculoAtivo !== false && String(g.colabUser.colabStatus || g.colabUser.status || 'ativo').trim().toLowerCase() !== 'inativo' && (
                                 <span 
                                   style={{ 
                                     padding: '2px 7px', 

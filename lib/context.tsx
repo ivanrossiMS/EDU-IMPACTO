@@ -343,18 +343,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const u = sessionData?.session?.user
             if (u) {
               const meta = u.user_metadata || {}
+              const appMeta = u.app_metadata || {}
+              const isStrictFamily =
+                appMeta.role_type === 'responsavel' ||
+                appMeta.role_type === 'aluno'
+              const resolvedPerfil = isStrictFamily
+                ? 'Família'
+                : (meta.perfil || ((meta.responsavel_id || meta.aluno_id) ? 'Família' : 'Usuário'))
+              const resolvedCargo = isStrictFamily
+                ? (appMeta.role_type === 'aluno' ? 'Aluno' : 'Responsável')
+                : (meta.cargo || (meta.responsavel_id ? 'Responsável' : (meta.aluno_id ? 'Aluno' : 'Colaborador')))
+
               savedUser = {
                 id: u.id,
                 nome: meta.nome || u.email?.split('@')[0] || 'Usuário',
                 email: u.email || '',
-                cargo: meta.cargo || (meta.responsavel_id ? 'Responsável' : (meta.aluno_id ? 'Aluno' : 'Colaborador')),
-                perfil: meta.perfil || ((meta.responsavel_id || meta.aluno_id) ? 'Família' : 'Usuário'),
+                cargo: resolvedCargo,
+                perfil: resolvedPerfil,
                 foto: meta.foto,
-                aluno_id: meta.aluno_id || '',
-                responsavel_id: meta.responsavel_id || '',
-                colaborador_id: meta.colaborador_id || meta.system_user_id || '',
-                system_user_id: meta.system_user_id || meta.colaborador_id || '',
-                hasDualRole: Boolean(
+                aluno_id: meta.aluno_id || appMeta.aluno_id || '',
+                responsavel_id: meta.responsavel_id || appMeta.responsavel_id || '',
+                colaborador_id: isStrictFamily ? '' : (meta.colaborador_id || meta.system_user_id || ''),
+                system_user_id: isStrictFamily ? '' : (meta.system_user_id || meta.colaborador_id || ''),
+                hasDualRole: !isStrictFamily && Boolean(
                   meta.hasDualRole && 
                   (meta.colaborador_id || meta.system_user_id) && 
                   (meta.responsavel_id || meta.aluno_id)
@@ -436,6 +447,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               setCurrentUserState(savedUser)
             }
           } catch (e) {}
+
+          // Revalidação silenciosa em background com /api/auth/me para refletir inativação ou perda de vínculo de colaborador em tempo real
+          if (typeof window !== 'undefined' && navigator.onLine !== false && !isUserLoggedOut()) {
+            const baselineUser = savedUser
+            void fetch('/api/auth/me', {
+              cache: 'no-store',
+              credentials: 'include',
+              headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+            })
+              .then(r => (r.ok ? r.json() : null))
+              .then(meData => {
+                const serverUser = meData?.user
+                if (!serverUser?.id || !isMounted) return
+                const drifted =
+                  serverUser.perfil !== baselineUser?.perfil ||
+                  serverUser.cargo !== baselineUser?.cargo ||
+                  (serverUser.status || '') !== ((baselineUser as any)?.status || '') ||
+                  Boolean(serverUser.hasDualRole) !== Boolean(baselineUser?.hasDualRole) ||
+                  (serverUser.colaborador_id || '') !== (baselineUser?.colaborador_id || '') ||
+                  (serverUser.system_user_id || '') !== (baselineUser?.system_user_id || '') ||
+                  (serverUser.responsavel_id || '') !== (baselineUser?.responsavel_id || '') ||
+                  (serverUser.aluno_id || '') !== (baselineUser?.aluno_id || '')
+                if (drifted) {
+                  const merged = {
+                    ...baselineUser,
+                    ...serverUser,
+                    ...(serverUser.foto ? { foto: serverUser.foto } : (baselineUser?.foto ? { foto: baselineUser.foto } : {})),
+                  }
+                  setCurrentUserState(merged)
+                  if (merged.perfil) {
+                    setCurrentUserPerfilState(merged.perfil)
+                    saveSetting('edu-current-perfil', merged.perfil)
+                  }
+                  saveSetting('edu-current-user', merged)
+                }
+              })
+              .catch(() => {})
+          }
         } else {
           setCurrentUserState(null)
           setCurrentUserPerfilState('')
