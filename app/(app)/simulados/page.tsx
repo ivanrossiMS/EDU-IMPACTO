@@ -1,766 +1,741 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  LayoutDashboard, PenTool, FileText, AlertCircle, Calendar, 
-  ChevronRight, Sparkles, BookOpen, Clock, Activity, FileSignature, 
-  User, Users, Upload, CheckCircle, ArrowRight, PlusCircle, Settings, 
-  FileEdit, BookMarked, GraduationCap
-} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import {
+  AlertCircle,
+  ArrowRight,
+  ChevronDown,
+  Filter,
+  RotateCcw,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus } from '@/lib/utils'
-import { formatDateTime } from '@/lib/utils'
+import { GabaritoProvaModal } from '@/components/simulados/GabaritoProvaModal'
+import { GabaritoRedacaoModal } from '@/components/simulados/GabaritoRedacaoModal'
+import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
+import { BentoKpiGrid, KpiFilterMode } from '@/components/simulados/dashboard/BentoKpiGrid'
+import { EvaluationRowCard } from '@/components/simulados/dashboard/EvaluationRowCard'
+import { PedagogicalRadarPanel } from '@/components/simulados/dashboard/PedagogicalRadarPanel'
+import { ProfessorDashboardView } from '@/components/simulados/dashboard/ProfessorDashboardView'
+import { SimuladosDashboardSkeleton } from '@/components/simulados/dashboard/SimuladosDashboardSkeleton'
+import { SimuladosHeader } from '@/components/simulados/dashboard/SimuladosHeader'
+import {
+  EVALUATION_TYPE_META,
+  EvaluationType,
+  NormalizedEvaluation,
+  ProfessorTaskItem,
+  formatCreatorShortName,
+  getDeadlineUrgency,
+  normalizeEvaluationItem,
+} from '@/components/simulados/dashboard/simuladosDashboardUtils'
+
+type FeedTab = 'todas' | 'Simulado' | 'Prova' | 'Redação' | 'adaptadas'
+type SortMode = 'recentes' | 'prazo' | 'progresso' | 'revisao'
+
+interface BimestreRow {
+  id: string
+  nome: string
+}
 
 export default function SimuladosDashboard() {
-  const router = useRouter()
   const { currentUserPerfil, currentUser, hydrated } = useApp()
   const isProfessor = currentUserPerfil === 'Professor'
-  
-  const [loading, setLoading] = useState(true)
-  
-  // Coordinator Stats
-  const [adminStats, setAdminStats] = useState({
-    provasAtivas: 0,
-    simuladosAtivos: 0,
-    redacoesAtivas: 0,
-  })
-  const [adminRecent, setAdminRecent] = useState<any[]>([])
 
-  // Professor Stats
+  const [loading, setLoading] = useState(true)
+
+  // Coordinator State
+  const [evaluations, setEvaluations] = useState<NormalizedEvaluation[]>([])
+  const [bimestres, setBimestres] = useState<BimestreRow[]>([])
+
+  // Filters & Toolbar
+  const [searchQuery, setSearchQuery] = useState('')
+  const [bimestreFilter, setBimestreFilter] = useState('todos')
+  const [activeTab, setActiveTab] = useState<FeedTab>('todas')
+  const [statusFilter, setStatusFilter] = useState('todos')
+  const [sortMode, setSortMode] = useState<SortMode>('recentes')
+  const [showAllRows, setShowAllRows] = useState(false)
+
+  // Quick Gabarito Modal State
+  const [gabaritoModal, setGabaritoModal] = useState<{
+    id: string
+    type: EvaluationType
+  } | null>(null)
+
+  // Professor State
+  const [profPendingTasks, setProfPendingTasks] = useState<ProfessorTaskItem[]>([])
+  const [profSubmittedTasks, setProfSubmittedTasks] = useState<ProfessorTaskItem[]>([])
   const [profStats, setProfStats] = useState({
     provasPendentes: 0,
     simuladosPendentes: 0,
     redacoesPendentes: 0,
   })
-  const [profTasks, setProfTasks] = useState<any[]>([])
+
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Global "/" or Cmd/Ctrl+K shortcut to focus dashboard search
+  useEffect(() => {
+    if (isProfessor) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isTyping =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+      if (!isTyping && e.key === '/') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isProfessor])
 
   useEffect(() => {
     if (!hydrated || !currentUser) return
+    let cancelled = false
 
     async function loadDashboard() {
       setLoading(true)
       try {
         if (isProfessor) {
-          // ==============================
-          // VISÃO DO PROFESSOR
-          // ==============================
-          
-          // Buscar requisições pendentes do professor
           const [resProvas, resSimulados, resRedacao, resBimestres] = await Promise.all([
-            (supabase as any).from('provas_upload_requisicoes').select('*, provas_upload(*)').eq('id_professor', currentUser?.id),
-            (supabase as any).from('simulados_upload_requisicoes').select('*, simulados_upload(*)').eq('id_professor', currentUser?.id),
-            (supabase as any).from('redacao_upload_requisicoes').select('*, redacao_upload(*)').eq('id_professor', currentUser?.id),
-            (supabase as any).from('simulados_bimestres').select('id, nome')
+            (supabase as any)
+              .from('provas_upload_requisicoes')
+              .select('*, provas_upload(*)')
+              .eq('id_professor', currentUser?.id),
+            (supabase as any)
+              .from('simulados_upload_requisicoes')
+              .select('*, simulados_upload(*)')
+              .eq('id_professor', currentUser?.id),
+            (supabase as any)
+              .from('redacao_upload_requisicoes')
+              .select('*, redacao_upload(*)')
+              .eq('id_professor', currentUser?.id),
+            (supabase as any).from('simulados_bimestres').select('id, nome'),
           ])
 
-          const bimsMapProf: Record<string, string> = {}
-          if (resBimestres?.data) {
-            resBimestres.data.forEach((b: any) => {
-              if (b.id && b.nome) bimsMapProf[b.id] = b.nome
-            })
+          if (cancelled) return
+
+          const bimsMap: Record<string, string> = {}
+          ;(resBimestres?.data || []).forEach((b: any) => {
+            if (b?.id && b?.nome) bimsMap[b.id] = b.nome
+          })
+
+          const extractBim = (parent: any) => {
+            if (!parent) return ''
+            if (parent.id_bimestre && bimsMap[parent.id_bimestre]) return bimsMap[parent.id_bimestre]
+            if (typeof parent.bimestre === 'string' && parent.bimestre.trim()) return parent.bimestre.trim()
+            return parent.bimestre_nome || ''
           }
 
-          const extractBimestreProf = (item: any) => {
-            if (!item) return ''
-            if (item.id_bimestre && bimsMapProf[item.id_bimestre]) return bimsMapProf[item.id_bimestre]
-            if (typeof item.bimestre === 'string' && item.bimestre.trim()) return item.bimestre.trim()
-            if (item.bimestre_nome) return item.bimestre_nome
-            return ''
-          }
+          const sources: {
+            rows: any[]
+            parentKey: string
+            type: EvaluationType
+            routeBase: string
+          }[] = [
+            {
+              rows: resProvas.data || [],
+              parentKey: 'provas_upload',
+              type: 'Prova',
+              routeBase: '/simulados/provas-upload',
+            },
+            {
+              rows: resSimulados.data || [],
+              parentKey: 'simulados_upload',
+              type: 'Simulado',
+              routeBase: '/simulados/simulados-upload',
+            },
+            {
+              rows: resRedacao.data || [],
+              parentKey: 'redacao_upload',
+              type: 'Redação',
+              routeBase: '/simulados/redacao-upload',
+            },
+          ]
 
-          const pReq = resProvas.data || []
-          const sReq = resSimulados.data || []
-          const rReq = resRedacao.data || []
+          const pending: ProfessorTaskItem[] = []
+          const submitted: ProfessorTaskItem[] = []
+          const counts = { Prova: 0, Simulado: 0, 'Redação': 0 }
 
-          const pPendentes = pReq.filter((r: any) => r.status === 'pendente' || r.status === 'rejeitado')
-          const sPendentes = sReq.filter((r: any) => r.status === 'pendente' || r.status === 'rejeitado')
-          const rPendentes = rReq.filter((r: any) => r.status === 'pendente' || r.status === 'rejeitado')
-
-          setProfStats({
-            provasPendentes: pPendentes.length,
-            simuladosPendentes: sPendentes.length,
-            redacoesPendentes: rPendentes.length
-          })
-
-          // Combine and sort tasks
-          let allTasks: any[] = []
-          
-          pPendentes.forEach((r: any) => {
-            if (r.provas_upload) {
-              allTasks.push({
-                id: r.id,
-                parentId: r.provas_upload.id,
-                type: 'Prova',
-                title: r.provas_upload.titulo,
-                disciplina: r.disciplina_nome,
-                bimestre: extractBimestreProf(r.provas_upload),
-                prazo: r.provas_upload.data_limite_upload,
-                statusReq: r.status,
-                link: `/simulados/provas-upload/${r.provas_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
-                icon: FileSignature,
-                color: '#10b981'
-              })
-            }
-          })
-
-          sPendentes.forEach((r: any) => {
-            if (r.simulados_upload) {
-              allTasks.push({
-                id: r.id,
-                parentId: r.simulados_upload.id,
-                type: 'Simulado',
-                title: r.simulados_upload.titulo,
-                disciplina: r.disciplina_nome,
-                bimestre: extractBimestreProf(r.simulados_upload),
-                prazo: r.simulados_upload.data_limite_upload,
-                statusReq: r.status,
-                link: `/simulados/simulados-upload/${r.simulados_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
-                icon: BookOpen,
-                color: '#3b82f6'
-              })
-            }
-          })
-
-          rPendentes.forEach((r: any) => {
-            if (r.redacao_upload) {
-              allTasks.push({
-                id: r.id,
-                parentId: r.redacao_upload.id,
-                type: 'Redação',
-                title: r.redacao_upload.titulo,
-                disciplina: r.disciplina_nome,
-                bimestre: extractBimestreProf(r.redacao_upload),
-                prazo: r.redacao_upload.data_limite_upload,
-                statusReq: r.status,
-                link: `/simulados/redacao-upload/${r.redacao_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
-                icon: PenTool,
-                color: '#f43f5e'
-              })
-            }
-          })
-
-          // Sort by deadline (closest first)
-          allTasks.sort((a, b) => {
-            if (!a.prazo) return 1
-            if (!b.prazo) return -1
-            return new Date(a.prazo).getTime() - new Date(b.prazo).getTime()
-          })
-
-          setProfTasks(allTasks)
-
-        } else {
-          // ==============================
-          // VISÃO DO COORDENADOR
-          // ==============================
-          
-          const [resProvas, resSimulados, resRedacao, resBimestres] = await Promise.all([
-            (supabase as any).from('provas_upload').select('*, provas_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('simulados_upload').select('*, simulados_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('redacao_upload').select('*, redacao_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('simulados_bimestres').select('id, nome')
-          ])
-
-          const bimsMapAdmin: Record<string, string> = {}
-          if (resBimestres?.data) {
-            resBimestres.data.forEach((b: any) => {
-              if (b.id && b.nome) bimsMapAdmin[b.id] = b.nome
-            })
-          }
-
-          const extractBimestreAdmin = (item: any) => {
-            if (!item) return ''
-            if (item.id_bimestre && bimsMapAdmin[item.id_bimestre]) return bimsMapAdmin[item.id_bimestre]
-            if (typeof item.bimestre === 'string' && item.bimestre.trim()) return item.bimestre.trim()
-            if (item.bimestre_nome) return item.bimestre_nome
-            return ''
-          }
-
-          let pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova'), bimestre_nome: extractBimestreAdmin(p) }))
-          let sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado'), bimestre_nome: extractBimestreAdmin(s) }))
-          let rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao'), bimestre_nome: extractBimestreAdmin(r) }))
-
-          // Fetch users for criado_por
-          const allUserIds = Array.from(new Set([
-            ...pData.map((p: any) => p.criado_por),
-            ...sData.map((p: any) => p.criado_por),
-            ...rData.map((r: any) => r.criado_por)
-          ].filter(Boolean)));
-          
-          if (allUserIds.length > 0) {
-            try {
-              const req = await fetch('/api/usuarios/nomes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: allUserIds })
-              });
-              const resData = await req.json();
-              const usersMap = resData.data || {};
-              
-              if (currentUser?.id && !usersMap[currentUser.id]) {
-                usersMap[currentUser.id] = currentUser.nome;
+          for (const src of sources) {
+            for (const r of src.rows) {
+              const parent = r?.[src.parentKey]
+              if (!parent) continue
+              const st = String(r.status || 'pendente').toLowerCase()
+              const prazo = parent.data_limite_upload || null
+              const task: ProfessorTaskItem = {
+                id: String(r.id),
+                parentId: String(parent.id),
+                type: src.type,
+                title: parent.titulo || 'Sem título',
+                disciplina: r.disciplina_nome || '',
+                bimestre: extractBim(parent),
+                prazo,
+                deadline: getDeadlineUrgency(prazo),
+                statusReq: st,
+                enviadoEm: r.enviado_em || r.updated_at || null,
+                link: `${src.routeBase}/${parent.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
               }
 
-              const formatCreatorName = (name: string) => {
-                if (!name) return 'Desconhecido';
-                const parts = name.trim().split(/\s+/).filter((p: string) => !['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase()));
-                if (parts.length > 1) {
-                  return parts.slice(0, 2).join(' ');
-                }
-                return parts[0] || 'Desconhecido';
-              };
-              
-              Object.keys(usersMap).forEach(k => {
-                usersMap[k] = formatCreatorName(usersMap[k]);
-              });
-
-              pData = pData.map((p: any) => ({ ...p, criado_por_nome: usersMap[p.criado_por] || 'Sistema' }));
-              sData = sData.map((s: any) => ({ ...s, criado_por_nome: usersMap[s.criado_por] || 'Sistema' }));
-              rData = rData.map((r: any) => ({ ...r, criado_por_nome: usersMap[r.criado_por] || 'Sistema' }));
-            } catch(e) {
-              console.error("Error fetching creators:", e);
+              if (st === 'pendente' || st === 'rejeitado' || st === 'reprovado') {
+                pending.push(task)
+                counts[src.type] += 1
+              } else {
+                submitted.push(task)
+              }
             }
           }
 
-          const pAtivas = pData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
-          const sAtivas = sData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
-          const rAtivas = rData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
-
-          setAdminStats({
-            provasAtivas: pAtivas,
-            simuladosAtivos: sAtivas,
-            redacoesAtivas: rAtivas
+          pending.sort((a, b) => {
+            const aRej = a.statusReq === 'rejeitado' || a.statusReq === 'reprovado' ? 0 : 1
+            const bRej = b.statusReq === 'rejeitado' || b.statusReq === 'reprovado' ? 0 : 1
+            if (aRej !== bRej) return aRej - bRej
+            return (a.deadline.daysLeft ?? 9999) - (b.deadline.daysLeft ?? 9999)
           })
 
-          let allRecent: any[] = []
-          
-          pData.forEach((r: any) => {
-            allRecent.push({ ...r, type: 'Prova', icon: FileSignature, color: '#10b981', link: `/simulados/provas-upload/${r.id}` })
-          })
-          sData.forEach((r: any) => {
-            allRecent.push({ ...r, type: 'Simulado', icon: BookOpen, color: '#3b82f6', link: `/simulados/simulados-upload/${r.id}` })
-          })
-          rData.forEach((r: any) => {
-            allRecent.push({ ...r, type: 'Redação', icon: PenTool, color: '#f43f5e', link: `/simulados/redacao-upload/${r.id}` })
+          submitted.sort((a, b) => {
+            const ta = a.enviadoEm ? new Date(a.enviadoEm).getTime() : 0
+            const tb = b.enviadoEm ? new Date(b.enviadoEm).getTime() : 0
+            return tb - ta
           })
 
-          allRecent.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          setAdminRecent(allRecent.slice(0, 8)) // Show last 8
+          setProfStats({
+            provasPendentes: counts.Prova,
+            simuladosPendentes: counts.Simulado,
+            redacoesPendentes: counts['Redação'],
+          })
+          setProfPendingTasks(pending)
+          setProfSubmittedTasks(submitted.slice(0, 15))
+          return
         }
-      } catch (e: any) {
-        console.error("Dashboard error:", e)
+
+        // ==============================
+        // VISÃO DO COORDENADOR
+        // ==============================
+        const [resProvas, resSimulados, resRedacao, resBimestres] = await Promise.all([
+          (supabase as any)
+            .from('provas_upload')
+            .select('*, provas_upload_requisicoes(*)')
+            .order('created_at', { ascending: false })
+            .limit(45),
+          (supabase as any)
+            .from('simulados_upload')
+            .select('*, simulados_upload_requisicoes(*)')
+            .order('created_at', { ascending: false })
+            .limit(45),
+          (supabase as any)
+            .from('redacao_upload')
+            .select('*, redacao_upload_requisicoes(*)')
+            .order('created_at', { ascending: false })
+            .limit(45),
+          (supabase as any)
+            .from('simulados_bimestres')
+            .select('id, nome')
+            .order('nome'),
+        ])
+
+        if (cancelled) return
+
+        const bimsList: BimestreRow[] = (resBimestres?.data || []).filter(
+          (b: any) => b?.id && b?.nome
+        )
+        const bimsMap: Record<string, string> = {}
+        bimsList.forEach((b) => {
+          bimsMap[b.id] = b.nome
+        })
+        setBimestres(bimsList)
+
+        const pRaw = resProvas.data || []
+        const sRaw = resSimulados.data || []
+        const rRaw = resRedacao.data || []
+
+        const allUserIds = Array.from(
+          new Set(
+            [
+              ...pRaw.map((p: any) => p.criado_por),
+              ...sRaw.map((s: any) => s.criado_por),
+              ...rRaw.map((r: any) => r.criado_por),
+            ].filter(Boolean)
+          )
+        )
+
+        const usersMap: Record<string, string> = {}
+        if (allUserIds.length > 0) {
+          try {
+            const req = await fetch('/api/usuarios/nomes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids: allUserIds }),
+            })
+            const resData = await req.json()
+            const rawMap = resData?.data || {}
+            if (currentUser?.id && !rawMap[currentUser.id]) {
+              rawMap[currentUser.id] = currentUser.nome
+            }
+            Object.keys(rawMap).forEach((k) => {
+              usersMap[k] = formatCreatorShortName(rawMap[k])
+            })
+          } catch (err) {
+            console.error('Error fetching creators:', err)
+          }
+        }
+
+        if (cancelled) return
+
+        const normalized: NormalizedEvaluation[] = [
+          ...pRaw.map((item: any) => normalizeEvaluationItem(item, 'Prova', bimsMap, usersMap)),
+          ...sRaw.map((item: any) => normalizeEvaluationItem(item, 'Simulado', bimsMap, usersMap)),
+          ...rRaw.map((item: any) => normalizeEvaluationItem(item, 'Redação', bimsMap, usersMap)),
+        ]
+
+        normalized.sort(
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        )
+        setEvaluations(normalized)
+      } catch (err) {
+        console.error('Dashboard error:', err)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadDashboard()
-  }, [hydrated, currentUser])
+    return () => {
+      cancelled = true
+    }
+  }, [hydrated, currentUser, isProfessor])
+
+  // Items filtered only by Bimestre (drives KPI stats + tab badges + radar)
+  const bimestreScoped = useMemo(() => {
+    if (bimestreFilter === 'todos') return evaluations
+    return evaluations.filter((item) => item.bimestreId === bimestreFilter)
+  }, [evaluations, bimestreFilter])
+
+  // KPI Metrics computed over scoped dataset
+  const kpiStats = useMemo(() => {
+    const isActive = (s: string) => s === 'aguardando' || s === 'em_revisao'
+    const reviewItems = bimestreScoped.filter((i) => i.status === 'em_revisao')
+    const urgentReview = reviewItems.filter(
+      (i) =>
+        i.deadline.state === 'overdue' ||
+        i.deadline.state === 'today' ||
+        i.deadline.state === 'soon'
+    ).length
+
+    const provas = bimestreScoped.filter((i) => i.type === 'Prova' && isActive(i.status))
+    const provasAguardando = provas.filter((i) => i.status === 'aguardando').length
+
+    const simulados = bimestreScoped.filter(
+      (i) => i.type === 'Simulado' && isActive(i.status)
+    )
+    const simTotalReqs = simulados.reduce((acc, s) => acc + s.progress.total, 0)
+    const simSentReqs = simulados.reduce((acc, s) => acc + s.progress.submitted, 0)
+    const simuladosCompletionPct =
+      simTotalReqs > 0 ? Math.round((simSentReqs / simTotalReqs) * 100) : 0
+
+    const redacoes = bimestreScoped.filter(
+      (i) => i.type === 'Redação' && isActive(i.status)
+    )
+    const adaptadasCount = bimestreScoped.filter((i) => i.isAdaptada).length
+
+    return {
+      reviewReady: reviewItems.length,
+      urgentReview,
+      provasAtivas: provas.length,
+      provasAguardando,
+      simuladosAtivos: simulados.length,
+      simuladosCompletionPct,
+      redacoesAtivas: redacoes.length,
+      adaptadasCount,
+    }
+  }, [bimestreScoped])
+
+  // Current KPI highlight mode
+  const activeKpiMode: KpiFilterMode = useMemo(() => {
+    if (statusFilter === 'em_revisao' && activeTab === 'todas') return 'review'
+    if (activeTab === 'Prova' || activeTab === 'Simulado' || activeTab === 'Redação') {
+      return activeTab
+    }
+    return 'all'
+  }, [statusFilter, activeTab])
+
+  const handleKpiSelect = (mode: KpiFilterMode) => {
+    setShowAllRows(false)
+    if (mode === 'all') {
+      setActiveTab('todas')
+      setStatusFilter('todos')
+      return
+    }
+    if (mode === 'review') {
+      setActiveTab('todas')
+      setStatusFilter('em_revisao')
+      return
+    }
+    setActiveTab(mode)
+    setStatusFilter('todos')
+  }
+
+  // Tab counts
+  const tabCounts = useMemo(
+    () => ({
+      todas: bimestreScoped.length,
+      Simulado: bimestreScoped.filter((i) => i.type === 'Simulado').length,
+      Prova: bimestreScoped.filter((i) => i.type === 'Prova').length,
+      'Redação': bimestreScoped.filter((i) => i.type === 'Redação').length,
+      adaptadas: bimestreScoped.filter((i) => i.isAdaptada).length,
+    }),
+    [bimestreScoped]
+  )
+
+  // Filtered + Sorted list for main workspace
+  const filteredEvaluations = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+
+    const list = bimestreScoped.filter((item) => {
+      if (activeTab === 'adaptadas' && !item.isAdaptada) return false
+      if (
+        activeTab !== 'todas' &&
+        activeTab !== 'adaptadas' &&
+        item.type !== activeTab
+      ) {
+        return false
+      }
+      if (statusFilter !== 'todos' && item.status !== statusFilter) return false
+
+      if (q) {
+        const haystack = [
+          item.titulo,
+          item.type,
+          item.seriesText,
+          item.bimestreName,
+          item.criadoPorNome,
+          ...item.disciplinas,
+        ]
+          .join(' ')
+          .toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+
+    const sorted = [...list]
+    sorted.sort((a, b) => {
+      if (sortMode === 'prazo') {
+        return (a.deadline.daysLeft ?? 9999) - (b.deadline.daysLeft ?? 9999)
+      }
+      if (sortMode === 'progresso') {
+        return b.progress.percent - a.progress.percent
+      }
+      if (sortMode === 'revisao') {
+        const score = (s: string) =>
+          s === 'em_revisao' ? 0 : s === 'aguardando' ? 1 : s === 'aprovado' ? 2 : 3
+        const diff = score(a.status) - score(b.status)
+        if (diff !== 0) return diff
+      }
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    })
+
+    return sorted
+  }, [bimestreScoped, activeTab, statusFilter, searchQuery, sortMode])
+
+  const hasActiveFilters =
+    activeTab !== 'todas' ||
+    statusFilter !== 'todos' ||
+    bimestreFilter !== 'todos' ||
+    searchQuery.trim().length > 0
+
+  const resetAllFilters = () => {
+    setActiveTab('todas')
+    setStatusFilter('todos')
+    setBimestreFilter('todos')
+    setSearchQuery('')
+    setSortMode('recentes')
+    setShowAllRows(false)
+  }
 
   if (!hydrated) return null
 
-  // ==============================
-  // RENDER: PROFESSOR
-  // ==============================
   if (isProfessor) {
     return (
-      <div className="simulados-dash-container" style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
-        <style>{`
-          @media (max-width: 768px) {
-            .simulados-dash-container {
-              padding: 16px !important;
-            }
-            .task-feed-card {
-              padding: 16px !important;
-              gap: 12px !important;
-            }
-            .task-feed-card > div:first-child {
-              gap: 12px !important;
-              min-width: 0 !important;
-            }
-            .task-feed-card-content {
-              min-width: 0 !important;
-            }
-            .task-feed-card-info {
-              flex-direction: column !important;
-              align-items: flex-start !important;
-              gap: 4px !important;
-            }
-            .task-feed-card-arrow {
-              display: none !important;
-            }
-            .task-feed-card h3 {
-              font-size: 16px !important;
-              word-break: break-word !important;
-              white-space: normal !important;
-            }
-          }
-        `}</style>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 1200, margin: '0 auto' }}>
-          
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 40, background: 'linear-gradient(135deg, rgba(139,92,246,0.1), rgba(139,92,246,0.02))', padding: '32px', borderRadius: 32, border: '1px solid rgba(139,92,246,0.2)' }}>
-            <div style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 24px -6px rgba(139,92,246,0.5)' }}>
-              <User size={32} color="#fff" strokeWidth={2.5} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: 32, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-                Olá, {currentUser?.nome?.split(' ')[0]}! 👋
-              </h1>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 16, margin: 0, fontWeight: 500 }}>
-                Você tem <strong style={{ color: '#f43f5e' }}>{profTasks.length} uploads pendentes</strong> no momento.
-              </p>
-            </div>
-          </div>
-
-          {/* KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 48 }}>
-            {[
-              { title: 'Provas Pendentes', value: profStats.provasPendentes, icon: FileSignature, color: '#10b981' },
-              { title: 'Simulados Pendentes', value: profStats.simuladosPendentes, icon: BookOpen, color: '#3b82f6' },
-              { title: 'Redações Pendentes', value: profStats.redacoesPendentes, icon: PenTool, color: '#f43f5e' }
-            ].map((card, idx) => (
-              <motion.div key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * idx }}
-                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, padding: '16px 8px', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${card.color}20, ${card.color}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <card.icon size={22} color={card.color} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', lineHeight: 1 }}>{card.value}</div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-secondary))', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.2, whiteSpace: 'pre-line' }}>{card.title.replace(' ', '\n')}</div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Pending Tasks Feed */}
-          <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 32, padding: 32, border: '1px solid hsl(var(--border-subtle))' }}>
-            <h2 style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: '0 0 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Clock size={24} color="#f59e0b" /> Seus Trabalhos Pendentes
-            </h2>
-
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'hsl(var(--text-secondary))' }}>
-                <Activity size={40} className="animate-spin mx-auto mb-4" opacity={0.5} />
-                <p>Carregando tarefas...</p>
-              </div>
-            ) : profTasks.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '80px 20px', background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px dashed hsl(var(--border-subtle))' }}>
-                <CheckCircle size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
-                <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>Tudo em dia!</h3>
-                <p style={{ color: 'hsl(var(--text-secondary))', margin: 0 }}>Você não possui nenhum upload pendente no momento.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {profTasks.map((task) => (
-                  <Link href={task.link} key={task.id} style={{ textDecoration: 'none' }}>
-                    <motion.div whileHover={{ scale: 1.01, x: 4 }} whileTap={{ scale: 0.99 }}
-                      className="task-feed-card"
-                      style={{ background: 'hsl(var(--bg-surface))', border: `1px solid ${task.color}30`, borderRadius: 20, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, cursor: 'pointer', transition: 'all 0.2s', boxShadow: `0 4px 20px -10px ${task.color}20` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 20, minWidth: 0 }}>
-                        <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${task.color}20, ${task.color}05)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <task.icon size={24} color={task.color} />
-                        </div>
-                        <div className="task-feed-card-content" style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: task.color, background: `${task.color}15`, padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              {task.type}
-                            </span>
-                            {task.statusReq === 'rejeitado' && (
-                              <span style={{ fontSize: 11, fontWeight: 800, color: '#ef4444', background: 'rgba(239,68,68,0.15)', padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase' }}>
-                                Refazer
-                              </span>
-                            )}
-                          </div>
-                          <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 4px' }}>{task.title}</h3>
-                          <div className="task-feed-card-info" style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 500, flexWrap: 'wrap' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookMarked size={14} /> {task.disciplina}</span>
-                            {task.bimestre && (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#d97706', fontWeight: 600 }}>
-                                <Calendar size={14} /> {task.bimestre}
-                              </span>
-                            )}
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: task.prazo && new Date(task.prazo) < new Date() ? '#ef4444' : 'inherit' }}>
-                              <Calendar size={14} /> Prazo: {task.prazo ? task.prazo.split('-').reverse().join('/') : 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="task-feed-card-arrow" style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <ArrowRight size={20} />
-                      </div>
-                    </motion.div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </div>
+      <ProfessorDashboardView
+        userName={currentUser?.nome}
+        loading={loading}
+        pendingTasks={profPendingTasks}
+        submittedTasks={profSubmittedTasks}
+        stats={profStats}
+      />
     )
   }
 
-  // ==============================
-  // RENDER: COORDENADOR
-  // ==============================
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'aguardando': return { c: '#f59e0b', b: 'rgba(245,158,11,0.15)', l: 'Aguardando' }
-      case 'em_revisao': return { c: '#3b82f6', b: 'rgba(59,130,246,0.15)', l: 'Em Revisão' }
-      case 'publicado': return { c: '#8b5cf6', b: 'rgba(139,92,246,0.15)', l: 'Publicado' }
-      default: return { c: '#10b981', b: 'rgba(16,185,129,0.15)', l: status }
-    }
+  if (loading) {
+    return <SimuladosDashboardSkeleton />
   }
 
+  const displayedEvaluations = showAllRows
+    ? filteredEvaluations
+    : filteredEvaluations.slice(0, 10)
+
+  const listFooterLink =
+    activeTab === 'Prova' || activeTab === 'Simulado' || activeTab === 'Redação'
+      ? EVALUATION_TYPE_META[activeTab].listHref
+      : activeTab === 'adaptadas'
+        ? '/simulados/arquivo-adaptadas'
+        : '/simulados/simulados-upload'
+
+  const listFooterLabel =
+    activeTab === 'Prova'
+      ? 'Ver todas as provas'
+      : activeTab === 'Simulado'
+        ? 'Ver todos os simulados'
+        : activeTab === 'Redação'
+          ? 'Ver todas as redações'
+          : activeTab === 'adaptadas'
+            ? 'Ir para Arquivo Adaptadas'
+            : 'Explorar lista completa'
+
+  const tabs: { id: FeedTab; label: string; count: number; isSpecial?: boolean }[] = [
+    { id: 'todas', label: 'Todas', count: tabCounts.todas },
+    { id: 'Simulado', label: 'Simulados', count: tabCounts.Simulado },
+    { id: 'Prova', label: 'Provas', count: tabCounts.Prova },
+    { id: 'Redação', label: 'Redações', count: tabCounts['Redação'] },
+    { id: 'adaptadas', label: 'Adaptadas', count: tabCounts.adaptadas, isSpecial: true },
+  ]
+
   return (
-    <div className="simulados-dash-container" style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
-      <style>{`
-        @media (max-width: 768px) {
-          .simulados-dash-container {
-            padding: 16px !important;
-          }
-          .quick-actions-container {
-            flex-wrap: wrap !important;
-            width: 100% !important;
-          }
-          .quick-actions-container > a {
-            flex: 1 1 calc(33.333% - 8px);
-            min-width: 100px;
-          }
-          .quick-action-btn {
-            width: 100% !important;
-            padding: 12px 4px !important;
-            font-size: 12px !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            gap: 6px !important;
-            text-align: center !important;
-          }
-        }
-        @media (max-width: 900px) {
-          .eval-list-item {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 14px !important;
-          }
-          .eval-list-middle {
-            width: 100% !important;
-            justify-content: space-between !important;
-            border-top: 1px dashed hsl(var(--border-subtle)) !important;
-            padding-top: 12px !important;
-            flex-wrap: wrap !important;
-          }
-          .eval-list-right {
-            width: 100% !important;
-            justify-content: space-between !important;
-          }
-        }
-      `}</style>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 1200, margin: '0 auto' }}>
-        
-        {/* Header & Quick Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 40, flexWrap: 'wrap', gap: 24 }}>
-          <div>
-            <h1 style={{ fontSize: 32, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: '0 0 8px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <LayoutDashboard size={32} color="#8b5cf6" /> Painel de Controle
-            </h1>
-            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 16, margin: 0, fontWeight: 500 }}>
-              Visão geral do sistema de Provas, Simulados e Redações.
-            </p>
-          </div>
-          
-          <div className="quick-actions-container" style={{ display: 'flex', gap: 12 }}>
-            <Link href="/simulados/provas-upload/nova" style={{ textDecoration: 'none' }}>
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                className="quick-action-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#10b981', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(16,185,129,0.4)' }}>
-                <PlusCircle size={18} /> Nova Prova
-              </motion.button>
-            </Link>
-            <Link href="/simulados/simulados-upload/nova" style={{ textDecoration: 'none' }}>
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                className="quick-action-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(59,130,246,0.4)' }}>
-                <PlusCircle size={18} /> Novo Simulado
-              </motion.button>
-            </Link>
-            <Link href="/simulados/redacao-upload/nova" style={{ textDecoration: 'none' }}>
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                className="quick-action-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#f43f5e', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(244,63,94,0.4)' }}>
-                <PlusCircle size={18} /> Nova Redação
-              </motion.button>
-            </Link>
-          </div>
-        </div>
+    <div className="mx-auto w-full max-w-[1360px] px-4 py-6 sm:px-8 sm:py-8">
+      <SimuladosHeader
+        searchQuery={searchQuery}
+        onSearchChange={(val) => {
+          setSearchQuery(val)
+          setShowAllRows(false)
+        }}
+        searchInputRef={searchInputRef}
+        bimestreFilter={bimestreFilter}
+        onBimestreChange={(val) => {
+          setBimestreFilter(val)
+          setShowAllRows(false)
+        }}
+        bimestres={bimestres}
+        totalCount={bimestreScoped.length}
+        reviewCount={kpiStats.reviewReady}
+      />
 
-        {/* KPI Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 48 }}>
-          {[
-            { title: 'Provas Ativas', value: adminStats.provasAtivas, icon: FileSignature, color: '#10b981', link: '/simulados/provas-upload' },
-            { title: 'Simulados Ativos', value: adminStats.simuladosAtivos, icon: BookOpen, color: '#3b82f6', link: '/simulados/simulados-upload' },
-            { title: 'Redações Ativas', value: adminStats.redacoesAtivas, icon: PenTool, color: '#f43f5e', link: '/simulados/redacao-upload' }
-          ].map((card, idx) => (
-            <Link href={card.link} key={idx} style={{ textDecoration: 'none' }}>
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * idx }} whileHover={{ y: -4 }}
-                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, padding: '16px 8px', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)', textAlign: 'center' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${card.color}20, ${card.color}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <card.icon size={22} color={card.color} strokeWidth={2.5} />
+      <BentoKpiGrid
+        activeFilter={activeKpiMode}
+        onSelectFilter={handleKpiSelect}
+        stats={kpiStats}
+      />
+
+      {/* Main Split Grid: Evaluations Workspace (left) + Pedagogical Radar (right) */}
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_336px]">
+        {/* Left: Workspace de Avaliações */}
+        <section
+          aria-label="Avaliações"
+          className="overflow-hidden rounded-[20px] border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] shadow-sm"
+        >
+          {/* Toolbar: Tabs + Status & Sort Controls */}
+          <div className="border-b border-[hsl(var(--border-subtle))] px-4 pt-3 sm:px-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div
+                className="sim-tablist flex-1 border-b-0"
+                role="tablist"
+                aria-label="Filtrar avaliações por categoria"
+              >
+                {tabs.map((tab) => {
+                  const selected = activeTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => {
+                        setActiveTab(tab.id)
+                        setShowAllRows(false)
+                      }}
+                      className="sim-tab"
+                    >
+                      {tab.isSpecial && (
+                        <Sparkles size={13} className="text-amber-500" />
+                      )}
+                      <span>{tab.label}</span>
+                      <span className="rounded-full bg-[hsl(var(--bg-elevated))] px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[hsl(var(--text-secondary))]">
+                        {tab.count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pb-2.5 lg:pb-1">
+                <div className="sim-input-wrap h-8 px-2">
+                  <Filter size={12} className="text-[hsl(var(--text-muted))]" />
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value)
+                      setShowAllRows(false)
+                    }}
+                    aria-label="Filtrar por status"
+                    className="sim-clean-select cursor-pointer text-[11px] font-semibold"
+                  >
+                    <option value="todos">Todos os status</option>
+                    <option value="em_revisao">Em Revisão</option>
+                    <option value="aguardando">Aguardando</option>
+                    <option value="aprovado">Aprovado</option>
+                    <option value="publicado">Publicado</option>
+                  </select>
                 </div>
-                <div>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', lineHeight: 1 }}>{card.value}</div>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-secondary))', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.2, whiteSpace: 'pre-line' }}>{card.title.replace(' ', '\n')}</div>
+
+                <div className="sim-input-wrap h-8 px-2">
+                  <SlidersHorizontal size={12} className="text-[hsl(var(--text-muted))]" />
+                  <select
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value as SortMode)}
+                    aria-label="Ordenar avaliações"
+                    className="sim-clean-select cursor-pointer text-[11px] font-semibold"
+                  >
+                    <option value="recentes">Mais recentes</option>
+                    <option value="revisao">Prioridade de revisão</option>
+                    <option value="prazo">Prazo mais próximo</option>
+                    <option value="progresso">Maior % de envio</option>
+                  </select>
                 </div>
-              </motion.div>
-            </Link>
-          ))}
-        </div>
 
-        {/* Recent Activity Feed */}
-        <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 32, padding: 32, border: '1px solid hsl(var(--border-subtle))' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: '0 0 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Activity size={24} color="#8b5cf6" /> Avaliações Recentes
-          </h2>
-
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: 'hsl(var(--text-secondary))' }}>
-              <Activity size={40} className="animate-spin mx-auto mb-4" opacity={0.5} />
-              <p>Carregando feed...</p>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-[hsl(var(--border-subtle))] bg-transparent px-2.5 text-[11px] font-semibold text-[#f43f5e] transition-colors hover:bg-[#f43f5e]/10"
+                  >
+                    <RotateCcw size={12} />
+                    Limpar
+                  </button>
+                )}
+              </div>
             </div>
-          ) : adminRecent.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '80px 20px', background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px dashed hsl(var(--border-subtle))' }}>
-              <AlertCircle size={48} color="#94a3b8" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>Nenhuma avaliação encontrada</h3>
-              <p style={{ color: 'hsl(var(--text-secondary))', margin: 0 }}>Crie uma nova prova ou simulado para começar.</p>
+          </div>
+
+          {/* Evaluations Feed */}
+          {filteredEvaluations.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <AlertCircle
+                size={40}
+                className="mx-auto mb-3 text-[hsl(var(--text-muted))] opacity-60"
+              />
+              <h3 className="m-0 text-base font-bold text-[hsl(var(--text-primary))]">
+                Nenhuma avaliação encontrada
+              </h3>
+              <p className="mx-auto mt-1 max-w-md text-sm text-[hsl(var(--text-secondary))]">
+                {hasActiveFilters
+                  ? 'Nenhum registro corresponde aos filtros atuais. Tente limpar os filtros para ver tudo.'
+                  : 'Crie uma nova prova, simulado ou redação para iniciar o ciclo.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-elevated))] px-4 py-2 text-xs font-bold text-[hsl(var(--text-primary))] transition-colors hover:border-[hsl(var(--border-strong))]"
+                >
+                  <RotateCcw size={13} />
+                  Limpar filtros
+                </button>
+              )}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {adminRecent.map((item) => {
-                const sColor = getStatusColor(item.status)
-                const isAdaptada = item.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(item.eh_adaptada)
-
-                // Extrair séries
-                const rawSeries = item.series || item.serie || item.series_nomes || item.turmas
-                let seriesText = ''
-                if (Array.isArray(rawSeries)) {
-                  seriesText = rawSeries.filter(Boolean).join(', ')
-                } else if (typeof rawSeries === 'string' && rawSeries.trim()) {
-                  seriesText = rawSeries.trim()
-                }
-
-                // Extrair disciplinas das requisições ou campo direto
-                const reqs = item.provas_upload_requisicoes || item.simulados_upload_requisicoes || item.redacao_upload_requisicoes || item.requisicoes || []
-                const discSet = new Set<string>()
-                if (item.disciplina_nome) discSet.add(item.disciplina_nome)
-                if (item.disciplina) discSet.add(item.disciplina)
-                if (Array.isArray(reqs)) {
-                  reqs.forEach((r: any) => {
-                    if (r.disciplina_nome) discSet.add(r.disciplina_nome)
-                    if (r.nome_disciplina) discSet.add(r.nome_disciplina)
-                  })
-                }
-                const disciplinasText = Array.from(discSet).filter(Boolean).join(', ')
-
-                // Extrair bimestre
-                const bimestreText = item.bimestre_nome || item.bimestre || (item.simulados_bimestres && item.simulados_bimestres.nome) || ''
-
-                // Extrair datas de criação e envio
-                const dataCriacao = item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : null
-                const reqsWithEnvio = (reqs || []).filter((r: any) => r.enviado_em || r.status === 'enviado' || r.status === 'aprovado' || r.status === 'concluido')
-                let dataEnvio: string | null = null
-                if (reqsWithEnvio.length > 0) {
-                  const latestEnvio = reqsWithEnvio.map((r: any) => r.enviado_em || r.updated_at).filter(Boolean).sort().reverse()[0]
-                  if (latestEnvio) {
-                    dataEnvio = new Date(latestEnvio).toLocaleDateString('pt-BR')
+            <div>
+              {displayedEvaluations.map((item) => (
+                <EvaluationRowCard
+                  key={item.key}
+                  item={item}
+                  onOpenGabarito={(target) =>
+                    setGabaritoModal({ id: target.id, type: target.type })
                   }
-                }
-                if (!dataEnvio && item.status !== 'aguardando' && item.updated_at) {
-                  dataEnvio = new Date(item.updated_at).toLocaleDateString('pt-BR')
-                }
+                />
+              ))}
 
-                return (
-                  <Link href={item.link} key={`${item.type}-${item.id}`} style={{ textDecoration: 'none' }}>
-                    <motion.div 
-                      whileHover={{ scale: 1.005, x: 4 }} 
-                      whileTap={{ scale: 0.995 }}
-                      className="eval-list-item"
-                      style={{ 
-                        background: 'hsl(var(--bg-surface))', 
-                        border: `1px solid ${item.color}25`, 
-                        borderRadius: 18, 
-                        padding: '16px 20px', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        gap: 20, 
-                        cursor: 'pointer', 
-                        transition: 'all 0.2s', 
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.03)' 
-                      }}
+              {/* Footer: Expand / Go to Full List */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-base)_/_0.35)] px-5 py-3">
+                <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+                  Exibindo {displayedEvaluations.length} de {filteredEvaluations.length}{' '}
+                  {filteredEvaluations.length === 1 ? 'avaliação' : 'avaliações'}
+                </span>
+
+                <div className="flex items-center gap-3">
+                  {filteredEvaluations.length > 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRows((prev) => !prev)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-3 py-1.5 text-xs font-bold text-[hsl(var(--text-primary))] transition-colors hover:border-[hsl(var(--border-strong))]"
                     >
-                      {/* Esquerda: Ícone + Título + Badges de Série, Disciplina, Bimestre + Criador */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
-                        <div style={{ 
-                          width: 44, 
-                          height: 44, 
-                          borderRadius: 14, 
-                          background: `linear-gradient(135deg, ${item.color}20, ${item.color}05)`, 
-                          border: `1px solid ${item.color}30`,
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          flexShrink: 0 
-                        }}>
-                          <item.icon size={22} color={item.color} />
-                        </div>
+                      <span>
+                        {showAllRows
+                          ? 'Mostrar menos'
+                          : `Ver todas (${filteredEvaluations.length})`}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${showAllRows ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                  )}
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
-                          {/* Tipo e Título */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                            <span style={{ 
-                              fontSize: 10, 
-                              fontWeight: 800, 
-                              color: item.color, 
-                              background: `${item.color}15`, 
-                              border: `1px solid ${item.color}30`,
-                              padding: '2px 8px', 
-                              borderRadius: 6, 
-                              textTransform: 'uppercase', 
-                              letterSpacing: '0.05em',
-                              flexShrink: 0
-                            }}>
-                              {item.type}
-                            </span>
-                            <h3 style={{ 
-                              fontSize: 16, 
-                              fontWeight: 800, 
-                              color: 'hsl(var(--text-primary))', 
-                              margin: 0, 
-                              whiteSpace: 'nowrap', 
-                              overflow: 'hidden', 
-                              textOverflow: 'ellipsis' 
-                            }}>
-                              {item.titulo}
-                            </h3>
-                            {isAdaptada && (
-                              <span className="badge-adaptada-neon-brown">
-                                ADAPTADA
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Séries, Disciplinas, Bimestre e Criador */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            {seriesText && (
-                              <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 4, 
-                                fontSize: 11, fontWeight: 700, color: '#8b5cf6', 
-                                background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)',
-                                padding: '2px 8px', borderRadius: 6 
-                              }}>
-                                <GraduationCap size={12} strokeWidth={2.5} /> {seriesText}
-                              </span>
-                            )}
-
-                            {disciplinasText && (
-                              <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 4, 
-                                fontSize: 11, fontWeight: 700, color: '#0284c7', 
-                                background: 'rgba(2, 132, 199, 0.1)', border: '1px solid rgba(2, 132, 199, 0.2)',
-                                padding: '2px 8px', borderRadius: 6 
-                              }}>
-                                <BookOpen size={12} strokeWidth={2.5} /> {disciplinasText}
-                              </span>
-                            )}
-
-                            {bimestreText && (
-                              <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 4, 
-                                fontSize: 11, fontWeight: 700, color: '#d97706', 
-                                background: 'rgba(217, 119, 6, 0.1)', border: '1px solid rgba(217, 119, 6, 0.2)',
-                                padding: '2px 8px', borderRadius: 6 
-                              }}>
-                                <Calendar size={12} strokeWidth={2.5} /> {bimestreText}
-                              </span>
-                            )}
-
-                            {item.criado_por_nome && (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600 }}>
-                                <User size={12} color="#3b82f6" /> {item.criado_por_nome}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Centro: Datas de Criada, Envio e Aplicação */}
-                      <div className="eval-list-middle" style={{ display: 'flex', alignItems: 'center', gap: 20, color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                        {dataCriacao && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Criada</span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8b5cf6', fontWeight: 700 }}>
-                              <Calendar size={13} /> {dataCriacao}
-                            </span>
-                          </div>
-                        )}
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Envio</span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: dataEnvio ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
-                            <Upload size={13} /> {dataEnvio || 'Pendente'}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Aplicação</span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>
-                            <Calendar size={13} /> {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Direita: Status + Seta */}
-                      <div className="eval-list-right" style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                        <div style={{ 
-                          background: sColor.b, 
-                          color: sColor.c, 
-                          padding: '6px 14px', 
-                          borderRadius: 100, 
-                          fontSize: 11, 
-                          fontWeight: 800, 
-                          textTransform: 'uppercase', 
-                          letterSpacing: '0.02em',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {sColor.l}
-                        </div>
-                        <div style={{ 
-                          width: 34, 
-                          height: 34, 
-                          borderRadius: 10, 
-                          background: 'rgba(139,92,246,0.1)', 
-                          color: '#8b5cf6', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          flexShrink: 0 
-                        }}>
-                          <ArrowRight size={18} />
-                        </div>
-                      </div>
-
-                    </motion.div>
+                  <Link
+                    href={listFooterLink}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-[#f43f5e] no-underline hover:underline"
+                  >
+                    <span>{listFooterLabel}</span>
+                    <ArrowRight size={13} />
                   </Link>
-                )
-              })}
+                </div>
+              </div>
             </div>
           )}
-        </div>
+        </section>
 
-      </motion.div>
+        {/* Right: Radar Pedagógico & Atalhos */}
+        <PedagogicalRadarPanel
+          items={bimestreScoped}
+          statusFilter={statusFilter}
+          onSelectStatusFilter={(status) => {
+            setStatusFilter(status)
+            setShowAllRows(false)
+          }}
+        />
+      </div>
+
+      {/* Gabarito Modals triggered directly from Quick Actions */}
+      {gabaritoModal?.type === 'Simulado' && (
+        <GabaritoSimuladoModal
+          simuladoUploadId={gabaritoModal.id}
+          onClose={() => setGabaritoModal(null)}
+        />
+      )}
+      {gabaritoModal?.type === 'Prova' && (
+        <GabaritoProvaModal
+          provaUploadId={gabaritoModal.id}
+          onClose={() => setGabaritoModal(null)}
+        />
+      )}
+      {gabaritoModal?.type === 'Redação' && (
+        <GabaritoRedacaoModal
+          provaUploadId={gabaritoModal.id}
+          onClose={() => setGabaritoModal(null)}
+        />
+      )}
     </div>
   )
 }

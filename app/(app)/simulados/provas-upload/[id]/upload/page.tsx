@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, OriginalFileRecord, resolveOriginalFileForRequisicao, upsertOriginalFileInConfig, mergeConfigEstudioPreservingOriginalFiles, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
@@ -40,7 +40,7 @@ export default function UploadProvaPage() {
   const [parseError, setParseError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [fileName, setFileName] = useState('')
-  const [arquivoOriginal, setArquivoOriginal] = useState<{ url: string; nome: string; tamanho?: number; id_requisicao?: string } | null>(null)
+  const [arquivoOriginal, setArquivoOriginal] = useState<OriginalFileRecord | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
 
@@ -87,28 +87,20 @@ export default function UploadProvaPage() {
       const targetProf = searchParams.get('prof')
       const showAll = searchParams.get('all') === 'true'
 
-      const arquivosList: any[] = Array.isArray(data?.config_estudio?.arquivos_originais) ? data.config_estudio.arquivos_originais : []
-      let matchedArquivo = null
-      if (targetReq) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_requisicao === targetReq)
-      } else if (targetDisc) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_disciplina === targetDisc)
-      } else if (targetProf) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_professor === targetProf)
-      }
-      if (!matchedArquivo && arquivosList.length > 0) {
-        matchedArquivo = arquivosList[0]
-      }
-      if (!matchedArquivo && data?.config_estudio?.arquivo_original_url) {
-        matchedArquivo = {
-          url: data.config_estudio.arquivo_original_url,
-          nome: data.config_estudio.arquivo_original_nome || 'arquivo_original.docx',
-          tamanho: data.config_estudio.arquivo_original_tamanho
-        }
-      }
-      if (matchedArquivo) {
-        setArquivoOriginal(matchedArquivo)
-      }
+      const currentActiveReq = showAll ? null : (
+        (targetReq && reqs?.find((r: any) => r.id === targetReq)) ||
+        (targetDisc && reqs?.find((r: any) => (r.id_disciplina === targetDisc || r.disciplina_nome === targetDisc) && (!targetProf || r.id_professor === targetProf))) ||
+        (targetProf && reqs?.find((r: any) => r.id_professor === targetProf)) ||
+        reqs?.[0] ||
+        null
+      )
+
+      const matchedArquivo = resolveOriginalFileForRequisicao(
+        data?.config_estudio,
+        currentActiveReq,
+        showAll ? [] : (reqs || [])
+      )
+      setArquivoOriginal(matchedArquivo)
 
       // If questions already exist, load them for review
       if (provaData?.questoes_json && provaData.questoes_json.length > 0) {
@@ -200,12 +192,23 @@ export default function UploadProvaPage() {
       }
 
       if (data.arquivoUrl) {
-        setArquivoOriginal({
+        const uploadedEntry = {
           url: data.arquivoUrl,
           nome: data.arquivoNome || file.name,
           tamanho: data.arquivoTamanho || file.size,
-          id_requisicao: targetReq || undefined
-        })
+          path: data.arquivoPath,
+          id_requisicao: targetReq || undefined,
+          id_disciplina: targetDisc || null,
+          id_professor: targetProf || null,
+          uploaded_at: new Date().toISOString()
+        }
+        setArquivoOriginal(uploadedEntry)
+        setProva((prev: any) => prev ? {
+          ...prev,
+          config_estudio: upsertOriginalFileInConfig(prev.config_estudio, uploadedEntry)
+        } : prev)
+      } else if (data.storageWarning) {
+        console.warn('[Upload DOCX Original] Falha ao salvar cópia original:', data.storageWarning)
       }
 
       const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true }))
@@ -287,21 +290,22 @@ export default function UploadProvaPage() {
       // 4. Merge
       const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
 
-      // 5. Merge config_estudio with original file list
-      let currentConfig = dbData?.config_estudio || prova?.config_estudio || {}
-      let currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais) ? [...currentConfig.arquivos_originais] : []
+      // 5. Merge config_estudio preserving original file list
+      let mergedConfig = mergeConfigEstudioPreservingOriginalFiles(
+        dbData?.config_estudio || prova?.config_estudio,
+        config_estudio
+      )
+      const resolvedReqId = targetReq || arquivoOriginal?.id_requisicao || null
       if (arquivoOriginal?.url) {
-        const exists = currentArquivos.some((a: any) => a.url === arquivoOriginal.url || (targetReq && a.id_requisicao === targetReq))
-        if (!exists) {
-          currentArquivos.push({
-            id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-            url: arquivoOriginal.url,
-            nome: arquivoOriginal.nome,
-            tamanho: arquivoOriginal.tamanho,
-            id_requisicao: targetReq || null,
+        const existingEntry = (Array.isArray(mergedConfig.arquivos_originais) ? mergedConfig.arquivos_originais : []).find(
+          (a: any) => a.url === arquivoOriginal.url && (!resolvedReqId || a.id_requisicao === resolvedReqId)
+        )
+        if (!existingEntry) {
+          mergedConfig = upsertOriginalFileInConfig(mergedConfig, {
+            ...arquivoOriginal,
+            id_requisicao: resolvedReqId,
             id_disciplina: targetDisc || null,
             id_professor: targetProf || null,
-            uploaded_at: new Date().toISOString()
           })
         }
       }
@@ -310,16 +314,7 @@ export default function UploadProvaPage() {
         questoes_json: finalQToSave,
         questoes_count: finalQToSave.filter((q: any) => q.tipo_questao !== 'texto_apoio').length,
         ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
-        config_estudio: {
-          ...currentConfig,
-          ...(config_estudio || {}),
-          arquivos_originais: currentArquivos,
-          ...(arquivoOriginal?.url ? {
-            arquivo_original_url: arquivoOriginal.url,
-            arquivo_original_nome: arquivoOriginal.nome,
-            arquivo_original_tamanho: arquivoOriginal.tamanho
-          } : {})
-        },
+        config_estudio: mergedConfig,
         updated_at: new Date().toISOString(),
       }
 
@@ -767,10 +762,10 @@ export default function UploadProvaPage() {
                       </div>
                     )}
                     {(() => {
-                      const reqMatchedFile = prova?.config_estudio?.arquivos_originais?.find((a: any) => 
-                        (a.id_requisicao && a.id_requisicao === req.id) ||
-                        (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina) ||
-                        (a.id_professor && req.id_professor && a.id_professor === req.id_professor)
+                      const reqMatchedFile = resolveOriginalFileForRequisicao(
+                        prova?.config_estudio,
+                        req,
+                        prova?.provas_upload_requisicoes || []
                       ) || (isCurrentActive && arquivoOriginal?.url ? arquivoOriginal : null)
 
                       if (!reqMatchedFile?.url) return null

@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
-import { formatProfessorHeaderName } from '@/lib/utils'
+import { formatProfessorHeaderName, mergeConfigEstudioPreservingOriginalFiles } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
@@ -175,7 +175,8 @@ export default function UploadProvaPage() {
       }
 
       if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
+        const { data: latestRow } = await (supabase as any).from('provas_upload').select('config_estudio').eq('id', provaId).maybeSingle()
+        updatePayload.config_estudio = mergeConfigEstudioPreservingOriginalFiles(latestRow?.config_estudio || prova?.config_estudio, config_estudio)
       }
 
       if (actionType === 'aprovar') {

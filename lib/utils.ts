@@ -529,6 +529,250 @@ export function isFileForRequisicao(a: any, req: any, allReqs: any[] = []): bool
   return false
 }
 
+export interface OriginalFileRecord {
+  id?: string
+  url: string
+  nome: string
+  tamanho?: number
+  path?: string
+  id_requisicao?: string | null
+  id_disciplina?: string | null
+  id_professor?: string | null
+  disciplina_nome?: string | null
+  professor_nome?: string | null
+  uploaded_at?: string
+}
+
+function parseConfigEstudioObject(rawConfig: any): Record<string, any> {
+  if (!rawConfig) return {}
+  if (typeof rawConfig === 'string') {
+    try {
+      const parsed = JSON.parse(rawConfig)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return typeof rawConfig === 'object' ? rawConfig : {}
+}
+
+/**
+ * Resolve o arquivo original (.docx) para uma requisição (ou visão geral quando `req` é omitido),
+ * usando `arquivos_originais` com fallback seguro para `config_estudio.arquivo_original_url`
+ * em avaliações de requisição única ou modo geral.
+ */
+export function resolveOriginalFileForRequisicao(
+  configEstudio: any,
+  req?: any,
+  allReqs: any[] = []
+): OriginalFileRecord | null {
+  const cfg = parseConfigEstudioObject(configEstudio)
+  const arquivosList: OriginalFileRecord[] = Array.isArray(cfg.arquivos_originais)
+    ? cfg.arquivos_originais.filter((a: any) => a && typeof a === 'object' && Boolean(a.url))
+    : []
+
+  if (req) {
+    const matched = arquivosList.find((a) => isFileForRequisicao(a, req, allReqs))
+    if (matched) return matched
+
+    const isSingleReq = !Array.isArray(allReqs) || allReqs.length <= 1
+    if (isSingleReq) {
+      if (arquivosList.length === 1) return arquivosList[0]
+      if (cfg.arquivo_original_url) {
+        return {
+          url: cfg.arquivo_original_url,
+          nome: cfg.arquivo_original_nome || 'arquivo_original.docx',
+          tamanho: cfg.arquivo_original_tamanho,
+          path: cfg.arquivo_original_path,
+          id_requisicao: req.id || null,
+          uploaded_at: cfg.arquivo_original_uploaded_at,
+        }
+      }
+    }
+    return null
+  }
+
+  if (arquivosList.length > 0) return arquivosList[0]
+  if (cfg.arquivo_original_url) {
+    return {
+      url: cfg.arquivo_original_url,
+      nome: cfg.arquivo_original_nome || 'arquivo_original.docx',
+      tamanho: cfg.arquivo_original_tamanho,
+      path: cfg.arquivo_original_path,
+      uploaded_at: cfg.arquivo_original_uploaded_at,
+    }
+  }
+  return null
+}
+
+/**
+ * Insere ou atualiza a referência do arquivo original em `config_estudio.arquivos_originais`
+ * e nos campos de fallback `arquivo_original_*`, sem remover arquivos de outras disciplinas.
+ */
+export function upsertOriginalFileInConfig(
+  configEstudio: any,
+  entry: OriginalFileRecord
+): Record<string, any> {
+  const cfg = parseConfigEstudioObject(configEstudio)
+  const currentArquivos: OriginalFileRecord[] = Array.isArray(cfg.arquivos_originais)
+    ? cfg.arquivos_originais.filter((a: any) => a && typeof a === 'object' && Boolean(a.url))
+    : []
+
+  const normalizedEntry: OriginalFileRecord = {
+    id: entry.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    url: entry.url,
+    nome: entry.nome,
+    ...(entry.tamanho !== undefined ? { tamanho: entry.tamanho } : {}),
+    ...(entry.path ? { path: entry.path } : {}),
+    id_requisicao: entry.id_requisicao || null,
+    id_disciplina: entry.id_disciplina || null,
+    id_professor: entry.id_professor || null,
+    uploaded_at: entry.uploaded_at || new Date().toISOString(),
+  }
+
+  const nextArquivos = currentArquivos.filter((a) => {
+    if (normalizedEntry.id_requisicao && a.id_requisicao === normalizedEntry.id_requisicao) return false
+    if (
+      !normalizedEntry.id_requisicao &&
+      normalizedEntry.id_disciplina &&
+      a.id_disciplina === normalizedEntry.id_disciplina &&
+      !a.id_requisicao
+    ) {
+      return false
+    }
+    if (
+      !normalizedEntry.id_requisicao &&
+      !normalizedEntry.id_disciplina &&
+      normalizedEntry.id_professor &&
+      a.id_professor === normalizedEntry.id_professor &&
+      !a.id_requisicao &&
+      !a.id_disciplina
+    ) {
+      return false
+    }
+    if (a.url === normalizedEntry.url) return false
+    return true
+  })
+  nextArquivos.push(normalizedEntry)
+
+  return {
+    ...cfg,
+    arquivos_originais: nextArquivos,
+    arquivo_original_url: normalizedEntry.url,
+    arquivo_original_nome: normalizedEntry.nome,
+    ...(normalizedEntry.tamanho !== undefined ? { arquivo_original_tamanho: normalizedEntry.tamanho } : {}),
+    ...(normalizedEntry.path ? { arquivo_original_path: normalizedEntry.path } : {}),
+    arquivo_original_uploaded_at: normalizedEntry.uploaded_at,
+  }
+}
+
+/**
+ * Mescla alterações de layout/configuração em `config_estudio` preservando
+ * `arquivos_originais` e campos `arquivo_original_*` persistidos no banco,
+ * evitando que auto-saves com estado em memória obsoleto apaguem os DOCX originais.
+ */
+export function mergeConfigEstudioPreservingOriginalFiles(
+  dbConfig: any,
+  nextConfig: any
+): Record<string, any> {
+  const dbObj = parseConfigEstudioObject(dbConfig)
+  const nextObj = parseConfigEstudioObject(nextConfig)
+  const merged: Record<string, any> = { ...dbObj, ...nextObj }
+
+  const dbFiles: OriginalFileRecord[] = Array.isArray(dbObj.arquivos_originais)
+    ? dbObj.arquivos_originais.filter((a: any) => a && typeof a === 'object' && Boolean(a.url))
+    : []
+  const nextFiles: OriginalFileRecord[] = Array.isArray(nextObj.arquivos_originais)
+    ? nextObj.arquivos_originais.filter((a: any) => a && typeof a === 'object' && Boolean(a.url))
+    : []
+
+  const getTs = (entry: any) => {
+    const ms = Date.parse(entry?.uploaded_at || '')
+    return Number.isFinite(ms) ? ms : 0
+  }
+
+  const combinedFiles: OriginalFileRecord[] = [...nextFiles]
+  for (const dbFile of dbFiles) {
+    const existingIdx = combinedFiles.findIndex(
+      (f) =>
+        f.url === dbFile.url ||
+        (dbFile.id_requisicao && f.id_requisicao === dbFile.id_requisicao)
+    )
+    if (existingIdx === -1) {
+      combinedFiles.push(dbFile)
+    } else if (getTs(dbFile) > getTs(combinedFiles[existingIdx])) {
+      // Se o banco já recebeu um upload mais recente para a mesma requisição, mantém o mais novo
+      combinedFiles[existingIdx] = dbFile
+    }
+  }
+
+  if (combinedFiles.length > 0 || Array.isArray(dbObj.arquivos_originais) || Array.isArray(nextObj.arquivos_originais)) {
+    merged.arquivos_originais = combinedFiles
+  }
+
+  const dbTopTs = getTs({ uploaded_at: dbObj.arquivo_original_uploaded_at })
+  const nextTopTs = getTs({ uploaded_at: nextObj.arquivo_original_uploaded_at })
+  const dbTopIsNewer = Boolean(dbObj.arquivo_original_url) && (!nextObj.arquivo_original_url || dbTopTs > nextTopTs)
+
+  if (dbTopIsNewer) {
+    merged.arquivo_original_url = dbObj.arquivo_original_url
+    if (dbObj.arquivo_original_nome !== undefined) merged.arquivo_original_nome = dbObj.arquivo_original_nome
+    if (dbObj.arquivo_original_tamanho !== undefined) merged.arquivo_original_tamanho = dbObj.arquivo_original_tamanho
+    if (dbObj.arquivo_original_path !== undefined) merged.arquivo_original_path = dbObj.arquivo_original_path
+    if (dbObj.arquivo_original_uploaded_at !== undefined) merged.arquivo_original_uploaded_at = dbObj.arquivo_original_uploaded_at
+  }
+
+  return merged
+}
+
+/**
+ * Persiste `config_estudio` no(s) registro(s) correspondente(s) preservando metadados
+ * de arquivos originais já gravados no banco (inclusive em saves concorrentes ou auto-save).
+ */
+export async function saveStudioConfigPreservingFiles(
+  supabaseClient: any,
+  ids: string[],
+  updatedConfigEstudio: any,
+  instrucoes?: any
+): Promise<Record<string, any> | null> {
+  const tables = ['provas_upload', 'simulados_upload', 'redacao_upload', 'simulados']
+  let latestMergedConfig: Record<string, any> | null = null
+
+  for (const targetId of ids) {
+    if (!targetId) continue
+    for (const table of tables) {
+      try {
+        const { data: existingRow, error: selectErr } = await supabaseClient
+          .from(table)
+          .select('config_estudio')
+          .eq('id', targetId)
+          .maybeSingle()
+
+        if (selectErr || !existingRow) continue
+
+        const mergedConfig = mergeConfigEstudioPreservingOriginalFiles(
+          existingRow.config_estudio,
+          updatedConfigEstudio
+        )
+        latestMergedConfig = mergedConfig
+
+        await supabaseClient
+          .from(table)
+          .update({
+            config_estudio: mergedConfig,
+            ...(table !== 'redacao_upload' && instrucoes !== undefined ? { instrucoes } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', targetId)
+      } catch {
+        // Ignora tabelas sem o registro ou colunas opcionais
+      }
+    }
+  }
+
+  return latestMergedConfig
+}
+
 /**
  * Valida se a string fornecida representa uma foto de aluno válida (base64 ou URL real).
  * Rejeita strings vazias, base64 vazios ("data:image/jpeg;base64,"), respostas JSON de erro da catraca e avatares SVG mockados.

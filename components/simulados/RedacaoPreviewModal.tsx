@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
-import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages } from '@/lib/utils'
+import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages, saveStudioConfigPreservingFiles } from '@/lib/utils'
 
 export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string }
 export interface Questao {
@@ -165,48 +165,11 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
   }
 
   const saveToDatabaseTables = async (updatedConfigEstudio: any) => {
-    const ids = getAllItemIds()
-    for (const targetId of ids) {
-      try {
-        await (supabase as any)
-          .from('provas_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('simulados_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('redacao_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('simulados')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-    }
+    return await saveStudioConfigPreservingFiles(
+      supabase as any,
+      getAllItemIds(),
+      updatedConfigEstudio
+    )
   }
 
   const getInitialHeaderLayout = () => {
@@ -295,11 +258,11 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         header_layout: headerLayout
       }
 
-      if (prova) {
-        (prova as any).config_estudio = updatedConfigEstudio
-      }
+      const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
 
-      await saveToDatabaseTables(updatedConfigEstudio)
+      if (prova) {
+        (prova as any).config_estudio = safeConfig
+      }
 
       alert('Margens salvas para esta redação com sucesso!')
     } catch (e: any) {
@@ -327,11 +290,11 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         header_layout: headerLayout
       }
 
-      if (prova) {
-        (prova as any).config_estudio = updatedConfigEstudio
-      }
+      const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
 
-      await saveToDatabaseTables(updatedConfigEstudio)
+      if (prova) {
+        (prova as any).config_estudio = safeConfig
+      }
 
       setHasUserEdited(false)
       alert('Posições do cabeçalho salvas para esta redação com sucesso!')
@@ -793,9 +756,12 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
                   header_layout: headerLayout
                 }
 
-                await saveToDatabaseTables(updatedConfigEstudio)
+                const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
+                if (prova) {
+                  (prova as any).config_estudio = safeConfig
+                }
 
-                if (onSave) await onSave(safeLocalQuestoes, updatedConfigEstudio)
+                if (onSave) await onSave(safeLocalQuestoes, safeConfig)
                 onClose()
               }} 
               style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 12, border: 'none', cursor: saving ? 'wait' : 'pointer', transition: 'all 0.2s', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}

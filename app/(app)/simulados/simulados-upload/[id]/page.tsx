@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao, normalizeQuestoesList } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao, normalizeQuestoesList, mergeConfigEstudioPreservingOriginalFiles } from '@/lib/utils'
 import { SimuladoPreviewModal, Questao } from '@/components/simulados/SimuladoPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -142,9 +142,11 @@ export default function VerProvaUploadPage() {
     try {
       const toSave = updatedQuestoes || questoes
       const validCount = toSave.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
-      const mergedConfig = config_estudio
-        ? { ...(prova?.config_estudio || {}), ...config_estudio }
-        : undefined
+      let mergedConfig: any = undefined
+      if (config_estudio) {
+        const { data: latestRow } = await (supabase as any).from('simulados_upload').select('config_estudio').eq('id', provaId).maybeSingle()
+        mergedConfig = mergeConfigEstudioPreservingOriginalFiles(latestRow?.config_estudio || prova?.config_estudio, config_estudio)
+      }
       let updatePayload: any = {
         questoes_json: toSave,
         questoes_count: validCount,

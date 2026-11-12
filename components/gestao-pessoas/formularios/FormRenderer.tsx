@@ -3270,13 +3270,8 @@ export function FormRenderer({
             >
               <Globe size={22} />
             </div>
-            <div>
-              <div style={{ fontSize: 14.5, fontWeight: 800 }}>
-                Link Público Aberto • Resposta sem Necessidade de Login
-              </div>
-              <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
-                Você pode responder diretamente preenchendo seu nome ou se identificar com seu login do sistema IMPACTO EDU.
-              </div>
+            <div style={{ fontSize: 14.5, fontWeight: 800 }}>
+              Link Público
             </div>
           </div>
 
@@ -3303,12 +3298,7 @@ export function FormRenderer({
                     cursor: 'pointer',
                   }}
                 >
-                  <Search size={14} /> Já respondi • Editar por{' '}
-                  {identifierFields[0]?.type === 'cpf'
-                    ? 'CPF'
-                    : identifierFields[0]?.type === 'telefone'
-                    ? 'Telefone'
-                    : 'E-mail'}
+                  <Search size={14} /> Já respondi • Editar
                 </button>
               )}
 

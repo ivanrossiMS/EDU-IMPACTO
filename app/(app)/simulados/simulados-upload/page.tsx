@@ -870,11 +870,17 @@ export default function UploadSimuladosGerenciamentoPage() {
 
         // Copy and map config_estudio if present
         let newConfig = simulado.config_estudio ? { ...simulado.config_estudio } : {}
+        const singleMappedReqId = Object.values(idMap).length === 1 ? Object.values(idMap)[0] : null
         if (Array.isArray(newConfig.arquivos_originais)) {
           newConfig.arquivos_originais = newConfig.arquivos_originais.map((a: any) => ({
             ...a,
-            id_requisicao: (a.id_requisicao && idMap[a.id_requisicao]) ? idMap[a.id_requisicao] : a.id_requisicao
+            id_requisicao: (a.id_requisicao && idMap[a.id_requisicao])
+              ? idMap[a.id_requisicao]
+              : (singleMappedReqId || a.id_requisicao)
           }))
+        }
+        if (Array.isArray(newConfig.ordem_requisicoes)) {
+          newConfig.ordem_requisicoes = newConfig.ordem_requisicoes.map((rid: string) => idMap[rid] || rid)
         }
 
         const updatePayload: any = {

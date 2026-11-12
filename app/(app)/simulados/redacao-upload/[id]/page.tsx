@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, mergeConfigEstudioPreservingOriginalFiles } from '@/lib/utils'
 import { RedacaoPreviewModal, Questao } from '@/components/simulados/RedacaoPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -79,13 +79,16 @@ export default function VerRedaçãoUploadPage() {
         questoes_json: updatedQuestoes || questoes,
         updated_at: new Date().toISOString()
       }
+      let mergedConfig: any = undefined
       if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
+        const { data: latestRow } = await (supabase as any).from('redacao_upload').select('config_estudio').eq('id', redacaoId).maybeSingle()
+        mergedConfig = mergeConfigEstudioPreservingOriginalFiles(latestRow?.config_estudio || redacao?.config_estudio, config_estudio)
+        updatePayload.config_estudio = mergedConfig
       }
       const { error } = await (supabase as any).from('redacao_upload').update(updatePayload).eq('id', redacaoId)
       if (error) throw error
-      if (config_estudio) {
-        setRedação((prev: any) => ({ ...prev, config_estudio }))
+      if (mergedConfig) {
+        setRedação((prev: any) => ({ ...prev, config_estudio: mergedConfig }))
       }
       setSuccessMessage('Alterações salvas com sucesso!')
       setSuccessModal(true)

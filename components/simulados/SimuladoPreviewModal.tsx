@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
-import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages } from '@/lib/utils'
+import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages, saveStudioConfigPreservingFiles } from '@/lib/utils'
 
 export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string; letra?: string; eh_correta?: boolean }
 
@@ -167,51 +167,12 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   }
 
   const saveToDatabaseTables = async (updatedConfigEstudio: any) => {
-    const ids = getAllItemIds()
-    for (const targetId of ids) {
-      try {
-        await (supabase as any)
-          .from('provas_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            ...(simulado?.instrucoes !== undefined ? { instrucoes: simulado.instrucoes } : {}),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('simulados_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            ...(simulado?.instrucoes !== undefined ? { instrucoes: simulado.instrucoes } : {}),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('redacao_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-
-      try {
-        await (supabase as any)
-          .from('simulados')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            ...(simulado?.instrucoes !== undefined ? { instrucoes: simulado.instrucoes } : {}),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetId)
-      } catch (e) {}
-    }
+    return await saveStudioConfigPreservingFiles(
+      supabase as any,
+      getAllItemIds(),
+      updatedConfigEstudio,
+      simulado?.instrucoes
+    )
   }
 
   const getInitialHeaderLayout = () => {
@@ -366,9 +327,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       saveToLocalStorage('simulador_page_margins', pageMargins)
 
       const updatedConfigEstudio = buildUpdatedConfigEstudio()
-      if (simulado) simulado.config_estudio = updatedConfigEstudio
-
-      await saveToDatabaseTables(updatedConfigEstudio)
+      const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
+      if (simulado) simulado.config_estudio = safeConfig
 
       alert('Margens salvas para este simulado com sucesso!')
     } catch (e: any) {
@@ -384,9 +344,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       saveToLocalStorage('simulador_header', headerLayout)
 
       const updatedConfigEstudio = buildUpdatedConfigEstudio()
-      if (simulado) simulado.config_estudio = updatedConfigEstudio
-
-      await saveToDatabaseTables(updatedConfigEstudio)
+      const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
+      if (simulado) simulado.config_estudio = safeConfig
 
       setHasUserEdited(false)
       alert('Posições do cabeçalho salvas para este simulado com sucesso!')
@@ -447,8 +406,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
 
       const updatedConfigEstudio = buildUpdatedConfigEstudio();
 
-      if (simulado) simulado.config_estudio = updatedConfigEstudio;
-      await saveToDatabaseTables(updatedConfigEstudio);
+      const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio;
+      if (simulado) simulado.config_estudio = safeConfig;
       const now = new Date();
       setAutoSavedTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
     }, 600);
@@ -1208,11 +1167,10 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                   saveToLocalStorage('simulador_header', headerLayout)
 
                   const updatedConfigEstudio = buildUpdatedConfigEstudio()
-                  if (simulado) simulado.config_estudio = updatedConfigEstudio
+                  const safeConfig = (await saveToDatabaseTables(updatedConfigEstudio)) || updatedConfigEstudio
+                  if (simulado) simulado.config_estudio = safeConfig
 
-                  await saveToDatabaseTables(updatedConfigEstudio)
-
-                  if (onSave) await onSave(safeLocalQuestoes, updatedConfigEstudio)
+                  if (onSave) await onSave(safeLocalQuestoes, safeConfig)
                   onClose()
                 }} 
                 style={{ flex: 1, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.25)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}

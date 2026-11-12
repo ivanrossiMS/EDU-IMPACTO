@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, OriginalFileRecord, resolveOriginalFileForRequisicao, upsertOriginalFileInConfig, mergeConfigEstudioPreservingOriginalFiles, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
@@ -43,7 +43,7 @@ export default function UploadSimuladoPage() {
   const [parseError, setParseError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [fileName, setFileName] = useState('')
-  const [arquivoOriginal, setArquivoOriginal] = useState<{ url: string; nome: string; tamanho?: number; id_requisicao?: string } | null>(null)
+  const [arquivoOriginal, setArquivoOriginal] = useState<OriginalFileRecord | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [showPreviewIsolated, setShowPreviewIsolated] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
@@ -177,14 +177,11 @@ export default function UploadSimuladoPage() {
       }
 
       // Look for original file in config_estudio specifically for this active requisition
-      const arquivosList: any[] = Array.isArray(data?.config_estudio?.arquivos_originais) ? data.config_estudio.arquivos_originais : []
-      let matchedArquivo: any = null
-
-      if (currentActiveReq) {
-        matchedArquivo = arquivosList.find((a: any) => isFileForRequisicao(a, currentActiveReq, reqs))
-      } else if (showAll) {
-        matchedArquivo = arquivosList[0] || null
-      }
+      const matchedArquivo = resolveOriginalFileForRequisicao(
+        data?.config_estudio,
+        currentActiveReq,
+        showAll ? [] : reqs
+      )
 
       if (matchedArquivo) {
         setArquivoOriginal(matchedArquivo)
@@ -390,12 +387,23 @@ export default function UploadSimuladoPage() {
       }
 
       if (data.arquivoUrl) {
-        setArquivoOriginal({
+        const uploadedEntry = {
           url: data.arquivoUrl,
           nome: data.arquivoNome || file.name,
           tamanho: data.arquivoTamanho || file.size,
-          id_requisicao: targetReq || undefined
-        })
+          path: data.arquivoPath,
+          id_requisicao: targetReq || undefined,
+          id_disciplina: activeRequisicao?.id_disciplina || targetDiscId || null,
+          id_professor: activeRequisicao?.id_professor || targetProfId || null,
+          uploaded_at: new Date().toISOString()
+        }
+        setArquivoOriginal(uploadedEntry)
+        setSimulado((prev: any) => prev ? {
+          ...prev,
+          config_estudio: upsertOriginalFileInConfig(prev.config_estudio, uploadedEntry)
+        } : prev)
+      } else if (data.storageWarning) {
+        console.warn('[Upload DOCX Original] Falha ao salvar cópia original:', data.storageWarning)
       }
 
       let parseNumCounter = 1
@@ -535,36 +543,30 @@ export default function UploadSimuladoPage() {
       })
 
       // 5. Merge config_estudio with original file list
-      let currentConfig = dbData?.config_estudio || simulado?.config_estudio || {}
-      let currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais) ? [...currentConfig.arquivos_originais] : []
+      let mergedConfig = mergeConfigEstudioPreservingOriginalFiles(
+        dbData?.config_estudio || simulado?.config_estudio,
+        config_estudio
+      )
 
-      if (arquivoOriginal?.url && activeRequisicao) {
-        currentArquivos = currentArquivos.filter((a: any) => a.id_requisicao !== activeRequisicao.id)
-        currentArquivos.push({
-          id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-          url: arquivoOriginal.url,
-          nome: arquivoOriginal.nome,
-          tamanho: arquivoOriginal.tamanho,
-          id_requisicao: activeRequisicao.id,
-          id_disciplina: activeRequisicao.id_disciplina || null,
-          id_professor: activeRequisicao.id_professor || null,
-          uploaded_at: new Date().toISOString()
-        })
+      const resolvedReqId = activeRequisicao?.id || arquivoOriginal?.id_requisicao || targetReqId || null
+      if (arquivoOriginal?.url) {
+        const existingEntry = (Array.isArray(mergedConfig.arquivos_originais) ? mergedConfig.arquivos_originais : []).find(
+          (a: any) => a.url === arquivoOriginal.url && (!resolvedReqId || a.id_requisicao === resolvedReqId)
+        )
+        if (!existingEntry) {
+          mergedConfig = upsertOriginalFileInConfig(mergedConfig, {
+            ...arquivoOriginal,
+            id_requisicao: resolvedReqId,
+            id_disciplina: activeRequisicao?.id_disciplina || targetDiscId || null,
+            id_professor: activeRequisicao?.id_professor || targetProfId || null,
+          })
+        }
       }
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
         questoes_count: finalQToSave.filter((q: any) => !isTextoApoio(q)).length,
-        config_estudio: {
-          ...currentConfig,
-          ...(config_estudio || {}),
-          arquivos_originais: currentArquivos,
-          ...(arquivoOriginal?.url ? {
-            arquivo_original_url: arquivoOriginal.url,
-            arquivo_original_nome: arquivoOriginal.nome,
-            arquivo_original_tamanho: arquivoOriginal.tamanho
-          } : {})
-        },
+        config_estudio: mergedConfig,
         updated_at: new Date().toISOString(),
       }
 
@@ -1078,8 +1080,10 @@ export default function UploadSimuladoPage() {
                       </div>
                     )}
                     {(() => {
-                      const reqMatchedFile = simulado?.config_estudio?.arquivos_originais?.find((a: any) => 
-                        isFileForRequisicao(a, req, simulado.simulados_upload_requisicoes || [])
+                      const reqMatchedFile = resolveOriginalFileForRequisicao(
+                        simulado?.config_estudio,
+                        req,
+                        simulado.simulados_upload_requisicoes || []
                       ) || (isCurrentActive && arquivoOriginal?.url ? arquivoOriginal : null)
 
                       if (!reqMatchedFile?.url) return null

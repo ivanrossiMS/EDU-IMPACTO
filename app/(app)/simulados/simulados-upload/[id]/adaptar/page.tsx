@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
+import { formatProfessorHeaderName, isQuestionForRequisicao, mergeConfigEstudioPreservingOriginalFiles } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadSimuladoPage() {
   const router = useRouter()
@@ -217,7 +217,8 @@ export default function UploadSimuladoPage() {
       }
 
       if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
+        const { data: latestRow } = await (supabase as any).from('simulados_upload').select('config_estudio').eq('id', simuladoId).maybeSingle()
+        updatePayload.config_estudio = mergeConfigEstudioPreservingOriginalFiles(latestRow?.config_estudio || simulado?.config_estudio, config_estudio)
       }
 
       if (actionType === 'aprovar') {

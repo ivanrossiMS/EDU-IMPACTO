@@ -4844,6 +4844,259 @@ dialog::backdrop {
   backdrop-filter: blur(4px);
 }
 
+/* ──────── SIMULADOS DASHBOARD ULTRAMODERNO ──────── */
+.sim-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border-subtle));
+  background: hsl(var(--bg-surface));
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.sim-input-wrap:focus-within {
+  border-color: hsl(var(--brand-primary));
+  box-shadow: 0 0 0 3px hsl(var(--brand-primary) / 0.14);
+}
+
+[data-theme='light'] .sim-input-wrap {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme='light'] .sim-input-wrap:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+[data-theme='light'] input.sim-clean-input,
+input.sim-clean-input,
+[data-theme='light'] select.sim-clean-select,
+select.sim-clean-select {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: hsl(var(--text-primary)) !important;
+}
+
+input.sim-clean-input::placeholder {
+  color: hsl(var(--text-muted));
+}
+
+/* Bento KPI Card (Container-Aware) */
+.sim-kpi-card {
+  container: sim-kpi / inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid hsl(var(--border-subtle));
+  background: hsl(var(--bg-surface));
+  text-align: left;
+  cursor: pointer;
+  overflow: clip;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+[data-theme='light'] .sim-kpi-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px -6px rgba(15, 23, 42, 0.05);
+}
+
+.sim-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--sim-accent-border, hsl(var(--border-strong)));
+  box-shadow: 0 12px 28px -12px var(--sim-accent-glow, rgba(59, 130, 246, 0.22));
+}
+
+.sim-kpi-card:focus-visible {
+  outline: 2px solid var(--sim-accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+.sim-kpi-card[data-active='true'] {
+  border-color: var(--sim-accent, #3b82f6);
+  box-shadow: 0 0 0 1px var(--sim-accent, #3b82f6), 0 12px 28px -10px var(--sim-accent-glow, rgba(59, 130, 246, 0.28));
+}
+
+/* Accessible Single-Row Horizontal Scrollable Tabs */
+.sim-tablist {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  border-block-end: 1px solid hsl(var(--border-subtle));
+  padding-inline: 2px;
+}
+
+.sim-tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.sim-tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px 12px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--text-secondary));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+
+.sim-tab:hover {
+  color: hsl(var(--text-primary));
+  background: hsl(var(--bg-hover) / 0.35);
+}
+
+.sim-tab:focus-visible {
+  outline: 2px solid hsl(var(--brand-primary));
+  outline-offset: -2px;
+}
+
+.sim-tab[aria-selected='true'] {
+  color: hsl(var(--text-primary));
+}
+
+.sim-tab[aria-selected='true']::after {
+  content: "";
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 0;
+  border-block-end: 2.5px solid #f43f5e;
+  border-radius: 2px 2px 0 0;
+}
+
+/* Evaluation Row Card — Stretched Link + Container Query */
+.sim-eval-card {
+  container: sim-card / inline-size;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 20px;
+  background: hsl(var(--bg-surface));
+  border-block-end: 1px solid hsl(var(--border-subtle));
+  transition: background-color 0.16s ease;
+}
+
+.sim-eval-card:last-child {
+  border-block-end: none;
+}
+
+[data-theme='light'] .sim-eval-card {
+  background: #ffffff;
+  border-color: #eef2f7;
+}
+
+.sim-eval-card:has(a.sim-eval-card-link:hover) {
+  background: hsl(var(--bg-elevated) / 0.55);
+}
+
+[data-theme='light'] .sim-eval-card:has(a.sim-eval-card-link:hover) {
+  background: #f8fafc;
+}
+
+.sim-eval-card a.sim-eval-card-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.sim-eval-card a.sim-eval-card-link:focus-visible {
+  outline: none;
+}
+
+.sim-eval-card a.sim-eval-card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.sim-eval-card:has(a.sim-eval-card-link:focus-visible) {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+
+/* Keep independent actions clickable above the stretched link */
+.sim-eval-card button,
+.sim-eval-card a:not(.sim-eval-card-link),
+.sim-eval-card [data-interactive='true'] {
+  position: relative;
+  z-index: 1;
+}
+
+.sim-eval-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+@container sim-card (inline-size >= 680px) {
+  .sim-eval-grid {
+    grid-template-columns: minmax(0, 1.85fr) minmax(170px, 0.95fr) auto;
+    gap: 20px;
+  }
+}
+
+.sim-quick-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.72;
+  transition: opacity 0.16s ease;
+}
+
+.sim-eval-card:hover .sim-quick-actions,
+.sim-eval-card:focus-within .sim-quick-actions {
+  opacity: 1;
+}
+
+/* Refined Adaptada Pill (readable, high-contrast, non-distracting) */
+.sim-adaptada-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+[data-theme='dark'] .sim-adaptada-pill,
+.dark .sim-adaptada-pill {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
 /* ──────── LIMPEZA GLOBAL PARA IMPRESSÃO ──────── */
 @media print {
   .sidebar,

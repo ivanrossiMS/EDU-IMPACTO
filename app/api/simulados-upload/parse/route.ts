@@ -77,6 +77,7 @@ export async function POST(request: Request) {
     let arquivoNome = file.name
     let arquivoTamanho = file.size
     let arquivoPath = ''
+    let storageWarning = ''
 
     try {
       const supabaseAdmin = createClient(
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
 
       // Fallback to comunicados-midia if needed
       if (storageError) {
+        console.warn('[Storage simulados-arquivos upload error]:', storageError)
         const { error: fallbackError } = await supabaseAdmin.storage
           .from('comunicados-midia')
           .upload(filePath, buffer, {
@@ -117,6 +119,9 @@ export async function POST(request: Request) {
         if (!fallbackError) {
           storageError = null
           usedBucket = 'comunicados-midia'
+        } else {
+          console.error('[Storage comunicados-midia fallback error]:', fallbackError)
+          storageWarning = fallbackError.message || storageError.message || 'Falha ao gravar cópia original no Storage.'
         }
       }
 
@@ -164,8 +169,9 @@ export async function POST(request: Request) {
 
         await supabaseAdmin.from(table).update({ config_estudio: updatedConfig, updated_at: new Date().toISOString() }).eq('id', itemId)
       }
-    } catch (storageErr) {
+    } catch (storageErr: any) {
       console.warn('[Storage upload warning]:', storageErr)
+      storageWarning = storageErr?.message || 'Erro ao salvar cópia original no Storage.'
     }
 
     return NextResponse.json({
@@ -176,6 +182,7 @@ export async function POST(request: Request) {
       arquivoNome,
       arquivoTamanho,
       arquivoPath,
+      ...(storageWarning ? { storageWarning } : {}),
       rawText: text.slice(0, 1000) + (text.length > 1000 ? `\n...[+${text.length - 1000} chars]` : ''),
     })
   } catch (e: any) {

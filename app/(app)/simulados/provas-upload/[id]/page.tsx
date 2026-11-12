@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao, mergeConfigEstudioPreservingOriginalFiles } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -100,14 +100,17 @@ export default function VerProvaUploadPage() {
         ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
         updated_at: new Date().toISOString()
       }
+      let mergedConfig: any = undefined
       if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
+        const { data: latestRow } = await (supabase as any).from('provas_upload').select('config_estudio').eq('id', provaId).maybeSingle()
+        mergedConfig = mergeConfigEstudioPreservingOriginalFiles(latestRow?.config_estudio || prova?.config_estudio, config_estudio)
+        updatePayload.config_estudio = mergedConfig
       }
       const { error } = await (supabase as any).from('provas_upload').update(updatePayload).eq('id', provaId)
       if (error) throw error
       setProva((prev: any) => ({
         ...prev,
-        ...(config_estudio ? { config_estudio } : {}),
+        ...(mergedConfig ? { config_estudio: mergedConfig } : {}),
         ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {})
       }))
       setSuccessMessage('Alterações salvas com sucesso!')

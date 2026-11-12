@@ -19,18 +19,18 @@ interface NavItem {
   profLabel?: string
   href: string
   icon: React.ReactNode
-  groupId?: string
+  section: 'Principal' | 'Fluxos de Upload' | 'Acervo' | 'Sistema'
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', shortLabel: 'Início', href: '/simulados', icon: <LayoutDashboard size={20} /> },
-  { label: 'Provas via Upload', shortLabel: 'Provas', profLabel: 'Minhas Provas', href: '/simulados/provas-upload', icon: <FileText size={20} />, groupId: 'upload-provas' },
-  { label: 'Simulados via Upload', shortLabel: 'Simulados', profLabel: 'Meus Simulados', href: '/simulados/simulados-upload', icon: <BookOpen size={20} />, groupId: 'upload-simulados' },
-  { label: 'Redação via Upload', shortLabel: 'Redações', profLabel: 'Minhas Redações', href: '/simulados/redacao-upload', icon: <PenTool size={20} />, groupId: 'upload-redacao' },
-  { label: 'Arquivo Adaptadas', shortLabel: 'Adaptadas', href: '/simulados/arquivo-adaptadas', icon: <FolderArchive size={20} /> },
-  { label: 'Banco de Questões', shortLabel: 'Banco', href: '/simulados/banco', icon: <Library size={20} /> },
-  { label: 'Configurações', shortLabel: 'Config', href: '/simulados/configuracoes', icon: <Settings size={20} /> },
-  { label: 'Ajuda', shortLabel: 'Ajuda', href: '/ajuda', icon: <Sparkles size={20} /> },
+  { label: 'Dashboard', shortLabel: 'Início', href: '/simulados', icon: <LayoutDashboard size={18} />, section: 'Principal' },
+  { label: 'Provas via Upload', shortLabel: 'Provas', profLabel: 'Minhas Provas', href: '/simulados/provas-upload', icon: <FileText size={18} />, section: 'Fluxos de Upload' },
+  { label: 'Simulados via Upload', shortLabel: 'Simulados', profLabel: 'Meus Simulados', href: '/simulados/simulados-upload', icon: <BookOpen size={18} />, section: 'Fluxos de Upload' },
+  { label: 'Redação via Upload', shortLabel: 'Redações', profLabel: 'Minhas Redações', href: '/simulados/redacao-upload', icon: <PenTool size={18} />, section: 'Fluxos de Upload' },
+  { label: 'Arquivo Adaptadas', shortLabel: 'Adaptadas', href: '/simulados/arquivo-adaptadas', icon: <FolderArchive size={18} />, section: 'Acervo' },
+  { label: 'Banco de Questões', shortLabel: 'Banco', href: '/simulados/banco', icon: <Library size={18} />, section: 'Acervo' },
+  { label: 'Configurações', shortLabel: 'Config', href: '/simulados/configuracoes', icon: <Settings size={18} />, section: 'Sistema' },
+  { label: 'Ajuda', shortLabel: 'Ajuda', href: '/ajuda', icon: <Sparkles size={18} />, section: 'Sistema' },
 ]
 
 export function SidebarSimulados() {
@@ -280,12 +280,12 @@ export function SidebarSimulados() {
     <>
     {overlay}
     <motion.div 
-      animate={{ width: collapsed ? 88 : 280 }}
+      animate={{ width: collapsed ? 84 : 272 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       style={{
-        height: '100vh',
-        background: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
-        borderRight: '1px solid rgba(255,255,255,0.05)',
+        height: '100dvh',
+        background: 'linear-gradient(180deg, #0b1120 0%, #030712 100%)',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
@@ -295,102 +295,166 @@ export function SidebarSimulados() {
       }}
     >
       {/* Decorative Glow */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 200, background: 'radial-gradient(circle at 50% 0%, rgba(244,63,94,0.15) 0%, rgba(0,0,0,0) 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 180, background: 'radial-gradient(circle at 30% 0%, rgba(244,63,94,0.14) 0%, rgba(0,0,0,0) 70%)', pointerEvents: 'none' }} />
 
-      <div style={{ padding: '32px 24px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
+      {/* Header + Integrated Collapse Toggle */}
+      <div style={{ padding: collapsed ? '20px 14px 16px' : '22px 16px 18px 20px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', gap: 10, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
         <AnimatePresence mode="wait">
           {!collapsed ? (
-            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 16px -4px rgba(244,63,94,0.5)' }}>
-                <Activity size={22} color="white" strokeWidth={2.5} />
+            <motion.div key="expanded-brand" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 11, background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px -4px rgba(244,63,94,0.5)', flexShrink: 0 }}>
+                <Activity size={19} color="white" strokeWidth={2.5} />
               </div>
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: 'white', fontSize: 20, letterSpacing: '-0.02em', lineHeight: 1 }}>PROVAS/SIMULADOS</span>
-                  <Sparkles size={14} color="#f43f5e" />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, color: 'white', fontSize: 15, letterSpacing: '-0.02em', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Provas & Simulados
                 </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.05em', marginTop: 4, textTransform: 'uppercase' }}>Sistema de Provas</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.48)', fontWeight: 600, letterSpacing: '0.06em', marginTop: 2, textTransform: 'uppercase' }}>
+                  Sistema de Provas
+                </div>
               </div>
             </motion.div>
           ) : (
-            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 16px -4px rgba(244,63,94,0.5)' }}>
-              <Activity size={22} color="white" strokeWidth={2.5} />
-            </motion.div>
+            <motion.button
+              key="collapsed-brand"
+              type="button"
+              onClick={() => setCollapsed(false)}
+              title="Expandir menu"
+              aria-label="Expandir menu"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              style={{ width: 38, height: 38, borderRadius: 11, background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px -4px rgba(244,63,94,0.5)', border: 'none', cursor: 'pointer' }}
+            >
+              <Activity size={19} color="white" strokeWidth={2.5} />
+            </motion.button>
           )}
         </AnimatePresence>
+
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            title="Recolher menu"
+            aria-label="Recolher menu"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'rgba(255,255,255,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = '#ffffff'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
+            }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+        )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }} className="no-scrollbar">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 4 }} className="no-scrollbar">
+        {collapsed && (
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="Expandir menu"
+            aria-label="Expandir menu"
+            style={{
+              width: '100%',
+              padding: '8px 0',
+              marginBottom: 6,
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              color: 'rgba(255,255,255,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        )}
+
         {activeNavItems.map((item, idx, arr) => {
           const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
-          const isBack = item.href === '/login?step=choose_system'
-
-          const hasPrevInGroup = item.groupId && arr[idx - 1]?.groupId === item.groupId
-          const isChild = hasPrevInGroup
+          const showSectionHeader = !collapsed && (idx === 0 || arr[idx - 1].section !== item.section)
 
           return (
-            <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : (isChild ? -6 : 0) }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: collapsed ? 'center' : 'flex-start',
-                gap: 16,
-                padding: collapsed ? '10px 0' : (isChild ? '10px 18px 10px 42px' : '10px 18px'),
-                borderRadius: 14,
-                background: isActive ? 'linear-gradient(90deg, rgba(244,63,94,0.1) 0%, rgba(244,63,94,0.02) 100%)' : 'transparent',
-                color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                border: isActive ? '1px solid rgba(244,63,94,0.2)' : '1px solid transparent',
-                position: 'relative'
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
-                  e.currentTarget.style.color = 'white'
-                  e.currentTarget.style.transform = 'translateX(4px)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.5)'
-                  e.currentTarget.style.transform = 'translateX(0)'
-                }
-              }}
-              >
-                {!collapsed && isChild && (
-                  <div style={{
-                    position: 'absolute',
-                    top: -12,
-                    left: 27,
-                    width: 11,
-                    height: 31,
-                    borderLeft: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                    borderBottom: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                    borderBottomLeftRadius: 10,
-                    pointerEvents: 'none',
-                    zIndex: 0,
-                    transition: 'all 0.3s ease'
-                  }} />
-                )}
-
-                {isActive && !collapsed && (
-                  <motion.div layoutId="activeNavIndicator" style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 3, background: '#f43f5e', borderRadius: '0 4px 4px 0', boxShadow: '0 0 10px rgba(244,63,94,0.5)' }} />
-                )}
-                
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {item.icon}
+            <div key={item.href} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {showSectionHeader && (
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'rgba(148, 163, 184, 0.52)',
+                  padding: idx === 0 ? '2px 12px 4px' : '12px 12px 4px',
+                  userSelect: 'none'
+                }}>
+                  {item.section}
                 </div>
-                
-                <AnimatePresence>
-                  {!collapsed && (
-                    <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} style={{ fontSize: 14, fontWeight: isActive ? 700 : 500, whiteSpace: 'nowrap', zIndex: 1, letterSpacing: '-0.01em' }}>
-                      {item.label}
-                    </motion.span>
+              )}
+
+              <Link href={item.href} title={collapsed ? item.label : undefined} style={{ textDecoration: 'none' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  gap: 12,
+                  padding: collapsed ? '10px 0' : '9px 12px',
+                  borderRadius: 12,
+                  background: isActive ? 'linear-gradient(90deg, rgba(244,63,94,0.14) 0%, rgba(244,63,94,0.03) 100%)' : 'transparent',
+                  color: isActive ? '#fda4af' : 'rgba(226,232,240,0.65)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  border: isActive ? '1px solid rgba(244,63,94,0.24)' : '1px solid transparent',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.045)'
+                    e.currentTarget.style.color = '#ffffff'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = 'rgba(226,232,240,0.65)'
+                  }
+                }}
+                >
+                  {isActive && !collapsed && (
+                    <motion.div layoutId="activeNavIndicator" style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: '#f43f5e', borderRadius: '0 4px 4px 0', boxShadow: '0 0 10px rgba(244,63,94,0.55)' }} />
                   )}
-                </AnimatePresence>
-              </div>
-            </Link>
+                  
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isActive ? '#fb7185' : 'inherit' }}>
+                    {item.icon}
+                  </div>
+                  
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.span initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} style={{ fontSize: 13.5, fontWeight: isActive ? 700 : 500, whiteSpace: 'nowrap', zIndex: 1, letterSpacing: '-0.01em' }}>
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </Link>
+            </div>
           )
         })}
 
@@ -627,24 +691,6 @@ export function SidebarSimulados() {
             )}
           </div>
         </div>
-      </div>
-
-      <div style={{ padding: '16px', display: 'flex', justifyContent: 'center' }}>
-        <button 
-          onClick={() => setCollapsed(!collapsed)}
-          style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 14, color: 'rgba(255,255,255,0.5)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-            e.currentTarget.style.color = 'white'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
-            e.currentTarget.style.color = 'rgba(255,255,255,0.5)'
-          }}
-          title={collapsed ? "Expandir menu" : "Recolher menu"}
-        >
-          {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-        </button>
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `

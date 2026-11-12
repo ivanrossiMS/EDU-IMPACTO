@@ -11,7 +11,7 @@ export default function SimuladosLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
 
-  if (!hydrated) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-app))' }} />
+  if (!hydrated) return <div style={{ minHeight: '100dvh', background: 'hsl(var(--bg-base))' }} />
 
   // Se for a rota de impressão (PDF), não renderiza a sidebar nem formatação extra
   const isPrintView = pathname?.includes('/imprimir') || pathname?.includes('/gabarito')
@@ -123,23 +123,23 @@ function SimuladosLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-app))' }} />
+  if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-base))' }} />
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'hsl(var(--bg-app))' }}>
+    <div style={{ display: 'flex', height: '100dvh', width: '100%', overflow: 'hidden', background: 'hsl(var(--bg-base))' }}>
       <SidebarSimulados />
       <div
         style={{
           flex: 1,
-          height: '100vh',
+          height: '100dvh',
           overflowY: 'auto',
           overflowX: 'hidden',
           position: 'relative',
-          background: 'hsl(var(--bg-app))'
+          background: 'hsl(var(--bg-base))'
         }}
         className="no-scrollbar"
       >
-        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', minHeight: '100vh', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 95px)' }} className="simulados-content">
+        <div style={{ maxWidth: 1440, margin: '0 auto', width: '100%', minHeight: '100dvh', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 95px)' }} className="simulados-content">
           {children}
         </div>
       </div>
