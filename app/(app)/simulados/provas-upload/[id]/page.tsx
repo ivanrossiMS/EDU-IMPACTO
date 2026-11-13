@@ -84,9 +84,28 @@ export default function VerProvaUploadPage() {
   const updateStatus = async (status: string) => {
     setSaving(true)
     try {
-      await (supabase as any).from('provas_upload').update({ status }).eq('id', provaId)
+      const now = new Date().toISOString()
+      await (supabase as any).from('provas_upload').update({ status, updated_at: now }).eq('id', provaId)
+
+      let reqStatusToSet: string | null = null
+      if (status === 'aprovado' || status === 'publicado') {
+        reqStatusToSet = 'aprovado'
+      } else if (status === 'reprovado') {
+        reqStatusToSet = 'reprovado'
+      } else if (status === 'aguardando') {
+        reqStatusToSet = 'pendente'
+      }
+
+      if (reqStatusToSet) {
+        await (supabase as any)
+          .from('provas_upload_requisicoes')
+          .update({ status: reqStatusToSet })
+          .eq('id_prova_upload', provaId)
+        setRequisicoes((prev: any[]) => prev.map(r => ({ ...r, status: reqStatusToSet })))
+      }
+
       setProva((prev: any) => ({ ...prev, status }))
-      setSuccessMessage(`Prova ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : 'publicada'} com sucesso!`)
+      setSuccessMessage(`Prova ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : status === 'publicado' ? 'publicada' : 'atualizada'} com sucesso!`)
       setSuccessModal(true)
     } catch (e: any) { alert('Erro: ' + e.message) }
     finally { setSaving(false) }
@@ -217,7 +236,7 @@ export default function VerProvaUploadPage() {
         </div>
 
         {/* Coordinator Actions */}
-        {isCoord && prova.status === 'em_revisao' && (
+        {isCoord && (questoes.length > 0 || derivedStatus === 'em_revisao' || prova.status === 'em_revisao') && (
           <div className="detail-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <motion.button onClick={() => setShowPreview(true)}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
@@ -227,7 +246,12 @@ export default function VerProvaUploadPage() {
             <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              <XCircle size={16} /> Reprovar
+              <XCircle size={16} /> Devolver / Reprovar
+            </motion.button>
+            <motion.button onClick={() => updateStatus('aprovado')} disabled={saving}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', color: '#059669', border: '1px solid rgba(16,185,129,0.25)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <CheckCircle size={16} /> Aprovar Prova
             </motion.button>
             <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}

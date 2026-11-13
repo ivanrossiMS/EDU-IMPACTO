@@ -9,13 +9,112 @@ interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
   onBlurHtml?: (html: string) => void
   onBackspaceAtStart?: () => void
   editable?: boolean
+  onPasteImage?: (fileOrBlob: File | Blob | null, srcUrl?: string) => void
 }
 
-export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ...props }: HtmlContentProps) {
+export function unpackMasksAndFormulas(html: string): string {
+  if (!html) return ''
+  if (typeof window === 'undefined') return html
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    
+    // 1. Restaurar fórmulas do KaTeX
+    const formulaSpans = doc.querySelectorAll('.ql-formula')
+    formulaSpans.forEach(span => {
+      const formula = span.getAttribute('data-value')
+      if (formula) {
+        span.innerHTML = formula 
+        span.removeAttribute('contenteditable')
+      }
+    })
+
+    // 2. Restaurar máscaras estilizadas de volta para texto puro original
+    const maskSpans = doc.querySelectorAll('.tag-mask')
+    maskSpans.forEach(span => {
+      const mask = span.getAttribute('data-mask') || span.textContent || ''
+      const match = mask.match(/\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/i)
+      const cleanTag = match ? match[0] : mask.trim()
+      const textNode = doc.createTextNode(cleanTag)
+      span.parentNode?.replaceChild(textNode, span)
+    })
+
+    return doc.body.innerHTML
+  } catch (err) {
+    return html
+  }
+}
+
+export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, onPasteImage, ...props }: HtmlContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   
   const toolbarRef = useRef<HTMLDivElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (props.onPaste) {
+      props.onPaste(e)
+      if (e.defaultPrevented) return
+    }
+
+    if (!editable || !onPasteImage) return
+
+    // 1. Check if clipboard contains an image item
+    const items = e.clipboardData?.items
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            onPasteImage(file)
+            return
+          }
+        }
+      }
+    }
+
+    // 2. Check if clipboard files contain an image
+    const files = e.clipboardData?.files
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].type.startsWith('image/')) {
+          e.preventDefault()
+          onPasteImage(files[i])
+          return
+        }
+      }
+    }
+
+    // 3. Check if HTML data in clipboard has an <img> tag
+    const htmlData = e.clipboardData?.getData('text/html')
+    if (htmlData && /<img[^>]+src=["']([^"']+)["']/i.test(htmlData)) {
+      const match = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i)
+      const src = match?.[1]
+      if (src) {
+        e.preventDefault()
+        if (src.startsWith('data:image/')) {
+          try {
+            const byteString = atob(src.split(',')[1])
+            const mimeString = src.split(',')[0].split(':')[1].split(';')[0]
+            const ab = new ArrayBuffer(byteString.length)
+            const ia = new Uint8Array(ab)
+            for (let j = 0; j < byteString.length; j++) {
+              ia[j] = byteString.charCodeAt(j)
+            }
+            const blob = new Blob([ab], { type: mimeString })
+            onPasteImage(blob)
+            return
+          } catch (err) {
+            console.error('Erro ao converter imagem em base64 colada:', err)
+          }
+        }
+        onPasteImage(null, src)
+        return
+      }
+    }
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (props.onKeyDown) props.onKeyDown(e)
@@ -97,6 +196,40 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         }
       }
 
+      // 3. Render masks: [IMAGEM N], [LINHAS_PAUTADAS:N], [ESPACO_BRANCO:N] as bold colorful badges
+      const maskWalker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
+      const maskTextNodes: Text[] = []
+      let mNode = maskWalker.nextNode()
+      while (mNode) {
+        const parent = (mNode as Text).parentElement
+        if (!parent || (!parent.closest('.ql-formula') && !parent.closest('.katex') && !parent.closest('.tag-mask'))) {
+          maskTextNodes.push(mNode as Text)
+        }
+        mNode = maskWalker.nextNode()
+      }
+
+      for (const node of maskTextNodes) {
+        const val = node.nodeValue || ''
+        if (/\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/i.test(val)) {
+          const replaced = val.replace(/\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/gi, (match) => {
+            const upper = match.toUpperCase()
+            if (upper.includes('IMAGEM')) {
+              return `<span class="tag-mask tag-mask-imagem" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">🖼️</span><strong>${match}</strong></span>`
+            } else if (upper.includes('LINHAS_PAUTADAS')) {
+              return `<span class="tag-mask tag-mask-linhas" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">📝</span><strong>${match}</strong></span>`
+            } else if (upper.includes('ESPACO_BRANCO')) {
+              return `<span class="tag-mask tag-mask-espaco" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">📄</span><strong>${match}</strong></span>`
+            }
+            return match
+          })
+          if (replaced !== val) {
+            const temp = doc.createElement('span')
+            temp.innerHTML = replaced
+            node.parentNode?.replaceChild(temp, node)
+          }
+        }
+      }
+
       return doc.body.innerHTML
     } catch (e) {
       console.error('HtmlContent parsing error:', e)
@@ -117,19 +250,8 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     
     try {
       const currentHtml = e.currentTarget.innerHTML
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(currentHtml, 'text/html')
-      
-      const formulaSpans = doc.querySelectorAll('.ql-formula')
-      formulaSpans.forEach(span => {
-        const formula = span.getAttribute('data-value')
-        if (formula) {
-          span.innerHTML = formula 
-          span.removeAttribute('contenteditable')
-        }
-      })
-      
-      onBlurHtml(cleanEnunciadoHtml(doc.body.innerHTML))
+      const unpacked = unpackMasksAndFormulas(currentHtml)
+      onBlurHtml(cleanEnunciadoHtml(unpacked))
     } catch (err) {
       onBlurHtml(cleanEnunciadoHtml(e.currentTarget.innerHTML))
     }
@@ -218,19 +340,8 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     if (containerRef.current && onBlurHtml) {
       try {
         const currentHtml = containerRef.current.innerHTML
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(currentHtml, 'text/html')
-        
-        const formulaSpans = doc.querySelectorAll('.ql-formula')
-        formulaSpans.forEach(span => {
-          const formula = span.getAttribute('data-value')
-          if (formula) {
-            span.innerHTML = formula 
-            span.removeAttribute('contenteditable')
-          }
-        })
-        
-        onBlurHtml(doc.body.innerHTML)
+        const unpacked = unpackMasksAndFormulas(currentHtml)
+        onBlurHtml(unpacked)
       } catch (err) {
         onBlurHtml(containerRef.current.innerHTML)
       }
@@ -275,19 +386,8 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     if (containerRef.current && onBlurHtml) {
       try {
         const currentHtml = containerRef.current.innerHTML
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(currentHtml, 'text/html')
-        
-        const formulaSpans = doc.querySelectorAll('.ql-formula')
-        formulaSpans.forEach(span => {
-          const formula = span.getAttribute('data-value')
-          if (formula) {
-            span.innerHTML = formula 
-            span.removeAttribute('contenteditable')
-          }
-        })
-        
-        onBlurHtml(doc.body.innerHTML)
+        const unpacked = unpackMasksAndFormulas(currentHtml)
+        onBlurHtml(unpacked)
       } catch (err) {
         onBlurHtml(containerRef.current.innerHTML)
       }
@@ -396,19 +496,85 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
           background-color: rgba(59, 130, 246, 0.03);
           border-radius: 3px;
         }
+
+        /* Máscaras no texto: Negrito com cores elegantes e destaque */
+        .tag-mask {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-weight: 800 !important;
+          font-family: inherit;
+          font-size: 0.88em;
+          padding: 2px 8px;
+          margin: 1px 3px;
+          border-radius: 6px;
+          line-height: 1.4;
+          user-select: all;
+          vertical-align: baseline;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+          letter-spacing: 0.02em;
+          cursor: default;
+        }
+        .tag-mask strong {
+          font-weight: 800 !important;
+        }
+        .tag-mask-icon {
+          font-size: 0.95em;
+          line-height: 1;
+        }
+        .tag-mask-imagem {
+          color: #1d4ed8 !important; /* Azul Forte */
+          background: #eff6ff !important; /* Azul Suave */
+          border: 1.5px solid #93c5fd !important; /* Borda Azul */
+        }
+        .tag-mask-linhas {
+          color: #6d28d9 !important; /* Roxo Forte */
+          background: #f5f3ff !important; /* Roxo Suave */
+          border: 1.5px solid #c4b5fd !important; /* Borda Roxa */
+        }
+        .tag-mask-espaco {
+          color: #047857 !important; /* Verde Forte */
+          background: #ecfdf5 !important; /* Verde Suave */
+          border: 1.5px solid #a7f3d0 !important; /* Borda Verde */
+        }
+        .dark .tag-mask-imagem {
+          color: #60a5fa !important;
+          background: rgba(37, 99, 235, 0.22) !important;
+          border-color: rgba(96, 165, 250, 0.45) !important;
+        }
+        .dark .tag-mask-linhas {
+          color: #c4b5fd !important;
+          background: rgba(139, 92, 246, 0.22) !important;
+          border-color: rgba(196, 181, 253, 0.45) !important;
+        }
+        .dark .tag-mask-espaco {
+          color: #6ee7b7 !important;
+          background: rgba(16, 185, 129, 0.22) !important;
+          border-color: rgba(110, 231, 183, 0.45) !important;
+        }
       `}</style>
       <div 
         ref={containerRef}
+        {...props} 
         className={`html-content ${props.className || ''}`}
         style={{ display: 'flow-root', ...props.style }}
         contentEditable={editable}
         suppressContentEditableWarning={editable}
-        onBlur={editable ? handleBlur : undefined}
-        onMouseUp={editable ? checkSelection : undefined}
-        onKeyUp={editable ? checkSelection : undefined}
+        onBlur={(e) => {
+          if (props.onBlur) props.onBlur(e)
+          if (editable) handleBlur(e)
+        }}
+        onMouseUp={(e) => {
+          if (props.onMouseUp) props.onMouseUp(e)
+          if (editable) checkSelection()
+        }}
+        onKeyUp={(e) => {
+          if (props.onKeyUp) props.onKeyUp(e)
+          if (editable) checkSelection()
+        }}
         onKeyDown={editable ? handleKeyDown : props.onKeyDown}
+        onPaste={handlePaste}
         dangerouslySetInnerHTML={{ __html: renderedHtml }} 
-        {...props} 
       />
       {editable && (
         <div 

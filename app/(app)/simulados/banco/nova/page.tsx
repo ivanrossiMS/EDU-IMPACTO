@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, List, CheckCircle2, Sparkles, X, Bot, ChevronUp, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { checkIsStrictProfessor, filterDisciplinasForUser, isTeacherLinkedToDisciplina } from '@/lib/simuladosAuth'
 
 // A simple zero-dependency Rich Text Editor component
 function SimpleRichTextEditor({ value, onChange, placeholder }: { value: string, onChange: (val: string) => void, placeholder?: string }) {
@@ -161,6 +162,12 @@ export default function NovaQuestaoBancoPage() {
   
   const [disciplinas, setDisciplinas] = useState<any[]>([])
 
+  const isStrictProfessor = checkIsStrictProfessor(currentUser)
+
+  const availableDisciplinas = useMemo(() => {
+    return filterDisciplinasForUser(disciplinas, currentUser)
+  }, [disciplinas, currentUser])
+
   useEffect(() => {
     const fetchDisciplinas = async () => {
       try {
@@ -173,6 +180,12 @@ export default function NovaQuestaoBancoPage() {
     }
     fetchDisciplinas()
   }, [])
+
+  useEffect(() => {
+    if (isStrictProfessor && availableDisciplinas.length === 1 && !disciplinaId) {
+      setDisciplinaId(availableDisciplinas[0].id)
+    }
+  }, [isStrictProfessor, availableDisciplinas, disciplinaId])
 
   const turmasDisponiveis = [
     '6º Ano Fundamental',
@@ -206,6 +219,18 @@ export default function NovaQuestaoBancoPage() {
     if (!enunciado.trim() || !disciplinaId || !turma || !dificuldade) {
       alert('Preencha o enunciado, disciplina, dificuldade e turma.')
       return
+    }
+
+    if (isStrictProfessor) {
+      if (availableDisciplinas.length === 0) {
+        alert('Você não possui disciplinas vinculadas para cadastrar questões no banco.')
+        return
+      }
+      const chosenDisc = disciplinas.find(d => d.id === disciplinaId)
+      if (!chosenDisc || !isTeacherLinkedToDisciplina(chosenDisc, currentUser)) {
+        alert('O professor só pode cadastrar questões nas disciplinas que está vinculado.')
+        return
+      }
     }
     
     if (alternativas.some(a => !a.texto.trim())) {
@@ -341,12 +366,16 @@ export default function NovaQuestaoBancoPage() {
           
           <div style={{ display: 'flex', gap: 12 }}>
             <motion.button 
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: (isStrictProfessor && availableDisciplinas.length === 0) ? 1 : 1.02 }} 
+              whileTap={{ scale: (isStrictProfessor && availableDisciplinas.length === 0) ? 1 : 0.98 }}
               onClick={() => setIsAiModalOpen(true)}
+              disabled={isStrictProfessor && availableDisciplinas.length === 0}
               style={{ 
                 display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', 
                 borderRadius: 12, background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', 
-                color: '#ec4899', fontWeight: 700, border: '1px solid rgba(236,72,153,0.2)', cursor: 'pointer',
+                color: '#ec4899', fontWeight: 700, border: '1px solid rgba(236,72,153,0.2)', 
+                cursor: (isStrictProfessor && availableDisciplinas.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (isStrictProfessor && availableDisciplinas.length === 0) ? 0.5 : 1,
                 boxShadow: '0 4px 15px rgba(236,72,153,0.1)'
               }}
             >
@@ -355,12 +384,14 @@ export default function NovaQuestaoBancoPage() {
             </motion.button>
             <button 
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || (isStrictProfessor && availableDisciplinas.length === 0)}
               style={{ 
                 display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', 
                 borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
-                color: '#fff', fontWeight: 700, border: 'none', cursor: loading ? 'wait' : 'pointer',
-                opacity: loading ? 0.7 : 1, boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)'
+                color: '#fff', fontWeight: 700, border: 'none', 
+                cursor: (loading || (isStrictProfessor && availableDisciplinas.length === 0)) ? 'not-allowed' : 'pointer',
+                opacity: (loading || (isStrictProfessor && availableDisciplinas.length === 0)) ? 0.6 : 1, 
+                boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)'
               }}
             >
               <Save size={18} />
@@ -368,6 +399,22 @@ export default function NovaQuestaoBancoPage() {
             </button>
           </div>
         </div>
+
+        {isStrictProfessor && availableDisciplinas.length === 0 && (
+          <div style={{
+            marginBottom: 24,
+            padding: '16px 20px',
+            borderRadius: 14,
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            color: '#f87171',
+            fontSize: 14,
+            lineHeight: 1.5,
+            fontWeight: 500
+          }}>
+            ⚠️ Você não possui disciplinas vinculadas ao seu cadastro de professor. Solicite à coordenação que vincule suas disciplinas para cadastrar questões no banco.
+          </div>
+        )}
 
         {/* Formulário */}
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32 }}>
@@ -381,7 +428,7 @@ export default function NovaQuestaoBancoPage() {
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none' }}
               >
                 <option value="" disabled>Selecione a disciplina</option>
-                {disciplinas.map(d => (
+                {availableDisciplinas.map(d => (
                   <option key={d.id} value={d.id}>{d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}</option>
                 ))}
               </select>
@@ -533,7 +580,7 @@ export default function NovaQuestaoBancoPage() {
                       onFocus={e => e.target.style.borderColor = '#ec4899'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'} 
                     >
                       <option value="" disabled>Selecione...</option>
-                      {disciplinas.map(d => (
+                      {availableDisciplinas.map(d => (
                         <option key={d.id} value={d.id}>{d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}</option>
                       ))}
                     </select>

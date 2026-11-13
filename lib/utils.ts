@@ -264,7 +264,7 @@ export function formatPhone(value: string): string {
 
 export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redacao'): string {
   if (!item) return 'aguardando'
-  // Se já foi publicado, esse status prevalece (pode ser forçado pelo coordenador)
+  // 1. Status definitivo explícito no item (publicado tem prioridade máxima)
   if (item.status === 'publicado') return 'publicado'
   
   const reqs = type === 'prova' ? item.provas_upload_requisicoes 
@@ -275,34 +275,31 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
   
   const allQs = Array.isArray(item.questoes_json) ? item.questoes_json : []
 
-  // Verifica se todas as requisições foram concluídas ou aprovadas
-  const allApproved = reqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado')
+  // 2. Se a prova/simulado em si foi explicitamente aprovada ou concluída
+  if (item.status === 'aprovado' || item.status === 'concluido') {
+    return 'aprovado'
+  }
+
+  // 3. Se a prova/simulado em si foi explicitamente reprovada ou devolvida
+  if (item.status === 'reprovado' || item.status === 'rejeitado') {
+    return 'reprovado'
+  }
+
+  // 4. Se alguma requisição foi expressamente devolvida / rejeitada / reprovada
+  const hasReprovada = reqs.some((r: any) => r.status === 'rejeitado' || r.status === 'reprovado')
+  if (hasReprovada) {
+    return 'reprovado'
+  }
+
+  // 5. Verifica se todas as requisições foram concluídas ou aprovadas
+  const allApproved = reqs.length > 0 && reqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado')
   if (allApproved) return 'aprovado'
 
-  // Verifica se alguma requisição foi expressamente rejeitada
-  if (reqs.some((r: any) => r.status === 'rejeitado' || r.status === 'reprovado')) {
-    return 'aguardando'
-  }
-
-  // Verifica se cada requisição está enviada ou possui questões cadastradas
-  const isReqDoneOrUploaded = (r: any) => {
-    const hasQs = allQs.length > 0 && allQs.some((q: any) => isQuestionForRequisicao(q, r, reqs, true))
-    if (r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado') {
-      return true
-    }
-    if (hasQs) {
-      return true
-    }
-    return false
-  }
-
-  // Se todas as requisições já enviaram ou possuem questões
-  if (reqs.every(isReqDoneOrUploaded)) {
-    return 'em_revisao'
-  }
-
-  // Se pelo menos uma enviou ou tem questões
-  if (reqs.some(isReqDoneOrUploaded)) {
+  // 6. Verifica se o item ou alguma requisição foi expressamente enviada para revisão
+  // IMPORTANTE: Ter questões cadastradas ou salvas como rascunho (pendente) NÃO coloca em revisão!
+  // Apenas a ação explícita de 'Salvar e Enviar para Revisão' (status === 'enviado' ou 'em_revisao')
+  const hasEnviada = reqs.some((r: any) => r.status === 'enviado' || r.status === 'em_revisao')
+  if (hasEnviada || item.status === 'em_revisao') {
     return 'em_revisao'
   }
 
@@ -1061,8 +1058,8 @@ export function normalizeQuestionImages(q: any): any {
       })
     }
 
-    const correctAlt = updatedAlternativas.find((a: any) => a.correct === true || a.correta === true || a.eh_correta === true)
-    const updatedGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra || q.gabarito) : q.gabarito
+    const correctLetter = getQuestionCorrectAnswer({ ...q, alternativas: updatedAlternativas })
+    const updatedGabarito = correctLetter !== '?' ? correctLetter : q.gabarito
 
     return {
       ...q,
@@ -1076,56 +1073,106 @@ export function normalizeQuestionImages(q: any): any {
   return q
 }
 
+/**
+ * Sincroniza todas as flags de gabarito de uma questão (correct, eh_correta, correta, gabarito)
+ * para eliminar inconsistências entre o editor, visualizadores e modais de gabarito.
+ */
+export function syncQuestionGabarito(q: any): any {
+  if (!q || !Array.isArray(q.alternativas) || q.alternativas.length === 0) return q
+
+  const correctLetter = getQuestionCorrectAnswer(q)
+  if (!correctLetter || correctLetter === '?') {
+    return q
+  }
+
+  const updatedAlts = q.alternativas.map((alt: any) => {
+    const l = (alt.letter || alt.letra || '').toUpperCase().trim()
+    const isMatch = Boolean(l && l === correctLetter)
+    return {
+      ...alt,
+      letter: alt.letter || alt.letra || l,
+      letra: alt.letra || alt.letter || l,
+      correct: isMatch,
+      eh_correta: isMatch,
+      correta: isMatch,
+      is_correta: isMatch,
+      isCorrect: isMatch,
+    }
+  })
+
+  return {
+    ...q,
+    alternativas: updatedAlts,
+    gabarito: correctLetter
+  }
+}
+
 export function normalizeQuestoesList(questoes: any[]): any[] {
   if (!Array.isArray(questoes)) return []
-  return questoes.map(q => normalizeQuestionImages(q))
+  return questoes.map(q => syncQuestionGabarito(normalizeQuestionImages(q)))
 }
 
 /**
  * Extrai a letra da alternativa correta com máxima resiliência:
- * checa alt.correct, alt.eh_correta, alt.correta, alt.is_correta, alt.isCorrect,
- * checa simulados_alternativas e fallback em q.gabarito.
+ * 1. Alternativa com correct === true (ou correta/eh_correta === true sem flag correct === false)
+ * 2. Campo q.gabarito direto na questão se for letra válida (A-Z)
+ * 3. Fallbacks de alternativas (eh_correta, correta, simulados_alternativas, provas_alternativas)
+ * 4. Fallbacks adicionais de campos de texto
  */
 export function getQuestionCorrectAnswer(q: any): string {
   if (!q) return '?'
 
-  // 1. Alternativas em formato array de objetos (questoes_json)
-  if (Array.isArray(q.alternativas) && q.alternativas.length > 0) {
-    const correctAlt = q.alternativas.find((a: any) =>
-      a.correct === true || a.correct === 'true' ||
-      a.eh_correta === true || a.eh_correta === 'true' ||
-      a.correta === true || a.correta === 'true' ||
-      a.is_correta === true || a.is_correta === 'true' ||
-      a.isCorrect === true || a.isCorrect === 'true'
-    )
-    if (correctAlt) {
-      const l = correctAlt.letter || correctAlt.letra
+  const alts = Array.isArray(q.alternativas) && q.alternativas.length > 0
+    ? q.alternativas
+    : (Array.isArray(q.simulados_alternativas) && q.simulados_alternativas.length > 0
+        ? q.simulados_alternativas
+        : (Array.isArray(q.provas_alternativas) && q.provas_alternativas.length > 0 ? q.provas_alternativas : null))
+
+  // 1. Sinal mais forte: alternativa explicitamente marcada com correct === true
+  if (alts) {
+    const explicitTrue = alts.find((a: any) => a.correct === true || a.correct === 'true')
+    if (explicitTrue) {
+      const l = explicitTrue.letter || explicitTrue.letra
       if (l && typeof l === 'string' && l.trim()) {
         return l.trim().toUpperCase()
       }
     }
   }
 
-  // 2. simulados_alternativas (se vier de relacionamento SQL do Supabase)
-  if (Array.isArray(q.simulados_alternativas) && q.simulados_alternativas.length > 0) {
-    const correctAlt = q.simulados_alternativas.find((a: any) =>
-      a.correct === true || a.correct === 'true' ||
-      a.eh_correta === true || a.eh_correta === 'true' ||
-      a.correta === true || a.correta === 'true'
-    )
-    if (correctAlt) {
-      const l = correctAlt.letra || correctAlt.letter
-      if (l && typeof l === 'string' && l.trim()) {
-        return l.trim().toUpperCase()
-      }
-    }
-  }
-
-  // 3. Campo gabarito direto na questão
+  // 2. Campo gabarito direto na questão (se for letra única A-Z)
   if (q.gabarito && typeof q.gabarito === 'string' && q.gabarito.trim()) {
     const g = q.gabarito.trim().toUpperCase()
     if (/^[A-Z]$/.test(g)) {
       return g
+    }
+  }
+
+  // 3. Alternativas com eh_correta / correta, ignorando alternativas explicitamente desmarcadas (correct === false)
+  if (alts) {
+    const fallbackAlt = alts.find((a: any) =>
+      (a.eh_correta === true || a.eh_correta === 'true' ||
+       a.correta === true || a.correta === 'true' ||
+       a.is_correta === true || a.is_correta === 'true' ||
+       a.isCorrect === true || a.isCorrect === 'true') &&
+      a.correct !== false && a.correct !== 'false'
+    )
+    if (fallbackAlt) {
+      const l = fallbackAlt.letter || fallbackAlt.letra
+      if (l && typeof l === 'string' && l.trim()) {
+        return l.trim().toUpperCase()
+      }
+    }
+
+    // Último recurso em alts: qualquer que tenha flag positiva
+    const anyTrue = alts.find((a: any) =>
+      a.eh_correta === true || a.eh_correta === 'true' ||
+      a.correta === true || a.correta === 'true'
+    )
+    if (anyTrue) {
+      const l = anyTrue.letter || anyTrue.letra
+      if (l && typeof l === 'string' && l.trim()) {
+        return l.trim().toUpperCase()
+      }
     }
   }
 

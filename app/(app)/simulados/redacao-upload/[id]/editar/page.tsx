@@ -1,21 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle, AlertTriangle, AlertCircle, User } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { checkIsStrictProfessor, getTeacherUserIds, isTeacherLinkedToDisciplina } from '@/lib/simuladosAuth'
 
 export default function EditarRedaçãoUploadPage() {
   const router = useRouter()
   const params = useParams() as { id: string }
-  const { currentUser } = useApp()
+  const { currentUser, currentUserPerfil } = useApp()
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [successModal, setSuccessModal] = useState(false)
   const [assignmentToDelete, setAssignmentToDelete] = useState<any | null>(null)
+
+  const isStrictProfessor = checkIsStrictProfessor(currentUser, currentUserPerfil)
 
   // Form state
   const [titulo, setTitulo] = useState('')
@@ -91,10 +94,27 @@ export default function EditarRedaçãoUploadPage() {
     load()
   }, [params.id])
 
+  const teacherIds = useMemo(() => {
+    return getTeacherUserIds(currentUser, professores)
+  }, [currentUser, professores])
+
+  const availableDisciplinas = useMemo(() => {
+    if (!isStrictProfessor) return disciplinas
+    const assignedDiscIds = new Set(assignments.map(a => a.disciplinaId).filter(Boolean))
+    return disciplinas.filter(d => isTeacherLinkedToDisciplina(d, teacherIds) || assignedDiscIds.has(d.id))
+  }, [isStrictProfessor, disciplinas, teacherIds, assignments])
+
   const toggleSerie = (s: string) => setSeries(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
 
   const addAssignment = () => setAssignments(prev => [...prev, {
-    id: Date.now().toString() + Math.random(), reqId: null, disciplinaId: '', disciplinaNome: '', professorId: '', professorNome: '', qtdQuestoes: 10, status: 'pendente'
+    id: Date.now().toString() + Math.random(),
+    reqId: null,
+    disciplinaId: isStrictProfessor && availableDisciplinas.length === 1 ? availableDisciplinas[0].id : '',
+    disciplinaNome: isStrictProfessor && availableDisciplinas.length === 1 ? availableDisciplinas[0].nome : '',
+    professorId: isStrictProfessor ? (currentUser?.id || '') : '',
+    professorNome: isStrictProfessor ? (currentUser?.nome || 'Professor') : '',
+    qtdQuestoes: isStrictProfessor && availableDisciplinas.length === 1 ? (availableDisciplinas[0].quantidade_questoes || 10) : 10,
+    status: 'pendente'
   }])
 
   const removeAssignment = (id: string) => {
@@ -107,19 +127,24 @@ export default function EditarRedaçãoUploadPage() {
       
       const updated: any = { ...a, [field]: value }
       if (field === 'disciplinaId') {
-        const disc = disciplinas.find(d => d.id === value)
+        const disc = availableDisciplinas.find(d => d.id === value)
         if (disc) {
           updated.disciplinaNome = disc.nome
           if (disc.quantidade_questoes) updated.qtdQuestoes = disc.quantidade_questoes
-          // Auto-populate professor
-          let ids: string[] = []
-          if (Array.isArray(disc.professores_ids)) ids = disc.professores_ids
-          else if (typeof disc.professores_ids === 'string') {
-            try { ids = JSON.parse(disc.professores_ids) } catch {}
-          } else if (disc.id_professor) ids = [disc.id_professor]
-          if (ids.length > 0) {
-            const prof = professores.find(p => ids.includes(p.id))
-            if (prof) { updated.professorId = prof.id; updated.professorNome = prof.nome }
+          if (isStrictProfessor) {
+            updated.professorId = currentUser?.id || ''
+            updated.professorNome = currentUser?.nome || 'Professor'
+          } else {
+            // Auto-populate professor
+            let ids: string[] = []
+            if (Array.isArray(disc.professores_ids)) ids = disc.professores_ids
+            else if (typeof disc.professores_ids === 'string') {
+              try { ids = JSON.parse(disc.professores_ids) } catch {}
+            } else if (disc.id_professor) ids = [disc.id_professor]
+            if (ids.length > 0) {
+              const prof = professores.find(p => ids.includes(p.id))
+              if (prof) { updated.professorId = prof.id; updated.professorNome = prof.nome }
+            }
           }
         }
       }
@@ -135,6 +160,17 @@ export default function EditarRedaçãoUploadPage() {
     if (!titulo.trim()) { alert('Informe o título da redação.'); return }
     if (!bimestreId) { alert('Selecione o bimestre da redação.'); return }
     if (series.length === 0) { alert('Selecione ao menos uma série.'); return }
+    if (isStrictProfessor) {
+      if (availableDisciplinas.length === 0) {
+        alert('Você não possui disciplinas vinculadas para esta redação.')
+        return
+      }
+      const invalid = assignments.find(a => !availableDisciplinas.some(d => d.id === a.disciplinaId))
+      if (invalid) {
+        alert('O professor só pode salvar redação com as disciplinas que está vinculado.')
+        return
+      }
+    }
     if (assignments.some(a => !a.disciplinaId || !a.professorId)) {
       alert('Preencha disciplina e professor em todas as atribuições.'); return
     }
@@ -260,13 +296,26 @@ export default function EditarRedaçãoUploadPage() {
             </div>
           </div>
           <motion.button
-            onClick={handleSave} disabled={loading}
+            onClick={handleSave} disabled={loading || (isStrictProfessor && availableDisciplinas.length === 0)}
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', fontWeight: 700, border: 'none', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1, fontSize: 14, boxShadow: '0 8px 20px rgba(139,92,246,0.35)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', fontWeight: 700, border: 'none', cursor: (loading || (isStrictProfessor && availableDisciplinas.length === 0)) ? 'not-allowed' : 'pointer', opacity: (loading || (isStrictProfessor && availableDisciplinas.length === 0)) ? 0.6 : 1, fontSize: 14, boxShadow: '0 8px 20px rgba(139,92,246,0.35)' }}
           >
             <Save size={18} /> {loading ? 'Salvando...' : 'Salvar Alterações'}
           </motion.button>
         </div>
+
+        {/* ── Aviso de Professor sem disciplinas ── */}
+        {isStrictProfessor && availableDisciplinas.length === 0 && (
+          <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: 16, padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <AlertCircle size={22} color="#ef4444" style={{ flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, color: '#ef4444', fontSize: 14 }}>Nenhuma disciplina vinculada ao seu usuário</div>
+              <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginTop: 2 }}>
+                O professor só pode criar ou editar redações com as disciplinas às quais está vinculado. Entre em contato com a coordenação para vincular suas matérias.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Section 1: Basic Info ── */}
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32, marginBottom: 24 }}>
@@ -328,17 +377,32 @@ export default function EditarRedaçãoUploadPage() {
               <h3 style={{ color: 'hsl(var(--text-primary))', fontSize: 16, fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Upload size={18} color="#8b5cf6" /> Atribuições por Professor
               </h3>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: 0 }}>Defina quais professores enviarão questões de quais disciplinas.</p>
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: 0 }}>
+                {isStrictProfessor 
+                  ? 'Selecione suas disciplinas vinculadas e a quantidade de questões desta redação.' 
+                  : 'Defina quais professores enviarão questões de quais disciplinas.'}
+              </p>
             </div>
-            <motion.button onClick={addAssignment} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 10, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer' }}>
+            <motion.button 
+              onClick={addAssignment} 
+              disabled={isStrictProfessor && availableDisciplinas.length === 0}
+              whileHover={{ scale: 1.04 }} 
+              whileTap={{ scale: 0.96 }}
+              style={{ 
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 10, 
+                background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', fontSize: 13, fontWeight: 700, 
+                border: '1px solid rgba(139,92,246,0.2)', 
+                cursor: (isStrictProfessor && availableDisciplinas.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (isStrictProfessor && availableDisciplinas.length === 0) ? 0.5 : 1
+              }}
+            >
               <Plus size={16} /> Adicionar
             </motion.button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {assignments.map((a, i) => {
-              const disc = disciplinas.find(d => d.id === a.disciplinaId)
+              const disc = availableDisciplinas.find(d => d.id === a.disciplinaId)
               let allowedProfIds: string[] = []
               if (disc) {
                 if (Array.isArray(disc.professores_ids)) allowedProfIds = disc.professores_ids
@@ -358,25 +422,53 @@ export default function EditarRedaçãoUploadPage() {
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
-                      {disciplinas.map(d => (
-                        <option key={d.id} value={d.id}>
-                          {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
-                        </option>
-                      ))}
+                      {availableDisciplinas.length === 0 ? (
+                        <option disabled>Nenhuma disciplina vinculada</option>
+                      ) : (
+                        availableDisciplinas.map(d => (
+                          <option key={d.id} value={d.id}>
+                            {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
                   <div>
-                    <label style={{ ...labelStyle, marginBottom: 6 }}>Professor *</label>
-                    <select value={a.professorId} onChange={e => updateAssignment(a.id, 'professorId', e.target.value)}
-                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
-                      <option value="" disabled>Selecionar...</option>
-                      {filteredProfs.length === 0 && !a.professorId
-                        ? <option disabled>Nenhum professor vinculado</option>
-                        : (!filteredProfs.find(p => p.id === a.professorId) && a.professorId) 
-                          ? <option value={a.professorId}>{a.professorNome} (Não vinculado)</option>
-                          : null}
-                      {filteredProfs.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                    </select>
+                    {isStrictProfessor ? (
+                      <div>
+                        <label style={{ ...labelStyle, marginBottom: 6 }}>Professor</label>
+                        <div style={{ 
+                          ...inputStyle, 
+                          padding: '10px 12px', 
+                          fontSize: 14, 
+                          background: 'rgba(139,92,246,0.06)', 
+                          border: '1px solid rgba(139,92,246,0.2)', 
+                          color: 'hsl(var(--text-primary))', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 8, 
+                          fontWeight: 600,
+                          minHeight: 42
+                        }}>
+                          <User size={15} color="#8b5cf6" />
+                          <span>{currentUser?.nome || 'Professor'} (Você)</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label style={{ ...labelStyle, marginBottom: 6 }}>Professor *</label>
+                        <select value={a.professorId} onChange={e => updateAssignment(a.id, 'professorId', e.target.value)}
+                          style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
+                          <option value="" disabled>Selecionar...</option>
+                          {filteredProfs.length === 0 && !a.professorId
+                            ? <option disabled>Nenhum professor vinculado</option>
+                            : (!filteredProfs.find(p => p.id === a.professorId) && a.professorId) 
+                              ? <option value={a.professorId}>{a.professorNome} (Não vinculado)</option>
+                              : null}
+                          {filteredProfs.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div>

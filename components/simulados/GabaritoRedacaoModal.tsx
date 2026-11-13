@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { isTextoApoio } from '@/lib/utils'
+import { isTextoApoio, getQuestionCorrectAnswer } from '@/lib/utils'
 
 interface GabaritoRedacaoModalProps {
   provaUploadId: string
@@ -303,8 +303,7 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
                         <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
                           {colQuestoes.map((q, idx) => {
                             const num = colIndex === 0 ? idx + 1 : Math.ceil(meQuestoes.length / 2) + idx + 1
-                            const alternativaCorreta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
-                            const letraCorreta = alternativaCorreta ? (alternativaCorreta.letter || alternativaCorreta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+                            const letraCorreta = getQuestionCorrectAnswer(q)
 
                             return (
                               <div 

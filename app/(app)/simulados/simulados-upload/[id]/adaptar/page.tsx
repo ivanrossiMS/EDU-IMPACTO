@@ -611,7 +611,6 @@ export default function UploadSimuladoPage() {
           config={simConfig}
           onClose={() => {
             setShowPreviewIsolated(false)
-            router.push(`/simulados/simulados-upload/${simuladoId}/upload?all=true`)
           }}
           isolatedMode={true}
           isReadOnly={isProfessorViewAll}

@@ -1,14 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Library, Plus, Search, Filter, BookOpen, Layers, User, MoreVertical, LayoutGrid, List, Trash2, X, Sparkles, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useApp } from '@/lib/context'
+import { checkIsStrictProfessor, filterDisciplinasForUser } from '@/lib/simuladosAuth'
 
 export default function BancoQuestoesPage() {
   const router = useRouter()
+  const { currentUser } = useApp()
   const [questoes, setQuestoes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -20,6 +23,11 @@ export default function BancoQuestoesPage() {
   const [filterDisciplina, setFilterDisciplina] = useState('')
   const [filterDificuldade, setFilterDificuldade] = useState('')
   const [filterTurma, setFilterTurma] = useState('')
+
+  const isStrictProfessor = checkIsStrictProfessor(currentUser)
+  const availableDisciplinas = useMemo(() => {
+    return filterDisciplinasForUser(disciplinas, currentUser)
+  }, [disciplinas, currentUser])
 
   const turmasDisponiveis = [
     '6º Ano Fundamental', '7º Ano Fundamental', '8º Ano Fundamental', '9º Ano Fundamental',
@@ -206,7 +214,7 @@ export default function BancoQuestoesPage() {
                       style={{ width: '100%', padding: '12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none' }}
                     >
                       <option value="">Todas as disciplinas</option>
-                      {disciplinas.map(d => (
+                      {availableDisciplinas.map(d => (
                         <option key={d.id} value={d.id}>{d.nome}</option>
                       ))}
                     </select>

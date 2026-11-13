@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { isTextoApoio } from '@/lib/utils'
+import { isTextoApoio, getQuestionCorrectAnswer } from '@/lib/utils'
 
 interface GabaritoModalProps {
   simuladoId: string
@@ -329,8 +329,7 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                       <div style={{ columnCount: 2, columnGap: 16 }}>
                         {questoesDisciplina.map((q) => {
                           const num = meQuestoes.findIndex(item => item.id === q.id) + 1
-                          const alternativaCorreta = q.simulados_alternativas?.find((a: any) => a.eh_correta || a.correct)
-                          const letraCorreta = alternativaCorreta ? (alternativaCorreta.letra || alternativaCorreta.letter) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+                          const letraCorreta = getQuestionCorrectAnswer(q)
 
                           return (
                             <div 

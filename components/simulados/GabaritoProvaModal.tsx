@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText, BookOpen } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { isTextoApoio, isQuestionForRequisicao } from '@/lib/utils'
+import { isTextoApoio, isQuestionForRequisicao, getQuestionCorrectAnswer, normalizeQuestoesList } from '@/lib/utils'
 
 interface GabaritoProvaModalProps {
   provaUploadId: string
@@ -69,8 +69,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
 
     questoesValidas.forEach((q: any, idx: number) => {
       const num = q.numero && typeof q.numero === 'number' && q.numero > 0 ? q.numero : idx + 1
-      const alt = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
-      const letra = alt ? (alt.letter || alt.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+      const letra = getQuestionCorrectAnswer(q)
       const discNome = getDisciplineName(q, idx, reqs)
 
       let group = groups.find(g => g.disciplina.toLowerCase() === discNome.toLowerCase())
@@ -121,7 +120,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
 
         if (p) {
           setProva({ ...p, simulados_bimestres: { nome: bimestreNome }, provas_upload_requisicoes: reqs })
-          setQuestoes(p.questoes_json || [])
+          setQuestoes(normalizeQuestoesList(p.questoes_json || []))
         }
       } catch (err) {
         console.error('Erro ao carregar gabarito:', err)

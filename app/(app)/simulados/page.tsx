@@ -30,12 +30,15 @@ import {
   formatCreatorShortName,
   getDeadlineUrgency,
   normalizeEvaluationItem,
+  extractSeriesText,
+  findLastBimestreOfYear,
+  BimestreInfo,
 } from '@/components/simulados/dashboard/simuladosDashboardUtils'
 
 type FeedTab = 'todas' | 'Simulado' | 'Prova' | 'Redação' | 'adaptadas'
 type SortMode = 'recentes' | 'prazo' | 'progresso' | 'revisao'
 
-interface BimestreRow {
+interface BimestreRow extends BimestreInfo {
   id: string
   nome: string
 }
@@ -71,6 +74,11 @@ export default function SimuladosDashboard() {
     provasPendentes: 0,
     simuladosPendentes: 0,
     redacoesPendentes: 0,
+    provasTotal: 0,
+    simuladosTotal: 0,
+    redacoesTotal: 0,
+    totalEnviados: 0,
+    totalGeral: 0,
   })
 
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -122,14 +130,24 @@ export default function SimuladosDashboard() {
               .from('redacao_upload_requisicoes')
               .select('*, redacao_upload(*)')
               .eq('id_professor', currentUser?.id),
-            (supabase as any).from('simulados_bimestres').select('id, nome'),
+            (supabase as any).from('simulados_bimestres').select('*').order('nome'),
           ])
 
           if (cancelled) return
 
+          const bimsList: BimestreRow[] = (resBimestres?.data || []).filter(
+            (b: any) => b?.id && b?.nome
+          )
+          setBimestres(bimsList)
+
+          const lastBimId = findLastBimestreOfYear(bimsList)
+          if (lastBimId) {
+            setBimestreFilter(lastBimId)
+          }
+
           const bimsMap: Record<string, string> = {}
-          ;(resBimestres?.data || []).forEach((b: any) => {
-            if (b?.id && b?.nome) bimsMap[b.id] = b.nome
+          bimsList.forEach((b: any) => {
+            bimsMap[b.id] = b.nome
           })
 
           const extractBim = (parent: any) => {
@@ -182,11 +200,16 @@ export default function SimuladosDashboard() {
                 title: parent.titulo || 'Sem título',
                 disciplina: r.disciplina_nome || '',
                 bimestre: extractBim(parent),
+                bimestreId: parent.id_bimestre ? String(parent.id_bimestre) : undefined,
                 prazo,
                 deadline: getDeadlineUrgency(prazo),
                 statusReq: st,
                 enviadoEm: r.enviado_em || r.updated_at || null,
                 link: `${src.routeBase}/${parent.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
+                qtdQuestoes: r.qtd_questoes || parent.questoes_count || undefined,
+                seriesText: extractSeriesText(parent),
+                dataAplicacao: parent.data_aplicacao || null,
+                observacoes: r.observacoes || r.motivo_rejeicao || null,
               }
 
               if (st === 'pendente' || st === 'rejeitado' || st === 'reprovado') {
@@ -211,13 +234,22 @@ export default function SimuladosDashboard() {
             return tb - ta
           })
 
+          const totalProvas = sources.find((s) => s.type === 'Prova')?.rows.length || 0
+          const totalSimulados = sources.find((s) => s.type === 'Simulado')?.rows.length || 0
+          const totalRedacoes = sources.find((s) => s.type === 'Redação')?.rows.length || 0
+
           setProfStats({
             provasPendentes: counts.Prova,
             simuladosPendentes: counts.Simulado,
             redacoesPendentes: counts['Redação'],
+            provasTotal: totalProvas,
+            simuladosTotal: totalSimulados,
+            redacoesTotal: totalRedacoes,
+            totalEnviados: submitted.length,
+            totalGeral: pending.length + submitted.length,
           })
           setProfPendingTasks(pending)
-          setProfSubmittedTasks(submitted.slice(0, 15))
+          setProfSubmittedTasks(submitted)
           return
         }
 
@@ -242,7 +274,7 @@ export default function SimuladosDashboard() {
             .limit(45),
           (supabase as any)
             .from('simulados_bimestres')
-            .select('id, nome')
+            .select('*')
             .order('nome'),
         ])
 
@@ -256,6 +288,11 @@ export default function SimuladosDashboard() {
           bimsMap[b.id] = b.nome
         })
         setBimestres(bimsList)
+
+        const lastBimId = findLastBimestreOfYear(bimsList)
+        if (lastBimId && bimestreFilter === 'todos') {
+          setBimestreFilter(lastBimId)
+        }
 
         const pRaw = resProvas.data || []
         const sRaw = resSimulados.data || []
@@ -476,6 +513,9 @@ export default function SimuladosDashboard() {
         pendingTasks={profPendingTasks}
         submittedTasks={profSubmittedTasks}
         stats={profStats}
+        bimestres={bimestres}
+        selectedBimestre={bimestreFilter}
+        onBimestreChange={setBimestreFilter}
       />
     )
   }

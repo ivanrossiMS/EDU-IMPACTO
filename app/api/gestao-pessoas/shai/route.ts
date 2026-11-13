@@ -87,6 +87,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true })
     }
 
+    // Action: add single colaborador manually
+    if (body.action === 'add_colaborador') {
+      const c = body.colaborador
+      const nome = typeof c?.nome === 'string' ? c.nome.trim() : ''
+      const id = typeof c?.id === 'string' ? c.id.trim() : ''
+
+      if (!id || !nome) {
+        return NextResponse.json(
+          { error: 'ID e nome do colaborador são obrigatórios.' },
+          { status: 400 }
+        )
+      }
+
+      const row = {
+        id,
+        unidade: typeof c.unidade === 'string' && c.unidade.trim() ? c.unidade.trim() : 'COLEGIO EF',
+        nome,
+        cpf: typeof c.cpf === 'string' ? c.cpf.trim() : '',
+        data_nascimento: typeof c.dataNascimento === 'string' ? c.dataNascimento.trim() : '',
+        whatsapp: typeof c.whatsapp === 'string' ? c.whatsapp.trim() : '',
+        codigo: typeof c.codigo === 'string' ? c.codigo.trim() : '',
+        status: c.status === 'enviado' ? 'enviado' : 'pendente',
+        enviado_em: c.enviadoEm || null,
+        updated_at: new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from('shai_colaboradores')
+        .upsert([row], { onConflict: 'id' })
+
+      if (error && error.code !== 'PGRST205') throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // Action: delete single colaborador
+    if (body.action === 'delete_colaborador') {
+      const id = typeof body.id === 'string' ? body.id.trim() : ''
+      if (!id) {
+        return NextResponse.json({ error: 'ID do colaborador é obrigatório.' }, { status: 400 })
+      }
+
+      const { error } = await supabase
+        .from('shai_colaboradores')
+        .delete()
+        .eq('id', id)
+
+      if (error && error.code !== 'PGRST205') throw error
+      return NextResponse.json({ success: true })
+    }
+
     // Action: clear all
     if (body.action === 'clear_all') {
       const { error } = await supabase
@@ -99,6 +149,10 @@ export async function POST(request: Request) {
 
     // Action: save colaboradores list (bulk upsert)
     if (Array.isArray(body.colaboradores)) {
+      if (body.colaboradores.length === 0) {
+        return NextResponse.json({ success: true, count: 0 })
+      }
+
       const rowsToUpsert = body.colaboradores.map((c: any) => ({
         id: c.id,
         unidade: c.unidade,

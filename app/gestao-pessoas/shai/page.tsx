@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react'
 import { 
   FileSpreadsheet, Upload, Send, CheckCircle2, Clock, 
   Search, Filter, Sparkles, Copy, Check, Trash2, RefreshCw,
-  MessageSquare, User, Smartphone, ShieldCheck, KeyRound, ExternalLink,
+  MessageSquare, User, UserPlus, Smartphone, ShieldCheck, KeyRound, ExternalLink,
   ChevronDown, HelpCircle, FileText, Download, Play, AlertCircle, Building,
   ArrowUpDown, ArrowUp, ArrowDown, Database, Pencil, X
 } from 'lucide-react'
@@ -51,6 +51,39 @@ function formatExcelDate(val: any): string {
   return String(val).trim()
 }
 
+function formatCpfInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+}
+
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+interface ManualFormState {
+  unidade: string
+  nome: string
+  cpf: string
+  dataNascimento: string
+  whatsapp: string
+  codigo: string
+}
+
+const EMPTY_MANUAL_FORM: ManualFormState = {
+  unidade: 'COLEGIO EF',
+  nome: '',
+  cpf: '',
+  dataNascimento: '',
+  whatsapp: '',
+  codigo: ''
+}
+
 export default function ShaiPage() {
   const { currentUser } = useApp()
   const [colaboradores, setColaboradores] = useState<ColaboradorShai[]>([])
@@ -72,7 +105,73 @@ export default function ShaiPage() {
   const [showConfig, setShowConfig] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // Manual inclusion modal state
+  const [manualForm, setManualForm] = useState<ManualFormState>(EMPTY_MANUAL_FORM)
+  const [manualErrors, setManualErrors] = useState<{ nome?: string; unidade?: string }>({})
+  const [manualTouched, setManualTouched] = useState<{ nome?: boolean; unidade?: boolean }>({})
+  const [isSavingManual, setIsSavingManual] = useState(false)
+
+  // Individual delete confirmation modal state
+  const [colabToDelete, setColabToDelete] = useState<ColaboradorShai | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const addDialogRef = useRef<HTMLDialogElement>(null)
+  const deleteDialogRef = useRef<HTMLDialogElement>(null)
+  const nomeInputRef = useRef<HTMLInputElement>(null)
+  const unidadeInputRef = useRef<HTMLInputElement>(null)
+  const deleteCancelBtnRef = useRef<HTMLButtonElement>(null)
+
+  const addTitleId = useId()
+  const unidadeListId = useId()
+  const nomeId = useId()
+  const unidadeId = useId()
+  const cpfId = useId()
+  const nascId = useId()
+  const whatsappId = useId()
+  const codigoId = useId()
+  const nomeErrId = useId()
+  const unidadeErrId = useId()
+  const whatsappHintId = useId()
+  const deleteTitleId = useId()
+  const deleteDescId = useId()
+
+  const availableUnidades = useMemo(() => {
+    const set = new Set<string>(['COLEGIO EF', 'COLEGIO IMPACTO'])
+    for (const c of colaboradores) {
+      if (c.unidade?.trim()) set.add(c.unidade.trim())
+    }
+    return Array.from(set)
+  }, [colaboradores])
+
+  // Light-dismiss fallback for native <dialog closedby="any"> on browsers without closedBy support (e.g. Safari)
+  useEffect(() => {
+    const dialog = deleteDialogRef.current
+    if (!dialog || 'closedBy' in HTMLDialogElement.prototype) return
+
+    const isOutside = (e: PointerEvent) => {
+      const r = dialog.getBoundingClientRect()
+      return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+    }
+
+    let pressedOutside = false
+    const onPointerDown = (e: PointerEvent) => {
+      pressedOutside = isOutside(e)
+    }
+    const onPointerUp = (e: PointerEvent) => {
+      if (pressedOutside && isOutside(e) && dialog.open) {
+        dialog.close()
+      }
+      pressedOutside = false
+    }
+
+    dialog.addEventListener('pointerdown', onPointerDown)
+    dialog.addEventListener('pointerup', onPointerUp)
+    return () => {
+      dialog.removeEventListener('pointerdown', onPointerDown)
+      dialog.removeEventListener('pointerup', onPointerUp)
+    }
+  }, [])
 
   // Load state from local storage first, then sync with Supabase database API
   useEffect(() => {
@@ -437,6 +536,151 @@ export default function ShaiPage() {
     }
   }
 
+  // Open manual add modal
+  const openAddModal = () => {
+    setManualForm({
+      ...EMPTY_MANUAL_FORM,
+      unidade: availableUnidades[0] || 'COLEGIO EF'
+    })
+    setManualErrors({})
+    setManualTouched({})
+    addDialogRef.current?.showModal()
+    requestAnimationFrame(() => nomeInputRef.current?.focus())
+  }
+
+  const closeAddModal = () => {
+    addDialogRef.current?.close()
+  }
+
+  const validateManualField = (field: 'nome' | 'unidade', value: string): string | undefined => {
+    if (!value.trim()) {
+      return field === 'nome'
+        ? 'Informe o nome completo do colaborador.'
+        : 'Informe a unidade do colaborador.'
+    }
+    return undefined
+  }
+
+  const handleManualBlur = (field: 'nome' | 'unidade') => {
+    if (!manualTouched[field]) return
+    const error = validateManualField(field, manualForm[field])
+    setManualErrors(prev => ({ ...prev, [field]: error }))
+  }
+
+  const handleAddColaborador = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    const nomeError = validateManualField('nome', manualForm.nome)
+    const unidadeError = validateManualField('unidade', manualForm.unidade)
+
+    if (nomeError || unidadeError) {
+      setManualTouched({ nome: true, unidade: true })
+      setManualErrors({ nome: nomeError, unidade: unidadeError })
+      if (nomeError) {
+        nomeInputRef.current?.focus()
+      } else {
+        unidadeInputRef.current?.focus()
+      }
+      return
+    }
+
+    setIsSavingManual(true)
+    const newColab: ColaboradorShai = {
+      id: `shai_manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      unidade: manualForm.unidade.trim(),
+      nome: manualForm.nome.trim(),
+      cpf: manualForm.cpf.trim(),
+      dataNascimento: manualForm.dataNascimento.trim(),
+      whatsapp: manualForm.whatsapp.trim(),
+      codigo: manualForm.codigo.trim(),
+      status: 'pendente',
+      enviadoEm: null
+    }
+
+    const nextList = [newColab, ...colaboradores]
+    setColaboradores(nextList)
+    try {
+      localStorage.setItem('impacto_shai_colaboradores', JSON.stringify(nextList))
+    } catch (err) {
+      console.error('Erro ao salvar no localStorage:', err)
+    }
+
+    try {
+      const res = await fetch('/api/gestao-pessoas/shai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_colaborador', colaborador: newColab })
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error || 'Erro ao salvar no banco')
+      }
+      addDialogRef.current?.close()
+      toast.success(`Colaborador "${newColab.nome}" incluído e salvo com sucesso!`)
+    } catch (err) {
+      console.error('Erro ao salvar colaborador manual no banco:', err)
+      addDialogRef.current?.close()
+      toast.warning(`Colaborador "${newColab.nome}" incluído localmente, mas houve erro ao sincronizar com o banco.`)
+    } finally {
+      setIsSavingManual(false)
+    }
+  }
+
+  // Open individual delete confirmation modal
+  const requestDeleteColaborador = (colab: ColaboradorShai) => {
+    setColabToDelete(colab)
+    deleteDialogRef.current?.showModal()
+    requestAnimationFrame(() => deleteCancelBtnRef.current?.focus())
+  }
+
+  // Confirm individual delete
+  const confirmDeleteColaborador = async () => {
+    const target = colabToDelete
+    if (!target) return
+
+    setIsDeleting(true)
+    const previousList = colaboradores
+    const nextList = colaboradores.filter(c => c.id !== target.id)
+
+    setColaboradores(nextList)
+    if (editingId === target.id) {
+      setEditingId(null)
+      setEditingCode('')
+    }
+    if (selectedColab?.id === target.id) {
+      setSelectedColab(null)
+    }
+
+    try {
+      localStorage.setItem('impacto_shai_colaboradores', JSON.stringify(nextList))
+    } catch (err) {
+      console.error('Erro ao atualizar localStorage:', err)
+    }
+
+    try {
+      const res = await fetch('/api/gestao-pessoas/shai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_colaborador', id: target.id })
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error || 'Erro ao excluir no banco de dados')
+      }
+      deleteDialogRef.current?.close()
+      toast.success(`Colaborador "${target.nome}" excluído com sucesso!`)
+    } catch (err) {
+      console.error('Erro ao excluir colaborador:', err)
+      setColaboradores(previousList)
+      try {
+        localStorage.setItem('impacto_shai_colaboradores', JSON.stringify(previousList))
+      } catch {}
+      toast.error('Não foi possível excluir o colaborador no banco de dados.')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   // Export current status to CSV/Excel
   const handleExportStatus = () => {
     if (colaboradores.length === 0) {
@@ -569,6 +813,29 @@ export default function ShaiPage() {
 
         {/* Action Buttons Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={openAddModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '10px 16px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: 13,
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(79,70,229,0.25)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <UserPlus size={16} />
+            Incluir Manualmente
+          </button>
+
           {colaboradores.length > 0 && (
             <>
               <button
@@ -1203,6 +1470,7 @@ export default function ShaiPage() {
                           </button>
 
                           <button
+                            type="button"
                             onClick={() => handleSendWhatsapp(colab)}
                             style={{
                               padding: '6px 12px',
@@ -1225,6 +1493,27 @@ export default function ShaiPage() {
                             <Send size={13} />
                             {isSent ? 'Reenviar' : 'Enviar WA'}
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => requestDeleteColaborador(colab)}
+                            aria-label={`Excluir ${colab.nome}`}
+                            title="Excluir colaborador"
+                            style={{
+                              padding: '6px 8px',
+                              borderRadius: 8,
+                              background: '#fff1f2',
+                              border: '1px solid #fecdd3',
+                              color: '#e11d48',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.15s'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1237,14 +1526,487 @@ export default function ShaiPage() {
           <div style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
             <FileSpreadsheet size={40} color="#cbd5e1" style={{ marginBottom: 12 }} />
             <h4 style={{ margin: '0 0 6px 0', fontSize: 16, color: '#0f172a', fontWeight: 800 }}>Nenhum colaborador encontrado</h4>
-            <p style={{ margin: 0, fontSize: 13 }}>
+            <p style={{ margin: '0 0 16px 0', fontSize: 13 }}>
               {colaboradores.length === 0 
-                ? 'Faça o upload de uma planilha Excel acima ou clique em "Carregar Dados de Exemplo".'
+                ? 'Faça o upload de uma planilha Excel acima, inclua manualmente ou clique em "Carregar Dados de Exemplo".'
                 : 'Nenhum resultado corresponde à sua busca ou filtro.'}
             </p>
+            {colaboradores.length === 0 && (
+              <button
+                type="button"
+                onClick={openAddModal}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '9px 16px',
+                  borderRadius: 10,
+                  background: '#4f46e5',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <UserPlus size={15} />
+                Incluir Colaborador Manualmente
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* MODAL: INCLUIR COLABORADOR MANUALMENTE */}
+      <dialog
+        ref={addDialogRef}
+        aria-labelledby={addTitleId}
+        className="shai-modal-dialog"
+        onClose={() => {
+          if (addDialogRef.current) addDialogRef.current.returnValue = ''
+        }}
+      >
+        <div style={{
+          background: '#ffffff',
+          borderRadius: 20,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 24px 64px rgba(15, 23, 42, 0.22)',
+          overflowY: 'auto',
+          maxHeight: '90dvh'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '18px 22px',
+            borderBottom: '1px solid #e2e8f0',
+            background: '#f8fafc'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: '#ede9fe',
+                color: '#4f46e5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <UserPlus size={18} />
+              </div>
+              <div>
+                <h2 id={addTitleId} style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif" }}>
+                  Incluir Colaborador Manualmente
+                </h2>
+                <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+                  O registro será salvo na lista e sincronizado com o banco de dados.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={closeAddModal}
+              aria-label="Fechar janela"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                color: '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <form
+            onSubmit={handleAddColaborador}
+            noValidate
+            aria-labelledby={addTitleId}
+            style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}
+          >
+            {/* Nome Completo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={nomeId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                Nome Completo <span aria-hidden="true" style={{ color: '#e11d48' }}>*</span>
+              </label>
+              <input
+                ref={nomeInputRef}
+                id={nomeId}
+                name="nome"
+                type="text"
+                required
+                autoFocus
+                autoComplete="name"
+                enterKeyHint="next"
+                value={manualForm.nome}
+                aria-invalid={Boolean(manualErrors.nome)}
+                aria-describedby={manualErrors.nome ? nomeErrId : undefined}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setManualForm(prev => ({ ...prev, nome: val }))
+                  setManualTouched(prev => ({ ...prev, nome: true }))
+                  if (manualErrors.nome && val.trim()) {
+                    setManualErrors(prev => ({ ...prev, nome: undefined }))
+                  }
+                }}
+                onBlur={() => handleManualBlur('nome')}
+                placeholder="Ex.: Maria Clara da Silva"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: `1.5px solid ${manualErrors.nome ? '#e11d48' : '#cbd5e1'}`,
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 'max(1rem, 1em)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {manualErrors.nome && (
+                <span id={nomeErrId} role="alert" style={{ fontSize: 12, color: '#e11d48', fontWeight: 600 }}>
+                  {manualErrors.nome}
+                </span>
+              )}
+            </div>
+
+            {/* Unidade */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={unidadeId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                Unidade <span aria-hidden="true" style={{ color: '#e11d48' }}>*</span>
+              </label>
+              <input
+                ref={unidadeInputRef}
+                id={unidadeId}
+                name="unidade"
+                type="text"
+                list={unidadeListId}
+                required
+                enterKeyHint="next"
+                value={manualForm.unidade}
+                aria-invalid={Boolean(manualErrors.unidade)}
+                aria-describedby={manualErrors.unidade ? unidadeErrId : undefined}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setManualForm(prev => ({ ...prev, unidade: val }))
+                  setManualTouched(prev => ({ ...prev, unidade: true }))
+                  if (manualErrors.unidade && val.trim()) {
+                    setManualErrors(prev => ({ ...prev, unidade: undefined }))
+                  }
+                }}
+                onBlur={() => handleManualBlur('unidade')}
+                placeholder="Ex.: COLEGIO EF"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: `1.5px solid ${manualErrors.unidade ? '#e11d48' : '#cbd5e1'}`,
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 'max(1rem, 1em)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <datalist id={unidadeListId}>
+                {availableUnidades.map(u => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+              {manualErrors.unidade && (
+                <span id={unidadeErrId} role="alert" style={{ fontSize: 12, color: '#e11d48', fontWeight: 600 }}>
+                  {manualErrors.unidade}
+                </span>
+              )}
+            </div>
+
+            {/* CPF */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={cpfId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                CPF
+              </label>
+              <input
+                id={cpfId}
+                name="cpf"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
+                value={manualForm.cpf}
+                onChange={(e) => setManualForm(prev => ({ ...prev, cpf: formatCpfInput(e.target.value) }))}
+                placeholder="000.000.000-00"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 'max(1rem, 1em)',
+                  fontFamily: 'monospace',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Data de Nascimento */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={nascId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                Data de Nascimento
+              </label>
+              <input
+                id={nascId}
+                name="dataNascimento"
+                type="text"
+                inputMode="numeric"
+                autoComplete="bday"
+                enterKeyHint="next"
+                value={manualForm.dataNascimento}
+                onChange={(e) => setManualForm(prev => ({ ...prev, dataNascimento: formatDateInput(e.target.value) }))}
+                placeholder="DD/MM/AAAA"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 'max(1rem, 1em)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* WhatsApp */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={whatsappId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                WhatsApp
+              </label>
+              <input
+                id={whatsappId}
+                name="whatsapp"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                enterKeyHint="next"
+                aria-describedby={whatsappHintId}
+                value={manualForm.whatsapp}
+                onChange={(e) => setManualForm(prev => ({ ...prev, whatsapp: e.target.value }))}
+                placeholder="Ex.: 6799999-0000"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: 'max(1rem, 1em)',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <span id={whatsappHintId} style={{ fontSize: 12, color: formatPhoneForWhatsapp(manualForm.whatsapp) ? '#059669' : '#64748b' }}>
+                {formatPhoneForWhatsapp(manualForm.whatsapp)
+                  ? `Número pronto para disparo (+${formatPhoneForWhatsapp(manualForm.whatsapp)})`
+                  : 'Informe DDD + número (ex.: 6799999-0000).'}
+              </span>
+            </div>
+
+            {/* Código SHAI */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor={codigoId} style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+                Código SHAI
+              </label>
+              <input
+                id={codigoId}
+                name="codigo"
+                type="text"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                enterKeyHint="done"
+                value={manualForm.codigo}
+                onChange={(e) => setManualForm(prev => ({ ...prev, codigo: e.target.value }))}
+                placeholder="Ex.: 78BDCC3A"
+                style={{
+                  width: '100%',
+                  minHeight: 48,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1.5px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#4c1d95',
+                  fontSize: 'max(1rem, 1em)',
+                  fontWeight: 700,
+                  fontFamily: 'monospace',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Form Footer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 10,
+              paddingTop: 12,
+              borderTop: '1px solid #e2e8f0',
+              marginTop: 4
+            }}>
+              <button
+                type="button"
+                onClick={closeAddModal}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 18px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingManual}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: isSavingManual ? '#94a3b8' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color: '#ffffff',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: isSavingManual ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+              >
+                <UserPlus size={15} />
+                {isSavingManual ? 'Salvando...' : 'Incluir Colaborador'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+
+      {/* MODAL: CONFIRMAR EXCLUSÃO INDIVIDUAL */}
+      <dialog
+        ref={deleteDialogRef}
+        {...({ closedby: 'any' } as any)}
+        aria-labelledby={deleteTitleId}
+        aria-describedby={deleteDescId}
+        className="shai-modal-dialog shai-modal-dialog--sm"
+        onClose={() => {
+          if (deleteDialogRef.current) deleteDialogRef.current.returnValue = ''
+          setColabToDelete(null)
+        }}
+      >
+        <div style={{
+          background: '#ffffff',
+          borderRadius: 20,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 24px 64px rgba(15, 23, 42, 0.22)',
+          padding: 24,
+          overflowY: 'auto',
+          maxHeight: '90dvh'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 18 }}>
+            <div style={{
+              width: 42,
+              height: 42,
+              borderRadius: 12,
+              background: '#fff1f2',
+              border: '1px solid #fecdd3',
+              color: '#e11d48',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Trash2 size={20} />
+            </div>
+            <div>
+              <h2 id={deleteTitleId} style={{ margin: '0 0 6px 0', fontSize: 17, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif" }}>
+                Excluir colaborador?
+              </h2>
+              <p id={deleteDescId} style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.5 }}>
+                Tem certeza que deseja excluir{' '}
+                <strong style={{ color: '#0f172a' }}>{colabToDelete?.nome}</strong>
+                {colabToDelete?.unidade ? ` (${colabToDelete.unidade})` : ''}
+                {colabToDelete?.codigo ? ` — código ${colabToDelete.codigo}` : ''}? Esta ação remove o colaborador da lista e do banco de dados.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              ref={deleteCancelBtnRef}
+              type="button"
+              autoFocus
+              onClick={() => deleteDialogRef.current?.close()}
+              style={{
+                minHeight: 44,
+                padding: '9px 18px',
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: '#334155',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={confirmDeleteColaborador}
+              style={{
+                minHeight: 44,
+                padding: '9px 18px',
+                borderRadius: 10,
+                border: 'none',
+                background: isDeleting ? '#fda4af' : '#e11d48',
+                color: '#ffffff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: isDeleting ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <Trash2 size={14} />
+              {isDeleting ? 'Excluindo...' : 'Excluir'}
+            </button>
+          </div>
+        </div>
+      </dialog>
 
     </div>
   )

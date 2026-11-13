@@ -129,9 +129,28 @@ export default function VerProvaUploadPage() {
   const updateStatus = async (status: string) => {
     setSaving(true)
     try {
-      await (supabase as any).from('simulados_upload').update({ status }).eq('id', provaId)
+      const now = new Date().toISOString()
+      await (supabase as any).from('simulados_upload').update({ status, updated_at: now }).eq('id', provaId)
+
+      let reqStatusToSet: string | null = null
+      if (status === 'aprovado' || status === 'publicado') {
+        reqStatusToSet = 'aprovado'
+      } else if (status === 'reprovado') {
+        reqStatusToSet = 'reprovado'
+      } else if (status === 'aguardando') {
+        reqStatusToSet = 'pendente'
+      }
+
+      if (reqStatusToSet) {
+        await (supabase as any)
+          .from('simulados_upload_requisicoes')
+          .update({ status: reqStatusToSet })
+          .eq('id_simulado_upload', provaId)
+        setRequisicoes((prev: any[]) => prev.map(r => ({ ...r, status: reqStatusToSet })))
+      }
+
       setProva((prev: any) => ({ ...prev, status }))
-      setSuccessMessage(`Prova ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : 'publicada'} com sucesso!`)
+      setSuccessMessage(`Simulado ${status === 'aprovado' ? 'aprovado' : status === 'reprovado' ? 'reprovado' : status === 'publicado' ? 'publicado' : 'atualizado'} com sucesso!`)
       setSuccessModal(true)
     } catch (e: any) { alert('Erro: ' + e.message) }
     finally { setSaving(false) }
@@ -267,7 +286,7 @@ export default function VerProvaUploadPage() {
         </div>
 
         {/* Coordinator Actions */}
-        {isCoord && (questoes.length > 0 || prova.status === 'em_revisao') && (
+        {isCoord && (questoes.length > 0 || derivedStatus === 'em_revisao' || prova.status === 'em_revisao') && (
           <div className="detail-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             {questoes.length > 0 && (
               <motion.button onClick={() => setShowPreview(true)}
@@ -276,20 +295,21 @@ export default function VerProvaUploadPage() {
                 <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
               </motion.button>
             )}
-            {prova.status === 'em_revisao' && (
-              <>
-                <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
-                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <XCircle size={16} /> Reprovar
-                </motion.button>
-                <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
-                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
-                  <Send size={16} /> Aprovar e Publicar
-                </motion.button>
-              </>
-            )}
+            <motion.button onClick={() => updateStatus('reprovado')} disabled={saving}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <XCircle size={16} /> Devolver / Reprovar
+            </motion.button>
+            <motion.button onClick={() => updateStatus('aprovado')} disabled={saving}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(16,185,129,0.08)', color: '#059669', border: '1px solid rgba(16,185,129,0.25)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <CheckCircle size={16} /> Aprovar Simulado
+            </motion.button>
+            <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
+              <Send size={16} /> Aprovar e Publicar
+            </motion.button>
           </div>
         )}
 
@@ -348,9 +368,17 @@ export default function VerProvaUploadPage() {
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
             <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
-              <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Users size={16} color="#8b5cf6" /> Matérias do Simulado
-              </h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 18 }}>
+                <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 14.5, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                  <Users size={16} color="#8b5cf6" style={{ flexShrink: 0 }} />
+                  <span>Matérias do Simulado</span>
+                </h4>
+                {requisicoes?.length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-app))', padding: '3px 8px', borderRadius: 6, border: '1px solid hsl(var(--border-subtle))', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', lineHeight: 1 }}>
+                    {requisicoes.length} {requisicoes.length === 1 ? 'matéria' : 'matérias'}
+                  </span>
+                )}
+              </div>
 
             {requisicoes.length === 0 ? (
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, textAlign: 'center' }}>Sem atribuições cadastradas.</p>

@@ -81,7 +81,8 @@ export function SidebarSimulados() {
     'Administrador Master'
   ].includes(currentUser?.cargo || '')
 
-  const showProfileButton = isAdmin && !isProfessor
+  const showProfileButton = true
+  const isPerfilActive = pathname === '/simulados/perfil'
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
@@ -203,6 +204,41 @@ export function SidebarSimulados() {
         })}
 
         <div style={{ width: 1, height: 26, background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%)', flexShrink: 0, margin: '0 4px' }} />
+
+        {/* Botão Perfil (Mobile) */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => router.push('/simulados/perfil')}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: isPerfilActive ? '#c084fc' : '#a855f7',
+            minWidth: 62,
+            padding: '4px 6px',
+            borderRadius: 14,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ 
+            padding: '7px 15px', 
+            borderRadius: 16, 
+            background: isPerfilActive ? 'rgba(168, 85, 247, 0.22)' : 'rgba(168, 85, 247, 0.08)',
+            border: isPerfilActive ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid rgba(168, 85, 247, 0.2)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: '#a855f7'
+          }}>
+             <UserCircle size={20} />
+          </div>
+          <span style={{ fontSize: 10.5, color: isPerfilActive ? '#c084fc' : '#a855f7', fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap' }}>Perfil</span>
+        </motion.button>
 
         <motion.button
           whileTap={{ scale: 0.9 }}
@@ -482,13 +518,21 @@ export function SidebarSimulados() {
           >
             {/* Top row: Avatar + Name/Role + Notification */}
             <div 
+              onClick={() => router.push('/simulados/perfil')}
+              title="Acessar meu perfil"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 width: '100%',
-                justifyContent: collapsed ? 'center' : 'flex-start'
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                cursor: 'pointer',
+                borderRadius: 12,
+                padding: '2px',
+                transition: 'opacity 0.15s ease'
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
             >
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <UserAvatar 
@@ -530,10 +574,10 @@ export function SidebarSimulados() {
                 {/* 1. Meu Perfil */}
                 {showProfileButton && (
                   <motion.button
-                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.16)', color: '#ffffff' }}
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(168, 85, 247, 0.18)', color: '#ffffff' }}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => {
-                      router.push('/meu-perfil');
+                      router.push('/simulados/perfil');
                     }}
                     title="Meu Perfil"
                     style={{
@@ -543,13 +587,14 @@ export function SidebarSimulados() {
                       gap: 5,
                       padding: '6px 4px',
                       borderRadius: 9,
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'rgba(255, 255, 255, 0.8)',
+                      background: isPerfilActive ? 'rgba(168, 85, 247, 0.22)' : 'transparent',
+                      border: isPerfilActive ? '1px solid rgba(168, 85, 247, 0.45)' : 'none',
+                      color: isPerfilActive ? '#ffffff' : 'rgba(255, 255, 255, 0.85)',
                       cursor: 'pointer',
                       fontSize: 11,
-                      fontWeight: 600,
+                      fontWeight: isPerfilActive ? 700 : 600,
                       letterSpacing: '0.01em',
+                      boxShadow: isPerfilActive ? '0 0 10px rgba(168, 85, 247, 0.25)' : 'none',
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -627,21 +672,22 @@ export function SidebarSimulados() {
               >
                 {showProfileButton && (
                   <motion.button
-                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.18)' }}
+                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(168, 85, 247, 0.25)' }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => router.push('/meu-perfil')}
+                    onClick={() => router.push('/simulados/perfil')}
                     title="Meu Perfil"
                     style={{
                       width: 30,
                       height: 30,
                       borderRadius: 8,
-                      background: 'transparent',
-                      border: 'none',
+                      background: isPerfilActive ? 'rgba(168, 85, 247, 0.25)' : 'transparent',
+                      border: isPerfilActive ? '1px solid rgba(168, 85, 247, 0.45)' : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      color: '#a855f7'
+                      color: '#a855f7',
+                      boxShadow: isPerfilActive ? '0 0 10px rgba(168, 85, 247, 0.3)' : 'none'
                     }}
                   >
                     <UserCircle size={15} />

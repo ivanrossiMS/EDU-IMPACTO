@@ -4839,9 +4839,35 @@ sup {
 }
 
 /* ──────── DIALOG BACKDROP (OCORRÊNCIAS QUICK DRAWER) ──────── */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
 dialog::backdrop {
   background-color: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+dialog.shai-modal-dialog {
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  width: min(92vw, 540px);
+  max-width: 92vw;
+  max-height: 90dvh;
+  overflow: visible;
+}
+
+dialog.shai-modal-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+dialog.shai-modal-dialog--sm {
+  width: min(92vw, 440px);
 }
 
 /* ──────── SIMULADOS DASHBOARD ULTRAMODERNO ──────── */

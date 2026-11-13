@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info, X, Columns, LayoutList } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
+import { getQuestionCorrectAnswer } from '@/lib/utils'
 
 export default function ImprimirSimuladoPage() {
   const { id } = useParams()
@@ -120,12 +121,21 @@ export default function ImprimirSimuladoPage() {
           letra: letters[idx] || String.fromCharCode(65 + idx),
           letter: letters[idx] || String.fromCharCode(65 + idx)
         }))
-        const correctAlt = relettered.find((a: any) => a.correta || a.eh_correta || a.correct)
-        const newGabarito = correctAlt ? correctAlt.letra : (relettered.some((a: any) => a.letra === q.gabarito) ? q.gabarito : '')
+        const newGabarito = getQuestionCorrectAnswer({ ...q, simulados_alternativas: relettered, alternativas: relettered })
+        const syncedAlts = relettered.map((a: any) => {
+          const isMatch = newGabarito !== '?' && (a.letra === newGabarito || a.letter === newGabarito)
+          return {
+            ...a,
+            correta: isMatch,
+            eh_correta: isMatch,
+            correct: isMatch
+          }
+        })
         return {
           ...q,
-          simulados_alternativas: relettered,
-          ...(newGabarito !== undefined ? { gabarito: newGabarito } : {})
+          simulados_alternativas: syncedAlts,
+          alternativas: syncedAlts,
+          ...(newGabarito !== '?' ? { gabarito: newGabarito } : {})
         }
       }
       return q
@@ -156,13 +166,21 @@ export default function ImprimirSimuladoPage() {
           letra: letters[idx] || String.fromCharCode(65 + idx),
           letter: letters[idx] || String.fromCharCode(65 + idx)
         }))
-        const correctAlt = relettered.find((a: any) => a.correta || a.eh_correta || a.correct)
-        const newGabarito = correctAlt ? (correctAlt.letra || correctAlt.letter) : q.gabarito
+        const newGabarito = getQuestionCorrectAnswer({ ...q, simulados_alternativas: relettered, alternativas: relettered })
+        const syncedAlts = relettered.map((a: any) => {
+          const isMatch = newGabarito !== '?' && (a.letra === newGabarito || a.letter === newGabarito)
+          return {
+            ...a,
+            correta: isMatch,
+            eh_correta: isMatch,
+            correct: isMatch
+          }
+        })
         return {
           ...q,
-          simulados_alternativas: relettered,
-          alternativas: relettered,
-          ...(newGabarito ? { gabarito: newGabarito } : {})
+          simulados_alternativas: syncedAlts,
+          alternativas: syncedAlts,
+          ...(newGabarito !== '?' ? { gabarito: newGabarito } : {})
         }
       }
       return q

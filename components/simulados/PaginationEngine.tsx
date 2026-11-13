@@ -119,6 +119,20 @@ export function cleanEnunciadoHtml(html: string): string {
   }
 
   const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : '';
+  
+  // Unwrap any center-aligned containers around image masks
+  cleaned = cleaned.replace(/<(div|p)\b[^>]*style="[^"]*text-align:\s*center[^"]*"[^>]*>\s*(\[IMAGEM\s*\d+\])\s*<\/\1>/gi, '<p>$2</p>');
+  cleaned = cleaned.replace(/<(div|p)\b[^>]*class="[^"]*ql-align-center[^"]*"[^>]*>\s*(\[IMAGEM\s*\d+\])\s*<\/\1>/gi, '<p>$2</p>');
+
+  // Deduplicate identical [IMAGEM N] tags (keep only the first occurrence of each tag)
+  const seenImgTags = new Set<string>();
+  cleaned = cleaned.replace(/(?:<p\b[^>]*>)?\s*\[IMAGEM\s*(\d+)\]\s*(?:<\/p>)?|(\[IMAGEM\s*(\d+)\])/gi, (fullMatch: string, pNum?: string, bareNum?: string) => {
+    const num = pNum || bareNum || '';
+    if (num && seenImgTags.has(num)) return '';
+    if (num) seenImgTags.add(num);
+    return fullMatch;
+  });
+
   const result = prefix + cleaned;
   return hasWrapper ? `<div style="white-space: pre-wrap;">${result}</div>` : result;
 }

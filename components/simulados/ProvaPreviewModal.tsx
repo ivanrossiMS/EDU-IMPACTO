@@ -5,9 +5,9 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
-import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages, saveStudioConfigPreservingFiles } from '@/lib/utils'
+import { ensureUniqueQuestionIds, hasDuplicateQuestionIds, matchQuestionById, normalizeQuestionImages, saveStudioConfigPreservingFiles, getQuestionCorrectAnswer } from '@/lib/utils'
 
-export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string; letra?: string; eh_correta?: boolean }
+export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string; letra?: string; eh_correta?: boolean; linhas?: number }
 export interface Questao {
   numero: number
   enunciado: string
@@ -470,11 +470,14 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         imagens: q.imagens?.map((img: any) => img.src) || [],
         simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => {
           const altId = alt._uid || alt.id || `alt-${q._internalId || q.id || idx}-${i}-${alt.letter || alt.letra || ''}`;
+          const isCorrect = typeof alt.correct === 'boolean'
+            ? alt.correct
+            : Boolean(alt.eh_correta || alt.correta || (q.gabarito && (alt.letter === q.gabarito || alt.letra === q.gabarito)));
           return {
             id: altId,
             letra: alt.letter || alt.letra,
             texto: alt.text || alt.texto,
-            eh_correta: alt.correct || alt.eh_correta,
+            eh_correta: isCorrect,
             imagem_url: (alt as any).imagem_url,
             _uid: altId
           };
@@ -1370,7 +1373,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             onPaginatingChange={setIsPaginating}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {
-                if ((q._internalId || q.id) !== qId) return q
+                if (!matchQuestion(q, qId)) return q
                 
                 // Remove the wrapper div if it exists so we don't nest it indefinitely
                 let cleanedText = newText
@@ -1405,9 +1408,17 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   letter: LETTERS[idx] || String.fromCharCode(65 + idx),
                   letra: LETTERS[idx] || String.fromCharCode(65 + idx)
                 }));
-                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta);
-                const newGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra) : (relettered.some((alt: any) => alt.letter === q.gabarito) ? q.gabarito : '');
-                return { ...q, alternativas: relettered, ...(newGabarito !== undefined ? { gabarito: newGabarito } : {}) };
+                const newGabarito = getQuestionCorrectAnswer({ ...q, alternativas: relettered });
+                const syncedAlts = relettered.map((alt: any) => {
+                  const isMatch = newGabarito !== '?' && (alt.letter === newGabarito || alt.letra === newGabarito);
+                  return {
+                    ...alt,
+                    correct: isMatch,
+                    eh_correta: isMatch,
+                    correta: isMatch
+                  };
+                });
+                return { ...q, alternativas: syncedAlts, ...(newGabarito !== '?' ? { gabarito: newGabarito } : {}) };
               }));
             }}
             onMoveAlternativa={isReadOnly ? () => {} : (qId: string, aId: string, directionOrTarget: 'up' | 'down' | number, sourceIdx?: number, sourceLetter?: string) => {
@@ -1434,10 +1445,18 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   letra: LETTERS[idx] || String.fromCharCode(65 + idx)
                 }));
 
-                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta);
-                const newGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra) : q.gabarito;
+                const newGabarito = getQuestionCorrectAnswer({ ...q, alternativas: relettered });
+                const syncedAlts = relettered.map((alt: any) => {
+                  const isMatch = newGabarito !== '?' && (alt.letter === newGabarito || alt.letra === newGabarito);
+                  return {
+                    ...alt,
+                    correct: isMatch,
+                    eh_correta: isMatch,
+                    correta: isMatch
+                  };
+                });
 
-                return { ...q, alternativas: relettered, ...(newGabarito ? { gabarito: newGabarito } : {}) };
+                return { ...q, alternativas: syncedAlts, ...(newGabarito !== '?' ? { gabarito: newGabarito } : {}) };
               }));
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
@@ -1453,7 +1472,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             }}
             onEditEnunciadoImage={isReadOnly ? () => {} : (qId, imgIndex, newUrl) => {
               setLocalQuestoes(prev => prev.map((q) => {
-                if ((q._internalId || q.id) !== qId) return q
+                if (!matchQuestion(q, qId)) return q
                 const newImagens = [...(q.imagens || [])]
                 if (!newUrl) {
                   newImagens[imgIndex] = { ...newImagens[imgIndex], src: '' } as any 

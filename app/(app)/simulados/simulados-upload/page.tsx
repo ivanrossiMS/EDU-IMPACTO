@@ -6,7 +6,7 @@ import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
   FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, RotateCcw, RefreshCw, Send
 } from 'lucide-react'
 import Link from 'next/link'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -482,26 +482,24 @@ export default function UploadSimuladosGerenciamentoPage() {
                 }
                 return { ...r, status: 'pendente', enviado_em: null }
               }
-              if (qCount > 0 && r.status === 'pendente') {
-                const envDate = r.enviado_em || new Date().toISOString()
-                if (r.id) {
-                  (supabase as any)
-                    .from('simulados_upload_requisicoes')
-                    .update({ status: 'enviado', enviado_em: envDate })
-                    .eq('id', r.id)
-                    .then(() => {})
-                    .catch(() => {})
-                }
-                return { ...r, status: 'enviado', enviado_em: envDate }
-              }
               return r
             })
+
+            const derivedSt = getDerivedStatus({ ...p, simulados_upload_requisicoes: fixedReqs, questoes_json: pQs }, 'simulado')
+            if (p.id && p.status !== derivedSt && p.status !== 'publicado') {
+              (supabase as any)
+                .from('simulados_upload')
+                .update({ status: derivedSt, updated_at: new Date().toISOString() })
+                .eq('id', p.id)
+                .then(() => {})
+                .catch(() => {})
+            }
 
             return {
               ...p,
               simulados_upload_requisicoes: fixedReqs,
               questoes_json: pQs,
-              status: getDerivedStatus({ ...p, simulados_upload_requisicoes: fixedReqs, questoes_json: pQs }, 'simulado')
+              status: derivedSt
             }
           })
           
@@ -578,6 +576,151 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   const isProfView = isCollaboratorRole(currentUser, currentUserPerfil)
   const isCoord = !isProfView
+
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null)
+  const [feedbackToast, setFeedbackToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    if (!feedbackToast) return
+    const timer = setTimeout(() => setFeedbackToast(null), 4000)
+    return () => clearTimeout(timer)
+  }, [feedbackToast])
+
+  const handleUpdateReqStatus = async (simulado: any, req: any, newStatus: 'pendente' | 'enviado' | 'aprovado' | 'reprovado') => {
+    if (!simulado || !req) return
+    setStatusUpdatingId(req.id)
+    try {
+      const now = new Date().toISOString()
+      const updateReqData: any = { status: newStatus }
+      if (newStatus === 'enviado') {
+        updateReqData.enviado_em = req.enviado_em || now
+      } else if (newStatus === 'pendente') {
+        updateReqData.enviado_em = null
+      }
+
+      const { error: reqErr } = await (supabase as any)
+        .from('simulados_upload_requisicoes')
+        .update(updateReqData)
+        .eq('id', req.id)
+
+      if (reqErr) throw reqErr
+
+      const allReqs = Array.isArray(simulado.simulados_upload_requisicoes) ? simulado.simulados_upload_requisicoes : []
+      const updatedReqs = allReqs.map((r: any) =>
+        r.id === req.id ? { ...r, ...updateReqData } : r
+      )
+
+      const newSimuladoStatus = getDerivedStatus(
+        { ...simulado, simulados_upload_requisicoes: updatedReqs },
+        'simulado'
+      )
+
+      await (supabase as any)
+        .from('simulados_upload')
+        .update({ status: newSimuladoStatus, updated_at: now })
+        .eq('id', simulado.id)
+
+      setSimulados(prev =>
+        prev.map(s =>
+          s.id === simulado.id
+            ? {
+                ...s,
+                status: newSimuladoStatus,
+                simulados_upload_requisicoes: updatedReqs,
+                updated_at: now
+              }
+            : s
+        )
+      )
+
+      const statusLabels: Record<string, string> = {
+        pendente: 'Reaberta para elaboração',
+        enviado: 'Enviada para revisão da coordenação',
+        aprovado: 'Aprovada com sucesso',
+        reprovado: 'Devolvida para revisão do professor'
+      }
+      setFeedbackToast({
+        message: `${req.disciplina_nome || 'Disciplina'}: ${statusLabels[newStatus] || newStatus}!`,
+        type: 'success'
+      })
+    } catch (err: any) {
+      console.error('Erro ao atualizar status:', err)
+      setFeedbackToast({
+        message: 'Erro ao atualizar status: ' + (err.message || 'Tente novamente.'),
+        type: 'error'
+      })
+    } finally {
+      setStatusUpdatingId(null)
+    }
+  }
+
+  const handleUpdateSimuladoStatus = async (simulado: any, newStatus: 'aguardando' | 'em_revisao' | 'aprovado' | 'reprovado' | 'publicado') => {
+    if (!simulado) return
+    setStatusUpdatingId(simulado.id)
+    try {
+      const now = new Date().toISOString()
+      const { error: pErr } = await (supabase as any)
+        .from('simulados_upload')
+        .update({ status: newStatus, updated_at: now })
+        .eq('id', simulado.id)
+
+      if (pErr) throw pErr
+
+      const allReqs = Array.isArray(simulado.simulados_upload_requisicoes) ? simulado.simulados_upload_requisicoes : []
+      let newReqStatus: string | null = null
+      if (newStatus === 'aprovado' || newStatus === 'publicado') {
+        newReqStatus = 'aprovado'
+      } else if (newStatus === 'reprovado') {
+        newReqStatus = 'reprovado'
+      } else if (newStatus === 'aguardando') {
+        newReqStatus = 'pendente'
+      } else if (newStatus === 'em_revisao') {
+        newReqStatus = 'enviado'
+      }
+
+      let updatedReqs = allReqs
+      if (newReqStatus) {
+        await (supabase as any)
+          .from('simulados_upload_requisicoes')
+          .update({ status: newReqStatus })
+          .eq('id_simulado_upload', simulado.id)
+        updatedReqs = allReqs.map((r: any) => ({ ...r, status: newReqStatus }))
+      }
+
+      setSimulados(prev =>
+        prev.map(s =>
+          s.id === simulado.id
+            ? {
+                ...s,
+                status: newStatus,
+                simulados_upload_requisicoes: updatedReqs,
+                updated_at: now
+              }
+            : s
+        )
+      )
+
+      const statusLabels: Record<string, string> = {
+        aguardando: 'Reaberto para elaboração',
+        em_revisao: 'Colocado em revisão',
+        aprovado: 'Simulado aprovado com sucesso',
+        reprovado: 'Simulado devolvido para ajuste',
+        publicado: 'Simulado publicado oficialmente'
+      }
+      setFeedbackToast({
+        message: `Simulado "${simulado.titulo}": ${statusLabels[newStatus] || newStatus}!`,
+        type: 'success'
+      })
+    } catch (err: any) {
+      console.error('Erro ao atualizar status do simulado:', err)
+      setFeedbackToast({
+        message: 'Erro ao atualizar status: ' + (err.message || 'Tente novamente.'),
+        type: 'error'
+      })
+    } finally {
+      setStatusUpdatingId(null)
+    }
+  }
 
   const openDeleteModal = (simulado: any, specificReq?: any) => {
     if (!simulado) return
@@ -959,7 +1102,39 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   const filtered = useMemo(() => {
     return simuladosInYear.filter(p => {
-      const matchStatus = filterStatus === 'todos' || p.status === filterStatus
+      const matchStatus = (() => {
+        if (filterStatus === 'todos') return true
+        const reqs = p.simulados_upload_requisicoes || []
+        const relevantReqs = isProfView && currentUser?.id
+          ? reqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+          : reqs
+
+        if (filterStatus === 'aprovado') {
+          if (p.status === 'aprovado' || p.status === 'concluido' || p.status === 'publicado') return true
+          if (relevantReqs.length > 0 && relevantReqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido')) return true
+          return false
+        }
+        if (filterStatus === 'reprovado') {
+          if (p.status === 'reprovado' || p.status === 'rejeitado') return true
+          if (relevantReqs.some((r: any) => r.status === 'reprovado' || r.status === 'rejeitado')) return true
+          return false
+        }
+        if (filterStatus === 'em_revisao') {
+          if (p.status === 'em_revisao') return true
+          if (relevantReqs.some((r: any) => r.status === 'enviado')) return true
+          return false
+        }
+        if (filterStatus === 'aguardando') {
+          if (p.status === 'aguardando' || p.status === 'pendente') return true
+          if (relevantReqs.some((r: any) => r.status === 'pendente')) return true
+          return false
+        }
+        if (filterStatus === 'publicado') {
+          return p.status === 'publicado'
+        }
+        return p.status === filterStatus
+      })()
+
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
       const isAssigned =
@@ -1334,10 +1509,11 @@ export default function UploadSimuladosGerenciamentoPage() {
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
               <option value="todos">Todos os Status</option>
-              <option value="aguardando">Aguardando</option>
+              <option value="aguardando">Aguardando Envio / Elaboração</option>
               <option value="em_revisao">Em Revisão</option>
-              <option value="aprovado">Concluída / Aprovado</option>
-              <option value="reprovado">Reprovado</option>
+              <option value="aprovado">Concluída / Aprovada</option>
+              <option value="reprovado">Devolvida / Ajuste Solicitado</option>
+              <option value="publicado">Publicada</option>
             </select>
             <ChevronDown size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
           </div>
@@ -2054,10 +2230,12 @@ export default function UploadSimuladosGerenciamentoPage() {
                                 const getStatusWeight = (p: any) => {
                                   const req0 = p.simulados_upload_requisicoes?.[0]
                                   const status = req0?.status || p.status || ''
-                                  if (status === 'aguardando' || (!status && !req0?.enviado_em)) return 1
-                                  if (status === 'enviado' || status === 'em_revisao' || req0?.enviado_em) return 2
-                                  if (status === 'aprovado' || status === 'concluido' || status === 'publicado') return 3
-                                  return 4
+                                  if (status === 'reprovado' || status === 'rejeitado') return 0
+                                  if (status === 'aguardando' || status === 'pendente') return 1
+                                  if (status === 'enviado' || status === 'em_revisao') return 2
+                                  if (status === 'aprovado' || status === 'concluido') return 3
+                                  if (status === 'publicado') return 4
+                                  return 1
                                 }
                                 return getStatusWeight(a) - getStatusWeight(b)
                               })
@@ -2155,10 +2333,10 @@ export default function UploadSimuladosGerenciamentoPage() {
                                     const accentColor = isAdaptada ? '#d97706' : '#8b5cf6'
 
                                     const myFirstReq = myReqsInCard[0]
-                                    const openAllQuestionsUrl = (isProfView && myFirstReq && otherReqsInCard.length > 0)
+                                    const openAllQuestionsUrl = (isProfView && myFirstReq)
                                       ? `/simulados/simulados-upload/${simulado.id}/upload?req=${myFirstReq.id}&prof=${myFirstReq.id_professor || ''}&disc=${myFirstReq.id_disciplina || ''}`
                                       : `/simulados/simulados-upload/${simulado.id}/upload?all=true`
-                                    const openAllPrintUrl = (isProfView && myFirstReq && otherReqsInCard.length > 0)
+                                    const openAllPrintUrl = (isProfView && myFirstReq)
                                       ? `/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${myFirstReq.id}&prof=${myFirstReq.id_professor || ''}&disc=${myFirstReq.id_disciplina || ''}`
                                       : `/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`
                                     const editConfigUrl = `/simulados/simulados-upload/${simulado.id}/editar`
@@ -2621,22 +2799,27 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                             // Requisition-specific envio status
                                             const hasUploadedQuestions = reqUploadedCount > 0
-                                            const isReqEnviada = hasUploadedQuestions || (req.status === 'aprovado' || req.status === 'concluido')
-                                            const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
-
-                                            // Requisition-specific status badge
-                                            const isReqConcluida = (req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado') && hasUploadedQuestions
-                                            const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
-                                            const isReqEmRevisao = hasUploadedQuestions && !isReqConcluida && !isReqReprovada
+                                            const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado'
+                                            const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado' || simulado.status === 'reprovado'
+                                            const isReqEmRevisao = !isReqConcluida && !isReqReprovada && (req.status === 'enviado' || req.status === 'em_revisao')
 
                                             let statusObj = { label: 'Aguardando', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' }
                                             if (isReqConcluida) {
-                                              statusObj = { label: 'Concluída', color: '#059669', dot: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)' }
+                                              statusObj = { label: simulado.status === 'publicado' ? 'Publicada' : 'Concluída', color: '#059669', dot: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)' }
                                             } else if (isReqReprovada) {
                                               statusObj = { label: 'Devolvida', color: '#dc2626', dot: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.25)' }
                                             } else if (isReqEmRevisao) {
                                               statusObj = { label: 'Em revisão', color: '#2563eb', dot: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)' }
+                                            } else if (hasUploadedQuestions) {
+                                              statusObj = { label: 'Em elaboração', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' }
                                             }
+
+                                            const isReqEnviada = req.status === 'enviado' || isReqConcluida
+                                            const envioLabel = isReqEnviada
+                                              ? 'Enviada'
+                                              : (isReqReprovada
+                                                ? 'Devolvida'
+                                                : (hasUploadedQuestions ? 'Em elaboração' : 'Pendente'))
 
                                             const reqEditUrl = `/simulados/simulados-upload/${simulado.id}/upload?req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
                                             const reqPrintUrl = `/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
@@ -2813,26 +2996,116 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                   <span style={{ fontSize: 9.5, fontWeight: 700, color: 'hsl(var(--text-secondary))', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                                                     Status
                                                   </span>
-                                                  <Link href={reqEditUrl} style={{ textDecoration: 'none', display: 'inline-flex' }} title={`Status: ${statusObj.label}`}>
-                                                    <span
-                                                      style={{
-                                                        padding: '4px 10px',
-                                                        borderRadius: 9999,
-                                                        fontSize: 11.5,
-                                                        fontWeight: 700,
-                                                        background: statusObj.bg,
-                                                        color: statusObj.color,
-                                                        border: `1px solid ${statusObj.border}`,
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: 6,
-                                                        whiteSpace: 'nowrap'
-                                                      }}
-                                                    >
-                                                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusObj.dot, flexShrink: 0 }} />
-                                                      {statusObj.label}
-                                                    </span>
-                                                  </Link>
+                                                  <DropdownMenu.Root>
+                                                    <DropdownMenu.Trigger asChild>
+                                                      <button
+                                                        type="button"
+                                                        aria-label={`Status: ${statusObj.label} para ${disciplinaNome}. Clique para gerenciar.`}
+                                                        title={`Status: ${statusObj.label}. Clique para alterar status ou ver opções.`}
+                                                        disabled={statusUpdatingId === req.id}
+                                                        style={{
+                                                          padding: '4px 10px',
+                                                          borderRadius: 9999,
+                                                          fontSize: 11.5,
+                                                          fontWeight: 700,
+                                                          background: statusObj.bg,
+                                                          color: statusObj.color,
+                                                          border: `1px solid ${statusObj.border}`,
+                                                          display: 'inline-flex',
+                                                          alignItems: 'center',
+                                                          gap: 6,
+                                                          whiteSpace: 'nowrap',
+                                                          cursor: 'pointer',
+                                                          outline: 'none',
+                                                          transition: 'all 0.15s ease'
+                                                        }}
+                                                      >
+                                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusObj.dot, flexShrink: 0 }} />
+                                                        {statusUpdatingId === req.id ? 'Atualizando...' : statusObj.label}
+                                                        <ChevronDown size={11} style={{ opacity: 0.6 }} />
+                                                      </button>
+                                                    </DropdownMenu.Trigger>
+
+                                                    <DropdownMenu.Portal>
+                                                      <DropdownMenu.Content
+                                                        align="start"
+                                                        side="bottom"
+                                                        sideOffset={6}
+                                                        collisionPadding={12}
+                                                        style={{
+                                                          minWidth: 230,
+                                                          background: 'hsl(var(--bg-elevated))',
+                                                          border: '1px solid hsl(var(--border-subtle))',
+                                                          borderRadius: 12,
+                                                          padding: 6,
+                                                          display: 'flex',
+                                                          flexDirection: 'column',
+                                                          gap: 2,
+                                                          boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.25), 0 4px 12px -2px rgba(0, 0, 0, 0.12)',
+                                                          zIndex: 9999999,
+                                                          outline: 'none'
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                      >
+                                                        <div style={{ padding: '6px 10px 4px', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'hsl(var(--text-secondary))' }}>
+                                                          Alterar Status ({disciplinaNome})
+                                                        </div>
+
+                                                        {isCoord && (
+                                                          <>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div
+                                                                onClick={() => handleUpdateReqStatus(simulado, req, 'aprovado')}
+                                                                style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: '#10b981', cursor: 'pointer', userSelect: 'none', outline: 'none' }}
+                                                                className="menu-item-hover"
+                                                              >
+                                                                <CheckCircle size={14} color="#10b981" /> Marcar como Concluída / Aprovada
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div
+                                                                onClick={() => handleUpdateReqStatus(simulado, req, 'reprovado')}
+                                                                style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }}
+                                                                className="menu-item-hover"
+                                                              >
+                                                                <XCircle size={14} color="#ef4444" /> Devolver para Revisão (Solicitar Ajuste)
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                          </>
+                                                        )}
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => handleUpdateReqStatus(simulado, req, 'enviado')}
+                                                            style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: '#3b82f6', cursor: 'pointer', userSelect: 'none', outline: 'none' }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <Send size={14} color="#3b82f6" /> {isCoord ? 'Marcar como Em Revisão' : 'Enviar para Revisão da Coordenação'}
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => handleUpdateReqStatus(simulado, req, 'pendente')}
+                                                            style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: '#f59e0b', cursor: 'pointer', userSelect: 'none', outline: 'none' }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <RotateCcw size={14} color="#f59e0b" /> Reabrir para Elaboração (Rascunho)
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <Link href={reqEditUrl} style={{ textDecoration: 'none', outline: 'none' }}>
+                                                            <div style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
+                                                              <Eye size={14} color="#8b5cf6" /> Abrir no Estúdio de Edição
+                                                            </div>
+                                                          </Link>
+                                                        </DropdownMenu.Item>
+                                                      </DropdownMenu.Content>
+                                                    </DropdownMenu.Portal>
+                                                  </DropdownMenu.Root>
                                                 </div>
 
                                                 {/* 6. AÇÕES DA DISCIPLINA */}
@@ -2893,7 +3166,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                         sideOffset={6}
                                                         collisionPadding={12}
                                                         style={{
-                                                          minWidth: 220,
+                                                          minWidth: 230,
                                                           background: 'hsl(var(--bg-elevated))',
                                                           border: '1px solid hsl(var(--border-subtle))',
                                                           borderRadius: 12,
@@ -2922,6 +3195,56 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                           </Link>
                                                         </DropdownMenu.Item>
 
+                                                        {/* GERENCIAMENTO DE STATUS DA DISCIPLINA */}
+                                                        <DropdownMenu.Separator style={{ height: 1, background: "hsl(var(--border-subtle))", margin: "4px 0" }} />
+                                                        <div style={{ padding: '4px 12px 2px', fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'hsl(var(--text-secondary))' }}>
+                                                          Status de {disciplinaNome}
+                                                        </div>
+
+                                                        {isCoord && (
+                                                          <>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div
+                                                                onClick={() => handleUpdateReqStatus(simulado, req, 'aprovado')}
+                                                                style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#10b981", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                                className="menu-item-hover"
+                                                              >
+                                                                <CheckCircle size={15} color="#10b981" /> Aprovar envio ({disciplinaNome})
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                            <DropdownMenu.Item asChild>
+                                                              <div
+                                                                onClick={() => handleUpdateReqStatus(simulado, req, 'reprovado')}
+                                                                style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#ef4444", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                                className="menu-item-hover"
+                                                              >
+                                                                <XCircle size={15} color="#ef4444" /> Devolver para ajuste ({disciplinaNome})
+                                                              </div>
+                                                            </DropdownMenu.Item>
+                                                          </>
+                                                        )}
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => handleUpdateReqStatus(simulado, req, 'enviado')}
+                                                            style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#3b82f6", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <Send size={15} color="#3b82f6" /> {isCoord ? 'Marcar Em Revisão' : 'Enviar para Revisão'} ({disciplinaNome})
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => handleUpdateReqStatus(simulado, req, 'pendente')}
+                                                            style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#f59e0b", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <RotateCcw size={15} color="#f59e0b" /> Reabrir elaboração ({disciplinaNome})
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        {/* AÇÕES DE ORDENAÇÃO */}
                                                         <DropdownMenu.Separator style={{ height: 1, background: "hsl(var(--border-subtle))", margin: "4px 0" }} />
 
                                                         {itemIdx > 0 && (
@@ -3352,6 +3675,38 @@ export default function UploadSimuladosGerenciamentoPage() {
                   </button>
                 </div>
               </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Status Feedback Toast */}
+        <AnimatePresence>
+          {feedbackToast && (
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                position: 'fixed',
+                bottom: 24,
+                right: 24,
+                zIndex: 999999,
+                padding: '12px 20px',
+                borderRadius: 14,
+                background: feedbackToast.type === 'success' ? '#065f46' : '#991b1b',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 13.5,
+                fontWeight: 700,
+                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.2)'
+              }}
+            >
+              {feedbackToast.type === 'success' ? <CheckCircle size={18} color="#34d399" /> : <XCircle size={18} color="#f87171" />}
+              <span>{feedbackToast.message}</span>
             </motion.div>
           )}
         </AnimatePresence>

@@ -65,11 +65,72 @@ export interface ProfessorTaskItem {
   title: string
   disciplina: string
   bimestre: string
+  bimestreId?: string
   prazo: string | null
   deadline: DeadlineUrgency
   statusReq: string
   enviadoEm: string | null
   link: string
+  qtdQuestoes?: number
+  seriesText?: string
+  dataAplicacao?: string | null
+  observacoes?: string
+}
+
+export interface BimestreInfo {
+  id: string
+  nome: string
+  ano_letivo?: string
+  data_fim?: string
+  data_inicio?: string
+  status?: string
+}
+
+/**
+ * Encontra o último bimestre do ano a partir de uma lista de bimestres.
+ * Ordena considerando:
+ * 1. Ano Letivo mais recente (ano_letivo ou extraído do nome/data_fim)
+ * 2. Maior número de bimestre (ex.: 4º > 3º > 2º > 1º)
+ * 3. data_fim mais tardia no ano
+ */
+export function findLastBimestreOfYear(bimestres: BimestreInfo[]): string | null {
+  if (!bimestres || bimestres.length === 0) return null
+
+  const parseBim = (b: BimestreInfo) => {
+    let year = 0
+    if (b.ano_letivo) {
+      const parsed = parseInt(String(b.ano_letivo).trim(), 10)
+      if (!isNaN(parsed)) year = parsed
+    }
+    if (!year && b.nome) {
+      const ym = b.nome.match(/\b(20\d{2})\b/)
+      if (ym) year = parseInt(ym[1], 10)
+    }
+    if (!year && b.data_fim) {
+      const ym = b.data_fim.match(/\b(20\d{2})\b/)
+      if (ym) year = parseInt(ym[1], 10)
+    }
+
+    let num = 0
+    const nm = b.nome?.match(/(\d+)\s*[º°ªa]/i)
+    if (nm) {
+      num = parseInt(nm[1], 10)
+    }
+
+    const dateVal = b.data_fim ? new Date(b.data_fim).getTime() : 0
+
+    return { id: b.id, nome: b.nome, year, num, dateVal }
+  }
+
+  const list = bimestres.map(parseBim)
+
+  list.sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year
+    if (a.num !== b.num) return b.num - a.num
+    return b.dateVal - a.dateVal
+  })
+
+  return list[0]?.id || null
 }
 
 export interface TypeMeta {

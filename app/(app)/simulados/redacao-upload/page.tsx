@@ -432,7 +432,39 @@ export default function UploadRedacoesGerenciamentoPage() {
 
   const filtered = useMemo(() => {
     return redacoesInYear.filter(p => {
-      const matchStatus = filterStatus === 'todos' || p.status === filterStatus
+      const matchStatus = (() => {
+        if (filterStatus === 'todos') return true
+        const reqs = p.redacao_upload_requisicoes || []
+        const relevantReqs = isProfView && currentUser?.id
+          ? reqs.filter((r: any) => isUserRequisicaoOwner(currentUser, r))
+          : reqs
+
+        if (filterStatus === 'aprovado') {
+          if (p.status === 'aprovado' || p.status === 'concluido' || p.status === 'publicado') return true
+          if (relevantReqs.length > 0 && relevantReqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido')) return true
+          return false
+        }
+        if (filterStatus === 'reprovado') {
+          if (p.status === 'reprovado' || p.status === 'rejeitado') return true
+          if (relevantReqs.some((r: any) => r.status === 'reprovado' || r.status === 'rejeitado')) return true
+          return false
+        }
+        if (filterStatus === 'em_revisao') {
+          if (p.status === 'em_revisao') return true
+          if (relevantReqs.some((r: any) => r.status === 'enviado')) return true
+          return false
+        }
+        if (filterStatus === 'aguardando') {
+          if (p.status === 'aguardando' || p.status === 'pendente') return true
+          if (relevantReqs.some((r: any) => r.status === 'pendente')) return true
+          return false
+        }
+        if (filterStatus === 'publicado') {
+          return p.status === 'publicado'
+        }
+        return p.status === filterStatus
+      })()
+
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
       const isAssigned =
@@ -705,10 +737,11 @@ export default function UploadRedacoesGerenciamentoPage() {
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
               <option value="todos">Todos os Status</option>
-              <option value="aguardando">Aguardando</option>
+              <option value="aguardando">Aguardando Envio / Elaboração</option>
               <option value="em_revisao">Em Revisão</option>
-              <option value="aprovado">Concluída / Aprovado</option>
-              <option value="reprovado">Reprovado</option>
+              <option value="aprovado">Concluída / Aprovada</option>
+              <option value="reprovado">Devolvida / Ajuste Solicitado</option>
+              <option value="publicado">Publicada</option>
             </select>
             <ChevronDown size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
           </div>
@@ -978,27 +1011,35 @@ export default function UploadRedacoesGerenciamentoPage() {
                                               {/* REDAÇÃO Title (spans all reqs of this redacao) */}
                                               {isFirstRow && (
                                                 <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '8px 12px 8px 16px', borderRadius: '12px 0 0 12px', borderLeft: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
-                                                  <Link href={`/simulados/redacao-upload/${redacao.id}/upload?all=true`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', cursor: 'pointer' }}>
-                                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
-                                                      <FileText size={15} />
-                                                    </div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={redacao.titulo}>
-                                                          {redacao.titulo}
-                                                        </span>
-                                                        {isAdaptada && (
-                                                          <span className="badge-adaptada-neon-brown">
-                                                            ADAPTADA
+                                                  {(() => {
+                                                    const myReqForTitle = isProfView ? (reqs || []).find((r: any) => isUserRequisicaoOwner(currentUser, r)) : null
+                                                    const redacaoTitleHref = myReqForTitle
+                                                      ? `/simulados/redacao-upload/${redacao.id}/upload?req=${myReqForTitle.id}&prof=${myReqForTitle.id_professor || ''}`
+                                                      : `/simulados/redacao-upload/${redacao.id}/upload?all=true`
+                                                    return (
+                                                      <Link href={redacaoTitleHref} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', cursor: 'pointer' }}>
+                                                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
+                                                          <FileText size={15} />
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+                                                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={redacao.titulo}>
+                                                              {redacao.titulo}
+                                                            </span>
+                                                            {isAdaptada && (
+                                                              <span className="badge-adaptada-neon-brown">
+                                                                ADAPTADA
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                          <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
+                                                            {formatCreatedInfo(redacao.created_at, redacao.criado_por_nome)}
                                                           </span>
-                                                        )}
-                                                      </div>
-                                                      <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
-                                                        {formatCreatedInfo(redacao.created_at, redacao.criado_por_nome)}
-                                                       </span>
-                                                     </div>
-                                                   </Link>
-                                                 </td>
+                                                        </div>
+                                                      </Link>
+                                                    )
+                                                  })()}
+                                                </td>
                                                )}
 
                                                {/* DISCIPLINA (Individual per req) */}
