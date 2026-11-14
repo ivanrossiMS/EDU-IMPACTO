@@ -985,13 +985,13 @@ export default function UploadRedacoesGerenciamentoPage() {
                                           const meQuestoesRatio = `${reqUploadedCount}/${reqTotalRequested}`
 
                                           // Requisition-specific envio status
-                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || redacao.status === 'aprovado' || redacao.status === 'publicado') && req.status !== 'pendente'
+                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || (!req.status && (redacao.status === 'aprovado' || redacao.status === 'publicado'))) && req.status !== 'pendente'
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
-                                          const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || redacao.status === 'aprovado' || redacao.status === 'publicado'
-                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em) && req.status !== 'pendente' && !isReqConcluida
-                                          const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
+                                          const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || (!req.status && (redacao.status === 'aprovado' || redacao.status === 'publicado'))
+                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || (!req.status && (!!req.enviado_em || redacao.status === 'em_revisao'))) && req.status !== 'pendente' && !isReqConcluida
+                                          const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado' || (!req.status && (redacao.status === 'reprovado' || redacao.status === 'rejeitado'))
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }
                                           if (isReqConcluida) {

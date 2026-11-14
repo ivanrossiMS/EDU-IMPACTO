@@ -254,13 +254,22 @@ export default function UploadProvaPage() {
     const myAssignment = allReqs.find((r: any) => r.id_professor === currentUser?.id) || activeRequisicao;
 
     const currentQuestionsOnly = currentQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio);
-    if (!showAll && currentUser?.perfil === 'Professor' && activeRequisicao) {
-      if (currentQuestionsOnly.length > activeRequisicao.qtd_questoes) {
-        setAlertModal({ 
-          open: true, 
-          message: `Você não pode salvar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
-        });
-        return;
+    if (!isAutoSave && !showAll && currentUser?.perfil === 'Professor' && activeRequisicao && actionType === 'enviar_revisao') {
+      if (activeRequisicao.qtd_questoes !== undefined && activeRequisicao.qtd_questoes !== null) {
+        if (currentQuestionsOnly.length > activeRequisicao.qtd_questoes) {
+          setAlertModal({ 
+            open: true, 
+            message: `Você não pode enviar para revisão. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
+          });
+          return;
+        }
+        if (currentQuestionsOnly.length < activeRequisicao.qtd_questoes) {
+          setAlertModal({ 
+            open: true, 
+            message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQuestionsOnly.length} questões.` 
+          });
+          return;
+        }
       }
     }
 

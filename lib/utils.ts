@@ -264,38 +264,26 @@ export function formatPhone(value: string): string {
 
 export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redacao'): string {
   if (!item) return 'aguardando'
-  // 1. Status definitivo explícito no item (publicado tem prioridade máxima)
-  if (item.status === 'publicado') return 'publicado'
   
   const reqs = type === 'prova' ? item.provas_upload_requisicoes 
              : type === 'simulado' ? item.simulados_upload_requisicoes
              : item.redacao_upload_requisicoes;
              
   if (!reqs || reqs.length === 0) return item.status || 'aguardando'
-  
-  const allQs = Array.isArray(item.questoes_json) ? item.questoes_json : []
 
-  // 2. Se a prova/simulado em si foi explicitamente aprovada ou concluída
-  if (item.status === 'aprovado' || item.status === 'concluido') {
-    return 'aprovado'
-  }
-
-  // 3. Se a prova/simulado em si foi explicitamente reprovada ou devolvida
-  if (item.status === 'reprovado' || item.status === 'rejeitado') {
-    return 'reprovado'
-  }
-
-  // 4. Se alguma requisição foi expressamente devolvida / rejeitada / reprovada
+  // 1. Se alguma requisição foi expressamente devolvida / rejeitada / reprovada
   const hasReprovada = reqs.some((r: any) => r.status === 'rejeitado' || r.status === 'reprovado')
   if (hasReprovada) {
     return 'reprovado'
   }
 
-  // 5. Verifica se todas as requisições foram concluídas ou aprovadas
+  // 2. Se todas as requisições foram concluídas ou aprovadas
   const allApproved = reqs.length > 0 && reqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado')
-  if (allApproved) return 'aprovado'
+  if (allApproved) {
+    return item.status === 'publicado' ? 'publicado' : 'aprovado'
+  }
 
-  // 6. Verifica se o item ou alguma requisição foi expressamente enviada para revisão
+  // 3. Se alguma requisição foi expressamente enviada para revisão
   // IMPORTANTE: Ter questões cadastradas ou salvas como rascunho (pendente) NÃO coloca em revisão!
   // Apenas a ação explícita de 'Salvar e Enviar para Revisão' (status === 'enviado' ou 'em_revisao')
   const hasEnviada = reqs.some((r: any) => r.status === 'enviado' || r.status === 'em_revisao')
@@ -303,6 +291,7 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
     return 'em_revisao'
   }
 
+  // 4. Se houver requisições pendentes/em elaboração (e nenhuma enviada para revisão ou reprovada)
   return 'aguardando'
 }
 
@@ -705,6 +694,34 @@ export function mergeConfigEstudioPreservingOriginalFiles(
 
   if (combinedFiles.length > 0 || Array.isArray(dbObj.arquivos_originais) || Array.isArray(nextObj.arquivos_originais)) {
     merged.arquivos_originais = combinedFiles
+  }
+
+  // Preserva e consolida histórico de movimentações (auditoria) sem perder logs de saves concorrentes
+  const dbLogs = Array.isArray(dbObj.historico_movimentacoes) ? dbObj.historico_movimentacoes : []
+  const nextLogs = Array.isArray(nextObj.historico_movimentacoes) ? nextObj.historico_movimentacoes : []
+  if (dbLogs.length > 0 || nextLogs.length > 0) {
+    const logMap = new Map<string, any>()
+    for (const l of [...nextLogs, ...dbLogs]) {
+      if (l && typeof l === 'object') {
+        const idKey = l.id || `${l.data_hora}_${l.acao}_${l.id_requisicao || ''}`
+        if (!logMap.has(idKey)) {
+          logMap.set(idKey, l)
+        }
+      }
+    }
+    const mergedLogs = Array.from(logMap.values()).sort((a, b) => {
+      const ta = Date.parse(a.data_hora || '') || 0
+      const tb = Date.parse(b.data_hora || '') || 0
+      return tb - ta
+    })
+    merged.historico_movimentacoes = mergedLogs.slice(0, 150)
+  }
+
+  // Preserva metadados de reabertura por requisição
+  const dbMetas = dbObj.requisicoes_meta && typeof dbObj.requisicoes_meta === 'object' && !Array.isArray(dbObj.requisicoes_meta) ? dbObj.requisicoes_meta : {}
+  const nextMetas = nextObj.requisicoes_meta && typeof nextObj.requisicoes_meta === 'object' && !Array.isArray(nextObj.requisicoes_meta) ? nextObj.requisicoes_meta : {}
+  if (Object.keys(dbMetas).length > 0 || Object.keys(nextMetas).length > 0) {
+    merged.requisicoes_meta = { ...dbMetas, ...nextMetas }
   }
 
   const dbTopTs = getTs({ uploaded_at: dbObj.arquivo_original_uploaded_at })

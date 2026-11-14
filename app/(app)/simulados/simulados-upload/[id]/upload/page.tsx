@@ -463,20 +463,22 @@ export default function UploadSimuladoPage() {
     const currentQuestionsOnly = currentQs.filter((q: any) => !isTextoApoio(q));
 
     // Validate limit for active requisition
-    if (currentUser?.perfil === 'Professor' && activeRequisicao) {
-      if (currentQuestionsOnly.length > activeRequisicao.qtd_questoes) {
-        setAlertModal({ 
-          open: true, 
-          message: `Você não pode salvar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
-        });
-        return;
-      }
-      if (actionType === 'enviar_revisao' && currentQuestionsOnly.length < activeRequisicao.qtd_questoes) {
-        setAlertModal({ 
-          open: true, 
-          message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQuestionsOnly.length} questões.` 
-        });
-        return;
+    if (!isAutoSave && currentUser?.perfil === 'Professor' && activeRequisicao && actionType === 'enviar_revisao') {
+      if (activeRequisicao.qtd_questoes !== undefined && activeRequisicao.qtd_questoes !== null) {
+        if (currentQuestionsOnly.length > activeRequisicao.qtd_questoes) {
+          setAlertModal({ 
+            open: true, 
+            message: `Você não pode enviar para revisão. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
+          });
+          return;
+        }
+        if (currentQuestionsOnly.length < activeRequisicao.qtd_questoes) {
+          setAlertModal({ 
+            open: true, 
+            message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQuestionsOnly.length} questões.` 
+          });
+          return;
+        }
       }
     }
 

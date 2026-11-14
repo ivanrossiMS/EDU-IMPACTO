@@ -5011,34 +5011,77 @@ input.sim-clean-input::placeholder {
   border-radius: 2px 2px 0 0;
 }
 
-/* Evaluation Row Card — Stretched Link + Container Query */
+/* Evaluation Row Card — Ultra-Modern 3D Separated Cards */
 .sim-eval-card {
   container: sim-card / inline-size;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 20px;
+  gap: 14px;
+  padding: 18px 22px;
+  border-radius: 18px;
   background: hsl(var(--bg-surface));
-  border-block-end: 1px solid hsl(var(--border-subtle));
-  transition: background-color 0.16s ease;
-}
-
-.sim-eval-card:last-child {
-  border-block-end: none;
+  border: 1px solid hsl(var(--border-subtle));
+  box-shadow:
+    0 1px 2px 0 rgba(15, 23, 42, 0.04),
+    0 4px 12px -2px rgba(15, 23, 42, 0.05),
+    inset 0 1.5px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.35);
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.22s ease,
+    background-color 0.22s ease;
+  overflow: hidden;
 }
 
 [data-theme='light'] .sim-eval-card {
-  background: #ffffff;
-  border-color: #eef2f7;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfd 100%);
+  border-color: rgba(226, 232, 240, 0.95);
+  box-shadow:
+    0 1px 2px 0 rgba(15, 23, 42, 0.03),
+    0 4px 14px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1.5px 0 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 0 0 rgba(226, 232, 240, 0.75);
 }
 
+.sim-eval-card:hover,
 .sim-eval-card:has(a.sim-eval-card-link:hover) {
-  background: hsl(var(--bg-elevated) / 0.55);
+  transform: translateY(-2px);
+  border-color: hsl(var(--border-strong));
+  box-shadow:
+    0 4px 12px 0 rgba(0, 0, 0, 0.4),
+    0 14px 28px -4px rgba(0, 0, 0, 0.65),
+    inset 0 1.5px 0 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.5);
 }
 
+[data-theme='light'] .sim-eval-card:hover,
 [data-theme='light'] .sim-eval-card:has(a.sim-eval-card-link:hover) {
-  background: #f8fafc;
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow:
+    0 8px 24px -4px rgba(15, 23, 42, 0.12),
+    0 3px 8px -2px rgba(15, 23, 42, 0.05),
+    inset 0 2px 0 0 #ffffff,
+    inset 0 -2px 0 0 #e2e8f0;
+}
+
+/* 3D Vertical Pillar / Indicator Strip on Left Edge */
+.sim-eval-3d-pillar {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 10px;
+  inline-size: 4px;
+  border-start-end-radius: 4px;
+  border-end-end-radius: 4px;
+  pointer-events: none;
+  transition: inline-size 0.2s ease, filter 0.2s ease;
+}
+
+.sim-eval-card:hover .sim-eval-3d-pillar {
+  inline-size: 5.5px;
+  filter: brightness(1.15);
 }
 
 .sim-eval-card a.sim-eval-card-link {
@@ -5055,12 +5098,13 @@ input.sim-clean-input::placeholder {
   position: absolute;
   inset: 0;
   z-index: 0;
+  border-radius: inherit;
 }
 
 .sim-eval-card:has(a.sim-eval-card-link:focus-visible) {
   outline: 2px solid #3b82f6;
-  outline-offset: -2px;
-  border-radius: 10px;
+  outline-offset: 2px;
+  border-radius: 18px;
 }
 
 /* Keep independent actions clickable above the stretched link */
@@ -5074,7 +5118,7 @@ input.sim-clean-input::placeholder {
 .sim-eval-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
   align-items: center;
 }
 
@@ -5088,8 +5132,8 @@ input.sim-clean-input::placeholder {
 .sim-quick-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  opacity: 0.72;
+  gap: 6px;
+  opacity: 0.85;
   transition: opacity 0.16s ease;
 }
 

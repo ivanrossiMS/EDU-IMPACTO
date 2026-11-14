@@ -6,7 +6,7 @@ import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
   FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical,
-  ArrowUp, ArrowDown, RotateCcw, RefreshCw, Send
+  ArrowUp, ArrowDown, RotateCcw, RefreshCw, Send, History
 } from 'lucide-react'
 import Link from 'next/link'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -16,6 +16,14 @@ import { useData } from '@/lib/dataContext'
 import { getDerivedStatus, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner, isUserCreator } from '@/lib/utils'
 import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
+import { HistoricoMovimentacoesModal } from '@/components/simulados/HistoricoMovimentacoesModal'
+import {
+  createMovimentacaoLog,
+  appendMovimentacaoLog,
+  isRequisicaoReaberta,
+  isAvaliacaoReaberta,
+  TipoAcaoMovimentacao
+} from '@/lib/simuladosLogs'
 
 // Visual styling helper per segment
 function getSegmentoInfo(serieName: string) {
@@ -223,6 +231,7 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [filterBaseTitle, setFilterBaseTitle] = useState<string | null>(null)
   const [newlyCreatedAdaptadoId, setNewlyCreatedAdaptadoId] = useState<string | null>(null)
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
+  const [historicoModalSimulado, setHistoricoModalSimulado] = useState<{ simulado: any; reqId?: string } | null>(null)
   
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [selectedSimulados, setSelectedSimulados] = useState<Record<string, boolean>>({})
@@ -611,13 +620,65 @@ export default function UploadSimuladosGerenciamentoPage() {
       )
 
       const newSimuladoStatus = getDerivedStatus(
-        { ...simulado, simulados_upload_requisicoes: updatedReqs },
+        { ...simulado, simulados_upload_requisicoes: updatedReqs, status: undefined },
         'simulado'
+      )
+
+      const acaoMap: Record<string, TipoAcaoMovimentacao> = {
+        pendente: 'reabrir',
+        enviado: 'enviar',
+        aprovado: 'aprovar',
+        reprovado: 'devolver'
+      }
+      const acao = acaoMap[newStatus] || 'custom'
+
+      const statusLabels: Record<string, string> = {
+        pendente: 'Reaberta para elaboração',
+        enviado: 'Enviada para revisão da coordenação',
+        aprovado: 'Aprovada com sucesso',
+        reprovado: 'Devolvida para revisão do professor'
+      }
+
+      const logEntry = createMovimentacaoLog({
+        usuario: currentUser,
+        acao,
+        titulo_acao: `${statusLabels[newStatus] || 'Atualização de Status'} (${req.disciplina_nome || 'Geral'})`,
+        status_anterior: req.status || 'pendente',
+        status_novo: newStatus,
+        id_requisicao: req.id,
+        disciplina_nome: req.disciplina_nome,
+        professor_nome: req.professor_nome,
+        observacao: newStatus === 'pendente' ? 'Disciplina reaberta para nova elaboração pelo professor.' : undefined
+      })
+
+      const reqMetaUpdate = {
+        reqId: req.id,
+        meta: {
+          reaberto: newStatus === 'pendente',
+          ...(newStatus === 'pendente'
+            ? {
+                reaberto_em: now,
+                reaberto_por_id: currentUser?.id,
+                reaberto_por_nome: currentUser?.nome,
+                reaberto_por_perfil: currentUser?.perfil || currentUser?.cargo
+              }
+            : {})
+        }
+      }
+
+      const nextConfigEstudio = appendMovimentacaoLog(
+        simulado.config_estudio,
+        logEntry,
+        reqMetaUpdate
       )
 
       await (supabase as any)
         .from('simulados_upload')
-        .update({ status: newSimuladoStatus, updated_at: now })
+        .update({
+          status: newSimuladoStatus,
+          config_estudio: nextConfigEstudio,
+          updated_at: now
+        })
         .eq('id', simulado.id)
 
       setSimulados(prev =>
@@ -627,18 +688,13 @@ export default function UploadSimuladosGerenciamentoPage() {
                 ...s,
                 status: newSimuladoStatus,
                 simulados_upload_requisicoes: updatedReqs,
+                config_estudio: nextConfigEstudio,
                 updated_at: now
               }
             : s
         )
       )
 
-      const statusLabels: Record<string, string> = {
-        pendente: 'Reaberta para elaboração',
-        enviado: 'Enviada para revisão da coordenação',
-        aprovado: 'Aprovada com sucesso',
-        reprovado: 'Devolvida para revisão do professor'
-      }
       setFeedbackToast({
         message: `${req.disciplina_nome || 'Disciplina'}: ${statusLabels[newStatus] || newStatus}!`,
         type: 'success'
@@ -659,12 +715,6 @@ export default function UploadSimuladosGerenciamentoPage() {
     setStatusUpdatingId(simulado.id)
     try {
       const now = new Date().toISOString()
-      const { error: pErr } = await (supabase as any)
-        .from('simulados_upload')
-        .update({ status: newStatus, updated_at: now })
-        .eq('id', simulado.id)
-
-      if (pErr) throw pErr
 
       const allReqs = Array.isArray(simulado.simulados_upload_requisicoes) ? simulado.simulados_upload_requisicoes : []
       let newReqStatus: string | null = null
@@ -687,18 +737,14 @@ export default function UploadSimuladosGerenciamentoPage() {
         updatedReqs = allReqs.map((r: any) => ({ ...r, status: newReqStatus }))
       }
 
-      setSimulados(prev =>
-        prev.map(s =>
-          s.id === simulado.id
-            ? {
-                ...s,
-                status: newStatus,
-                simulados_upload_requisicoes: updatedReqs,
-                updated_at: now
-              }
-            : s
-        )
-      )
+      const acaoMap: Record<string, TipoAcaoMovimentacao> = {
+        aguardando: 'reabrir',
+        em_revisao: 'enviar',
+        aprovado: 'aprovar',
+        reprovado: 'devolver',
+        publicado: 'publicar'
+      }
+      const acao = acaoMap[newStatus] || 'custom'
 
       const statusLabels: Record<string, string> = {
         aguardando: 'Reaberto para elaboração',
@@ -707,6 +753,58 @@ export default function UploadSimuladosGerenciamentoPage() {
         reprovado: 'Simulado devolvido para ajuste',
         publicado: 'Simulado publicado oficialmente'
       }
+
+      const logEntry = createMovimentacaoLog({
+        usuario: currentUser,
+        acao,
+        titulo_acao: `${statusLabels[newStatus] || 'Atualização Geral'} (Simulado Completo)`,
+        status_anterior: simulado.status || 'aguardando',
+        status_novo: newStatus,
+        observacao: newStatus === 'aguardando' ? 'Simulado reaberto integralmente para elaboração' : undefined
+      })
+
+      const avaliacaoMetaUpdate = {
+        avaliacao_reaberta: newStatus === 'aguardando',
+        ...(newStatus === 'aguardando'
+          ? {
+              avaliacao_reaberta_em: now,
+              avaliacao_reaberta_por: currentUser?.nome
+            }
+          : {})
+      }
+
+      const nextConfigEstudio = appendMovimentacaoLog(
+        simulado.config_estudio,
+        logEntry,
+        undefined,
+        avaliacaoMetaUpdate
+      )
+
+      const { error: pErr } = await (supabase as any)
+        .from('simulados_upload')
+        .update({
+          status: newStatus,
+          config_estudio: nextConfigEstudio,
+          updated_at: now
+        })
+        .eq('id', simulado.id)
+
+      if (pErr) throw pErr
+
+      setSimulados(prev =>
+        prev.map(s =>
+          s.id === simulado.id
+            ? {
+                ...s,
+                status: newStatus,
+                simulados_upload_requisicoes: updatedReqs,
+                config_estudio: nextConfigEstudio,
+                updated_at: now
+              }
+            : s
+        )
+      )
+
       setFeedbackToast({
         message: `Simulado "${simulado.titulo}": ${statusLabels[newStatus] || newStatus}!`,
         type: 'success'
@@ -1337,6 +1435,15 @@ export default function UploadSimuladosGerenciamentoPage() {
         />
       )}
       {gabaritoModalId && <GabaritoSimuladoModal simuladoUploadId={gabaritoModalId} onClose={() => setGabaritoModalId(null)} />}
+      {historicoModalSimulado && (
+        <HistoricoMovimentacoesModal
+          isOpen={Boolean(historicoModalSimulado)}
+          onClose={() => setHistoricoModalSimulado(null)}
+          avaliacao={historicoModalSimulado.simulado}
+          initialReqId={historicoModalSimulado.reqId}
+          tipo="simulado"
+        />
+      )}
 
       <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1280, margin: '0 auto', display: selectedAnoLetivo && !showAnoModal ? 'block' : 'none' }}>
       
@@ -2503,6 +2610,29 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                   </span>
                                                 )}
 
+                                                {isAvaliacaoReaberta(simulado) && (
+                                                  <span
+                                                    style={{
+                                                      display: 'inline-flex',
+                                                      alignItems: 'center',
+                                                      gap: 4,
+                                                      padding: '2px 8px',
+                                                      borderRadius: 9999,
+                                                      fontSize: 10.5,
+                                                      fontWeight: 800,
+                                                      background: 'rgba(245, 158, 11, 0.14)',
+                                                      color: '#d97706',
+                                                      border: '1px solid rgba(245, 158, 11, 0.35)',
+                                                      letterSpacing: '0.02em',
+                                                      flexShrink: 0
+                                                    }}
+                                                    title="Este simulado possui disciplina(s) reaberta(s) para elaboração"
+                                                  >
+                                                    <RotateCcw size={11} className="shrink-0" />
+                                                    Reaberto
+                                                  </span>
+                                                )}
+
                                                 {isAdaptada && versionInfo && versionInfo.totalVersions > 1 && (
                                                   <span
                                                     style={{
@@ -2637,6 +2767,30 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               title="Visualizar gabarito oficial do simulado"
                                             >
                                               <CheckSquare size={12} /> Gabarito
+                                            </button>
+
+                                            {/* Logs / Histórico de Movimentações */}
+                                            <button
+                                              type="button"
+                                              className="simulado-action-btn"
+                                              onClick={() => setHistoricoModalSimulado({ simulado })}
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 5,
+                                                padding: '6px 11px',
+                                                borderRadius: 8,
+                                                border: '1px solid rgba(124, 58, 237, 0.32)',
+                                                color: '#7c3aed',
+                                                background: 'rgba(124, 58, 237, 0.08)',
+                                                fontWeight: 700,
+                                                fontSize: 11.5,
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                              }}
+                                              title="Visualizar logs e histórico de movimentações deste simulado"
+                                            >
+                                              <History size={12} /> Logs
                                             </button>
 
                                             {/* Config */}
@@ -2799,19 +2953,22 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                             // Requisition-specific envio status
                                             const hasUploadedQuestions = reqUploadedCount > 0
-                                            const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado'
-                                            const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado' || simulado.status === 'reprovado'
-                                            const isReqEmRevisao = !isReqConcluida && !isReqReprovada && (req.status === 'enviado' || req.status === 'em_revisao')
+                                            const isReaberta = isRequisicaoReaberta(req, simulado)
+                                            const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || (!req.status && (simulado.status === 'aprovado' || simulado.status === 'publicado'))
+                                            const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado' || (!req.status && (simulado.status === 'reprovado' || simulado.status === 'rejeitado'))
+                                            const isReqEmRevisao = !isReqConcluida && !isReqReprovada && (req.status === 'enviado' || req.status === 'em_revisao' || (!req.status && simulado.status === 'em_revisao'))
 
-                                            let statusObj = { label: 'Aguardando', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' }
+                                            let statusObj = { label: 'Aguardando', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', isReaberta: false }
                                             if (isReqConcluida) {
-                                              statusObj = { label: simulado.status === 'publicado' ? 'Publicada' : 'Concluída', color: '#059669', dot: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)' }
+                                              statusObj = { label: simulado.status === 'publicado' ? 'Publicada' : 'Concluída', color: '#059669', dot: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)', isReaberta: false }
                                             } else if (isReqReprovada) {
-                                              statusObj = { label: 'Devolvida', color: '#dc2626', dot: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.25)' }
+                                              statusObj = { label: 'Devolvida', color: '#dc2626', dot: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.25)', isReaberta: false }
                                             } else if (isReqEmRevisao) {
-                                              statusObj = { label: 'Em revisão', color: '#2563eb', dot: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)' }
+                                              statusObj = { label: 'Em revisão', color: '#2563eb', dot: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)', isReaberta: false }
+                                            } else if (isReaberta) {
+                                              statusObj = { label: 'Reaberta', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.38)', isReaberta: true }
                                             } else if (hasUploadedQuestions) {
-                                              statusObj = { label: 'Em elaboração', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)' }
+                                              statusObj = { label: 'Em elaboração', color: '#d97706', dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', isReaberta: false }
                                             }
 
                                             const isReqEnviada = req.status === 'enviado' || isReqConcluida
@@ -2819,7 +2976,9 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               ? 'Enviada'
                                               : (isReqReprovada
                                                 ? 'Devolvida'
-                                                : (hasUploadedQuestions ? 'Em elaboração' : 'Pendente'))
+                                                : (isReaberta
+                                                  ? 'Reaberta'
+                                                  : (hasUploadedQuestions ? 'Em elaboração' : 'Pendente')))
 
                                             const reqEditUrl = `/simulados/simulados-upload/${simulado.id}/upload?req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
                                             const reqPrintUrl = `/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
@@ -3020,7 +3179,11 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                           transition: 'all 0.15s ease'
                                                         }}
                                                       >
-                                                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusObj.dot, flexShrink: 0 }} />
+                                                        {statusObj.isReaberta ? (
+                                                          <RotateCcw size={11} color={statusObj.color} className="shrink-0" />
+                                                        ) : (
+                                                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusObj.dot, flexShrink: 0 }} />
+                                                        )}
                                                         {statusUpdatingId === req.id ? 'Atualizando...' : statusObj.label}
                                                         <ChevronDown size={11} style={{ opacity: 0.6 }} />
                                                       </button>
@@ -3091,6 +3254,16 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                             className="menu-item-hover"
                                                           >
                                                             <RotateCcw size={14} color="#f59e0b" /> Reabrir para Elaboração (Rascunho)
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => setHistoricoModalSimulado({ simulado, reqId: req.id })}
+                                                            style={{ minHeight: 36, padding: '6px 10px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, fontWeight: 600, color: '#7c3aed', cursor: 'pointer', userSelect: 'none', outline: 'none' }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <History size={14} color="#7c3aed" /> Histórico de Movimentações
                                                           </div>
                                                         </DropdownMenu.Item>
 
@@ -3241,6 +3414,16 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                             className="menu-item-hover"
                                                           >
                                                             <RotateCcw size={15} color="#f59e0b" /> Reabrir elaboração ({disciplinaNome})
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div
+                                                            onClick={() => setHistoricoModalSimulado({ simulado, reqId: req.id })}
+                                                            style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "#7c3aed", cursor: "pointer", userSelect: "none", outline: "none" }}
+                                                            className="menu-item-hover"
+                                                          >
+                                                            <History size={15} color="#7c3aed" /> Histórico de Movimentações ({disciplinaNome})
                                                           </div>
                                                         </DropdownMenu.Item>
 

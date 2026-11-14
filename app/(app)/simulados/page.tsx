@@ -697,19 +697,24 @@ export default function SimuladosDashboard() {
             </div>
           ) : (
             <div>
-              {displayedEvaluations.map((item) => (
-                <EvaluationRowCard
-                  key={item.key}
-                  item={item}
-                  onOpenGabarito={(target) =>
-                    setGabaritoModal({ id: target.id, type: target.type })
-                  }
-                />
-              ))}
+              {/* Evaluations Feed Container — Separated Floating 3D Cards */}
+              <div className="sim-eval-feed-container bg-slate-50/70 p-3.5 sm:p-5 dark:bg-[hsl(var(--bg-base)_/_0.4)]">
+                <div className="flex flex-col gap-3.5">
+                  {displayedEvaluations.map((item) => (
+                    <EvaluationRowCard
+                      key={item.key}
+                      item={item}
+                      onOpenGabarito={(target) =>
+                        setGabaritoModal({ id: target.id, type: target.type })
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
 
               {/* Footer: Expand / Go to Full List */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-base)_/_0.35)] px-5 py-3">
-                <span className="text-xs font-medium text-[hsl(var(--text-muted))]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-5 py-3.5">
+                <span className="text-xs font-semibold text-[hsl(var(--text-secondary))]">
                   Exibindo {displayedEvaluations.length} de {filteredEvaluations.length}{' '}
                   {filteredEvaluations.length === 1 ? 'avaliação' : 'avaliações'}
                 </span>
@@ -719,7 +724,7 @@ export default function SimuladosDashboard() {
                     <button
                       type="button"
                       onClick={() => setShowAllRows((prev) => !prev)}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-3 py-1.5 text-xs font-bold text-[hsl(var(--text-primary))] transition-colors hover:border-[hsl(var(--border-strong))]"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-3.5 py-1.5 text-xs font-bold text-[hsl(var(--text-primary))] shadow-2xs transition-all hover:border-[hsl(var(--border-strong))] hover:bg-[hsl(var(--bg-elevated))]"
                     >
                       <span>
                         {showAllRows
@@ -728,14 +733,14 @@ export default function SimuladosDashboard() {
                       </span>
                       <ChevronDown
                         size={14}
-                        className={`transition-transform ${showAllRows ? 'rotate-180' : ''}`}
+                        className={`transition-transform duration-200 ${showAllRows ? 'rotate-180' : ''}`}
                       />
                     </button>
                   )}
 
                   <Link
                     href={listFooterLink}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-[#f43f5e] no-underline hover:underline"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#f43f5e] no-underline transition-colors hover:text-[#e11d48] hover:underline"
                   >
                     <span>{listFooterLabel}</span>
                     <ArrowRight size={13} />

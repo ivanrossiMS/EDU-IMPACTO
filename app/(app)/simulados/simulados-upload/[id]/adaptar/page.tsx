@@ -181,14 +181,16 @@ export default function UploadSimuladoPage() {
     const currentQuestionsOnly = currentQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio);
 
     const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-    if (currentUser?.perfil === 'Professor' && myAssignment) {
-      if (currentQuestionsOnly.length > myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para prosseguir.` });
-        return;
-      }
-      if (actionType === 'enviar_revisao' && currentQuestionsOnly.length < myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQuestionsOnly.length} questões.` });
-        return;
+    if (currentUser?.perfil === 'Professor' && myAssignment && actionType === 'enviar_revisao') {
+      if (myAssignment.qtd_questoes !== undefined && myAssignment.qtd_questoes !== null) {
+        if (currentQuestionsOnly.length > myAssignment.qtd_questoes) {
+          setAlertModal({ open: true, message: `Você não pode enviar para revisão. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para prosseguir.` });
+          return;
+        }
+        if (currentQuestionsOnly.length < myAssignment.qtd_questoes) {
+          setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQuestionsOnly.length} questões.` });
+          return;
+        }
       }
     }
 

@@ -12,6 +12,7 @@ import {
   Edit3,
   MoreHorizontal,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react'
 import {
   EVALUATION_TYPE_META,
@@ -73,25 +74,38 @@ export function EvaluationRowCard({
 
   return (
     <article className="sim-eval-card group">
+      {/* 3D Vertical Pillar / Indicator Strip on Left Edge */}
+      <span
+        className="sim-eval-3d-pillar"
+        style={{
+          background: item.isAdaptada
+            ? `linear-gradient(180deg, #f59e0b 0%, ${typeMeta.color} 100%)`
+            : `linear-gradient(180deg, ${typeMeta.color} 0%, ${typeMeta.color}cc 100%)`,
+          boxShadow: `0 0 10px ${item.isAdaptada ? 'rgba(245, 158, 11, 0.4)' : typeMeta.color + '40'}`,
+        }}
+        aria-hidden="true"
+      />
+
       <div className="sim-eval-grid">
         {/* Coluna 1: Identidade + Título Completo + Metadados Tipográficos */}
         <div className="flex min-w-0 items-start gap-3.5">
           <div
-            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+            className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all duration-200 group-hover:scale-105"
             style={{
               background: typeMeta.tintBg,
               borderColor: typeMeta.tintBorder,
               color: typeMeta.color,
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.7)',
             }}
             aria-hidden="true"
           >
-            <TypeIcon size={19} />
+            <TypeIcon size={20} />
           </div>
 
           <div className="min-w-0 flex-1 space-y-1.5">
             {/* Linha do Título — permite até 2 linhas para evitar corte prematuro */}
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="m-0 text-[15px] leading-snug font-bold text-[hsl(var(--text-primary))]">
+              <h3 className="m-0 text-[15.5px] leading-snug font-extrabold text-[hsl(var(--text-primary))]">
                 <Link
                   href={item.detailHref}
                   className="sim-eval-card-link transition-colors group-hover:text-[#e11d48] dark:group-hover:text-[#fb7185]"
@@ -101,9 +115,19 @@ export function EvaluationRowCard({
               </h3>
 
               {item.isAdaptada && (
-                <span className="sim-adaptada-pill">
+                <span className="sim-adaptada-pill shadow-2xs">
                   <Sparkles size={10} />
                   Adaptada
+                </span>
+              )}
+
+              {item.isReaberta && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-500/35 bg-amber-500/12 px-2 py-0.5 text-[10.5px] font-extrabold text-amber-700 dark:text-amber-300 shadow-2xs"
+                  title="Avaliação com elaboração reaberta"
+                >
+                  <RotateCcw size={10} className="shrink-0" />
+                  Reaberta
                 </span>
               )}
             </div>
@@ -162,13 +186,13 @@ export function EvaluationRowCard({
                 {visibleDiscs.map((disc) => (
                   <span
                     key={disc}
-                    className="inline-flex items-center rounded-md border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-elevated)_/_0.65)] px-2 py-0.5 text-[11px] font-medium text-[hsl(var(--text-secondary))]"
+                    className="inline-flex items-center rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-elevated)_/_0.7)] px-2.5 py-0.5 text-[11px] font-semibold text-[hsl(var(--text-secondary))] shadow-2xs"
                   >
                     {disc}
                   </span>
                 ))}
                 {extraDiscCount > 0 && (
-                  <span className="inline-flex items-center rounded-md border border-[hsl(var(--border-subtle))] px-1.5 py-0.5 text-[11px] font-bold text-[hsl(var(--text-muted))]">
+                  <span className="inline-flex items-center rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-elevated)_/_0.4)] px-2 py-0.5 text-[11px] font-bold text-[hsl(var(--text-muted))]">
                     +{extraDiscCount}
                   </span>
                 )}
@@ -178,10 +202,10 @@ export function EvaluationRowCard({
         </div>
 
         {/* Coluna 2: Progresso Real de Envios + Prazo & Aplicação */}
-        <div className="flex flex-col gap-2 min-w-0">
+        <div className="flex min-w-0 flex-col justify-center gap-2">
           {/* Progresso das Requisições */}
-          <div className="space-y-1" title={progressTooltip || undefined}>
-            <div className="flex items-center justify-between gap-2 text-[11px]">
+          <div className="space-y-1.5" title={progressTooltip || undefined}>
+            <div className="flex items-center justify-between gap-2 text-xs">
               <span className="font-semibold text-[hsl(var(--text-secondary))]">
                 {item.progress.total > 0
                   ? `${item.progress.submitted}/${item.progress.total} envios`
@@ -196,19 +220,20 @@ export function EvaluationRowCard({
               )}
             </div>
 
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800 shadow-inner">
               <div
-                className="h-full rounded-full transition-all duration-300"
+                className="h-full rounded-full transition-all duration-500 ease-out"
                 style={{
                   width: `${Math.max(item.progress.percent > 0 ? 8 : 0, item.progress.percent)}%`,
                   background: progressBarColor,
+                  boxShadow: `0 0 8px ${progressBarColor}40`,
                 }}
               />
             </div>
 
             {item.progress.missingNames.length > 0 && item.progress.submitted > 0 && (
               <p className="m-0 truncate text-[11px] text-[hsl(var(--text-muted))]">
-                Falta: {item.progress.missingNames.slice(0, 2).join(', ')}
+                Falta: <span className="font-medium text-[hsl(var(--text-secondary))]">{item.progress.missingNames.slice(0, 2).join(', ')}</span>
                 {item.progress.missingNames.length > 2
                   ? ` +${item.progress.missingNames.length - 2}`
                   : ''}
@@ -217,7 +242,7 @@ export function EvaluationRowCard({
           </div>
 
           {/* Datas Relevantes */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium">
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] font-medium">
             {item.dataLimiteUpload && (
               <span className={`inline-flex items-center gap-1 font-semibold ${deadlineBadgeColor}`}>
                 <Clock size={12} />
@@ -234,13 +259,24 @@ export function EvaluationRowCard({
         {/* Coluna 3: Status Pill + Ações Rápidas */}
         <div className="flex items-center justify-between gap-2.5 sm:justify-end">
           <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold whitespace-nowrap"
-            style={{ background: statusMeta.bg, color: statusMeta.color }}
+            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold whitespace-nowrap shadow-2xs"
+            style={{
+              background: statusMeta.bg,
+              borderColor: `${statusMeta.color}33`,
+              color: statusMeta.color,
+            }}
           >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: statusMeta.dot }}
-            />
+            {item.status === 'reaberto' || item.isReaberta ? (
+              <RotateCcw size={11} className="shrink-0" style={{ color: statusMeta.color }} />
+            ) : (
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: statusMeta.dot,
+                  boxShadow: `0 0 6px ${statusMeta.dot}`,
+                }}
+              />
+            )}
             {statusMeta.label}
           </span>
 
@@ -250,9 +286,9 @@ export function EvaluationRowCard({
               onClick={() => onOpenGabarito(item)}
               title="Abrir Gabarito / Impressão"
               aria-label={`Abrir gabarito de ${item.titulo}`}
-              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-2.5 text-[11px] font-semibold text-[hsl(var(--text-secondary))] transition-colors hover:border-[hsl(var(--border-strong))] hover:text-[hsl(var(--text-primary))]"
+              className="inline-flex h-8.5 cursor-pointer items-center gap-1.5 rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] px-3 text-[11px] font-semibold text-[hsl(var(--text-secondary))] shadow-2xs transition-all hover:border-[hsl(var(--border-strong))] hover:text-[hsl(var(--text-primary))] hover:shadow-xs active:scale-95"
             >
-              <CheckSquare size={13} />
+              <CheckSquare size={13} className="text-[#3b82f6]" />
               <span className="hidden xl:inline">Gabarito</span>
             </button>
 
@@ -261,7 +297,7 @@ export function EvaluationRowCard({
                 <button
                   type="button"
                   aria-label={`Mais ações para ${item.titulo}`}
-                  className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] text-[hsl(var(--text-secondary))] transition-colors hover:border-[hsl(var(--border-strong))] hover:text-[hsl(var(--text-primary))]"
+                  className="inline-flex h-8.5 w-8.5 cursor-pointer items-center justify-center rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] text-[hsl(var(--text-secondary))] shadow-2xs transition-all hover:border-[hsl(var(--border-strong))] hover:text-[hsl(var(--text-primary))] hover:shadow-xs active:scale-95"
                 >
                   <MoreHorizontal size={15} />
                 </button>
@@ -271,7 +307,7 @@ export function EvaluationRowCard({
                 <DropdownMenu.Content
                   align="end"
                   sideOffset={6}
-                  className="z-[1200] w-48 rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] p-1.5 shadow-xl"
+                  className="z-[1200] w-52 rounded-2xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-surface))] p-1.5 shadow-2xl backdrop-blur-md"
                 >
                   <DropdownMenu.Item asChild>
                     <Link
@@ -320,7 +356,7 @@ export function EvaluationRowCard({
               href={item.detailHref}
               tabIndex={-1}
               aria-hidden="true"
-              className="hidden h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--bg-elevated))] text-[hsl(var(--text-secondary))] transition-colors group-hover:bg-[#f43f5e] group-hover:text-white sm:inline-flex"
+              className="hidden h-8.5 w-8.5 items-center justify-center rounded-xl border border-[hsl(var(--border-subtle))] bg-[hsl(var(--bg-elevated))] text-[hsl(var(--text-secondary))] shadow-2xs transition-all duration-200 group-hover:border-[#f43f5e] group-hover:bg-[#f43f5e] group-hover:text-white group-hover:shadow-md group-hover:shadow-[#f43f5e]/25 group-hover:translate-x-0.5 sm:inline-flex"
             >
               <ArrowUpRight size={15} />
             </Link>

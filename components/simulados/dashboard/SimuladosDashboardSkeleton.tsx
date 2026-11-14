@@ -27,19 +27,24 @@ export function SimuladosDashboardSkeleton() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="overflow-hidden rounded-[20px] border border-slate-200/70 bg-white/80 dark:border-slate-800 dark:bg-slate-900/60">
           <div className="h-14 border-b border-slate-200/70 px-5 py-3 dark:border-slate-800" />
-          <div className="divide-y divide-slate-200/60 dark:divide-slate-800">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 px-5 py-4">
-                <div className="flex flex-1 items-center gap-3.5">
-                  <div className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-slate-200/80 dark:bg-slate-800" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200/80 dark:bg-slate-800" />
-                    <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200/60 dark:bg-slate-800/70" />
+          <div className="bg-slate-50/70 p-3.5 sm:p-5 dark:bg-slate-950/40">
+            <div className="flex flex-col gap-3.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-4 rounded-[18px] border border-slate-200/80 bg-white p-4.5 shadow-xs dark:border-slate-800 dark:bg-slate-900/80"
+                >
+                  <div className="flex flex-1 items-center gap-3.5">
+                    <div className="h-11 w-11 shrink-0 animate-pulse rounded-2xl bg-slate-200/80 dark:bg-slate-800" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-slate-200/80 dark:bg-slate-800" />
+                      <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200/60 dark:bg-slate-800/70" />
+                    </div>
                   </div>
+                  <div className="hidden h-7 w-28 animate-pulse rounded-full bg-slate-200/70 sm:block dark:bg-slate-800" />
                 </div>
-                <div className="hidden h-7 w-28 animate-pulse rounded-full bg-slate-200/70 sm:block dark:bg-slate-800" />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 

@@ -1,10 +1,12 @@
 import { BookOpen, FileSignature, PenTool, type LucideIcon } from 'lucide-react'
 import { getDerivedStatus, isQuestionForRequisicao } from '@/lib/utils'
+import { isAvaliacaoReaberta } from '@/lib/simuladosLogs'
 
 export type EvaluationType = 'Prova' | 'Simulado' | 'Redação'
 
 export type EvaluationStatus =
   | 'aguardando'
+  | 'reaberto'
   | 'em_revisao'
   | 'aprovado'
   | 'publicado'
@@ -41,6 +43,7 @@ export interface NormalizedEvaluation {
   type: EvaluationType
   titulo: string
   status: string
+  isReaberta?: boolean
   isAdaptada: boolean
   seriesText: string
   disciplinas: string[]
@@ -203,6 +206,13 @@ export const STATUS_META: Record<
     bg: 'rgba(59, 130, 246, 0.12)',
     dot: '#3b82f6',
     order: 0,
+  },
+  reaberto: {
+    label: 'Reaberta',
+    color: '#d97706',
+    bg: 'rgba(245, 158, 11, 0.16)',
+    dot: '#f59e0b',
+    order: 1,
   },
   aguardando: {
     label: 'Aguardando',
@@ -462,7 +472,9 @@ export function normalizeEvaluationItem(
 ): NormalizedEvaluation {
   const meta = EVALUATION_TYPE_META[type]
   const derivedTypeKey = type === 'Prova' ? 'prova' : type === 'Simulado' ? 'simulado' : 'redacao'
-  const status = getDerivedStatus(raw, derivedTypeKey)
+  const rawStatus = getDerivedStatus(raw, derivedTypeKey)
+  const isReaberta = isAvaliacaoReaberta(raw)
+  const status = rawStatus === 'aguardando' && isReaberta ? 'reaberto' : rawStatus
   const reqs = getReqsFromItem(raw, type)
 
   const bimestreId = raw?.id_bimestre ? String(raw.id_bimestre) : ''
@@ -482,6 +494,7 @@ export function normalizeEvaluationItem(
     type,
     titulo: raw.titulo || 'Sem título',
     status,
+    isReaberta,
     isAdaptada: Boolean(raw?.eh_adaptada) || String(raw?.titulo || '').toUpperCase().includes('ADAPT'),
     seriesText: extractSeriesText(raw),
     disciplinas: extractDisciplinasList(raw, reqs),
