@@ -6,11 +6,12 @@ import {
   X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, EyeOff, 
   Sparkles, Bot, FileText, Check, CheckCircle2, AlertCircle, 
   ArrowUp, ArrowDown, BookOpen, ListChecks, GraduationCap, AlignLeft, 
-  ShieldCheck, Folder, FolderOpen, Lock
+  ShieldCheck, Folder, FolderOpen, Lock, ClipboardPaste, Wand2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
+import { parseSmartPasteToSimuladoQuestoes } from '@/lib/provas-online/importParser'
 
 export function QuestaoUploadModal({ 
   questao, 
@@ -687,6 +688,69 @@ export function QuestaoUploadModal({
     return corr ? corr.letra : null
   }, [alternativas, tipoQuestao])
 
+  const hasEmbeddedAltsInModalEnunciado = useMemo(() => {
+    if (!enunciado) return false
+    const plain = enunciado
+      .replace(/<\/?(?:p|div|br|li|tr)\b[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+    return /(?:^|\n|\s{2,})\s*(?:\([aA]\)|\[[aA]\]|[aA][\.\-\)])\s+\S[\s\S]*?(?:^|\n|\s{2,})\s*(?:\([bB]\)|\[[bB]\]|[bB][\.\-\)])\s+\S/m.test(plain)
+  }, [enunciado])
+
+  const applyParsedQuestionToModal = (rawContent: string) => {
+    const parsedList = parseSmartPasteToSimuladoQuestoes(rawContent)
+    if (!parsedList || parsedList.length === 0) return false
+    const q0 = parsedList[0]
+    const cleanEnun = stripImageMasksFromHtml(q0.enunciado || '')
+    setEnunciado(cleanEnun ? `<div style="text-align: justify;">${cleanEnun}</div>` : '<div style="text-align: justify;"><br></div>')
+
+    if (Array.isArray(q0.imagens) && q0.imagens.length > 0) {
+      const mappedImgs = q0.imagens
+        .map((img: any) => ({
+          url: (typeof img === 'string' ? img : img.src || '').split('#')[0],
+          posicao: 'inicio' as const
+        }))
+        .filter((i: any) => Boolean(i.url))
+      if (mappedImgs.length > 0) {
+        setImagensApoio(prev => [...prev, ...mappedImgs])
+      }
+    }
+
+    if (Array.isArray(q0.alternativas) && q0.alternativas.length >= 2) {
+      setTipoQuestao('multipla_escolha')
+      setAlternativas(
+        q0.alternativas.map((a: any, idx: number) => ({
+          letra: a.letter || a.letra || String.fromCharCode(65 + idx),
+          texto: a.text || a.texto || '',
+          correta: Boolean(a.correct || a.correta),
+          imagem_url: a.imagem_url ? a.imagem_url.split('#')[0] : null,
+          imagem: a.imagem_url ? a.imagem_url.split('#')[0] : null,
+          linhas: 0,
+          showLinhasSlider: false
+        }))
+      )
+    } else {
+      setTipoQuestao('descritiva')
+    }
+    return true
+  }
+
+  const handlePasteReadyQuestionFromClipboard = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText()
+        if (text && text.trim()) {
+          applyParsedQuestionToModal(text)
+          return
+        }
+      }
+    } catch {}
+    if (hasEmbeddedAltsInModalEnunciado) {
+      applyParsedQuestionToModal(enunciado)
+    } else {
+      alert('Cole a questão completa (com alternativas e gabarito) diretamente no campo "Enunciado da Questão" e clique em "Separar Alternativas Automaticamente"!')
+    }
+  }
+
   return (
     <div style={{ 
       position: 'fixed', 
@@ -723,33 +787,33 @@ export function QuestaoUploadModal({
         
         {/* TOP HEADER */}
         <header style={{ 
-          padding: '18px 28px', 
+          padding: '13px 22px', 
           borderBottom: '1px solid hsl(var(--border-subtle))', 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center',
           background: 'hsl(var(--bg-surface))',
-          gap: 16,
+          gap: 12,
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0, flex: 1 }}>
             <div style={{ 
-              width: 42, 
-              height: 42, 
-              borderRadius: 12, 
+              width: 34, 
+              height: 34, 
+              borderRadius: 10, 
               background: 'linear-gradient(135deg, #3b82f6, #6366f1)', 
               color: 'white', 
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(59,130,246,0.3)',
+              boxShadow: '0 3px 10px rgba(59,130,246,0.28)',
               flexShrink: 0
             }}>
-              <FileText size={20} />
+              <FileText size={17} />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.02em' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
                   {questao ? 'Editar Questão' : 'Nova Questão'}
                 </h2>
                 {isAiGenerated && (
@@ -757,25 +821,52 @@ export function QuestaoUploadModal({
                     display: 'inline-flex', 
                     alignItems: 'center', 
                     gap: 4, 
-                    fontSize: 11, 
+                    fontSize: 10.5, 
                     fontWeight: 700, 
-                    padding: '3px 8px', 
+                    padding: '2px 7px', 
                     borderRadius: 20, 
                     background: 'rgba(236,72,153,0.12)', 
                     color: '#ec4899', 
-                    border: '1px solid rgba(236,72,153,0.25)' 
+                    border: '1px solid rgba(236,72,153,0.25)',
+                    whiteSpace: 'nowrap'
                   }}>
-                    <Sparkles size={11} /> Criada com IA
+                    <Sparkles size={10} /> Criada com IA
                   </span>
                 )}
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+              <p style={{ margin: '1px 0 0', fontSize: 12, color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 Edição profissional de questão, gabarito e diagramação para a prova
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* Paste Ready Question Button */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              type="button"
+              onClick={handlePasteReadyQuestionFromClipboard}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 10px',
+                borderRadius: 7,
+                background: 'rgba(59,130,246,0.1)',
+                color: '#2563eb',
+                fontWeight: 600,
+                fontSize: 11.5,
+                border: '1px solid rgba(59,130,246,0.26)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              title="Colar uma questão completa da área de transferência e separar enunciado, alternativas e gabarito automaticamente"
+            >
+              <ClipboardPaste size={13} /> Colar Questão
+            </motion.button>
+
             {/* IA Action Button */}
             <motion.button 
               whileHover={{ scale: 1.02 }} 
@@ -783,23 +874,24 @@ export function QuestaoUploadModal({
               type="button"
               onClick={() => setIsAiModalOpen(true)}
               style={{ 
-                display: 'flex', 
+                display: 'inline-flex', 
                 alignItems: 'center', 
-                gap: 8, 
-                padding: '8px 16px', 
-                borderRadius: 10, 
+                gap: 5, 
+                padding: '5px 10px', 
+                borderRadius: 7, 
                 background: 'linear-gradient(135deg, rgba(236,72,153,0.12), rgba(139,92,246,0.12))', 
                 color: '#d946ef', 
-                fontWeight: 700, 
-                fontSize: 13,
+                fontWeight: 600, 
+                fontSize: 11.5,
                 border: '1px solid rgba(236,72,153,0.25)', 
                 cursor: 'pointer', 
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 8px rgba(236,72,153,0.08)'
+                boxShadow: '0 1px 4px rgba(236,72,153,0.06)',
+                whiteSpace: 'nowrap'
               }}
               title="Gerar questão completa com Inteligência Artificial"
             >
-              <Sparkles size={16} /> Gerar com IA
+              <Sparkles size={13} /> Gerar com IA
             </motion.button>
 
             {/* Preview Toggle */}
@@ -807,22 +899,23 @@ export function QuestaoUploadModal({
               type="button" 
               onClick={() => setShowPreview(!showPreview)} 
               style={{ 
-                display: 'flex', 
+                display: 'inline-flex', 
                 alignItems: 'center', 
-                gap: 7, 
-                padding: '8px 14px', 
-                borderRadius: 10, 
+                gap: 5, 
+                padding: '5px 10px', 
+                borderRadius: 7, 
                 border: '1px solid hsl(var(--border-subtle))', 
                 background: showPreview ? 'rgba(59,130,246,0.1)' : 'hsl(var(--bg-app))', 
                 color: showPreview ? '#3b82f6' : 'hsl(var(--text-secondary))', 
                 fontWeight: 600, 
-                fontSize: 13,
+                fontSize: 11.5,
                 cursor: 'pointer', 
-                transition: 'all 0.2s' 
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
               }}
               title={showPreview ? 'Ocultar painel de preview' : 'Abrir visualização em tempo real'}
             >
-              {showPreview ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPreview ? <EyeOff size={13} /> : <Eye size={13} />}
               <span>{showPreview ? 'Ocultar Preview' : 'Ver Preview'}</span>
             </button>
 
@@ -831,9 +924,9 @@ export function QuestaoUploadModal({
               type="button"
               onClick={onClose} 
               style={{ 
-                width: 36, 
-                height: 36, 
-                borderRadius: 10, 
+                width: 30, 
+                height: 30, 
+                borderRadius: 8, 
                 background: 'transparent', 
                 border: '1px solid transparent', 
                 color: 'hsl(var(--text-secondary))', 
@@ -841,7 +934,8 @@ export function QuestaoUploadModal({
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center',
-                transition: 'all 0.15s' 
+                transition: 'all 0.15s',
+                flexShrink: 0
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background = 'hsl(var(--bg-hover))'
@@ -853,7 +947,7 @@ export function QuestaoUploadModal({
               }}
               title="Fechar (Esc)"
             >
-              <X size={20} />
+              <X size={17} />
             </button>
           </div>
         </header>
@@ -1073,6 +1167,43 @@ export function QuestaoUploadModal({
                     Suporta equações LaTeX/KaTeX, formatação e imagens
                   </span>
                 </div>
+                {tipoQuestao !== 'texto_apoio' && hasEmbeddedAltsInModalEnunciado && (
+                  <div style={{
+                    marginBottom: 8,
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: 'rgba(139,92,246,0.08)',
+                    border: '1px solid rgba(139,92,246,0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    flexWrap: 'wrap'
+                  }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Wand2 size={14} /> Detectamos alternativas e gabarito colados no enunciado!
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => applyParsedQuestionToModal(enunciado)}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: 7,
+                        border: 'none',
+                        background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                        color: '#fff',
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5
+                      }}
+                    >
+                      <Sparkles size={12} /> Separar Alternativas Automaticamente
+                    </button>
+                  </div>
+                )}
                 <div style={{ borderRadius: 12, overflow: 'hidden' }}>
                   <EditorQuill 
                     value={enunciado} 

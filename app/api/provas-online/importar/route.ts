@@ -255,7 +255,7 @@ export async function POST(request: Request) {
     const { text, html, rtf, defaultPoints, totalExamPoints } = body || {}
 
     let textToParse = html || text || ''
-    if (rtf && textToParse && !textToParse.includes('data:image/')) {
+    if (rtf && textToParse && /<img\b|<v:imagedata\b|<v:shape\b/i.test(textToParse) && !textToParse.includes('data:image/')) {
       try {
         const rtfImages = extractImagesFromRtf(rtf)
         if (rtfImages.length > 0) {

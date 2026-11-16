@@ -7,9 +7,11 @@ import {
   dbGetTentativasByProvaId,
   dbGetTentativaById,
   dbSaveTentativa,
-  dbSaveQuestoes
+  dbSaveQuestoes,
+  dbSaveExcecao
 } from '@/lib/provas-online/db'
 import { repairExamQuestoes } from '@/lib/provas-online/textSanitizer'
+import { autoGradeTentativa } from '@/lib/provas-online/engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +39,37 @@ export async function GET(
   const submittedTentativas = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
 
   const questoesDissertativas = (prova.questoes || []).filter(q => q.tipo === 'dissertativa')
+
+  // Fetch eligible class students so teacher can also launch printed answer sheets (OMR)
+  const adminClient = getAdminClient()
+  let alunosElegiveis: any[] = []
+  try {
+    let alunosQuery = adminClient.from('alunos').select('id, nome, matricula, turma, status')
+    if (prova.alunosModo === 'especificos' && prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
+      alunosQuery = alunosQuery.in('id', prova.alunosEspecificos)
+    } else if (prova.turmas && prova.turmas.length > 0) {
+      const { data: turmasDb } = await adminClient.from('turmas').select('id, codigo, nome')
+      const turmaTokens = new Set<string>()
+      for (const t of prova.turmas) {
+        turmaTokens.add(String(t).trim())
+        const match = (turmasDb || []).find(row =>
+          String(row.nome).toLowerCase() === String(t).toLowerCase() ||
+          String(row.id).toLowerCase() === String(t).toLowerCase() ||
+          String(row.codigo).toLowerCase() === String(t).toLowerCase()
+        )
+        if (match) {
+          if (match.id) turmaTokens.add(String(match.id).trim())
+          if (match.codigo) turmaTokens.add(String(match.codigo).trim())
+          if (match.nome) turmaTokens.add(String(match.nome).trim())
+        }
+      }
+      alunosQuery = alunosQuery.in('turma', Array.from(turmaTokens))
+    }
+    const { data: rows } = await alunosQuery
+    alunosElegiveis = (rows || [])
+      .filter((a: any) => !a.status || ['ativo', 'matriculado', 'cursando'].includes(String(a.status).toLowerCase()))
+      .sort((a: any, b: any) => String(a.nome || '').localeCompare(String(b.nome || '')))
+  } catch {}
 
   // Prepare payload for grading view
   const correcaoSubmissions = submittedTentativas.map((t, idx) => {
@@ -83,6 +116,7 @@ export async function GET(
     },
     questoesDissertativas,
     submissions: correcaoSubmissions,
+    alunosElegiveis,
     totalEntregues: submittedTentativas.length,
     pendentesCorrecao: submittedTentativas.filter(t => t.statusCorrecao === 'pendente' || t.statusCorrecao === 'parcial').length
   })
@@ -306,6 +340,257 @@ export async function POST(
       message: 'Textos das questões higienizados e alternativas reparadas com sucesso!',
       totalQuestoes: repairedQuestoes.length,
       questoes: repairedQuestoes
+    })
+  }
+
+  // 4. Simular ou Efetivar Anulação de Questão
+  if (acao === 'simular_anulacao' || acao === 'anular_questao') {
+    const isPreview = acao === 'simular_anulacao' || body.preview === true
+    const rawPolitica = body.politica || body.metodo || 'pontuar_todos'
+    const politica: 'pontos_para_todos' | 'redistribuir_demais' =
+      rawPolitica === 'redistribuir' || rawPolitica === 'redistribuir_demais'
+        ? 'redistribuir_demais'
+        : 'pontos_para_todos'
+    const motivo = body.motivo || 'Questão anulada pelo professor/coordenação'
+
+    if (!questaoId) {
+      return NextResponse.json({ error: 'questaoId é obrigatório' }, { status: 400 })
+    }
+
+    const questoes = prova.questoes || []
+    const targetQ = questoes.find(q => q.id === questaoId)
+    if (!targetQ) {
+      return NextResponse.json({ error: 'Questão não encontrada nesta prova' }, { status: 404 })
+    }
+
+    const tentativas = await dbGetTentativasByProvaId(provaId)
+    const submittedTentativas = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
+    const qPoints = Number(targetQ.pontuacao || 1)
+
+    const impactAnalysis = submittedTentativas.map(t => {
+      const currentResp = t.respostas?.[questaoId]
+      const pontosAtuais = Number(currentResp?.pontuacaoObtida ?? (currentResp as any)?.pontosAtribuidos ?? (currentResp as any)?.nota ?? 0)
+      let novaNota = Number(t.notaFinal || 0)
+
+      if (politica === 'pontos_para_todos') {
+        const ganho = Math.max(0, qPoints - pontosAtuais)
+        novaNota = Math.round((novaNota + ganho) * 100) / 100
+      } else {
+        const totalOriginal = Number(prova.valorTotal || 10)
+        const validMaxPoints = totalOriginal - qPoints
+        if (validMaxPoints > 0) {
+          const studentScoreWithoutQ = Math.max(0, novaNota - pontosAtuais)
+          novaNota = Math.round(((studentScoreWithoutQ / validMaxPoints) * totalOriginal) * 100) / 100
+        }
+      }
+
+      const diferenca = Math.round((novaNota - Number(t.notaFinal || 0)) * 100) / 100
+      return {
+        tentativaId: t.id,
+        alunoId: t.alunoId,
+        alunoNome: t.alunoNome,
+        notaAnterior: Number(t.notaFinal || 0),
+        novaNota,
+        diferenca
+      }
+    })
+
+    const mediaAnterior = impactAnalysis.length > 0
+      ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.notaAnterior, 0) / impactAnalysis.length) * 100) / 100
+      : 0
+    const novaMedia = impactAnalysis.length > 0
+      ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.novaNota, 0) / impactAnalysis.length) * 100) / 100
+      : 0
+    const alunosBeneficiados = impactAnalysis.filter(i => i.diferenca > 0).length
+
+    if (isPreview) {
+      return NextResponse.json({
+        ok: true,
+        preview: true,
+        simulacao: {
+          mediaAnterior,
+          novaMedia,
+          alunosBeneficiados
+        },
+        mediaAtual: mediaAnterior,
+        mediaSimulada: novaMedia,
+        alunosImpactados: alunosBeneficiados,
+        impactoAlunos: impactAnalysis
+      })
+    }
+
+    targetQ.anulada = true
+    targetQ.motivoAnulacao = motivo
+    targetQ.politicaAnulacao = politica
+
+    await dbSaveProva(prova)
+
+    const nowIso = new Date().toISOString()
+    for (const item of impactAnalysis) {
+      const t = submittedTentativas.find(x => x.id === item.tentativaId)
+      if (t) {
+        const currentResp = t.respostas?.[questaoId]
+        const pontosAtuais = Number(currentResp?.pontuacaoObtida ?? (currentResp as any)?.pontosAtribuidos ?? (currentResp as any)?.nota ?? 0)
+        const novosPontosQ = (politica === 'pontos_para_todos') ? qPoints : 0
+        const deltaQ = novosPontosQ - pontosAtuais
+
+        t.respostas = t.respostas || {}
+        t.respostas[questaoId] = {
+          ...(currentResp || { questaoId, versao: 1, salvoEm: nowIso }),
+          corrigida: true,
+          pontuacaoObtida: novosPontosQ,
+          comentarioProfessor: `[Questão Anulada: ${motivo}]`
+        }
+
+        if (targetQ.tipo === 'dissertativa') {
+          t.pontuacaoDissertativa = Math.max(0, Math.round((Number(t.pontuacaoDissertativa || 0) + deltaQ) * 100) / 100)
+        } else {
+          t.pontuacaoObjetiva = Math.max(0, Math.round((Number(t.pontuacaoObjetiva || 0) + deltaQ) * 100) / 100)
+        }
+        t.notaFinal = item.novaNota
+        t.updatedAt = nowIso
+        await dbSaveTentativa(t)
+      }
+    }
+
+    await dbSaveExcecao({
+      id: crypto.randomUUID(),
+      provaId,
+      alunoId: 'TODOS',
+      tipoExcecao: 'desbloqueio',
+      justificativa: `Questão ${(targetQ.ordem || 0) + 1} anulada. Política: ${politica}. Motivo: ${motivo}`,
+      autorizadoPor: graderName,
+      dados: { questaoId, politica, motivo },
+      createdAt: nowIso
+    })
+
+    return NextResponse.json({
+      ok: true,
+      message: 'Questão anulada e todas as notas recalculadas com sucesso!',
+      impactoAlunos: impactAnalysis
+    })
+  }
+
+  // 5. Lançar Prova Impressa / Cartão-Resposta (OMR Manual)
+  if (acao === 'lancar_cartao_impresso') {
+    const { alunoId, alunoNome, alunoMatricula, turmaId, respostasCartao } = body
+    if (!alunoId || !respostasCartao) {
+      return NextResponse.json({ error: 'Selecione o estudante e preencha o cartão-resposta.' }, { status: 400 })
+    }
+
+    const nowIso = new Date().toISOString()
+    const allTentativas = await dbGetTentativasByProvaId(provaId)
+    const existingTentativa = allTentativas.find(t => t.alunoId === alunoId)
+
+    const formattedRespostas: Record<string, any> = { ...(existingTentativa?.respostas || {}) }
+    for (const q of (prova.questoes || [])) {
+      const entry = respostasCartao[q.id]
+      if (!entry) continue
+
+      if (q.tipo === 'multipla_escolha') {
+        if (entry.alternativaIdSelecionada) {
+          formattedRespostas[q.id] = {
+            questaoId: q.id,
+            alternativaIdSelecionada: entry.alternativaIdSelecionada,
+            respostaOpcaoId: entry.alternativaIdSelecionada,
+            versao: 1,
+            salvoEm: nowIso
+          }
+        }
+      } else if (q.tipo === 'multipla_selecao') {
+        const ids = Array.isArray(entry.alternativasIdsSelecionadas) ? entry.alternativasIdsSelecionadas : []
+        formattedRespostas[q.id] = {
+          questaoId: q.id,
+          alternativasIdsSelecionadas: ids,
+          respostaOpcoesIds: ids,
+          versao: 1,
+          salvoEm: nowIso
+        }
+      } else if (q.tipo === 'verdadeiro_falso') {
+        if (entry.respostaVF && typeof entry.respostaVF === 'object') {
+          formattedRespostas[q.id] = {
+            questaoId: q.id,
+            respostaVF: entry.respostaVF,
+            versao: 1,
+            salvoEm: nowIso
+          }
+        }
+      } else if (q.tipo === 'dissertativa') {
+        const hasNota = entry.notaDissertativa !== undefined && entry.notaDissertativa !== '' && entry.notaDissertativa !== null
+        const awarded = hasNota ? Math.max(0, Math.min(Number(q.pontuacao || 1), Number(entry.notaDissertativa) || 0)) : 0
+        formattedRespostas[q.id] = {
+          questaoId: q.id,
+          respostaDissertativa: entry.textoDissertativo || '[Realizada em Caderno Impresso]',
+          textoDissertativo: entry.textoDissertativo || '[Realizada em Caderno Impresso]',
+          corrigida: hasNota,
+          pontuacaoObtida: awarded,
+          pontosAtribuidos: awarded,
+          nota: awarded,
+          comentarioProfessor: entry.comentarioProfessor || 'Nota lançada via Cartão-Resposta Impresso',
+          corrigidoPor: graderName,
+          corrigidoEm: hasNota ? nowIso : undefined,
+          versao: 1,
+          salvoEm: nowIso
+        }
+      }
+    }
+
+    const baseTentativa: any = existingTentativa || {
+      id: crypto.randomUUID(),
+      provaId,
+      alunoId,
+      alunoNome: alunoNome || 'Estudante',
+      alunoMatricula: alunoMatricula || '',
+      turmaId: turmaId || prova.turmas?.[0] || '',
+      numeroTentativa: 1,
+      status: 'entregue',
+      iniciadaEm: nowIso,
+      prazoLimite: nowIso,
+      entregueEm: nowIso,
+      tempoAdicionalMinutos: 0,
+      ordemQuestoes: (prova.questoes || []).map((q: any) => q.id),
+      ordemAlternativas: {},
+      respostas: formattedRespostas,
+      versaoRespostas: 1,
+      pontuacaoObjetiva: 0,
+      pontuacaoDissertativa: 0,
+      notaFinal: 0,
+      statusCorrecao: 'pendente',
+      createdAt: nowIso,
+      updatedAt: nowIso
+    }
+
+    baseTentativa.respostas = formattedRespostas
+    baseTentativa.status = 'entregue'
+    baseTentativa.entregueEm = baseTentativa.entregueEm || nowIso
+
+    // Calculate essay total first
+    let totalDiss = 0
+    for (const q of (prova.questoes || [])) {
+      if (q.tipo === 'dissertativa') {
+        const r = formattedRespostas[q.id]
+        if (r && r.corrigida) {
+          totalDiss += Number(r.pontuacaoObtida || 0)
+        }
+      }
+    }
+    baseTentativa.pontuacaoDissertativa = Math.round(totalDiss * 100) / 100
+
+    const graded = autoGradeTentativa(prova, baseTentativa)
+    baseTentativa.pontuacaoObjetiva = graded.pontuacaoObjetiva
+    baseTentativa.pontuacaoDissertativa = graded.pontuacaoDissertativa
+    baseTentativa.notaFinal = graded.notaFinal
+    baseTentativa.statusCorrecao = graded.statusCorrecao
+    baseTentativa.respostas = graded.respostas
+    baseTentativa.comprovanteCodigo = graded.comprovanteCodigo
+    baseTentativa.updatedAt = nowIso
+
+    const saved = await dbSaveTentativa(baseTentativa)
+
+    return NextResponse.json({
+      ok: true,
+      tentativa: saved,
+      message: `Cartão-resposta impresso de ${baseTentativa.alunoNome} lançado e corrigido com sucesso! Nota: ${saved.notaFinal.toFixed(2)}`
     })
   }
 

@@ -6,7 +6,8 @@ import {
   ArrowLeft, Upload, FileText, CheckCircle, AlertCircle, Loader2,
   Eye, EyeOff, Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
   Save, RefreshCw, Sparkles, Plus, X, Printer, ZoomIn, ZoomOut, ChevronLeft, ChevronRight,
-  Calendar, Clock, Users, Download, BookOpen, Layers, Target, User, RotateCcw, XCircle
+  Calendar, Clock, Users, Download, BookOpen, Layers, Target, User, RotateCcw, XCircle,
+  ClipboardPaste
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
@@ -18,6 +19,7 @@ import { HtmlContent } from '@/components/HtmlContent'
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
 import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, OriginalFileRecord, resolveOriginalFileForRequisicao, upsertOriginalFileInConfig, mergeConfigEstudioPreservingOriginalFiles, normalizeQuestionImages, normalizeQuestoesList, hasGabaritoBracketArtifact, isCollaboratorRole, isUserRequisicaoOwner } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
+import { SmartPasteQuestoesModal } from '@/components/simulados/SmartPasteQuestoesModal'
 
 const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
 
@@ -39,6 +41,7 @@ export default function UploadSimuladoPage() {
   const [alertModal, setAlertModal] = useState({ open: false, message: '' })
   const [questoes, setQuestoes] = useState<Questao[]>([])
   const [uploadStep, setUploadStep] = useState<'idle' | 'parsing' | 'review' | 'saved'>('idle')
+  const [idleTab, setIdleTab] = useState<'docx' | 'paste'>('docx')
   const [parseError, setParseError] = useState('')
 
   const myReqs = useMemo(() => {
@@ -1179,92 +1182,231 @@ export default function UploadSimuladoPage() {
           <>
             {/* ─── STEP: Upload Zone ─── */}
             {uploadStep === 'idle' && (
-              <div className="upload-main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 20, alignItems: 'start' }}>
-                <div style={{ minWidth: 0 }}>
-                  <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
-                    <div
-                      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-                      onDragLeave={() => setDragOver(false)}
-                      onDrop={handleDrop}
-                      onClick={() => fileInputRef.current?.click()}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {/* Mode Switcher Bar */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                  padding: '10px 14px',
+                  borderRadius: 16,
+                  background: 'hsl(var(--bg-surface))',
+                  border: '1px solid hsl(var(--border-subtle))',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIdleTab('docx')}
                       style={{
-                        border: `2px dashed ${dragOver ? '#8b5cf6' : 'rgba(139,92,246,0.3)'}`,
-                        borderRadius: 24, padding: '70px 40px', textAlign: 'center',
-                        background: dragOver ? 'rgba(139,92,246,0.05)' : 'hsl(var(--bg-surface))',
-                        cursor: 'pointer', transition: 'all 0.25s', marginBottom: 24,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '9px 16px',
+                        borderRadius: 11,
+                        border: idleTab === 'docx' ? '1px solid #7c3aed' : '1px solid hsl(var(--border-subtle))',
+                        background: idleTab === 'docx' ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : 'hsl(var(--bg-app))',
+                        color: idleTab === 'docx' ? '#ffffff' : 'hsl(var(--text-primary))',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: idleTab === 'docx' ? '0 4px 12px rgba(139,92,246,0.28)' : 'none',
+                        transition: 'all 0.18s'
+                      }}
+                    >
+                      <Upload size={15} /> Enviar Arquivo Word (.DOCX)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIdleTab('paste')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '9px 16px',
+                        borderRadius: 11,
+                        border: idleTab === 'paste' ? '1px solid #2563eb' : '1px solid rgba(59,130,246,0.3)',
+                        background: idleTab === 'paste' ? 'linear-gradient(135deg, #2563eb, #4f46e5)' : 'rgba(59,130,246,0.07)',
+                        color: idleTab === 'paste' ? '#ffffff' : '#2563eb',
+                        fontSize: 13,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        boxShadow: idleTab === 'paste' ? '0 4px 14px rgba(37,99,235,0.32)' : 'none',
+                        transition: 'all 0.18s'
+                      }}
+                    >
+                      <ClipboardPaste size={15} /> Copiar e Colar Questões
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: idleTab === 'paste' ? 'rgba(255,255,255,0.22)' : 'rgba(37,99,235,0.14)',
+                        color: idleTab === 'paste' ? '#ffffff' : '#2563eb'
                       }}>
-                      <input ref={fileInputRef} type="file" accept=".doc,.docx" style={{ display: 'none' }}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+                        INTELIGENTE
+                      </span>
+                    </button>
 
-                      <motion.div animate={{ y: dragOver ? -8 : 0 }} transition={{ type: 'spring', stiffness: 300 }}>
-                        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                          <Upload size={30} color="#8b5cf6" />
-                        </div>
-                        <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>
-                          {dragOver ? 'Solte o arquivo aqui!' : activeRequisicao ? `Enviar arquivo de ${activeRequisicao.disciplina_nome}` : 'Arraste ou clique para enviar'}
-                        </h3>
-                        <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: '0 0 16px' }}>
-                          Envie o arquivo <strong>.DOCX</strong> (Word) contendo apenas as questões de <strong>{activeRequisicao?.disciplina_nome || 'sua disciplina'}</strong> ({activeRequisicao?.qtd_questoes || 10} questões)
-                        </p>
-                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                          {[{ icon: FileText, label: '.DOCX — Word', color: '#3b82f6' }].map((t, i) => (
-                            <div key={i} style={{ padding: '6px 14px', borderRadius: 8, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <t.icon size={13} color={t.color} />
-                              <span style={{ fontSize: 12, fontWeight: 600, color: t.color }}>{t.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => setUploadStep('review')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 7,
+                        padding: '9px 16px',
+                        borderRadius: 11,
+                        border: '1px solid hsl(var(--border-subtle))',
+                        background: 'hsl(var(--bg-app))',
+                        color: 'hsl(var(--text-secondary))',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        transition: 'all 0.18s'
+                      }}
+                    >
+                      <Plus size={15} /> Criar no Editor Manual / IA
+                    </button>
+                  </div>
+                </div>
+
+                {idleTab === 'paste' ? (
+                  <SmartPasteQuestoesModal
+                    open={true}
+                    mode="inline"
+                    existingCount={questoes.filter((q: any) => !isTextoApoio(q)).length}
+                    cotaQuestoes={activeRequisicao?.qtd_questoes}
+                    defaultDisciplinaId={activeRequisicao?.id_disciplina || targetDiscId || undefined}
+                    defaultDisciplinaNome={activeRequisicao?.disciplina_nome || undefined}
+                    defaultProfessorId={activeRequisicao?.id_professor || targetProfId || currentUser?.id}
+                    defaultProfessorNome={activeRequisicao?.professor_nome || undefined}
+                    defaultRequisicaoId={activeRequisicao?.id || targetReqId || undefined}
+                    onImport={async (importedQs, mode) => {
+                      const nextQs = mode === 'append' ? [...questoes, ...importedQs] : importedQs
+                      setQuestoes(nextQs)
+                      setUploadStep('review')
+                      try {
+                        await handleSave(nextQs, undefined, undefined, true)
+                      } catch {}
+                    }}
+                  />
+                ) : (
+                  <div className="upload-main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 20, alignItems: 'start' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+                        <div
+                          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                          onDragLeave={() => setDragOver(false)}
+                          onDrop={handleDrop}
+                          onClick={() => fileInputRef.current?.click()}
+                          style={{
+                            border: `2px dashed ${dragOver ? '#8b5cf6' : 'rgba(139,92,246,0.3)'}`,
+                            borderRadius: 24, padding: '68px 40px', textAlign: 'center',
+                            background: dragOver ? 'rgba(139,92,246,0.05)' : 'hsl(var(--bg-surface))',
+                            cursor: 'pointer', transition: 'all 0.25s', marginBottom: 20,
+                          }}>
+                          <input ref={fileInputRef} type="file" accept=".doc,.docx" style={{ display: 'none' }}
+                            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+
+                          <motion.div animate={{ y: dragOver ? -8 : 0 }} transition={{ type: 'spring', stiffness: 300 }}>
+                            <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                              <Upload size={30} color="#8b5cf6" />
                             </div>
-                          ))}
-                        </div>
-                      </motion.div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-                      <motion.button 
-                        onClick={() => setUploadStep('review')}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 14, background: 'transparent', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.05)' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                      >
-                        <Plus size={18} /> Inserir questões de {activeRequisicao?.disciplina_nome || 'disciplina'} manualmente
-                      </motion.button>
-                    </div>
-
-                    {parseError && (
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        style={{ display: 'flex', gap: 10, padding: '14px 18px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, color: '#ef4444', fontSize: 14 }}>
-                        <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
-                        {parseError}
-                      </motion.div>
-                    )}
-
-                    {/* Format Tips */}
-                    <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, marginTop: 24 }}>
-                      <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Sparkles size={16} color="#f59e0b" /> Dicas de Formatação para Melhor Reconhecimento
-                      </h4>
-                      <div className="upload-tips-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        {[
-                          { emoji: '🧠', title: 'Listas Inteligentes', desc: 'Use numeração manual ("1.", "1-", "1)") ou listas automáticas do Word. O sistema entende tudo!' },
-                          { emoji: '🅰️', title: 'Alternativas Flexíveis', desc: 'Formatos aceitos: "a.", "a-", "a)", listas manuais ou automáticas em múltiplos níveis.' },
-                          { emoji: '🎯', title: 'Gabarito Automático', desc: 'Pinte o texto da alternativa correta de vermelho (qualquer tom) no Word.' },
-                          { emoji: '🖼️', title: 'Imagens Nativas', desc: 'Cole imagens diretamente no arquivo DOCX e elas serão importadas automaticamente.' },
-                        ].map((tip, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 14px', background: 'hsl(var(--bg-app))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
-                            <span style={{ fontSize: 20 }}>{tip.emoji}</span>
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>{tip.title}</div>
-                              <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>{tip.desc}</div>
+                            <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>
+                              {dragOver ? 'Solte o arquivo aqui!' : activeRequisicao ? `Enviar arquivo de ${activeRequisicao.disciplina_nome}` : 'Arraste ou clique para enviar'}
+                            </h3>
+                            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: '0 0 16px' }}>
+                              Envie o arquivo <strong>.DOCX</strong> (Word) contendo apenas as questões de <strong>{activeRequisicao?.disciplina_nome || 'sua disciplina'}</strong> ({activeRequisicao?.qtd_questoes || 10} questões)
+                            </p>
+                            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                              {[{ icon: FileText, label: '.DOCX — Word', color: '#3b82f6' }].map((t, i) => (
+                                <div key={i} style={{ padding: '6px 14px', borderRadius: 8, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <t.icon size={13} color={t.color} />
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: t.color }}>{t.label}</span>
+                                </div>
+                              ))}
                             </div>
+                          </motion.div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+                          <motion.button
+                            type="button"
+                            onClick={() => setIdleTab('paste')}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '12px 24px',
+                              borderRadius: 14,
+                              background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                              color: '#ffffff',
+                              border: 'none',
+                              fontSize: 14,
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              boxShadow: '0 4px 16px rgba(37,99,235,0.28)',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <ClipboardPaste size={18} /> Copiar e Colar Questões de {activeRequisicao?.disciplina_nome || 'Disciplina'}
+                          </motion.button>
+
+                          <motion.button 
+                            onClick={() => setUploadStep('review')}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 14, background: 'transparent', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.05)' }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                          >
+                            <Plus size={18} /> Inserir questões de {activeRequisicao?.disciplina_nome || 'disciplina'} manualmente
+                          </motion.button>
+                        </div>
+
+                        {parseError && (
+                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            style={{ display: 'flex', gap: 10, padding: '14px 18px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, color: '#ef4444', fontSize: 14 }}>
+                            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                            {parseError}
+                          </motion.div>
+                        )}
+
+                        {/* Format Tips */}
+                        <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, marginTop: 24 }}>
+                          <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Sparkles size={16} color="#f59e0b" /> Dicas de Formatação para Melhor Reconhecimento
+                          </h4>
+                          <div className="upload-tips-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            {[
+                              { emoji: '🧠', title: 'Listas Inteligentes', desc: 'Use numeração manual ("1.", "1-", "1)") ou listas automáticas do Word. O sistema entende tudo!' },
+                              { emoji: '🅰️', title: 'Alternativas Flexíveis', desc: 'Formatos aceitos: "a.", "a-", "a)", listas manuais ou automáticas em múltiplos níveis.' },
+                              { emoji: '🎯', title: 'Gabarito Automático', desc: 'Pinte o texto da alternativa correta de vermelho, grife em amarelo ou escreva "Gabarito: B".' },
+                              { emoji: '🖼️', title: 'Imagens e Fórmulas', desc: 'Cole questões com imagens diretamente do Word ou envie o arquivo DOCX completo.' },
+                            ].map((tip, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 14px', background: 'hsl(var(--bg-app))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                                <span style={{ fontSize: 20 }}>{tip.emoji}</span>
+                                <div>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>{tip.title}</div>
+                                  <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>{tip.desc}</div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      </motion.div>
                     </div>
-                  </motion.div>
-                </div>
-                <div style={{ position: 'sticky', top: 24 }}>
-                  {renderSidebar()}
-                </div>
+                    <div style={{ position: 'sticky', top: 24 }}>
+                      {renderSidebar()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -30,6 +30,7 @@ export default function ImprimirProvaPage() {
   const [limiteAlturaImagem, setLimiteAlturaImagem] = useState<150 | 250 | 380 | 900>(250)
   const [linhasDissertativa, setLinhasDissertativa] = useState<4 | 6 | 10 | 14>(6)
   const [mostrarGuiasMargem, setMostrarGuiasMargem] = useState<boolean>(false)
+  const [incluirCartaoNoCaderno, setIncluirCartaoNoCaderno] = useState<boolean>(true)
 
   const marginConfig = {
     estreita: { screenPad: '22px', pageMargin: '8mm', label: 'Estreita (8mm)' },
@@ -474,6 +475,30 @@ export default function ImprimirProvaPage() {
               ))}
             </div>
 
+            {/* Toggle Cartão-Resposta na Capa do Caderno */}
+            {modoImpressao === 'aluno' && (
+              <button
+                type="button"
+                onClick={() => setIncluirCartaoNoCaderno(prev => !prev)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '8px',
+                  border: incluirCartaoNoCaderno ? '1px solid #0284c7' : '1px solid #e2e8f0',
+                  background: incluirCartaoNoCaderno ? '#f0f9ff' : '#f8fafc',
+                  color: incluirCartaoNoCaderno ? '#0369a1' : '#475569',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+              >
+                <CheckCircle2 size={11} />
+                {incluirCartaoNoCaderno ? 'Cartão-Resposta na Capa: Sim' : 'Cartão-Resposta na Capa: Não'}
+              </button>
+            )}
+
             {/* Guias de Margem A4 */}
             <button
               type="button"
@@ -692,6 +717,111 @@ export default function ImprimirProvaPage() {
           )}
         </div>
 
+        {/* ── GRADE DE RESPOSTAS RÁPIDA NA CAPA DO CADERNO DO ALUNO (OMR COMPACTO) ── */}
+        {modoImpressao === 'aluno' && incluirCartaoNoCaderno && questoes.some((q: any) => q.tipo !== 'dissertativa') && (
+          <div style={{
+            border: '2px solid #0f172a',
+            borderRadius: '14px',
+            padding: '14px 16px',
+            marginBottom: '22px',
+            background: '#ffffff',
+            position: 'relative',
+            pageBreakInside: 'avoid',
+            breakInside: 'avoid'
+          }}>
+            {/* 4 Fiducial OMR Corner Squares */}
+            <span style={{ position: 'absolute', top: '6px', left: '6px', width: '8px', height: '8px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', top: '6px', right: '6px', width: '8px', height: '8px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', bottom: '6px', left: '6px', width: '8px', height: '8px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', bottom: '6px', right: '6px', width: '8px', height: '8px', background: '#0f172a' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '8px', marginBottom: '10px', paddingLeft: '8px', paddingRight: '8px' }}>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', color: '#0f172a', letterSpacing: '0.04em' }}>
+                  Cartão-Resposta Oficial (Resumo OMR)
+                </span>
+                <span style={{ display: 'block', fontSize: '10px', color: '#64748b' }}>
+                  Preencha completamente o círculo da alternativa correta com caneta azul ou preta, sem rasuras.
+                </span>
+              </div>
+              <span style={{ fontFamily: 'monospace', fontSize: '10px', fontWeight: 800, color: '#334155', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                OMR-{String(prova.id || '').slice(0, 8).toUpperCase()}
+              </span>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+              gap: '8px',
+              padding: '0 4px'
+            }}>
+              {questoes.map((q: any, idx: number) => {
+                const isObj = q.tipo === 'multipla_escolha' || q.tipo === 'unica_escolha' || q.tipo === 'multipla_selecao'
+                const isVF = q.tipo === 'verdadeiro_falso'
+                const countOptions = q.alternativas ? q.alternativas.length : 5
+                const vfItems = q.itensVF || q.itensVouF || []
+
+                return (
+                  <div
+                    key={q.id || idx}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '6px'
+                    }}
+                  >
+                    <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '11px', color: '#0f172a' }}>
+                      {String(idx + 1).padStart(2, '0')}.
+                    </span>
+                    {isObj ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {Array.from({ length: countOptions }).map((_, altI) => (
+                          <span
+                            key={altI}
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              border: '1.3px solid #475569',
+                              background: '#ffffff',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontFamily: 'monospace',
+                              fontSize: '9.5px',
+                              fontWeight: 800,
+                              color: '#334155'
+                            }}
+                          >
+                            {String.fromCharCode(65 + altI)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : isVF ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {vfItems.map((_: any, vfIdx: number) => (
+                          <span key={vfIdx} style={{ fontSize: '9px', fontFamily: 'monospace', fontWeight: 700, color: '#334155', background: '#ffffff', border: '1px solid #94a3b8', borderRadius: '4px', padding: '1px 4px' }}>
+                            {vfIdx + 1}:V/F
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                        Dissertativa
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── MODO 1 & 2: CADERNO DE QUESTÕES (ALUNO OU GABARITO PROFESSOR) ── */}
         {modoImpressao !== 'cartao_resposta' && (
           <div
@@ -722,61 +852,87 @@ export default function ImprimirProvaPage() {
                 <div
                   key={q.id || idx}
                   style={{
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '14px',
-                    padding: colunas === 2 ? '14px' : '18px',
-                    background: '#ffffff',
                     pageBreakInside: 'avoid',
                     breakInside: 'avoid',
                     marginBottom: colunas === 2 ? '16px' : '0'
                   }}
                 >
-                  {/* Questão Header */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingBottom: '10px',
-                    marginBottom: '12px',
-                    borderBottom: '1px solid #f1f5f9'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{
-                        width: '26px',
-                        height: '26px',
-                        borderRadius: '7px',
-                        background: '#0f172a',
-                        color: '#ffffff',
-                        fontWeight: 900,
-                        fontSize: '12px',
-                        display: 'flex',
+                  {/* Aba de Pasta Suspensa no Topo do Card (Tipo da Questão) */}
+                  <div style={{ display: 'flex', alignItems: 'center', paddingLeft: '14px' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        fontFamily: 'monospace'
-                      }}>
-                        {idx + 1}
-                      </span>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                        {isObjSingle && 'Múltipla Escolha'}
-                        {isObjMulti && 'Múltipla Seleção'}
-                        {isVF && 'Verdadeiro ou Falso'}
-                        {isDissertativa && 'Questão Dissertativa'}
-                      </span>
-                    </div>
-
-                    <div style={{
-                      fontSize: '11px',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      color: '#0f172a',
-                      background: '#f1f5f9',
-                      padding: '2px 9px',
-                      borderRadius: '7px',
-                      border: '1px solid #e2e8f0'
-                    }}>
-                      {valor.toFixed(1)} {valor === 1 ? 'pt' : 'pts'}
-                    </div>
+                        padding: '3px 12px',
+                        borderRadius: '9px 9px 0 0',
+                        border: '1px solid #cbd5e1',
+                        borderBottom: 'none',
+                        background: '#f1f5f9',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        color: '#475569',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                      }}
+                    >
+                      {isObjSingle && 'Múltipla Escolha'}
+                      {isObjMulti && 'Múltipla Seleção'}
+                      {isVF && 'Verdadeiro ou Falso'}
+                      {isDissertativa && 'Questão Dissertativa'}
+                    </span>
                   </div>
+
+                  <div
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '14px',
+                      padding: colunas === 2 ? '14px' : '18px',
+                      background: '#ffffff'
+                    }}
+                  >
+                    {/* Questão Header: Numeração + Título da Questão */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingBottom: '10px',
+                      marginBottom: '12px',
+                      borderBottom: '1px solid #f1f5f9'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: '7px',
+                          background: '#0f172a',
+                          color: '#ffffff',
+                          fontWeight: 900,
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontFamily: 'monospace'
+                        }}>
+                          {idx + 1}
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Questão {idx + 1}{q.titulo ? ` — ${q.titulo}` : ''}
+                        </span>
+                      </div>
+
+                      <div style={{
+                        fontSize: '11px',
+                        fontFamily: 'monospace',
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        background: '#f1f5f9',
+                        padding: '2px 9px',
+                        borderRadius: '7px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        {valor.toFixed(1)} {valor === 1 ? 'pt' : 'pts'}
+                      </div>
+                    </div>
 
                   {/* Enunciado */}
                   <div style={{
@@ -939,9 +1095,13 @@ export default function ImprimirProvaPage() {
                             <CheckCircle2 size={15} color="#059669" />
                             <span>Espelho de Correção / Resposta Esperada da Banca:</span>
                           </div>
-                          <p style={{ margin: 0, color: '#334155', lineHeight: 1.55 }}>
-                            {q.respostaEsperada || q.gabaritoOficial || 'Critério de pontuação atribuído pelo professor conforme argumentação, coerência e domínio do conteúdo.'}
-                          </p>
+                          <div style={{ margin: 0, color: '#334155', lineHeight: 1.55 }}>
+                            {q.respostaEsperada || q.gabaritoOficial ? (
+                              <HtmlContent html={q.respostaEsperada || q.gabaritoOficial} />
+                            ) : (
+                              'Critério de pontuação atribuído pelo professor conforme argumentação, coerência e domínio do conteúdo.'
+                            )}
+                          </div>
                           {q.criteriosAvaliacao && q.criteriosAvaliacao.length > 0 && (
                             <div style={{ paddingTop: '8px', borderTop: '1px solid #bbf7d0' }}>
                               <span style={{ fontWeight: 800, color: '#065f46', display: 'block', marginBottom: '4px' }}>Critérios de Avaliação:</span>
@@ -971,9 +1131,10 @@ export default function ImprimirProvaPage() {
                       color: '#0369a1'
                     }}>
                       <strong>Comentário Pedagógico / Resolução: </strong>
-                      {explicacaoTexto}
+                      <HtmlContent html={explicacaoTexto} />
                     </div>
                   )}
+                  </div>
                 </div>
               )
             })}
@@ -986,8 +1147,15 @@ export default function ImprimirProvaPage() {
             border: '2px solid #0f172a',
             borderRadius: '16px',
             padding: '24px',
-            background: '#ffffff'
+            background: '#ffffff',
+            position: 'relative'
           }}>
+            {/* 4 Fiducial OMR Corner Registration Marks */}
+            <span style={{ position: 'absolute', top: '10px', left: '10px', width: '12px', height: '12px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', top: '10px', right: '10px', width: '12px', height: '12px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', bottom: '10px', left: '10px', width: '12px', height: '12px', background: '#0f172a' }} />
+            <span style={{ position: 'absolute', bottom: '10px', right: '10px', width: '12px', height: '12px', background: '#0f172a' }} />
+
             <div style={{
               textAlign: 'center',
               paddingBottom: '16px',
@@ -995,11 +1163,14 @@ export default function ImprimirProvaPage() {
               marginBottom: '20px'
             }}>
               <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#0f172a' }}>
-                Grade de Respostas para Preenchimento Óptico / Manual
+                Grade de Respostas para Preenchimento Óptico / Manual (OMR)
               </h3>
               <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#64748b' }}>
                 Preencha totalmente a bolha correspondente à alternativa escolhida utilizando caneta esferográfica azul ou preta.
               </p>
+              <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'monospace', fontWeight: 800, color: '#334155' }}>
+                Código Óptico da Avaliação: IMP-OMR-{String(prova.id || '').slice(0, 8).toUpperCase()}
+              </div>
             </div>
 
             {/* Structured Optical Bubble Grid */}
@@ -1013,6 +1184,7 @@ export default function ImprimirProvaPage() {
                 const isObj = q.tipo === 'multipla_escolha' || q.tipo === 'unica_escolha' || q.tipo === 'multipla_selecao'
                 const isVF = q.tipo === 'verdadeiro_falso'
                 const countOptions = q.alternativas ? q.alternativas.length : 5
+                const vfItems = q.itensVF || q.itensVouF || []
 
                 return (
                   <div
@@ -1063,8 +1235,16 @@ export default function ImprimirProvaPage() {
                         ))}
                       </div>
                     ) : isVF ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748b' }}>(V / F)</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                        {vfItems.map((_: any, vfIdx: number) => (
+                          <div key={vfIdx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontFamily: 'monospace' }}>
+                            <span style={{ color: '#475569', fontWeight: 700 }}>Item {vfIdx + 1}:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1.5px solid #64748b', background: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '10px', color: '#334155' }}>V</span>
+                              <span style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1.5px solid #64748b', background: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '10px', color: '#334155' }}>F</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, color: '#94a3b8' }}>

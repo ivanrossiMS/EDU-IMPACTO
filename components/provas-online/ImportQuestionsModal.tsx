@@ -144,53 +144,37 @@ export function ImportQuestionsModal({
   // ── PASTE WITH IMAGES LISTENER ───────────────────────────────────────────
   const handlePasteAreaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const clipboard = e.clipboardData
+    const plainText = clipboard.getData('text/plain') || ''
+    let htmlData = clipboard.getData('text/html') || ''
+    const rtfData = clipboard.getData('text/rtf') || ''
 
-    // 1. Capture RTF stream and extract embedded hex images (from Word / Docs)
-    const rtfData = clipboard.getData('text/rtf')
-    if (rtfData) {
+    // Check if the pasted HTML from Word/Docs actually references inline images
+    const htmlHasEmbeddedImages = /<img\b|<v:imagedata\b|<v:shape\b/i.test(htmlData)
+
+    if (rtfData && htmlHasEmbeddedImages) {
       setPastedRtf(rtfData)
+    } else {
+      setPastedRtf('')
     }
-    const rtfImages = rtfData ? extractImagesFromRtf(rtfData) : []
 
-    // 2. Capture rich HTML from Word / Docs if available
-    let htmlData = clipboard.getData('text/html')
+    const rtfImages = (rtfData && htmlHasEmbeddedImages) ? extractImagesFromRtf(rtfData) : []
 
+    // Capture rich HTML from Word / Docs if available
     if (htmlData && htmlData.trim().length > 15) {
       if (rtfImages.length > 0) {
-        const { injectedHtml, unassignedImages } = injectRtfImagesIntoHtml(htmlData, rtfImages)
+        const { injectedHtml } = injectRtfImagesIntoHtml(htmlData, rtfImages)
         htmlData = injectedHtml
-        if (unassignedImages.length > 0) {
-          setPastedImages(prev => [
-            ...prev,
-            ...unassignedImages.map((u, idx) => ({
-              id: crypto.randomUUID(),
-              name: u.name,
-              src: u.src,
-              targetQ: getSuggestedQuestionIndex(u.name, prev.length + idx, stagedQuestions.length)
-            }))
-          ])
-        }
-        toast.success(`✨ Formatação e ${rtfImages.length} imagem(ns) do Word associadas automaticamente!`)
+        toast.success(`✨ Formatação e imagens do documento associadas automaticamente!`)
       } else {
         toast.success('Formatação rica do documento capturada com sucesso!')
       }
       setPastedHtml(htmlData)
-    } else if (rtfImages.length > 0) {
-      // If no rich HTML but RTF had images, make them available in unassigned
-      setPastedImages(prev => [
-        ...prev,
-        ...rtfImages.map((u, idx) => ({
-          id: crypto.randomUUID(),
-          name: u.name,
-          src: u.src,
-          targetQ: getSuggestedQuestionIndex(u.name, prev.length + idx, stagedQuestions.length)
-        }))
-      ])
-      toast.success(`${rtfImages.length} imagem(ns) extraídas do documento prontas para vincular!`)
     }
 
-    // 3. Capture any clipboard image files
-    if (clipboard.files && clipboard.files.length > 0) {
+    // ONLY capture clipboard.files images when the user is pasting an actual standalone image (no text/plain in clipboard).
+    // When copying text in Microsoft Word (especially on macOS), Word puts a rendered bitmap "image.png" of the text page
+    // into clipboard.files alongside text/plain and text/html — ignoring clipboard.files when plainText is present prevents fake text-screenshots!
+    if (!plainText.trim() && clipboard.files && clipboard.files.length > 0) {
       for (let i = 0; i < clipboard.files.length; i++) {
         const file = clipboard.files[i]
         if (file.type.startsWith('image/')) {
@@ -272,8 +256,8 @@ export function ImportQuestionsModal({
       return
     }
 
-    // If we have RTF images that haven't been injected yet, inject now
-    if (pastedRtf && richHtml && !richHtml.includes('data:image/')) {
+    // If we have RTF images that haven't been injected yet, inject now only if HTML actually references images
+    if (pastedRtf && richHtml && /<img\b|<v:imagedata\b|<v:shape\b/i.test(richHtml) && !richHtml.includes('data:image/')) {
       const rtfImages = extractImagesFromRtf(pastedRtf)
       if (rtfImages.length > 0) {
         const { injectedHtml } = injectRtfImagesIntoHtml(richHtml, rtfImages)
@@ -988,14 +972,18 @@ Gabarito: C"
                           onChange={() => handleToggleSelectQuestion(qIdx)}
                           className="w-4 h-4 rounded accent-sky-600 cursor-pointer"
                         />
-                        <span className="w-7 h-7 rounded-lg bg-sky-100 text-sky-800 font-extrabold text-xs flex items-center justify-center">
+                        <span className="w-7 h-7 rounded-lg bg-slate-900 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
                           {qIdx + 1}
+                        </span>
+                        <span className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
+                          Questão {qIdx + 1}
                         </span>
 
                         <select
                           value={q.tipo}
                           onChange={e => handleChangeQuestionType(qIdx, e.target.value as TipoQuestao)}
-                          className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700 focus:outline-none"
+                          style={{ width: 'auto', height: '30px', padding: '0 26px 0 10px' }}
+                          className="rounded-lg bg-sky-50 border border-sky-200 text-xs font-bold text-sky-800 focus:outline-none cursor-pointer"
                         >
                           <option value="multipla_escolha">Objetiva (Única)</option>
                           <option value="multipla_selecao">Múltipla Seleção</option>

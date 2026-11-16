@@ -6,7 +6,8 @@ import {
   Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
   Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText, BookOpen,
   ArrowUp, ArrowDown, ArrowUpDown, Target, RefreshCw, CheckCircle2, ListChecks, AlertCircle,
-  Copy, Check, AlignLeft, AlignJustify, Maximize2, PenTool, Lightbulb, Minus
+  Copy, Check, AlignLeft, AlignJustify, Maximize2, PenTool, Lightbulb, Minus,
+  ClipboardPaste, Bold, Italic, Underline, Subscript, Superscript, Sigma, Wand2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { isQuestionForRequisicao, getQuestionCorrectAnswer, syncQuestionGabarito } from '@/lib/utils'
@@ -14,6 +15,9 @@ import { cleanEnunciadoHtml } from '@/components/simulados/PaginationEngine'
 import { HtmlContent, unpackMasksAndFormulas } from '@/components/HtmlContent'
 import { Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestaoUploadModal } from '@/components/simulados/QuestaoUploadModal'
+import { SmartPasteQuestoesModal } from '@/components/simulados/SmartPasteQuestoesModal'
+import { parseSmartPasteToSimuladoQuestoes, applyBulkGabaritoString } from '@/lib/provas-online/importParser'
+import { useKeyboard } from '@/components/providers/KeyboardProvider'
 
 interface QuestoesEditorProps {
   questoes: Questao[]
@@ -50,11 +54,15 @@ export function QuestoesEditor({
   onSaveQuestoes,
   isSaving = false
 }: QuestoesEditorProps) {
+  const { openKeyboard } = useKeyboard()
   const [generatingAiFor, setGeneratingAiFor] = useState<number | null>(null)
   const [disciplinasList, setDisciplinasList] = useState<any[]>(disciplinas || [])
   const [reorderOpen, setReorderOpen] = useState<string | null>(null)
   const [activeAltLines, setActiveAltLines] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isSmartPasteOpen, setIsSmartPasteOpen] = useState(false)
+  const [isQuickGabaritoOpen, setIsQuickGabaritoOpen] = useState(false)
+  const [quickGabaritoInput, setQuickGabaritoInput] = useState('')
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const triggerSave = (updatedList: Questao[], immediate: boolean = false) => {
@@ -1236,6 +1244,136 @@ export function QuestoesEditor({
     triggerSave(updated, true)
   }
 
+  const handleSmartPasteImport = (importedList: any[], importMode: 'append' | 'replace') => {
+    const activeReq = requisicoes?.find((r: any) => r.id === defaultRequisicaoId)
+    const discNome = activeReq?.disciplina_nome || activeReq?.simulados_disciplinas?.nome || ''
+    const profNome = activeReq?.professor_nome || ''
+
+    const enrichedList = importedList.map((q: any) => ({
+      ...q,
+      id_requisicao: q.id_requisicao || defaultRequisicaoId || activeReq?.id || undefined,
+      id_disciplina: q.id_disciplina || defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_id: q.disciplina_id || defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_nome: q.disciplina_nome || discNome || undefined,
+      disciplina: q.disciplina || discNome || undefined,
+      id_professor: q.id_professor || defaultProfessorId || activeReq?.id_professor || undefined,
+      professor_nome: q.professor_nome || profNome || undefined,
+      expandido: true
+    }))
+
+    const combined = importMode === 'replace' ? enrichedList : [...questoes, ...enrichedList]
+    const recalculated = recalculateNumeros(combined)
+    setQuestoes(recalculated)
+    triggerSave(recalculated, true)
+  }
+
+  const handleApplyQuickGabarito = (val: string) => {
+    setQuickGabaritoInput(val)
+    if (!val.trim()) return
+    const { updated, appliedCount } = applyBulkGabaritoString(questoes, val)
+    if (appliedCount > 0) {
+      setQuestoes(updated)
+      triggerSave(updated, false)
+    }
+  }
+
+  const handleQuickFormatEnunciado = (qIdx: number, command: string) => {
+    const el = document.getElementById(`enunciado-editor-${qIdx}`)
+    if (!el) return
+    el.focus()
+    if (lastEnunciadoCaretRef.current && lastEnunciadoCaretRef.current.qIdx === qIdx) {
+      const sel = window.getSelection()
+      if (sel && sel.isCollapsed) {
+        try {
+          sel.removeAllRanges()
+          sel.addRange(lastEnunciadoCaretRef.current.range)
+        } catch {}
+      }
+    }
+    document.execCommand(command, false)
+    try {
+      const unpacked = unpackMasksAndFormulas(el.innerHTML)
+      updateQuestao(qIdx, 'enunciado', cleanEnunciadoHtml(unpacked))
+    } catch {}
+  }
+
+  const handleInsertFormulaInEnunciado = (qIdx: number) => {
+    saveCaret(qIdx)
+    openKeyboard({
+      onInsert: (latex: string) => {
+        if (!latex) return
+        const el = document.getElementById(`enunciado-editor-${qIdx}`)
+        const safeLatex = latex.replace(/"/g, '&quot;')
+        const formulaHtml = `<span class="ql-formula" data-value="${safeLatex}">\\(${latex}\\)</span>&nbsp;`
+
+        if (el) {
+          el.focus()
+          if (lastEnunciadoCaretRef.current && lastEnunciadoCaretRef.current.qIdx === qIdx) {
+            const sel = window.getSelection()
+            if (sel) {
+              try {
+                sel.removeAllRanges()
+                sel.addRange(lastEnunciadoCaretRef.current.range)
+              } catch {}
+            }
+          }
+          document.execCommand('insertHTML', false, formulaHtml)
+          const unpacked = unpackMasksAndFormulas(el.innerHTML)
+          updateQuestao(qIdx, 'enunciado', cleanEnunciadoHtml(unpacked))
+        } else {
+          const current = questoes[qIdx]?.enunciado || ''
+          updateQuestao(qIdx, 'enunciado', `${current} ${formulaHtml}`)
+        }
+      }
+    })
+  }
+
+  const hasUnseparatedAlternativesInEnunciado = (enunHtml: string): boolean => {
+    if (!enunHtml) return false
+    const plain = enunHtml
+      .replace(/<\/?(?:p|div|br|li|tr)\b[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+    return /(?:^|\n|\s{2,})\s*(?:\([aA]\)|\[[aA]\]|[aA][\.\-\)])\s+\S[\s\S]*?(?:^|\n|\s{2,})\s*(?:\([bB]\)|\[[bB]\]|[bB][\.\-\)])\s+\S/m.test(plain)
+  }
+
+  const handleSplitAlternativesFromEnunciadoCard = (qIdx: number) => {
+    const q = questoes[qIdx]
+    if (!q || !q.enunciado) return
+    const activeReq = requisicoes?.find((r: any) => r.id === (q.id_requisicao || defaultRequisicaoId))
+    const discNome = q.disciplina_nome || q.disciplina || activeReq?.disciplina_nome || ''
+    const profNome = q.professor_nome || activeReq?.professor_nome || ''
+
+    const parsedList = parseSmartPasteToSimuladoQuestoes(q.enunciado, {
+      id_requisicao: q.id_requisicao || defaultRequisicaoId,
+      id_disciplina: q.id_disciplina || defaultDisciplinaId,
+      disciplina_nome: discNome,
+      id_professor: q.id_professor || defaultProfessorId,
+      professor_nome: profNome,
+      startNumber: q.numero || 1
+    })
+
+    if (!parsedList || parsedList.length === 0) return
+
+    const firstParsed = parsedList[0]
+    const mergedFirst = {
+      ...q,
+      ...firstParsed,
+      imagens: [...(q.imagens || []), ...(firstParsed.imagens || [])],
+      expandido: true
+    }
+
+    const nextQuestoes = [...questoes]
+    if (parsedList.length === 1) {
+      nextQuestoes[qIdx] = mergedFirst
+    } else {
+      nextQuestoes.splice(qIdx, 1, mergedFirst, ...parsedList.slice(1))
+    }
+
+    const recalculated = recalculateNumeros(nextQuestoes)
+    setQuestoes(recalculated)
+    triggerSave(recalculated, true)
+  }
+
   const totalQuestoes = questoes.filter(q => !isTextoApoio(q)).length
   const comAlternativas = questoes.filter(q => !isTextoApoio(q) && (q.alternativas || []).length > 0).length
   const comGabarito = questoes.filter(q => !isTextoApoio(q) && q.gabarito).length
@@ -1251,6 +1389,19 @@ export function QuestoesEditor({
           defaultRequisicaoId={defaultRequisicaoId}
           onClose={() => { setIsModalOpen(false); setEditingIndex(null); }}
           onSaveObj={handleAddQuestao}
+        />
+      )}
+      {isSmartPasteOpen && (
+        <SmartPasteQuestoesModal
+          open={isSmartPasteOpen}
+          mode="modal"
+          onClose={() => setIsSmartPasteOpen(false)}
+          onImport={handleSmartPasteImport}
+          existingCount={totalQuestoes}
+          cotaQuestoes={cotaQuestoes}
+          defaultDisciplinaId={defaultDisciplinaId}
+          defaultProfessorId={defaultProfessorId}
+          defaultRequisicaoId={defaultRequisicaoId}
         />
       )}
       {/* Stats and Actions Control Toolbar (COVERS THE ENTIRE HORIZONTAL LINE) */}
@@ -1375,7 +1526,59 @@ export function QuestoesEditor({
 
         {/* Right: Action Buttons */}
         {!readOnly && showAddQuestao && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+            {comAlternativas > 0 && (
+              <motion.button
+                type="button"
+                onClick={() => setIsQuickGabaritoOpen(!isQuickGabaritoOpen)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 13px',
+                  borderRadius: 9,
+                  background: isQuickGabaritoOpen ? 'rgba(16,185,129,0.16)' : 'rgba(16,185,129,0.08)',
+                  color: '#059669',
+                  border: `1px solid ${isQuickGabaritoOpen ? '#10b981' : 'rgba(16,185,129,0.28)'}`,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s'
+                }}
+                title="Abrir grade rápida de gabaritos de todas as questões"
+              >
+                <CheckCircle2 size={14} /> Gabarito Rápido
+              </motion.button>
+            )}
+
+            <motion.button
+              type="button"
+              onClick={() => setIsSmartPasteOpen(true)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 9,
+                background: 'rgba(59,130,246,0.1)',
+                color: '#2563eb',
+                border: '1px solid rgba(59,130,246,0.3)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s'
+              }}
+              title="Copiar e colar várias questões de uma vez (Word, PDF, Google Docs, Web)"
+            >
+              <ClipboardPaste size={14} /> Colar Questões
+            </motion.button>
+
             <motion.button
               onClick={handleAddTextoApoio}
               whileHover={{ scale: 1.02 }}
@@ -1426,6 +1629,126 @@ export function QuestoesEditor({
         )}
       </div>
 
+      {/* Collapsible Quick Gabarito Panel */}
+      <AnimatePresence>
+        {isQuickGabaritoOpen && !readOnly && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            style={{ overflow: 'hidden', marginBottom: 20 }}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: 16,
+                background: 'hsl(var(--bg-surface))',
+                border: '1.5px solid rgba(16,185,129,0.35)',
+                boxShadow: '0 4px 16px -4px rgba(16,185,129,0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle2 size={16} color="#10b981" />
+                  <span style={{ fontSize: 13.5, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                    Painel de Gabarito Rápido ({comGabarito}/{comAlternativas} preenchidos)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 320px', maxWidth: 500 }}>
+                  <input
+                    type="text"
+                    value={quickGabaritoInput}
+                    onChange={(e) => handleApplyQuickGabarito(e.target.value)}
+                    placeholder="Colar sequência: Ex: 1-A, 2-C, 3-B ou A C B D E..."
+                    style={{
+                      flex: 1,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: '1px solid hsl(var(--border-subtle))',
+                      background: 'hsl(var(--bg-app))',
+                      color: 'hsl(var(--text-primary))',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickGabaritoOpen(false)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'hsl(var(--text-secondary))',
+                      cursor: 'pointer',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Fechar painel de gabarito"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {questoes.map((q, qIdx) => {
+                  if (isTextoApoio(q) || !(q.alternativas || []).length) return null
+                  return (
+                    <div
+                      key={qIdx}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 10px',
+                        borderRadius: 10,
+                        background: 'hsl(var(--bg-app))',
+                        border: `1px solid ${q.gabarito ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.4)'}`
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-primary))', minWidth: 24 }}>
+                        #{q.numero}
+                      </span>
+                      <div style={{ display: 'flex', gap: 3 }}>
+                        {(q.alternativas || []).map((alt: any, aIdx: number) => {
+                          const l = alt.letter || alt.letra || String.fromCharCode(65 + aIdx)
+                          const isCorr = Boolean(alt.correct || alt.correta)
+                          return (
+                            <button
+                              key={aIdx}
+                              type="button"
+                              onClick={() => updateAlternativa(qIdx, aIdx, 'correct', true)}
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: 6,
+                                border: 'none',
+                                fontSize: 11,
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                background: isCorr ? '#10b981' : 'hsl(var(--bg-surface))',
+                                color: isCorr ? '#fff' : 'hsl(var(--text-secondary))',
+                                transition: 'all 0.12s'
+                              }}
+                            >
+                              {l}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Content Area: Grid if sidebarContent is present, or 100% full width otherwise */}
       <div style={sidebarContent ? {
         display: 'grid',
@@ -1473,12 +1796,34 @@ export function QuestoesEditor({
                 Nenhuma questão adicionada ainda
               </h3>
 
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, maxWidth: 440, margin: '0 0 20px', lineHeight: 1.5 }}>
-                Você pode cadastrar questões manualmente pelo editor (com suporte a IA) ou reenviar um arquivo Word (.docx) com as questões formatadas.
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, maxWidth: 460, margin: '0 0 20px', lineHeight: 1.5 }}>
+                Você pode <strong>copiar e colar questões prontas</strong> (do Word, PDF ou Internet), criar manualmente pelo editor (com IA) ou enviar um arquivo Word (.docx).
               </p>
 
               {!readOnly && (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <motion.button
+                    type="button"
+                    onClick={() => setIsSmartPasteOpen(true)}
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '10px 18px',
+                      borderRadius: 10,
+                      background: 'linear-gradient(135deg, #2563eb, #4f46e5)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      boxShadow: '0 3px 12px rgba(37,99,235,0.28)'
+                    }}
+                  >
+                    <ClipboardPaste size={15} /> Copiar e Colar Questões (Word / PDF / Web)
+                  </motion.button>
+
                   <motion.button
                     onClick={() => { setEditingIndex(null); setIsModalOpen(true); }}
                     whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -1798,16 +2143,111 @@ export function QuestoesEditor({
 
                     {/* Enunciado */}
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           {isTextoApoio(q) ? 'Texto / Enunciado de Apoio' : 'Enunciado da Questão'}
                         </label>
-                        {pastingImageFor === qIdx && (
-                          <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <Loader2 size={12} className="animate-spin" /> Processando imagem colada...
-                          </span>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {pastingImageFor === qIdx && (
+                            <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <Loader2 size={12} className="animate-spin" /> Processando imagem colada...
+                            </span>
+                          )}
+                          {!readOnly && (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 5px', borderRadius: 8, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))' }}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleQuickFormatEnunciado(qIdx, 'bold') }}
+                                title="Negrito (Ctrl+B)"
+                                style={{ width: 24, height: 24, borderRadius: 5, border: 'none', background: 'transparent', color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Bold size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleQuickFormatEnunciado(qIdx, 'italic') }}
+                                title="Itálico (Ctrl+I)"
+                                style={{ width: 24, height: 24, borderRadius: 5, border: 'none', background: 'transparent', color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Italic size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleQuickFormatEnunciado(qIdx, 'underline') }}
+                                title="Sublinhado (Ctrl+U)"
+                                style={{ width: 24, height: 24, borderRadius: 5, border: 'none', background: 'transparent', color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Underline size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleQuickFormatEnunciado(qIdx, 'subscript') }}
+                                title="Subscrito (H₂O)"
+                                style={{ width: 24, height: 24, borderRadius: 5, border: 'none', background: 'transparent', color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Subscript size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleQuickFormatEnunciado(qIdx, 'superscript') }}
+                                title="Sobrescrito (x²)"
+                                style={{ width: 24, height: 24, borderRadius: 5, border: 'none', background: 'transparent', color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Superscript size={13} />
+                              </button>
+                              <div style={{ width: 1, height: 14, background: 'hsl(var(--border-subtle))', margin: '0 2px' }} />
+                              <button
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleInsertFormulaInEnunciado(qIdx) }}
+                                title="Inserir Fórmula Matemática (LaTeX/KaTeX)"
+                                style={{ padding: '2px 7px', height: 24, borderRadius: 5, border: 'none', background: 'rgba(139,92,246,0.1)', color: '#7c3aed', fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                              >
+                                <Sigma size={12} /> Fórmula
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {!readOnly && !isTextoApoio(q) && hasUnseparatedAlternativesInEnunciado(q.enunciado || '') && (
+                        <div style={{
+                          marginBottom: 8,
+                          padding: '8px 12px',
+                          borderRadius: 10,
+                          background: 'rgba(139,92,246,0.08)',
+                          border: '1px solid rgba(139,92,246,0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                          flexWrap: 'wrap'
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Wand2 size={14} /> Detectamos alternativas e gabarito colados dentro do enunciado!
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSplitAlternativesFromEnunciadoCard(qIdx)}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: 7,
+                              border: 'none',
+                              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                              color: '#fff',
+                              fontSize: 11.5,
+                              fontWeight: 800,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              boxShadow: '0 2px 8px rgba(139,92,246,0.25)'
+                            }}
+                          >
+                            <Sparkles size={12} /> Separar Alternativas e Gabarito Automaticamente
+                          </button>
+                        </div>
+                      )}
+
                       <HtmlContent
                         id={`enunciado-editor-${qIdx}`}
                         editable={!readOnly}

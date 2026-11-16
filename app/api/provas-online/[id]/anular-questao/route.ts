@@ -25,10 +25,14 @@ export async function POST(
   }
 
   const body = await request.json()
-  const { questaoId, motivo, politica, preview } = body
-  // politica: 'pontos_para_todos' | 'redistribuir_demais'
+  const { questaoId, motivo, preview } = body
+  const rawPolitica = body.politica || body.metodo
+  const politica: 'pontos_para_todos' | 'redistribuir_demais' =
+    rawPolitica === 'redistribuir' || rawPolitica === 'redistribuir_demais'
+      ? 'redistribuir_demais'
+      : 'pontos_para_todos'
 
-  if (!questaoId || !politica) {
+  if (!questaoId || !rawPolitica) {
     return NextResponse.json({ error: 'questaoId e politica são obrigatórios' }, { status: 400 })
   }
 
@@ -39,36 +43,45 @@ export async function POST(
   }
 
   const tentativas = await dbGetTentativasByProvaId(provaId)
+  const submittedTentativas = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
   const qPoints = Number(targetQ.pontuacao || 1)
 
-  // Calculate simulated impact on every attempt
-  const impactAnalysis = tentativas.map(t => {
+  // Calculate simulated impact on every submitted attempt
+  const impactAnalysis = submittedTentativas.map(t => {
     const currentResp = t.respostas?.[questaoId]
-    const pontosAtuais = Number(currentResp?.pontuacaoObtida || 0)
-    let novaNota = t.notaFinal
+    const pontosAtuais = Number(currentResp?.pontuacaoObtida ?? (currentResp as any)?.pontosAtribuidos ?? (currentResp as any)?.nota ?? 0)
+    let novaNota = Number(t.notaFinal || 0)
 
     if (politica === 'pontos_para_todos') {
       const ganho = Math.max(0, qPoints - pontosAtuais)
-      novaNota = Math.round((t.notaFinal + ganho) * 100) / 100
+      novaNota = Math.round((novaNota + ganho) * 100) / 100
     } else if (politica === 'redistribuir_demais') {
-      // Redistribute: scale remaining points to total exam value
       const totalOriginal = Number(prova.valorTotal || 10)
       const validMaxPoints = totalOriginal - qPoints
       if (validMaxPoints > 0) {
-        const studentScoreWithoutQ = Math.max(0, t.notaFinal - pontosAtuais)
+        const studentScoreWithoutQ = Math.max(0, novaNota - pontosAtuais)
         novaNota = Math.round(((studentScoreWithoutQ / validMaxPoints) * totalOriginal) * 100) / 100
       }
     }
 
+    const diferenca = Math.round((novaNota - Number(t.notaFinal || 0)) * 100) / 100
     return {
       tentativaId: t.id,
       alunoId: t.alunoId,
       alunoNome: t.alunoNome,
-      notaAnterior: t.notaFinal,
+      notaAnterior: Number(t.notaFinal || 0),
       novaNota,
-      diferenca: Math.round((novaNota - t.notaFinal) * 100) / 100
+      diferenca
     }
   })
+
+  const mediaAnterior = impactAnalysis.length > 0
+    ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.notaAnterior, 0) / impactAnalysis.length) * 100) / 100
+    : 0
+  const novaMedia = impactAnalysis.length > 0
+    ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.novaNota, 0) / impactAnalysis.length) * 100) / 100
+    : 0
+  const alunosBeneficiados = impactAnalysis.filter(i => i.diferenca > 0).length
 
   // If preview mode, return impact analysis without mutating database
   if (preview) {
@@ -78,12 +91,18 @@ export async function POST(
       enunciado: targetQ.enunciado,
       politica,
       totalAlunosAfetados: impactAnalysis.length,
-      mediaAnterior: impactAnalysis.length > 0 
-        ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.notaAnterior, 0) / impactAnalysis.length) * 100) / 100 
-        : 0,
-      novaMediaPrevista: impactAnalysis.length > 0 
-        ? Math.round((impactAnalysis.reduce((acc, i) => acc + i.novaNota, 0) / impactAnalysis.length) * 100) / 100 
-        : 0,
+      alunosImpactados: alunosBeneficiados,
+      alunosBeneficiados,
+      mediaAtual: mediaAnterior,
+      mediaAnterior,
+      mediaSimulada: novaMedia,
+      novaMediaPrevista: novaMedia,
+      novaMedia,
+      simulacao: {
+        mediaAnterior,
+        novaMedia,
+        alunosBeneficiados
+      },
       impactoAlunos: impactAnalysis
     })
   }
@@ -104,15 +123,31 @@ export async function POST(
     .maybeSingle()
 
   const authorName = dbUser?.nome || user.user_metadata?.nome || 'Coordenação'
+  const nowIso = new Date().toISOString()
 
   for (const item of impactAnalysis) {
-    const t = tentativas.find(x => x.id === item.tentativaId)
+    const t = submittedTentativas.find(x => x.id === item.tentativaId)
     if (t) {
-      t.notaFinal = item.novaNota
-      if (t.respostas && t.respostas[questaoId]) {
-        t.respostas[questaoId].pontuacaoObtida = (politica === 'pontos_para_todos') ? qPoints : 0
-        t.respostas[questaoId].comentarioProfessor = `[Questão Anulada: ${motivo || 'Pontuação recalculada'}]`
+      const currentResp = t.respostas?.[questaoId]
+      const pontosAtuais = Number(currentResp?.pontuacaoObtida ?? (currentResp as any)?.pontosAtribuidos ?? (currentResp as any)?.nota ?? 0)
+      const novosPontosQ = (politica === 'pontos_para_todos') ? qPoints : 0
+      const deltaQ = novosPontosQ - pontosAtuais
+
+      t.respostas = t.respostas || {}
+      t.respostas[questaoId] = {
+        ...(currentResp || { questaoId, versao: 1, salvoEm: nowIso }),
+        corrigida: true,
+        pontuacaoObtida: novosPontosQ,
+        comentarioProfessor: `[Questão Anulada: ${motivo || 'Pontuação recalculada'}]`
       }
+
+      if (targetQ.tipo === 'dissertativa') {
+        t.pontuacaoDissertativa = Math.max(0, Math.round((Number(t.pontuacaoDissertativa || 0) + deltaQ) * 100) / 100)
+      } else {
+        t.pontuacaoObjetiva = Math.max(0, Math.round((Number(t.pontuacaoObjetiva || 0) + deltaQ) * 100) / 100)
+      }
+      t.notaFinal = item.novaNota
+      t.updatedAt = nowIso
       await dbSaveTentativa(t)
     }
   }

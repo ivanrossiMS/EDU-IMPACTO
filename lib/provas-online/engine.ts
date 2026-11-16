@@ -176,7 +176,7 @@ export function gradeObjectiveQuestion(
     const selecionadas = Array.isArray(rawSelecionadas) ? rawSelecionadas : []
 
     const config: ConfigPontuacaoParcial = questao.configPontuacaoParcial || {
-      permiteParcial: true,
+      permiteParcial: (questao as any).permitePontuacaoParcial !== false,
       tipoCalculo: 'proporcional'
     }
 
@@ -312,6 +312,14 @@ export function autoGradeTentativa(
       if (resp) {
         resp.corrigida = true
         resp.pontuacaoObtida = pontuacaoObtida
+      } else if (q.anulada) {
+        respostas[q.id] = {
+          questaoId: q.id,
+          corrigida: true,
+          pontuacaoObtida,
+          versao: 1,
+          salvoEm: new Date().toISOString()
+        }
       }
     }
   }
@@ -385,3 +393,56 @@ export function shouldPublishResults(
 
   return !anyActiveTentativa
 }
+
+/**
+ * Selects the representative submitted attempt for a student according to the exam's
+ * multiple-attempts scoring policy ('maior_nota' | 'ultima_nota' | 'media').
+ */
+export function selectTentativaByPolicy(
+  prova: Pick<ProvaOnline, 'politicaTentativas'>,
+  submittedAttempts: TentativaAluno[]
+): TentativaAluno | undefined {
+  if (!submittedAttempts || submittedAttempts.length === 0) return undefined
+  if (submittedAttempts.length === 1) return submittedAttempts[0]
+
+  const policy = prova?.politicaTentativas || 'maior_nota'
+
+  if (policy === 'ultima_nota') {
+    const sortedByDate = [...submittedAttempts].sort((a, b) => {
+      const tA = new Date(a.entregueEm || a.updatedAt || a.iniciadaEm || 0).getTime()
+      const tB = new Date(b.entregueEm || b.updatedAt || b.iniciadaEm || 0).getTime()
+      return tB - tA
+    })
+    return sortedByDate[0]
+  }
+
+  const sortedByScore = [...submittedAttempts].sort((a, b) => {
+    const diff = Number(b.notaFinal || 0) - Number(a.notaFinal || 0)
+    if (diff !== 0) return diff
+    const tA = new Date(a.entregueEm || a.updatedAt || a.iniciadaEm || 0).getTime()
+    const tB = new Date(b.entregueEm || b.updatedAt || b.iniciadaEm || 0).getTime()
+    return tB - tA
+  })
+
+  if (policy === 'media') {
+    const avgNota = Math.round(
+      (submittedAttempts.reduce((acc, t) => acc + Number(t.notaFinal || 0), 0) / submittedAttempts.length) * 100
+    ) / 100
+    const avgObj = Math.round(
+      (submittedAttempts.reduce((acc, t) => acc + Number(t.pontuacaoObjetiva || 0), 0) / submittedAttempts.length) * 100
+    ) / 100
+    const avgDiss = Math.round(
+      (submittedAttempts.reduce((acc, t) => acc + Number(t.pontuacaoDissertativa || 0), 0) / submittedAttempts.length) * 100
+    ) / 100
+    return {
+      ...sortedByScore[0],
+      notaFinal: avgNota,
+      pontuacaoObjetiva: avgObj,
+      pontuacaoDissertativa: avgDiss
+    }
+  }
+
+  // Default: 'maior_nota'
+  return sortedByScore[0]
+}
+

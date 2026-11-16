@@ -38,14 +38,39 @@ export function EditorQuill({ value, onChange, placeholder, compact, variant = '
 
   const isAlternative = variant === 'alternative'
 
+  const insertFormulaViaModal = () => {
+    openKeyboard({
+      onInsert: (latex: string) => {
+        if (!latex) return
+        try {
+          const quill = quillRef.current?.getEditor?.()
+          if (quill) {
+            const range = quill.getSelection(true)
+            const index = range ? range.index : Math.max(0, quill.getLength() - 1)
+            quill.insertEmbed(index, 'formula', latex, 'user')
+            quill.setSelection(index + 1, 0)
+            return
+          }
+        } catch {}
+        const safeLatex = latex.replace(/"/g, '&quot;')
+        onChange(`${value || ''}<span class="ql-formula" data-value="${safeLatex}">\\(${latex}\\)</span>`)
+      }
+    })
+  }
+
   const modules = useMemo(() => {
     if (isAlternative) {
       return {
-        toolbar: [
-          ['bold', 'italic', 'underline', { 'script': 'sub'}, { 'script': 'super' }],
-          [{ 'align': '' }, { 'align': 'center' }, { 'align': 'right' }, { 'align': 'justify' }],
-          ['clean']
-        ]
+        toolbar: {
+          container: [
+            ['bold', 'italic', 'underline', { 'script': 'sub'}, { 'script': 'super' }, 'formula'],
+            [{ 'align': '' }, { 'align': 'center' }, { 'align': 'right' }, { 'align': 'justify' }],
+            ['clean']
+          ],
+          handlers: {
+            formula: insertFormulaViaModal
+          }
+        }
       }
     }
 
@@ -54,17 +79,19 @@ export function EditorQuill({ value, onChange, placeholder, compact, variant = '
         container: compact 
           ? [
               ['bold', 'italic', 'underline'],
-              [{ 'script': 'sub'}, { 'script': 'super' }],
+              [{ 'script': 'sub'}, { 'script': 'super' }, 'formula'],
               ['clean']
             ]
           : [
               ['bold', 'italic', 'underline', 'strike'],
-              [{ 'script': 'sub'}, { 'script': 'super' }],
+              [{ 'script': 'sub'}, { 'script': 'super' }, 'formula'],
               [{ 'list': 'ordered'}, { 'list': 'bullet' }],
               [{ 'align': [] }],
               ['clean']
             ],
-        handlers: {}
+        handlers: {
+          formula: insertFormulaViaModal
+        }
       }
     }
   }, [compact, isAlternative])

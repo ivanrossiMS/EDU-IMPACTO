@@ -2658,13 +2658,20 @@ export default function ADProvasOnlineStudentPage() {
                                 </div>
 
                                 {/* Objective Alternatives */}
-                                {q.tipo === 'multipla_escolha' && (
+                                {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
                                     {(q.alternativas || []).map((alt: any) => {
-                                      const isSelected = resp?.respostaOpcaoId === alt.id ||
-                                        resp?.alternativaIdSelecionada === alt.id ||
-                                        alt.id === resp?.respostaTexto ||
-                                        alt.letra === resp?.respostaTexto
+                                      const selectedMulti: string[] = Array.isArray(resp?.alternativasIdsSelecionadas)
+                                        ? resp.alternativasIdsSelecionadas
+                                        : Array.isArray(resp?.respostaOpcoesIds)
+                                        ? resp.respostaOpcoesIds
+                                        : []
+                                      const isSelected = q.tipo === 'multipla_selecao'
+                                        ? selectedMulti.includes(alt.id)
+                                        : (resp?.respostaOpcaoId === alt.id ||
+                                           resp?.alternativaIdSelecionada === alt.id ||
+                                           alt.id === resp?.respostaTexto ||
+                                           alt.letra === resp?.respostaTexto)
 
                                       const isCorrect = alt.correta === true
 
@@ -2758,7 +2765,9 @@ export default function ADProvasOnlineStudentPage() {
                                     {(q.itensVF || q.itensVouF || []).map((item: any, itemIdx: number) => {
                                       const alunoChoice = resp?.respostaVF?.[item.id] !== undefined
                                         ? resp.respostaVF[item.id]
-                                        : resp?.itensVouF?.find((i: any) => i.id === item.id)?.respostaAluno
+                                        : Array.isArray(resp?.itensVouF)
+                                        ? resp.itensVouF.find((i: any) => i.id === item.id)?.respostaAluno
+                                        : resp?.itensVouF?.[item.id]
 
                                       const correctChoice = item.correta !== undefined ? item.correta : item.afirmacao
                                       const isMatch = alunoChoice !== undefined && alunoChoice === correctChoice

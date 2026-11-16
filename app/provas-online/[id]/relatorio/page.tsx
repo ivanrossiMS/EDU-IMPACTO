@@ -75,7 +75,8 @@ export default function RelatorioProvaPage() {
         turmaId: selectedTurma,
         escala: String(escalaAlvo),
         peso: String(peso),
-        avaliacaoNome: avaliacaoNome.trim()
+        avaliacaoNome: avaliacaoNome.trim(),
+        tratarAusencias
       })
       const res = await fetch(`/api/provas-online/${id}/integrar-notas?${q.toString()}`)
       const json = await res.json()
@@ -676,10 +677,78 @@ export default function RelatorioProvaPage() {
       {/* 5. TAB 2: ANÁLISE POR QUESTÃO (ITEM A ITEM) */}
       {activeTab === 'itens' && (
         <div className="space-y-4">
+          {(() => {
+            const invertedItems = (analiseQuestoes || []).filter(
+              (q: any) => !q.anulada && q.classificacaoDiscriminacao === 'critica_invertida'
+            )
+            const veryLowHitItems = (analiseQuestoes || []).filter(
+              (q: any) => !q.anulada && q.totalRespostas >= 2 && (q.taxaAcerto || 0) < 25
+            )
+            if (invertedItems.length === 0 && veryLowHitItems.length === 0) return null
+
+            return (
+              <div
+                style={{
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: '20px',
+                  padding: '16px 20px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+                  <AlertTriangle size={20} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#92400e' }}>
+                      Alerta Psicométrico Automático de Qualidade de Item
+                    </span>
+                    {invertedItems.length > 0 && (
+                      <p style={{ margin: 0, fontSize: '12px', color: '#78350f', lineHeight: 1.5 }}>
+                        • <strong>Discriminação Invertida ({invertedItems.map((q: any) => `#${q.ordem}`).join(', ')}):</strong> Alunos com menor nota geral acertaram mais este item do que os alunos de maior desempenho (D &lt; 0). Verifique possível ambiguidade ou gabarito cadastrado incorretamente.
+                      </p>
+                    )}
+                    {veryLowHitItems.length > 0 && (
+                      <p style={{ margin: 0, fontSize: '12px', color: '#78350f', lineHeight: 1.5 }}>
+                        • <strong>Taxa de Acerto Crítica &lt; 25% ({veryLowHitItems.map((q: any) => `#${q.ordem}`).join(', ')}):</strong> Alto índice de erro coletivo. Recomenda-se revisão pedagógica ou simulação de anulação.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <Link
+                  href={`/provas-online/${id}/corrigir`}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '10px',
+                    background: '#d97706',
+                    color: '#ffffff',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap',
+                    alignSelf: 'center'
+                  }}
+                >
+                  Revisar / Simular Anulação
+                </Link>
+              </div>
+            )
+          })()}
+
           <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 mb-4">
-              Desempenho e Distratores por Questão
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Desempenho Psicométrico, Discriminação (TRI) e Distratores por Questão
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#64748b' }}>
+                  O Índice de Discriminação (D) compara o acerto dos 27% melhores alunos vs. 27% com menor nota (-1.00 a +1.00).
+                </p>
+              </div>
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -689,8 +758,9 @@ export default function RelatorioProvaPage() {
                     <th className="py-3 px-4">Tipo</th>
                     <th className="py-3 px-4">Pontuação</th>
                     <th className="py-3 px-4">Taxa de Acerto</th>
+                    <th className="py-3 px-4">Discriminação (D)</th>
                     <th className="py-3 px-4">Diagnóstico</th>
-                    <th className="py-3 px-4">Distratores Mais Assinalados</th>
+                    <th className="py-3 px-4">Distratores & Distribuição</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -699,7 +769,10 @@ export default function RelatorioProvaPage() {
                     let badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     let label = 'Fácil / Bem Compreendido'
 
-                    if (acerto < 40) {
+                    if (q.anulada) {
+                      badgeClass = 'bg-amber-50 text-amber-800 border-amber-300'
+                      label = 'Questão Anulada'
+                    } else if (acerto < 40) {
                       badgeClass = 'bg-rose-50 text-rose-700 border-rose-200'
                       label = 'Crítica / Alto Índice de Erro'
                     } else if (acerto < 70) {
@@ -707,16 +780,32 @@ export default function RelatorioProvaPage() {
                       label = 'Atenção / Médio Acerto'
                     }
 
+                    const dVal = q.indiceDiscriminacao
+                    const dClass = q.classificacaoDiscriminacao
+                    let dBadge = { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1', text: 'Amostra < 2' }
+                    if (dVal !== null && dVal !== undefined) {
+                      if (dClass === 'excelente') dBadge = { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', text: `D = +${dVal.toFixed(2)} • Excelente` }
+                      else if (dClass === 'boa') dBadge = { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', text: `D = +${dVal.toFixed(2)} • Boa` }
+                      else if (dClass === 'regular') dBadge = { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', text: `D = +${dVal.toFixed(2)} • Regular` }
+                      else if (dClass === 'fraca') dBadge = { bg: '#fffbeb', color: '#b45309', border: '#fde68a', text: `D = +${dVal.toFixed(2)} • Baixa` }
+                      else if (dClass === 'critica_invertida') dBadge = { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', text: `D = ${dVal.toFixed(2)} • Invertida ⚠` }
+                    }
+
                     return (
                       <tr key={idx} className="hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-4 font-mono font-bold text-slate-900">
                           #{idx + 1}
+                          {q.emBrancoCount > 0 && (
+                            <span style={{ display: 'block', fontSize: '10px', color: '#94a3b8', fontWeight: 500 }}>
+                              {q.taxaEmBranco}% em branco
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-4 capitalize">
                           {q.tipo?.replace('_', ' ')}
                         </td>
                         <td className="py-4 px-4 font-mono">
-                          {q.valorPontos?.toFixed(1)} pts
+                          {(q.valorPontos ?? q.pontuacao ?? 1).toFixed(1)} pts
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
@@ -732,18 +821,56 @@ export default function RelatorioProvaPage() {
                           </div>
                         </td>
                         <td className="py-4 px-4">
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            borderRadius: '999px',
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            fontFamily: 'monospace',
+                            background: dBadge.bg,
+                            color: dBadge.color,
+                            border: `1px solid ${dBadge.border}`
+                          }}>
+                            {dBadge.text}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${badgeClass}`}>
                             {label}
                           </span>
                         </td>
                         <td className="py-4 px-4 text-slate-600">
-                          {q.distratores && q.distratores.length > 0 ? (
-                            <span className="font-mono text-[11px]">
-                              {q.distratores.map((d: any) => `${d.alternativa} (${d.escolhas})`).join(', ')}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic">--</span>
-                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {q.distratores && q.distratores.length > 0 ? (
+                              <span className="font-mono text-[11px] font-semibold text-rose-700">
+                                Mais marcados: {q.distratores.map((d: any) => `${d.alternativa} (${d.escolhas})`).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Nenhum distrator assinalado</span>
+                            )}
+                            {Array.isArray(q.alternativasStats) && q.alternativasStats.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {q.alternativasStats.map((alt: any) => (
+                                  <span
+                                    key={alt.letra}
+                                    style={{
+                                      fontSize: '10px',
+                                      fontFamily: 'monospace',
+                                      fontWeight: alt.correta ? 800 : 600,
+                                      padding: '1px 6px',
+                                      borderRadius: '5px',
+                                      background: alt.correta ? '#ecfdf5' : '#f8fafc',
+                                      color: alt.correta ? '#047857' : '#475569',
+                                      border: `1px solid ${alt.correta ? '#86efac' : '#e2e8f0'}`
+                                    }}
+                                  >
+                                    {alt.letra}{alt.correta ? '★' : ''}: {alt.percentual}%
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )

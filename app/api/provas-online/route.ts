@@ -3,10 +3,20 @@ import { requireAuth, requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { dbGetProvas, dbSaveProva, dbGetTentativasByProvaId, dbGetTentativasStatsByProvaIds } from '@/lib/provas-online/db'
-import { sanitizeExamForParticipant, shouldPublishResults } from '@/lib/provas-online/engine'
+import { sanitizeExamForParticipant, shouldPublishResults, selectTentativaByPolicy } from '@/lib/provas-online/engine'
 import { ProvaOnline } from '@/types/provas-online'
 
 export const dynamic = 'force-dynamic'
+
+function cleanNormalizeStr(str: string): string {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s*-\s*(matutino|vespertino|noturno|integral|intermediario)\b/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim()
+}
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth(request)
@@ -190,9 +200,11 @@ export async function GET(request: Request) {
       // 1. Se o aluno está explicitamente listado em alunosEspecificos:
       const isInAlunosEspecificos = Boolean(
         p.alunosEspecificos && p.alunosEspecificos.length > 0 && (
-          p.alunosEspecificos.includes(alunoId) ||
-          p.alunosEspecificos.includes(dbAluno.id) ||
-          (dbAluno.matricula && p.alunosEspecificos.includes(dbAluno.matricula))
+          p.alunosEspecificos.some(aid => 
+            String(aid).trim() === String(alunoId).trim() ||
+            String(aid).trim() === String(dbAluno.id).trim() ||
+            (dbAluno.matricula && String(aid).trim() === String(dbAluno.matricula).trim())
+          )
         )
       )
 
@@ -213,18 +225,30 @@ export async function GET(request: Request) {
         return false
       }
 
-      // 3. Verifica correspondência exata de turma (por ID, código ou nome)
+      // 3. Verifica correspondência de turma (por ID, código, nome ou nome normalizado)
       const matchesTurma = pTurmas.length > 0 && pTurmas.some(t => {
         const tNorm = String(t || '').trim().toLowerCase()
         if (!tNorm) return false
-        return studentTurmaIdentifiers.some(st => st === tNorm)
+        const tClean = cleanNormalizeStr(tNorm)
+        return studentTurmaIdentifiers.some(st => {
+          if (!st) return false
+          if (st === tNorm) return true
+          const stClean = cleanNormalizeStr(st)
+          return Boolean(stClean && tClean && stClean === tClean)
+        })
       })
 
-      // 4. Verifica correspondência exata de série
+      // 4. Verifica correspondência de série
       const matchesSerie = pSeries.length > 0 && pSeries.some(s => {
         const sNorm = String(s || '').trim().toLowerCase()
         if (!sNorm) return false
-        return studentSeriesList.some(st => st === sNorm)
+        const sClean = cleanNormalizeStr(sNorm)
+        return studentSeriesList.some(st => {
+          if (!st) return false
+          if (st === sNorm) return true
+          const stClean = cleanNormalizeStr(st)
+          return Boolean(stClean && sClean && stClean === sClean)
+        })
       })
 
       return matchesTurma || matchesSerie
@@ -242,7 +266,8 @@ export async function GET(request: Request) {
         const submittedTentativas = myTentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
         const canView = shouldPublishResults(prova, tentativas)
 
-        let safeUltimaTentativa = myTentativas[0] || null
+        const bestOrPolicySubmitted = selectTentativaByPolicy(prova, submittedTentativas)
+        let safeUltimaTentativa = activeTentativa || bestOrPolicySubmitted || myTentativas[0] || null
         if (safeUltimaTentativa && !canView) {
           const maskedRespostas: Record<string, any> = {}
           for (const [k, v] of Object.entries(safeUltimaTentativa.respostas || {})) {
@@ -376,10 +401,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Permissão negada. Apenas professores e gestão podem criar provas.' }, { status: 403 })
     }
 
+    const isManagement = ['Master', 'Administrador Master', 'Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora'].includes(perfil)
+    let statusAprovacao = body.statusAprovacao
+    if (isManagement && body.status !== 'rascunho') {
+      statusAprovacao = 'aprovada'
+    } else if (!statusAprovacao) {
+      statusAprovacao = body.aprovacaoRequerida ? 'pendente' : 'aprovada'
+    }
+
     const id = body.id || crypto.randomUUID()
     const saved = await dbSaveProva({
       ...body,
       id,
+      statusAprovacao,
+      aprovacaoRequerida: body.aprovacaoRequerida ?? false,
       professorId: body.professorId || dbUser?.id || user.id,
       professorNome: body.professorNome || dbUser?.nome || user.user_metadata?.nome || 'Professor',
       createdAt: body.createdAt || new Date().toISOString()

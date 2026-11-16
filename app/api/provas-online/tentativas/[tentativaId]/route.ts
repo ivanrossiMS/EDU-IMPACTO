@@ -262,11 +262,16 @@ export async function PATCH(
     versao: nextVersao,
     salvoEm: nowIso,
     tempoRestanteSegundos,
-    totalRespondidas: Object.values(currentRespostas).filter(r => 
-      r.respostaOpcaoId || 
-      (r.respostaOpcoesIds && r.respostaOpcoesIds.length > 0) || 
-      (r.respostaVF && Object.keys(r.respostaVF).length > 0) || 
-      (r.respostaDissertativa && r.respostaDissertativa.trim().length > 0)
+    totalRespondidas: Object.values(currentRespostas).filter((r: any) => 
+      r?.respostaOpcaoId || 
+      r?.alternativaIdSelecionada ||
+      (r?.respostaOpcoesIds && r.respostaOpcoesIds.length > 0) || 
+      (r?.alternativasIdsSelecionadas && r.alternativasIdsSelecionadas.length > 0) ||
+      (r?.respostaVF && Object.keys(r.respostaVF).length > 0) || 
+      (r?.itensVouF && (Array.isArray(r.itensVouF) ? r.itensVouF.length > 0 : Object.keys(r.itensVouF).length > 0)) ||
+      (r?.respostaDissertativa && String(r.respostaDissertativa).trim().length > 0) ||
+      (r?.textoDissertativo && String(r.textoDissertativo).trim().length > 0) ||
+      (r?.respostaTexto && String(r.respostaTexto).trim().length > 0)
     ).length
   })
 }

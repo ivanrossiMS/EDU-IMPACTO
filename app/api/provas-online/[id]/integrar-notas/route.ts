@@ -2,8 +2,106 @@ import { NextResponse } from 'next/server'
 import { requireStaff } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { dbGetProvaById, dbSaveProva, dbGetTentativasByProvaId } from '@/lib/provas-online/db'
+import { selectTentativaByPolicy } from '@/lib/provas-online/engine'
 
 export const dynamic = 'force-dynamic'
+
+async function resolveTurmaStudents(adminClient: any, turmaId: string, submittedAttempts: any[]) {
+  const tokens = new Set<string>()
+  if (turmaId) tokens.add(turmaId.trim())
+
+  try {
+    const { data: allTurmas } = await adminClient.from('turmas').select('id, codigo, nome')
+    for (const t of allTurmas || []) {
+      const vals = [t.id, t.codigo, t.nome].filter(Boolean).map((v: any) => String(v).trim())
+      if (vals.some(v => v.toLowerCase() === turmaId.trim().toLowerCase())) {
+        vals.forEach(v => tokens.add(v))
+      }
+    }
+  } catch {}
+
+  const tokenArr = Array.from(tokens)
+  let classStudents: any[] = []
+  if (tokenArr.length > 0) {
+    const { data } = await adminClient
+      .from('alunos')
+      .select('id, nome, matricula, turma')
+      .in('turma', tokenArr)
+    classStudents = data || []
+  }
+
+  // Also ensure any student who submitted an attempt for this turma (or exam) is included
+  const existingIds = new Set(classStudents.map((s: any) => s.id))
+  for (const att of submittedAttempts) {
+    if (att.alunoId && !existingIds.has(att.alunoId)) {
+      if (!turmaId || !att.turmaId || tokenArr.some(tk => tk.toLowerCase() === String(att.turmaId).trim().toLowerCase())) {
+        classStudents.push({
+          id: att.alunoId,
+          nome: att.alunoNome || 'Estudante',
+          matricula: att.alunoMatricula || '',
+          turma: att.turmaId || turmaId
+        })
+        existingIds.add(att.alunoId)
+      }
+    }
+  }
+
+  return classStudents.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+}
+
+function buildIntegrationRows(
+  prova: any,
+  classStudents: any[],
+  submitted: any[],
+  existingLancamentos: any[],
+  escalaAlvo: number,
+  peso: number,
+  tratarAusencias: string = 'em_branco'
+) {
+  const valorOriginal = Number(prova.valorTotal || 10)
+
+  return classStudents.map((aluno: any) => {
+    const studentAttempts = submitted.filter(t => t.alunoId === aluno.id)
+    const chosenAttempt = selectTentativaByPolicy(prova, studentAttempts)
+    const hasAttempt = Boolean(chosenAttempt)
+    const notaExame = chosenAttempt ? Number(chosenAttempt.notaFinal || 0) : 0
+
+    let notaConvertida: number | null = null
+    if (hasAttempt) {
+      notaConvertida = valorOriginal > 0
+        ? Math.round(((notaExame / valorOriginal) * escalaAlvo * peso) * 100) / 100
+        : notaExame
+    } else if (tratarAusencias === 'zero') {
+      notaConvertida = 0
+    }
+
+    let notaAtualNoDiario: any = null
+    if (existingLancamentos && existingLancamentos.length > 0) {
+      for (const lanc of existingLancamentos) {
+        const alunoLanc = (lanc.academico_notas_aluno || []).find((a: any) => a.aluno_id === aluno.id)
+        if (alunoLanc) {
+          notaAtualNoDiario = alunoLanc.media_parcial
+          break
+        }
+      }
+    }
+
+    return {
+      alunoId: aluno.id,
+      alunoNome: aluno.nome,
+      alunoMatricula: aluno.matricula,
+      turma: aluno.turma,
+      tentativasRealizadas: studentAttempts.length,
+      notaExameOriginal: hasAttempt ? notaExame : (tratarAusencias === 'zero' ? 0 : null),
+      valorMaximoOriginal: valorOriginal,
+      notaConvertida,
+      notaConvertidaDiario: notaConvertida,
+      notaLancada: notaConvertida,
+      notaAtualNoDiario,
+      temDivergencia: notaAtualNoDiario !== null && notaConvertida !== null && Number(notaAtualNoDiario) !== notaConvertida
+    }
+  })
+}
 
 /**
  * GET: Previews grade integration before committing.
@@ -27,6 +125,7 @@ export async function GET(
   const escalaAlvo = Number(searchParams.get('escala') || 10.0)
   const peso = Number(searchParams.get('peso') || 1.0)
   const avaliacaoNome = searchParams.get('avaliacaoNome') || `Prova Online: ${prova.titulo}`
+  const tratarAusencias = searchParams.get('tratarAusencias') || 'em_branco'
 
   const adminClient = getAdminClient()
 
@@ -34,11 +133,8 @@ export async function GET(
   const tentativas = await dbGetTentativasByProvaId(provaId)
   const submitted = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
 
-  // 2. Fetch students in the class
-  const { data: classStudents } = await adminClient
-    .from('alunos')
-    .select('id, nome, matricula, turma')
-    .eq('turma', turmaId)
+  // 2. Fetch students in the class (resolving turma ID/Code/Name tokens + submitted attempts)
+  const classStudents = await resolveTurmaStudents(adminClient, turmaId, submitted)
 
   // 3. Check existing launches in academico_notas_lancamento
   const { data: existingLancamentos } = await adminClient
@@ -57,55 +153,18 @@ export async function GET(
     .eq('bimestre', prova.bimestre)
 
   // 4. Calculate student grade according to politicaTentativas
-  const previewRows = (classStudents || []).map((aluno: any) => {
-    const studentAttempts = submitted.filter(t => t.alunoId === aluno.id)
-
-    let notaExame = 0
-    if (studentAttempts.length > 0) {
-      if (prova.politicaTentativas === 'maior_nota') {
-        notaExame = Math.max(...studentAttempts.map(t => t.notaFinal))
-      } else if (prova.politicaTentativas === 'ultima_nota') {
-        const sorted = [...studentAttempts].sort((a, b) => new Date(b.iniciadaEm).getTime() - new Date(a.iniciadaEm).getTime())
-        notaExame = sorted[0].notaFinal
-      } else if (prova.politicaTentativas === 'media') {
-        const sum = studentAttempts.reduce((acc, t) => acc + t.notaFinal, 0)
-        notaExame = Math.round((sum / studentAttempts.length) * 100) / 100
-      }
-    }
-
-    // Convert scale
-    const valorOriginal = Number(prova.valorTotal || 10)
-    const notaConvertida = valorOriginal > 0 
-      ? Math.round(((notaExame / valorOriginal) * escalaAlvo * peso) * 100) / 100
-      : notaExame
-
-    // Check if grade already exists in Notas module
-    let notaAtualNoDiario: any = null
-    if (existingLancamentos && existingLancamentos.length > 0) {
-      for (const lanc of existingLancamentos) {
-        const alunoLanc = (lanc.academico_notas_aluno || []).find((a: any) => a.aluno_id === aluno.id)
-        if (alunoLanc) {
-          notaAtualNoDiario = alunoLanc.media_parcial
-          break
-        }
-      }
-    }
-
-    return {
-      alunoId: aluno.id,
-      alunoNome: aluno.nome,
-      alunoMatricula: aluno.matricula,
-      turma: aluno.turma,
-      tentativasRealizadas: studentAttempts.length,
-      notaExameOriginal: studentAttempts.length > 0 ? notaExame : null,
-      valorMaximoOriginal: valorOriginal,
-      notaConvertida: studentAttempts.length > 0 ? notaConvertida : null,
-      notaAtualNoDiario,
-      temDivergencia: notaAtualNoDiario !== null && studentAttempts.length > 0 && Number(notaAtualNoDiario) !== notaConvertida
-    }
-  })
+  const previewRows = buildIntegrationRows(
+    prova,
+    classStudents,
+    submitted,
+    existingLancamentos || [],
+    escalaAlvo,
+    peso,
+    tratarAusencias
+  )
 
   return NextResponse.json({
+    ok: true,
     prova: {
       id: prova.id,
       titulo: prova.titulo,
@@ -125,7 +184,9 @@ export async function GET(
     },
     jaLancado: Boolean(prova.integracaoNotas?.lancado),
     temLancamentoExistenteNoDiario: (existingLancamentos || []).length > 0,
-    previewAlunos: previewRows
+    previewAlunos: previewRows,
+    preview: previewRows,
+    linhas: previewRows
   })
 }
 
@@ -146,7 +207,11 @@ export async function POST(
   }
 
   const body = await request.json()
-  const { turmaId, escalaAlvo, peso, avaliacaoNome, substituirExistentes, notasAlunos } = body
+  const turmaId = body.turmaId || prova.turmas[0] || ''
+  const escalaAlvo = Number(body.escalaAlvo || 10)
+  const peso = Number(body.peso || 1)
+  const avaliacaoNome = body.avaliacaoNome || `Prova Online: ${prova.titulo}`
+  const tratarAusencias = body.tratarAusencias || 'em_branco'
 
   const adminClient = getAdminClient()
   const { data: dbUser } = await adminClient
@@ -158,6 +223,22 @@ export async function POST(
   const authorName = dbUser?.nome || user.user_metadata?.nome || 'Professor'
 
   try {
+    let rowsToCommit = body.notasAlunos
+    if (!Array.isArray(rowsToCommit) || rowsToCommit.length === 0) {
+      const tentativas = await dbGetTentativasByProvaId(provaId)
+      const submitted = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
+      const classStudents = await resolveTurmaStudents(adminClient, turmaId, submitted)
+      rowsToCommit = buildIntegrationRows(
+        prova,
+        classStudents,
+        submitted,
+        [],
+        escalaAlvo,
+        peso,
+        tratarAusencias
+      )
+    }
+
     const lancamentoId = `lanc-prova-${provaId.slice(0, 8)}-${turmaId}`
     const nowIso = new Date().toISOString()
 
@@ -180,8 +261,9 @@ export async function POST(
 
     // 2. Inserir notas por aluno
     let countSalvos = 0
-    for (const item of (notasAlunos || [])) {
-      if (item.notaConvertida === null || item.notaConvertida === undefined) continue
+    for (const item of (rowsToCommit || [])) {
+      const finalScore = item.notaConvertida ?? item.notaLancada ?? item.notaConvertidaDiario
+      if (finalScore === null || finalScore === undefined) continue
 
       const notaAlunoId = `naluno-${lancamentoId}-${item.alunoId}`
 
@@ -191,9 +273,9 @@ export async function POST(
           id: notaAlunoId,
           lancamento_id: lancamentoId,
           aluno_id: item.alunoId,
-          media_parcial: Number(item.notaConvertida),
+          media_parcial: Number(finalScore),
           faltas: 0,
-          situacao: Number(item.notaConvertida) >= 6.0 ? 'Aprovado' : 'Em recuperação'
+          situacao: Number(finalScore) >= 6.0 ? 'Aprovado' : 'Em recuperação'
         })
       } catch {}
 
@@ -203,7 +285,7 @@ export async function POST(
           id: `nval-${notaAlunoId}-det1`,
           nota_aluno_id: notaAlunoId,
           detalhe_id: 'avaliacao_online',
-          valor: String(item.notaConvertida)
+          valor: String(finalScore)
         })
       } catch {}
 
@@ -215,11 +297,12 @@ export async function POST(
           turma_id: turmaId,
           disciplina: prova.disciplina,
           periodo: `${prova.bimestre}º Bimestre`,
-          nota: Number(item.notaConvertida),
+          nota: Number(finalScore),
           dados: {
             origem: 'prova_online',
             provaId: prova.id,
             provaTitulo: prova.titulo,
+            avaliacaoNome,
             notaExameOriginal: item.notaExameOriginal,
             escalaAlvo: escalaAlvo || 10,
             peso: peso || 1,
@@ -251,6 +334,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       countSalvos,
+      notasLancadas: countSalvos,
       lancamentoId,
       message: `${countSalvos} notas integradas com sucesso ao Diário e Boletim da turma ${turmaId}.`
     })

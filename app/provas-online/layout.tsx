@@ -247,9 +247,14 @@ function ProvasOnlineLayoutInner({ children }: { children: React.ReactNode }) {
         .sidebar:not(aside) { display: none !important; }
         .topbar { display: none !important; }
 
-        /* Ajustes em inputs e selects para garantir contraste impecável */
+        /* Ajustes em inputs e selects para garantir contraste impecável e evitar corte vertical */
         input:not([type="checkbox"]):not([type="radio"]), select, textarea {
           color: #0f172a !important;
+        }
+        select {
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          line-height: 1.25 !important;
         }
         input::placeholder, textarea::placeholder {
           color: #94a3b8 !important;

@@ -1106,6 +1106,41 @@ export default function CentralCorrecaoPage() {
                             {q.respostaEsperada ? <HtmlContent html={q.respostaEsperada} /> : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhum critério dissertativo cadastrado.</span>}
                           </div>
                         </div>
+                      ) : q.tipo === 'verdadeiro_falso' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {(q.itensVF || q.itensVouF || []).map((item: any, itemIdx: number) => (
+                            <div
+                              key={item.id || itemIdx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                background: '#ffffff',
+                                border: '1px solid #e2e8f0',
+                                fontSize: '12px',
+                                color: '#334155'
+                              }}
+                            >
+                              <span style={{
+                                padding: '2px 7px',
+                                borderRadius: '6px',
+                                background: item.correta ? '#ecfdf5' : '#fef2f2',
+                                color: item.correta ? '#059669' : '#dc2626',
+                                border: `1px solid ${item.correta ? '#86efac' : '#fca5a5'}`,
+                                fontWeight: 800,
+                                fontSize: '11px',
+                                flexShrink: 0
+                              }}>
+                                {item.correta ? 'V' : 'F'}
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <HtmlContent html={item.afirmacao || item.texto || `Item ${itemIdx + 1}`} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {(q.alternativas || []).map((alt: any) => (
@@ -1139,7 +1174,9 @@ export default function CentralCorrecaoPage() {
                               }}>
                                 {alt.letra}
                               </span>
-                              <span style={{ flex: 1 }}>{alt.texto}</span>
+                              <div style={{ flex: 1 }}>
+                                <HtmlContent html={alt.texto} />
+                              </div>
                               {alt.correta && (
                                 <span style={{ fontSize: '10px', fontWeight: 800, color: '#059669', textTransform: 'uppercase' }}>
                                   Gabarito Oficial

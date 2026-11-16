@@ -3,11 +3,25 @@ import { QuestaoProva, AlternativaQuestao, TipoQuestao } from '@/types/provas-on
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
 
 /**
- * Detects whether a tag or style snippet contains red text (used for gabarito in Word/Docs)
+ * Detects whether a tag or style snippet contains red/green/highlighted text (used for gabarito in Word/Docs)
  */
 export function isRedMarker(str: string): boolean {
   if (!str) return false
-  return /color[:=]\s*["']?\s*(?:red|#c00000|#ff0000|#ed1c24|#c0504d|#d00000|#b00000|#ee0000|rgb\(\s*2\d\d)/i.test(str)
+  if (/\[\[GABARITO\]\]|data-gabarito=["']true["']/i.test(str)) return true
+  if (/color[:=]\s*["']?\s*(?:red|#c00000|#ff0000|#ed1c24|#c0504d|#d00000|#b00000|#ee0000|#e00000|#dc2626|#ef4444|#f00\b|rgb\(\s*2\d\d\s*,\s*[0-8]?\d\s*,\s*[0-8]?\d)/i.test(str)) {
+    return true
+  }
+  if (/color[:=]\s*["']?\s*(?:#00b050|#008000|#10b981|#059669|#16a34a|rgb\(\s*[0-5]?\d\s*,\s*(?:1[2-9]\d|2\d\d)\s*,\s*[0-9]?\d)/i.test(str)) {
+    return true
+  }
+  if (
+    /mso-highlight:\s*(?:yellow|brightgreen|green|cyan)/i.test(str) ||
+    /background(?:-color)?:\s*["']?\s*(?:yellow|#ffff00|#ff0\b|#fff2cc|#d9ead3|#00ff00|#b6d7a8|rgb\(\s*255\s*,\s*255\s*,\s*0\s*\))/i.test(str) ||
+    /<mark\b/i.test(str)
+  ) {
+    return true
+  }
+  return false
 }
 
 /**
@@ -25,44 +39,78 @@ export function isBoldMarker(str: string): boolean {
  * - class="MsoNormal", class="Mso..."
  * - style="mso-...", font-family, font-size, etc.
  * - Orphan closing tags: </span>, </div>, </p>, etc.
+ * While preserving .ql-formula spans, .tag-mask spans, tables, and Word automatic list markers.
  */
 export function cleanHtmlGarbage(str: string): string {
   if (!str) return ''
 
-  return str
-    // 1. Remove comments and conditional fragments
+  // Protect .ql-formula and .tag-mask spans from span-stripping
+  const protectedSpans: string[] = []
+  let working = str.replace(
+    /<span\b[^>]*class=["'][^"']*(?:ql-formula|tag-mask)[^"']*["'][^>]*>[\s\S]*?<\/span>/gi,
+    (match) => {
+      const idx = protectedSpans.length
+      protectedSpans.push(match)
+      return `[[PROTECTED_SPAN_${idx}]]`
+    }
+  )
+
+  working = working
+    // 0. Unwrap Word list conditional blocks BEFORE stripping comments so list numbers/letters are preserved
+    .replace(/<!--\s*\[if\s+!supportLists\]\s*-->([\s\S]*?)<!--\s*\[endif\]\s*-->/gi, '$1')
+    .replace(/<!\[if\s+!supportLists\]>([\s\S]*?)<!\[endif\]>/gi, '$1')
+    // 1. Remove comments, conditional fragments, style/xml/head blocks
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<xml\b[^>]*>[\s\S]*?<\/xml>/gi, '')
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
     // 2. Remove document level and office XML tags
     .replace(/<\/?(?:html|body|head|meta|link|title|o:p)\b[^>]*>/gi, '')
     .replace(/<\/?(?:w|m|o|v):[a-z0-9_-]+\b[^>]*>/gi, '')
     // 3. Remove Word classes
     .replace(/\s*class=['"]?Mso[a-zA-Z0-9_-]*['"]?/gi, '')
-    // 4. Clean style attributes: remove mso-*, font-family, font-size, line-height, text-align, margins, color:black/windowtext
+    // 4. Clean style attributes: remove mso-*, font-family, font-size, line-height, text-align, margins, widths, indents, color:black/windowtext
     .replace(/\s*style=(['"])(?:(?!\1)[\s\S])*?\1/gi, (match) => {
-      if (/mso-|font-family|font-size|line-height|margin|windowtext/i.test(match)) return ''
+      if (/mso-|font-family|font-size|line-height|margin|padding|width|text-indent|tab-stops|windowtext/i.test(match)) return ''
       return match
     })
     .replace(/font-family:[^;'"\n]+;?/gi, '')
     .replace(/font-size:[^;'"\n]+;?/gi, '')
     .replace(/line-height:[^;'"\n]+;?/gi, '')
     .replace(/margin(?:-bottom|-top|-left|-right)?:[^;'"\n]+;?/gi, '')
+    .replace(/padding(?:-bottom|-top|-left|-right)?:[^;'"\n]+;?/gi, '')
+    .replace(/(?:max-|min-)?width:[^;'"\n]+;?/gi, '')
+    .replace(/text-indent:[^;'"\n]+;?/gi, '')
     .replace(/text-align:[^;'"\n]+;?/gi, '')
     .replace(/background:[^;'"\n]+;?/gi, '')
     .replace(/color:\s*(?:black|windowtext|#000|#000000);?/gi, '')
-    // 5. Remove empty style attributes
+    // 5. Strip fixed width/nowrap attributes from table/td/th/tr/div/p (preserving img width)
+    .replace(/<((?:table|tbody|thead|tr|td|th|div|p|col|colgroup)\b[^>]*)>/gi, (_m, inner) => {
+      const cleanedInner = inner
+        .replace(/\s+(?:width|height|nowrap|valign)=['"]?[^'"\s>]*['"]?/gi, '')
+      return `<${cleanedInner}>`
+    })
+    // 6. Remove empty style attributes
     .replace(/\s*style=['"]\s*['"]/gi, '')
-    // 6. Remove Word spans and bookmark anchors (preserving KaTeX/math spans and real links)
-    .replace(/<span\b(?![^>]*(?:katex|math))[^>]*>/gi, '')
-    .replace(/<\/span>/gi, '')
-    .replace(/<\/?font\b[^>]*>/gi, '')
+    // 7. Remove Word spans, mark tags, and bookmark anchors (protected formula/mask spans are restored below)
+    .replace(/<\/?(?:span|font|mark)\b[^>]*>/gi, '')
     .replace(/<\/?a\b(?![^>]*href)[^>]*>/gi, '')
-    // 7. Clean empty paragraphs
+    // 8. Fix hyphenated Portuguese enclitic pronouns split by Word/PDF line wraps (e.g. "Incorporei- me" -> "Incorporei-me")
+    .replace(/([a-zA-Z\u00C0-\u017F])-[ \t]+(me|te|se|lhe|lhes|nos|vos|o|a|os|as|lo|la|los|las|no|na)\b/g, '$1-$2')
+    // 9. Clean empty paragraphs
     .replace(/<p\b[^>]*>\s*<\/p>/gi, '')
-    // 8. Remove orphan closing tags at beginning or end
-    .replace(/^(?:<\/(?:span|p|div|b|strong|font|i|u|em)>\s*)+/gi, '')
-    .replace(/(?:\s*<\/(?:span|font|o:p)>)+$/gi, '')
+    // 10. Remove orphan closing tags at beginning or end
+    .replace(/^(?:<\/(?:span|p|div|b|strong|font|i|u|em|td|tr|table|tbody)>\s*)+/gi, '')
+    .replace(/(?:\s*<\/(?:span|font|o:p|td|tr|table|tbody)>)+$/gi, '')
     .trim()
+
+  // Restore protected formula/mask spans
+  working = working.replace(/\[\[PROTECTED_SPAN_(\d+)\]\]/g, (_m, idxStr) => {
+    return protectedSpans[Number(idxStr)] || ''
+  })
+
+  return working
 }
 
 /**

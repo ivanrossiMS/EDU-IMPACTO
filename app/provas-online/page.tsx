@@ -100,6 +100,22 @@ export default function ProvasOnlineDashboardPage() {
     }
   }
 
+  const handleAprovarProva = async (provaId: string) => {
+    try {
+      const res = await fetch(`/api/provas-online/${provaId}/aprovar`, {
+        method: 'POST'
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Erro ao homologar avaliação')
+      }
+      toast.success('Avaliação homologada com sucesso e liberada para os alunos!')
+      setProvas(prev => prev.map(p => p.id === provaId ? { ...p, statusAprovacao: 'aprovada' } : p))
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao aprovar avaliação')
+    }
+  }
+
   const fetchProvas = async () => {
     try {
       setRefreshing(true)
@@ -232,7 +248,14 @@ export default function ProvasOnlineDashboardPage() {
     return { disponiveis, emAndamento, entregues, resultados }
   }, [provas, isStudent])
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, aprovacaoRequerida?: boolean, statusAprovacao?: string) => {
+    if (aprovacaoRequerida && statusAprovacao !== 'aprovada') {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: '#fffbeb', border: '1px solid #fde68a', color: '#b45309', fontSize: 11, fontWeight: 800 }}>
+          <Clock size={11} /> Aguardando Aprovação
+        </span>
+      )
+    }
     switch (status) {
       case 'em_aplicacao':
         return (
@@ -1211,7 +1234,7 @@ export default function ProvasOnlineDashboardPage() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                      {getStatusBadge(prova.status)}
+                      {getStatusBadge(prova.status, prova.aprovacaoRequerida, prova.statusAprovacao)}
                       {isTeacherOrStaff && prova.status !== 'publicada' && (
                         <span style={{
                           display: 'inline-flex',
@@ -1522,6 +1545,25 @@ export default function ProvasOnlineDashboardPage() {
                   {/* TEACHER ACTIONS */}
                   {isTeacherOrStaff && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                      {prova.aprovacaoRequerida && prova.statusAprovacao !== 'aprovada' && (
+                        <button
+                          type="button"
+                          onClick={() => handleAprovarProva(prova.id)}
+                          className="po-btn-primary"
+                          style={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #d97706, #b45309)',
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>Homologar & Liberar p/ Alunos</span>
+                        </button>
+                      )}
                       {/* Primary Actions Row: Monitorar & Corrigir */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
                         <button

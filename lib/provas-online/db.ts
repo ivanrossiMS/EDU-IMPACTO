@@ -35,6 +35,36 @@ function isTableMissingError(err: any): boolean {
 // PROVAS (EXAMS)
 // ─────────────────────────────────────────────────────────────────────────────
 
+function applyAutoStatusTransition(p: ProvaOnline): ProvaOnline {
+  if (!p || !p.dataAbertura || !p.dataEncerramento) return p
+  if (p.aprovacaoRequerida && p.statusAprovacao !== 'aprovada') return p
+
+  const now = Date.now()
+  const openTime = new Date(p.dataAbertura).getTime()
+  const closeTime = new Date(p.dataEncerramento).getTime()
+  if (isNaN(openTime) || isNaN(closeTime)) return p
+
+  let newStatus: ProvaOnline['status'] | null = null
+  if (p.status === 'agendada' && now >= openTime && now <= closeTime) {
+    newStatus = 'em_aplicacao'
+  } else if ((p.status === 'em_aplicacao' || p.status === 'agendada') && now > closeTime) {
+    newStatus = 'encerrada'
+  }
+
+  if (newStatus && newStatus !== p.status) {
+    p.status = newStatus
+    const sb = getAdminClient()
+    const updatedDados = { ...(p as any).dados, ...p, status: newStatus, questoes: undefined, dados: undefined }
+    void sb
+      .from('provas_online')
+      .update({ status: newStatus, dados: updatedDados, updated_at: new Date().toISOString() })
+      .eq('id', p.id)
+      .then(() => {}, () => {})
+  }
+
+  return p
+}
+
 export async function dbGetProvas(): Promise<ProvaOnline[]> {
   const sb = getAdminClient()
 
@@ -66,10 +96,14 @@ export async function dbGetProvas(): Promise<ProvaOnline[]> {
         alunosEspecificos: row.alunos_especificos || row.dados?.alunosEspecificos || [],
         professorId: row.professor_id || row.dados?.professorId,
         professorNome: row.professor_nome || row.dados?.professorNome,
+        aprovacaoRequerida: Boolean(row.aprovacao_requerida ?? row.dados?.aprovacaoRequerida ?? false),
+        statusAprovacao: (row.status_aprovacao || row.dados?.statusAprovacao || (row.aprovacao_requerida ? 'pendente' : 'aprovada')) as any,
+        aprovadoPor: row.aprovado_por || row.dados?.aprovadoPor,
+        dataAprovacao: row.data_aprovacao || row.dados?.dataAprovacao,
         codigoLiberacao: (row.codigo_liberacao || row.dados?.codigoLiberacao || '').trim() || undefined,
         exigeCodigoAcesso: Boolean((row.codigo_liberacao || row.dados?.codigoLiberacao || '').trim()),
         materiaisPermitidos: undefined
-      }))
+      })).map(applyAutoStatusTransition)
     }
   } catch (err: any) {
     if (!isTableMissingError(err)) console.error('[dbGetProvas dedicated table error]', err)
@@ -85,7 +119,7 @@ export async function dbGetProvas(): Promise<ProvaOnline[]> {
 
     if (error) throw error
 
-    return (data || []).map((row: any) => ({
+    return (data || []).map((row: any) => applyAutoStatusTransition({
       ...row.dados,
       id: row.id.replace('provas_online:', ''),
       createdAt: row.created_at,
@@ -111,7 +145,7 @@ export async function dbGetProvaById(id: string): Promise<ProvaOnline | null> {
     if (!error && data) {
       // Also fetch questions
       const questoes = await dbGetQuestoesByProvaId(id)
-      return {
+      return applyAutoStatusTransition({
         ...data,
         ...(data.dados || {}),
         id: data.id,
@@ -131,11 +165,15 @@ export async function dbGetProvaById(id: string): Promise<ProvaOnline | null> {
         alunosEspecificos: data.alunos_especificos || data.dados?.alunosEspecificos || [],
         professorId: data.professor_id || data.dados?.professorId,
         professorNome: data.professor_nome || data.dados?.professorNome,
+        aprovacaoRequerida: Boolean(data.aprovacao_requerida ?? data.dados?.aprovacaoRequerida ?? false),
+        statusAprovacao: (data.status_aprovacao || data.dados?.statusAprovacao || (data.aprovacao_requerida ? 'pendente' : 'aprovada')) as any,
+        aprovadoPor: data.aprovado_por || data.dados?.aprovadoPor,
+        dataAprovacao: data.data_aprovacao || data.dados?.dataAprovacao,
         codigoLiberacao: (data.codigo_liberacao || data.dados?.codigoLiberacao || '').trim() || undefined,
         exigeCodigoAcesso: Boolean((data.codigo_liberacao || data.dados?.codigoLiberacao || '').trim()),
         materiaisPermitidos: undefined,
         questoes
-      }
+      })
     }
   } catch (err: any) {
     if (!isTableMissingError(err)) console.error('[dbGetProvaById dedicated table error]', err)
@@ -152,13 +190,13 @@ export async function dbGetProvaById(id: string): Promise<ProvaOnline | null> {
     if (error || !data) return null
 
     const questoes = await dbGetQuestoesByProvaId(id)
-    return {
+    return applyAutoStatusTransition({
       ...data.dados,
       id: id,
       questoes,
       createdAt: data.created_at,
       updatedAt: data.dados?.updatedAt || data.created_at
-    }
+    })
   } catch (e: any) {
     console.error('[dbGetProvaById fallback error]', e)
     return null

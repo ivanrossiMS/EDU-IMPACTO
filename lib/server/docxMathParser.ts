@@ -444,6 +444,7 @@ export interface ParsedBlock {
   statement: string
   alternatives: { letter: string; text: string; correct: boolean }[]
   detectedGabarito?: string
+  carryOverText?: string
 }
 
 export interface ParsedQuestion {
@@ -618,7 +619,36 @@ export function parseBlock(block: string): ParsedBlock {
     // Also clean any trailing standalone "Gabarito X"
     text = text.replace(/(?:[\n\r\s,;.\-\–\—]|^)(?:gabarito|resposta|resp|chave)\s*[:=\-]?\s*[a-eA-E]\s*$/i, '').trim()
 
-    alternatives.push({ letter: bestSeq[i].letter, text, correct: isCorrect, ...(isBoldMarker ? { _isBold: true } : {}) } as any)
+    const rawTextTrimmed = stripGabaritoArtifacts(textPart).trim()
+    alternatives.push({
+      letter: bestSeq[i].letter,
+      text,
+      correct: isCorrect,
+      _rawText: rawTextTrimmed,
+      _rawHasNewline: rawTextTrimmed.includes('\n'),
+      ...(isBoldMarker ? { _isBold: true } : {})
+    } as any)
+  }
+
+  let carryOverText = ''
+  if (alternatives.length >= 2) {
+    const lastAlt: any = alternatives[alternatives.length - 1]
+    const rawLast: string = lastAlt._rawText || ''
+    const nlIdx = rawLast.indexOf('\n')
+    if (nlIdx > 0) {
+      const firstLine = rawLast.slice(0, nlIdx).trim()
+      const restBlock = rawLast.slice(nlIdx + 1).trim()
+      const prevAltsSingleLine = alternatives.slice(0, -1).every((a: any) => !a._rawHasNewline)
+      const looksLikeSupportText =
+        /\n\s*\n/.test(rawLast) ||
+        /^(?:<[^>]+>\s*)*(?:texto\s+para|texto\s+base|texto\s+[ivx\d]+|leia\s+|considere\s+|observe\s+|analise\s+|com\s+base|a\s+partir|instru[çc][õo]es|\([a-zA-Z]{2,}|\[|\[\[IMAGE:)/i.test(restBlock) ||
+        (prevAltsSingleLine && restBlock.split('\n').length >= 2)
+
+      if (firstLine && restBlock && looksLikeSupportText) {
+        lastAlt.text = stripGabaritoArtifacts(cleanAlternativeText(firstLine)).trim()
+        carryOverText = restBlock
+      }
+    }
   }
 
   // If explicit gabarito was found, update the alternatives' correct flag
@@ -634,13 +664,18 @@ export function parseBlock(block: string): ParsedBlock {
     }
   }
 
-  // Clean internal _isBold marker
-  alternatives.forEach((a: any) => delete (a as any)._isBold)
+  // Clean internal markers
+  alternatives.forEach((a: any) => {
+    delete (a as any)._isBold
+    delete (a as any)._rawText
+    delete (a as any)._rawHasNewline
+  })
 
   return {
     statement,
     alternatives,
     detectedGabarito: explicitGabaritoLetter || alternatives.find(a => a.correct)?.letter || undefined,
+    carryOverText: carryOverText || undefined
   }
 }
 
@@ -715,10 +750,15 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     return questions
   }
 
+  let pendingCarryOver = ''
   for (let i = 0; i < unique.length; i++) {
     const blockStart = unique[i].end
     const blockEnd = i + 1 < unique.length ? unique[i + 1].index : normalized.length
     let block = normalized.slice(blockStart, blockEnd).trim()
+    if (pendingCarryOver) {
+      block = `${pendingCarryOver}\n\n${block}`
+      pendingCarryOver = ''
+    }
 
     // Extract [[IMAGE:id]] markers from this block
     const imgIds: string[] = []
@@ -732,7 +772,10 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     }).trim()
 
     // Parse statement + alternatives
-    const { statement, alternatives, detectedGabarito } = parseBlock(block)
+    const { statement, alternatives, detectedGabarito, carryOverText } = parseBlock(block)
+    if (carryOverText) {
+      pendingCarryOver = carryOverText
+    }
 
     // Resolve images strictly by key match in imageMap (never fallback to arbitrary images)
     const imagens = imgIds

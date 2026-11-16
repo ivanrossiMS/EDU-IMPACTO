@@ -95,6 +95,35 @@ export function GabaritoPrintDocument({
         situacao = 'em_branco'
         totalErros++
       }
+    } else if (q.tipo === 'multipla_selecao') {
+      const selectedIds: string[] = Array.isArray(resp?.alternativasIdsSelecionadas)
+        ? resp.alternativasIdsSelecionadas
+        : Array.isArray(resp?.respostaOpcoesIds)
+        ? resp.respostaOpcoesIds
+        : []
+      const selectedLetters = (q.alternativas || [])
+        .filter((alt: any) => selectedIds.includes(alt.id))
+        .map((alt: any) => alt.letra)
+      const correctLetters = (q.alternativas || [])
+        .filter((alt: any) => alt.correta === true)
+        .map((alt: any) => alt.letra)
+
+      respostaAlunoStr = selectedLetters.length > 0 ? selectedLetters.join(', ') : '-'
+      gabaritoOficialStr = correctLetters.length > 0 ? correctLetters.join(', ') : '-'
+
+      if (selectedLetters.length === 0) {
+        situacao = 'em_branco'
+        totalErros++
+      } else if (pontosGanhos >= pontosQuestao - 0.01) {
+        situacao = 'correta'
+        totalAcertos++
+      } else if (pontosGanhos > 0) {
+        situacao = 'parcial'
+        totalParciais++
+      } else {
+        situacao = 'incorreta'
+        totalErros++
+      }
     } else if (q.tipo === 'verdadeiro_falso') {
       const itens = q.itensVF || q.itensVouF || []
       let vfAcertos = 0
@@ -104,7 +133,9 @@ export function GabaritoPrintDocument({
       itens.forEach((item: any) => {
         const alunoChoice = resp?.respostaVF?.[item.id] !== undefined
           ? resp.respostaVF[item.id]
-          : resp?.itensVouF?.find((i: any) => i.id === item.id)?.respostaAluno
+          : Array.isArray(resp?.itensVouF)
+          ? resp.itensVouF.find((i: any) => i.id === item.id)?.respostaAluno
+          : resp?.itensVouF?.[item.id]
         const correctChoice = item.correta !== undefined ? item.correta : item.afirmacao
 
         respostasAlunoArr.push(alunoChoice === true ? 'V' : alunoChoice === false ? 'F' : '-')
@@ -732,14 +763,21 @@ export function GabaritoPrintDocument({
                     <HtmlContent html={q.enunciado} />
                   </div>
 
-                  {/* Alternativas (Múltipla Escolha) */}
-                  {q.tipo === 'multipla_escolha' && (
+                  {/* Alternativas (Múltipla Escolha e Múltipla Seleção) */}
+                  {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                       {(q.alternativas || []).map((alt: any) => {
-                        const isSelected = resp?.respostaOpcaoId === alt.id ||
-                          resp?.alternativaIdSelecionada === alt.id ||
-                          alt.id === resp?.respostaTexto ||
-                          alt.letra === resp?.respostaTexto
+                        const selectedMulti: string[] = Array.isArray(resp?.alternativasIdsSelecionadas)
+                          ? resp.alternativasIdsSelecionadas
+                          : Array.isArray(resp?.respostaOpcoesIds)
+                          ? resp.respostaOpcoesIds
+                          : []
+                        const isSelected = q.tipo === 'multipla_selecao'
+                          ? selectedMulti.includes(alt.id)
+                          : (resp?.respostaOpcaoId === alt.id ||
+                             resp?.alternativaIdSelecionada === alt.id ||
+                             alt.id === resp?.respostaTexto ||
+                             alt.letra === resp?.respostaTexto)
 
                         const isCorrect = alt.correta === true
 
@@ -838,7 +876,9 @@ export function GabaritoPrintDocument({
                       {(q.itensVF || q.itensVouF || []).map((item: any, itemIdx: number) => {
                         const alunoChoice = resp?.respostaVF?.[item.id] !== undefined
                           ? resp.respostaVF[item.id]
-                          : resp?.itensVouF?.find((i: any) => i.id === item.id)?.respostaAluno
+                          : Array.isArray(resp?.itensVouF)
+                          ? resp.itensVouF.find((i: any) => i.id === item.id)?.respostaAluno
+                          : resp?.itensVouF?.[item.id]
 
                         const correctChoice = item.correta !== undefined ? item.correta : item.afirmacao
                         const isMatch = alunoChoice !== undefined && alunoChoice === correctChoice

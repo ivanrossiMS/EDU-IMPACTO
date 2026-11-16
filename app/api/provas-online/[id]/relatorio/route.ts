@@ -6,6 +6,7 @@ import {
   dbGetTentativasByProvaId,
   isInfraction
 } from '@/lib/provas-online/db'
+import { selectTentativaByPolicy } from '@/lib/provas-online/engine'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,7 @@ export async function GET(
 
   // 1. Fetch total expected students in the assigned classes
   let alunosQuery = adminClient.from('alunos').select('id, nome, matricula, turma, serie, status')
-  if (prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
+  if (prova.alunosModo === 'especificos' && prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
     alunosQuery = alunosQuery.in('id', prova.alunosEspecificos)
   } else if (prova.turmas && prova.turmas.length > 0) {
     const { data: turmasDb } = await adminClient.from('turmas').select('id, codigo, nome')
@@ -54,6 +55,22 @@ export async function GET(
 
   const tentativas = await dbGetTentativasByProvaId(provaId)
   const submittedTentativas = tentativas.filter(t => t.status === 'entregue' || t.status === 'expirada')
+
+  // Ensure any student who actually started/submitted an attempt is included in validStudents
+  const existingIds = new Set(validStudents.map((s: any) => s.id))
+  for (const t of tentativas) {
+    if (t.alunoId && !existingIds.has(t.alunoId)) {
+      validStudents.push({
+        id: t.alunoId,
+        nome: t.alunoNome || 'Estudante',
+        matricula: t.alunoMatricula || '',
+        turma: t.turmaId || prova.turmas?.[0] || 'Sem Turma',
+        serie: '',
+        status: 'ativo'
+      })
+      existingIds.add(t.alunoId)
+    }
+  }
 
   // Fetch occurrences / infractions for all attempts
   const tentativaIds = tentativas.map(t => t.id)
@@ -114,10 +131,33 @@ export async function GET(
     { faixa: '8.0 - 10.0', quantidade: notas.filter(n => n >= 8 && n <= 10).length }
   ]
 
-  // 4. Análise Item a Item (Questão por Questão)
+  // 4. Análise Item a Item (Questão por Questão) + Índice de Discriminação (TRI / Clássico)
   const questoes = prova.questoes || []
+  const sortedAttemptsByScore = [...submittedTentativas].sort(
+    (a, b) => Number(b.notaFinal || 0) - Number(a.notaFinal || 0)
+  )
+  const groupSize = sortedAttemptsByScore.length >= 2
+    ? Math.max(1, Math.round(sortedAttemptsByScore.length * 0.27))
+    : 0
+  const upperGroup = groupSize > 0 ? sortedAttemptsByScore.slice(0, groupSize) : []
+  const lowerGroup = groupSize > 0 ? sortedAttemptsByScore.slice(-groupSize) : []
+
+  const isQuestionHit = (q: any, idx: number, t: any): boolean => {
+    const resp = t.respostas?.[q.id] || (t.respostas as any)?.[String(idx)]
+    if (!resp) return false
+    if (q.tipo === 'multipla_escolha') {
+      const selectedId = (resp as any).alternativaIdSelecionada || resp.respostaOpcaoId
+      const altEscolhida = (q.alternativas || []).find((a: any) => a.id === selectedId)
+      return Boolean(altEscolhida?.correta)
+    }
+    const maxPts = Number(q.pontuacao || 1)
+    const threshold = q.tipo === 'dissertativa' ? maxPts * 0.6 : maxPts * 0.7
+    return Number(resp.pontuacaoObtida || 0) >= threshold
+  }
+
   const analiseQuestoes = questoes.map((q, idx) => {
     let totalAcertos = 0
+    let emBrancoCount = 0
     const contagemAlternativas: Record<string, number> = {}
 
     // Inicializa alternativas
@@ -126,20 +166,54 @@ export async function GET(
     })
 
     submittedTentativas.forEach(t => {
-      const resp = t.respostas?.[q.id]
-      if (!resp) return
+      const resp = t.respostas?.[q.id] || (t.respostas as any)?.[String(idx)]
+      if (!resp) {
+        emBrancoCount++
+        return
+      }
 
       if (q.tipo === 'multipla_escolha') {
-        const altEscolhida = (q.alternativas || []).find(a => a.id === resp.respostaOpcaoId)
+        const selectedId = (resp as any).alternativaIdSelecionada || resp.respostaOpcaoId
+        if (!selectedId) {
+          emBrancoCount++
+          return
+        }
+        const altEscolhida = (q.alternativas || []).find(a => a.id === selectedId)
         if (altEscolhida) {
           contagemAlternativas[altEscolhida.letra] = (contagemAlternativas[altEscolhida.letra] || 0) + 1
           if (altEscolhida.correta) totalAcertos++
         }
-      } else if (q.tipo === 'multipla_selecao' || q.tipo === 'verdadeiro_falso') {
+      } else if (q.tipo === 'multipla_selecao') {
+        const selectedIds: string[] = (resp as any).alternativasIdsSelecionadas || resp.respostaOpcoesIds || []
+        if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
+          emBrancoCount++
+          return
+        }
+        selectedIds.forEach(sId => {
+          const alt = (q.alternativas || []).find(a => a.id === sId)
+          if (alt) {
+            contagemAlternativas[alt.letra] = (contagemAlternativas[alt.letra] || 0) + 1
+          }
+        })
+        if (Number(resp.pontuacaoObtida || 0) >= Number(q.pontuacao || 1) * 0.7) {
+          totalAcertos++
+        }
+      } else if (q.tipo === 'verdadeiro_falso') {
+        const hasVF = (resp.respostaVF && Object.keys(resp.respostaVF).length > 0) ||
+          ((resp as any).itensVouF && (Array.isArray((resp as any).itensVouF) ? (resp as any).itensVouF.length > 0 : Object.keys((resp as any).itensVouF).length > 0))
+        if (!hasVF) {
+          emBrancoCount++
+          return
+        }
         if (Number(resp.pontuacaoObtida || 0) >= Number(q.pontuacao || 1) * 0.7) {
           totalAcertos++
         }
       } else if (q.tipo === 'dissertativa') {
+        const txt = String(resp.respostaDissertativa || (resp as any).textoDissertativo || (resp as any).respostaTexto || '').trim()
+        if (!txt) {
+          emBrancoCount++
+          return
+        }
         if (Number(resp.pontuacaoObtida || 0) >= Number(q.pontuacao || 1) * 0.6) {
           totalAcertos++
         }
@@ -148,12 +222,31 @@ export async function GET(
 
     const totalRespostas = submittedTentativas.length
     const taxaAcerto = totalRespostas > 0 ? Math.round((totalAcertos / totalRespostas) * 100) : 0
+    const taxaEmBranco = totalRespostas > 0 ? Math.round((emBrancoCount / totalRespostas) * 100) : 0
+
+    // Índice de Discriminação D = P_superior - P_inferior (-1.00 a +1.00)
+    let indiceDiscriminacao: number | null = null
+    let classificacaoDiscriminacao: 'excelente' | 'boa' | 'regular' | 'fraca' | 'critica_invertida' | 'insuficiente' = 'insuficiente'
+    if (groupSize > 0) {
+      const upperHits = upperGroup.filter(t => isQuestionHit(q, idx, t)).length
+      const lowerHits = lowerGroup.filter(t => isQuestionHit(q, idx, t)).length
+      const pUpper = upperHits / groupSize
+      const pLower = lowerHits / groupSize
+      indiceDiscriminacao = Math.round((pUpper - pLower) * 100) / 100
+
+      if (indiceDiscriminacao < 0) classificacaoDiscriminacao = 'critica_invertida'
+      else if (indiceDiscriminacao >= 0.4) classificacaoDiscriminacao = 'excelente'
+      else if (indiceDiscriminacao >= 0.3) classificacaoDiscriminacao = 'boa'
+      else if (indiceDiscriminacao >= 0.2) classificacaoDiscriminacao = 'regular'
+      else classificacaoDiscriminacao = 'fraca'
+    }
 
     // Distratores mais escolhidos
     const alternativasStats = (q.alternativas || []).map(a => {
       const count = contagemAlternativas[a.letra] || 0
       const pct = totalRespostas > 0 ? Math.round((count / totalRespostas) * 100) : 0
       return {
+        id: a.id,
         letra: a.letra,
         texto: a.texto,
         correta: a.correta,
@@ -162,6 +255,18 @@ export async function GET(
       }
     })
 
+    const distratores = alternativasStats
+      .filter(a => !a.correta && a.totalEscolhas > 0)
+      .sort((a, b) => b.totalEscolhas - a.totalEscolhas)
+      .slice(0, 3)
+      .map(a => ({
+        alternativa: a.letra,
+        escolhas: `${a.percentual}% (${a.totalEscolhas})`,
+        letra: a.letra,
+        percentual: a.percentual,
+        totalEscolhas: a.totalEscolhas
+      }))
+
     return {
       questaoId: q.id,
       ordem: idx + 1,
@@ -169,12 +274,18 @@ export async function GET(
       enunciado: q.enunciado,
       habilidadeBNCC: q.habilidadeBNCC,
       dificuldade: q.dificuldade || 'media',
-      pontuacao: q.pontuacao,
+      pontuacao: Number(q.pontuacao || 1),
+      valorPontos: Number(q.pontuacao || 1),
       anulada: q.anulada ?? false,
       taxaAcerto,
       totalAcertos,
       totalRespostas,
-      alternativasStats
+      emBrancoCount,
+      taxaEmBranco,
+      indiceDiscriminacao,
+      classificacaoDiscriminacao,
+      alternativasStats,
+      distratores
     }
   })
 
@@ -228,7 +339,8 @@ export async function GET(
   const listaAlunos = validStudents.map((aluno: any) => {
     const tList = tentativas.filter(t => t.alunoId === aluno.id)
     const submittedList = submittedTentativas.filter(t => t.alunoId === aluno.id)
-    const ultima = submittedList[0] || tList[0] || null
+    const chosenSubmitted = selectTentativaByPolicy(prova, submittedList)
+    const ultima = chosenSubmitted || tList[0] || null
 
     let situacao = 'ausente'
     if (ultima) situacao = ultima.status

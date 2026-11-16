@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FileCheck2, CheckCircle2, AlertCircle, ArrowLeft, Eye, EyeOff,
+  FileCheck2, FileText, CheckCircle2, AlertCircle, ArrowLeft, Eye, EyeOff,
   User, BookOpen, RefreshCw, Check, X, Award,
   ArrowUpRight, Scale, Calculator, Search, AlertTriangle,
   ChevronRight, HelpCircle, CheckSquare, MessageSquare, Sparkles
@@ -239,6 +239,13 @@ export default function CorrigirProvaPage() {
   const [confirmingAnnul, setConfirmingAnnul] = useState(false)
   const [repairing, setRepairing] = useState(false)
 
+  // Printed Answer Sheet (OMR Manual Launch) state
+  const [alunosElegiveis, setAlunosElegiveis] = useState<any[]>([])
+  const [omrModalOpen, setOmrModalOpen] = useState(false)
+  const [omrSelectedAlunoId, setOmrSelectedAlunoId] = useState('')
+  const [omrAnswers, setOmrAnswers] = useState<Record<string, any>>({})
+  const [savingOmr, setSavingOmr] = useState(false)
+
   const handleRepairTextos = async () => {
     setRepairing(true)
     try {
@@ -268,6 +275,7 @@ export default function CorrigirProvaPage() {
 
       setProva(data.prova)
       setSubmissions(data.submissions || [])
+      setAlunosElegiveis(data.alunosElegiveis || [])
       setPendentesCount(data.pendentesCorrecao || 0)
 
       const allQuestoes: QuestaoProva[] = data.prova?.questoes || []
@@ -423,6 +431,40 @@ export default function CorrigirProvaPage() {
     finally { setConfirmingAnnul(false) }
   }
 
+  const handleSaveOmrSheet = async () => {
+    if (!omrSelectedAlunoId) {
+      toast.error('Selecione o estudante para lançar o cartão-resposta.')
+      return
+    }
+    const alunoObj = alunosElegiveis.find(a => String(a.id) === String(omrSelectedAlunoId))
+    setSavingOmr(true)
+    try {
+      const res = await fetch(`/api/provas-online/${id}/corrigir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'lancar_cartao_impresso',
+          alunoId: omrSelectedAlunoId,
+          alunoNome: alunoObj?.nome || 'Estudante',
+          alunoMatricula: alunoObj?.matricula || '',
+          turmaId: alunoObj?.turma || prova?.turmas?.[0] || '',
+          respostasCartao: omrAnswers
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao lançar cartão-resposta')
+      toast.success(data.message || 'Cartão-resposta impresso lançado com sucesso!')
+      setOmrModalOpen(false)
+      setOmrSelectedAlunoId('')
+      setOmrAnswers({})
+      await loadData(isAnonimo)
+    } catch (err: any) {
+      toast.error(err.message || 'Falha ao salvar cartão-resposta')
+    } finally {
+      setSavingOmr(false)
+    }
+  }
+
   // All questions list
   const allQuestoes: QuestaoProva[] = prova?.questoes || []
   const questoesDissertativas = allQuestoes.filter(q => q.tipo === 'dissertativa')
@@ -557,6 +599,15 @@ export default function CorrigirProvaPage() {
               >
                 <Sparkles style={{ width: 13, height: 13, color: '#0284c7' }} />
                 {repairing ? 'Higienizando...' : 'Higienizar Textos'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOmrModalOpen(true)}
+                style={S.btnSecondary}
+                title="Transcrever respostas de aluno que realizou a prova impressa no papel"
+              >
+                <FileText style={{ width: 13, height: 13, color: '#7e22ce' }} /> Lançar Cartão Impresso
               </button>
 
               <button
@@ -794,24 +845,31 @@ export default function CorrigirProvaPage() {
                             <HtmlContent html={q.enunciado} />
                           </div>
 
-                          {/* Multiple Choice */}
-                          {q.tipo === 'multipla_escolha' && (() => {
+                          {/* Multiple Choice & Multiple Selection */}
+                          {(q.tipo === 'multipla_escolha' || q.tipo === 'multipla_selecao') && (() => {
                             const selectedAltId = resp?.alternativaIdSelecionada || resp?.respostaOpcaoId
-                            const correctAlt = (q.alternativas || []).find(a => a.correta)
-                            const isCorrect = Boolean(selectedAltId && correctAlt && selectedAltId === correctAlt.id)
+                            const selectedAltIds: string[] = q.tipo === 'multipla_selecao'
+                              ? (Array.isArray(resp?.alternativasIdsSelecionadas) ? resp.alternativasIdsSelecionadas : Array.isArray(resp?.respostaOpcoesIds) ? resp.respostaOpcoesIds : [])
+                              : (selectedAltId ? [selectedAltId] : [])
+                            const hasSelection = selectedAltIds.length > 0
+                            const obtainedPts = Number(resp?.pontuacaoObtida ?? 0)
+                            const isFullHit = hasSelection && obtainedPts >= maxPoints - 0.01
+                            const isPartialHit = hasSelection && !isFullHit && obtainedPts > 0
 
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                                   <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>Alternativas:</span>
-                                  {selectedAltId ? (
-                                    isCorrect
+                                  {hasSelection ? (
+                                    isFullHit
                                       ? <span style={S.pill('#065f46', '#d1fae5', '#a7f3d0')}><CheckCircle2 style={{ width: 11, height: 11 }} /> Acertou (+{maxPoints.toFixed(1)} pts)</span>
+                                      : isPartialHit
+                                      ? <span style={S.pill('#92400e', '#fef3c7', '#fde68a')}>Parcial (+{obtainedPts.toFixed(1)} pts)</span>
                                       : <span style={S.pill('#991b1b', '#fee2e2', '#fca5a5')}><X style={{ width: 11, height: 11 }} /> Errou (0.0 pts)</span>
                                   ) : <span style={S.pill('#92400e', '#fef3c7', '#fde68a')}>Não respondida</span>}
                                 </div>
                                 {(q.alternativas || []).map(alt => {
-                                  const isSelected = alt.id === selectedAltId
+                                  const isSelected = selectedAltIds.includes(alt.id)
                                   const isThisCorrect = alt.correta
                                   let bg = '#ffffff', border = '#e2e8f0', color = '#475569'
                                   if (isSelected && isThisCorrect) { bg = '#f0fdf4'; border = '#86efac'; color = '#166534' }
@@ -1120,6 +1178,242 @@ export default function CorrigirProvaPage() {
                 >
                   {confirmingAnnul ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Check style={{ width: 13, height: 13 }} />}
                   Efetivar Anulação
+                </button>
+              </div>
+            </ModalCard>
+          </ModalBackdrop>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* MODAL: LANÇAR CARTÃO-RESPOSTA IMPRESSO (OMR MANUAL)                   */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {omrModalOpen && (
+          <ModalBackdrop onClose={() => setOmrModalOpen(false)}>
+            <ModalCard maxWidth={680}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, background: '#f3e8ff', border: '1px solid #d8b4fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FileText style={{ width: 20, height: 20, color: '#7e22ce' }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    Lançar Cartão-Resposta de Prova Impressa
+                  </h3>
+                  <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0' }}>
+                    Transcreva as marcações do papel para corrigir automaticamente e integrar ao relatório e Diário.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Selecione o Estudante:
+                </label>
+                <select
+                  value={omrSelectedAlunoId}
+                  onChange={e => setOmrSelectedAlunoId(e.target.value)}
+                  style={{ ...S.input, height: 40, width: '100%' }}
+                >
+                  <option value="">Escolha um aluno da turma...</option>
+                  {alunosElegiveis.map((al: any) => {
+                    const jaEntregou = submissions.some(s => String(s.alunoId) === String(al.id))
+                    return (
+                      <option key={al.id} value={al.id}>
+                        {al.nome} ({al.turma || 'Turma'}) {jaEntregou ? '• [Já possui entrega - sobrescrever]' : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+
+              <div style={{
+                maxHeight: '52vh',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                paddingRight: 4
+              }}>
+                {allQuestoes.map((q, idx) => {
+                  const qEntry = omrAnswers[q.id] || {}
+                  return (
+                    <div
+                      key={q.id || idx}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        border: '1px solid #e2e8f0',
+                        background: '#f8fafc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 13, color: '#0f172a' }}>
+                          #{String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
+                          {getTipoLabel(q.tipo)} ({(q.pontuacao || 1).toFixed(1)} pts)
+                        </span>
+                      </div>
+
+                      {q.tipo === 'multipla_escolha' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {(q.alternativas || []).map(alt => {
+                            const selected = qEntry.alternativaIdSelecionada === alt.id
+                            return (
+                              <button
+                                key={alt.id}
+                                type="button"
+                                onClick={() => setOmrAnswers(prev => ({
+                                  ...prev,
+                                  [q.id]: {
+                                    ...prev[q.id],
+                                    alternativaIdSelecionada: selected ? undefined : alt.id
+                                  }
+                                }))}
+                                style={{
+                                  width: 30,
+                                  height: 30,
+                                  borderRadius: '50%',
+                                  border: selected ? '2px solid #7e22ce' : '1.5px solid #cbd5e1',
+                                  background: selected ? '#7e22ce' : '#ffffff',
+                                  color: selected ? '#ffffff' : '#334155',
+                                  fontWeight: 800,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {alt.letra}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {q.tipo === 'multipla_selecao' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {(q.alternativas || []).map(alt => {
+                            const list: string[] = qEntry.alternativasIdsSelecionadas || []
+                            const selected = list.includes(alt.id)
+                            return (
+                              <button
+                                key={alt.id}
+                                type="button"
+                                onClick={() => {
+                                  const next = selected ? list.filter(x => x !== alt.id) : [...list, alt.id]
+                                  setOmrAnswers(prev => ({
+                                    ...prev,
+                                    [q.id]: { ...prev[q.id], alternativasIdsSelecionadas: next }
+                                  }))
+                                }}
+                                style={{
+                                  width: 30,
+                                  height: 30,
+                                  borderRadius: 8,
+                                  border: selected ? '2px solid #7e22ce' : '1.5px solid #cbd5e1',
+                                  background: selected ? '#7e22ce' : '#ffffff',
+                                  color: selected ? '#ffffff' : '#334155',
+                                  fontWeight: 800,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {alt.letra}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {q.tipo === 'verdadeiro_falso' && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {(q.itensVF || []).map((item, vfIdx) => {
+                            const val = qEntry.respostaVF?.[item.id]
+                            return (
+                              <div key={item.id || vfIdx} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#ffffff', padding: '2px 6px', borderRadius: 8, border: '1px solid #cbd5e1' }}>
+                                <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#64748b' }}>{vfIdx + 1}:</span>
+                                {(['V', 'F'] as const).map(letter => {
+                                  const boolVal = letter === 'V'
+                                  const isSel = val === boolVal
+                                  return (
+                                    <button
+                                      key={letter}
+                                      type="button"
+                                      onClick={() => setOmrAnswers(prev => ({
+                                        ...prev,
+                                        [q.id]: {
+                                          ...prev[q.id],
+                                          respostaVF: { ...(prev[q.id]?.respostaVF || {}), [item.id]: boolVal }
+                                        }
+                                      }))}
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        borderRadius: '50%',
+                                        border: isSel ? '1.5px solid #7e22ce' : '1px solid #cbd5e1',
+                                        background: isSel ? '#7e22ce' : '#f8fafc',
+                                        color: isSel ? '#ffffff' : '#475569',
+                                        fontSize: 10,
+                                        fontWeight: 800,
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      {letter}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {q.tipo === 'dissertativa' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>Nota obtida:</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            max={q.pontuacao || 1}
+                            placeholder={`0 a ${q.pontuacao || 1}`}
+                            value={qEntry.notaDissertativa ?? ''}
+                            onChange={e => setOmrAnswers(prev => ({
+                              ...prev,
+                              [q.id]: { ...prev[q.id], notaDissertativa: e.target.value }
+                            }))}
+                            style={{ ...S.input, width: 85, height: 30, textAlign: 'center', fontFamily: 'monospace', fontWeight: 800 }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                <button
+                  type="button"
+                  onClick={() => setOmrModalOpen(false)}
+                  style={S.btnSecondary}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveOmrSheet}
+                  disabled={savingOmr || !omrSelectedAlunoId}
+                  style={{ ...S.btnPrimary, background: '#7e22ce', opacity: (savingOmr || !omrSelectedAlunoId) ? 0.5 : 1 }}
+                >
+                  {savingOmr ? <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> : <Check style={{ width: 13, height: 13 }} />}
+                  Salvar e Corrigir Cartão
                 </button>
               </div>
             </ModalCard>

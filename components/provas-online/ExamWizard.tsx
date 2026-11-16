@@ -446,10 +446,9 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
     setSavingExam(true)
 
     try {
-      const allTurmaStudentIds = availableStudentsForTurmas.map(s => String(s.id))
       const finalAlunosEspecificos = alunosModo === 'especificos'
         ? (exam.alunosEspecificos || [])
-        : (allTurmaStudentIds.length > 0 ? allTurmaStudentIds : (exam.alunosEspecificos || []))
+        : []
 
       const derivedSeries = Array.from(new Set(
         turmas
@@ -483,7 +482,11 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
           targetStatus = 'agendada'
         }
       }
-      const targetStatusAprovacao = exam.aprovacaoRequerida ? 'pendente' : 'aprovada'
+      const isManagement = ['Master', 'Administrador Master', 'Diretor Geral', 'Direção', 'Administrador', 'Coordenador', 'Coordenadora'].includes(currentUser?.perfil || '') ||
+        ['Administrador Master', 'Diretor Geral'].includes(currentUser?.cargo || '')
+      const targetStatusAprovacao = isManagement
+        ? 'aprovada'
+        : (exam.aprovacaoRequerida ? (exam.statusAprovacao === 'aprovada' ? 'aprovada' : 'pendente') : 'aprovada')
 
       const payload: ProvaOnline = {
         ...exam,
@@ -776,6 +779,29 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
 
       {/* STEP CONTENT CONTAINERS */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-7 md:p-8 shadow-2xs">
+        {exam.statusAprovacao === 'pendente' && (
+          <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <Clock size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-amber-950">Avaliação Pendente de Homologação Pedagógica</h4>
+                <p className="text-xs text-amber-700 mt-0.5">Esta prova ainda não está visível para os alunos até ser homologada pela coordenação.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setExam(p => ({ ...p, statusAprovacao: 'aprovada' }))
+                toast.success('Avaliação homologada como aprovada! Clique em Salvar/Publicar para efetivar.')
+              }}
+              className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
+            >
+              <CheckCircle2 size={14} /> Homologar & Aprovar
+            </button>
+          </div>
+        )}
         {/* ── STEP 1: INFORMAÇÕES GERAIS ───────────────────────── */}
         {step === 1 && (
           <div className="space-y-6">
@@ -1029,14 +1055,15 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
             {(exam.questoes || []).length > 0 && (
               <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 flex-1 flex-wrap">
-                  <div className="relative flex-1 min-w-[180px] sm:max-w-xs">
+                  <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <input
                       type="text"
                       value={questionSearch}
                       onChange={e => setQuestionSearch(e.target.value)}
                       placeholder="Filtrar questões por texto ou BNCC..."
-                      className="w-full h-8 pl-8 pr-7 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
+                      style={{ height: '36px', paddingTop: 0, paddingBottom: 0, paddingLeft: '32px', paddingRight: '28px' }}
+                      className="w-full rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
                     />
                     {questionSearch && (
                       <button
@@ -1052,7 +1079,8 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                   <select
                     value={questionTypeFilter}
                     onChange={e => setQuestionTypeFilter(e.target.value as any)}
-                    className="h-8 px-2.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-sky-500 cursor-pointer"
+                    style={{ width: 'auto', minWidth: '185px', height: '36px', paddingTop: 0, paddingBottom: 0, paddingLeft: '12px', paddingRight: '28px' }}
+                    className="rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-sky-500 cursor-pointer"
                   >
                     <option value="todas">Todos os Tipos ({(exam.questoes || []).length})</option>
                     <option value="multipla_escolha">Objetiva Única</option>
@@ -1160,101 +1188,153 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                   const totalQs = (exam.questoes || []).length
 
                   return (
-                    <div
-                      key={q.id}
-                      className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all space-y-3"
-                    >
-                      <div className={`flex items-center justify-between flex-wrap gap-2.5 ${compactQuestionList ? '' : 'pb-3 border-b border-slate-100'}`}>
-                        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-                          {/* Direct Position Selector / Badge */}
-                          <div className="flex items-center gap-1">
-                            <select
-                              value={idx}
-                              onChange={e => handleMoveQuestion(idx, Number(e.target.value))}
-                              title="Mudar posição da questão na prova"
-                              className="h-7 px-2 rounded-lg bg-sky-100/80 border border-sky-200 text-sky-900 font-extrabold text-xs cursor-pointer focus:outline-none focus:border-sky-500"
-                            >
-                              {Array.from({ length: totalQs }).map((_, posIdx) => (
-                                <option key={posIdx} value={posIdx}>
-                                  #{posIdx + 1}
-                                </option>
-                              ))}
-                            </select>
+                    <div key={q.id} className="pt-1">
+                      {/* Aba de Pasta Suspensa no Topo do Card para o Tipo da Questão */}
+                      <div className="flex items-center pl-4">
+                        <div
+                          style={{
+                            borderRadius: '10px 10px 0 0',
+                            border: '1px solid #cbd5e1',
+                            borderBottom: 'none',
+                            background: '#f1f5f9',
+                            padding: '3px 10px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <select
+                            value={q.tipo}
+                            onChange={e => {
+                              const nextTipo = e.target.value as any
+                              setExam(p => ({
+                                ...p,
+                                questoes: p.questoes?.map((item, i) => i === idx ? { ...item, tipo: nextTipo } : item)
+                              }))
+                            }}
+                            style={{
+                              width: 'auto',
+                              height: '22px',
+                              padding: '0 18px 0 4px',
+                              background: 'transparent',
+                              border: 'none',
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              color: '#334155',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                              boxShadow: 'none',
+                              cursor: 'pointer'
+                            }}
+                            title="Tipo da questão (clique para alterar)"
+                          >
+                            <option value="multipla_escolha">Múltipla Escolha</option>
+                            <option value="multipla_selecao">Múltipla Seleção</option>
+                            <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
+                            <option value="dissertativa">Questão Dissertativa</option>
+                          </select>
+                        </div>
+                      </div>
 
+                      <div
+                        className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-4 sm:p-5 shadow-2xs transition-all space-y-3"
+                      >
+                        <div className={`flex items-center justify-between flex-wrap gap-2.5 ${compactQuestionList ? '' : 'pb-3 border-b border-slate-100'}`}>
+                          <div className="flex items-center gap-2.5 flex-wrap min-w-0 flex-1">
+                            {/* Numeração Visível + Título da Questão no Lugar do Tipo */}
+                            <span
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '8px',
+                                background: '#0f172a',
+                                color: '#ffffff',
+                                fontWeight: 900,
+                                fontSize: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontFamily: 'monospace',
+                                flexShrink: 0
+                              }}
+                            >
+                              {idx + 1}
+                            </span>
+
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                              Questão {idx + 1}{(q as any).titulo ? ` — ${(q as any).titulo}` : ''}
+                            </span>
+
+                            {/* Controles de Reordenação */}
                             {totalQs > 1 && (
-                              <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200/80 p-0.5">
-                                <button
-                                  type="button"
-                                  disabled={idx === 0}
-                                  onClick={() => handleMoveQuestion(idx, idx - 1)}
-                                  className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
-                                  title="Mover questão para cima"
-                                >
-                                  <ArrowUp size={12} />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === totalQs - 1}
-                                  onClick={() => handleMoveQuestion(idx, idx + 1)}
-                                  className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
-                                  title="Mover questão para baixo"
-                                >
-                                  <ArrowDown size={12} />
-                                </button>
+                              <div className="flex items-center gap-1 ml-1">
+                                <div className="flex items-center bg-slate-100 rounded-lg border border-slate-200/80 p-0.5">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => handleMoveQuestion(idx, idx - 1)}
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
+                                    title="Mover questão para cima"
+                                  >
+                                    <ArrowUp size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === totalQs - 1}
+                                    onClick={() => handleMoveQuestion(idx, idx + 1)}
+                                    className="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-sky-700 disabled:opacity-30 cursor-pointer"
+                                    title="Mover questão para baixo"
+                                  >
+                                    <ArrowDown size={12} />
+                                  </button>
+                                </div>
                               </div>
+                            )}
+                            {hasImageInQ && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-1">
+                                <ImageIcon size={11} /> Com Figura
+                              </span>
+                            )}
+                            {q.habilidadeBNCC && (
+                              <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {q.habilidadeBNCC}
+                              </span>
+                            )}
+                            {q.dificuldade && (
+                              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                                q.dificuldade === 'facil' ? 'bg-emerald-100 text-emerald-800' :
+                                q.dificuldade === 'dificil' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {q.dificuldade}
+                              </span>
+                            )}
+
+                            {compactQuestionList && (
+                              <span className="text-xs text-slate-600 truncate max-w-xs sm:max-w-md ml-1">
+                                {(q.enunciado || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || '(Questão com figura)'}
+                              </span>
                             )}
                           </div>
 
-                          <span className="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-lg">
-                            {q.tipo === 'multipla_escolha' && 'Objetiva (Única)'}
-                            {q.tipo === 'multipla_selecao' && 'Múltipla Seleção'}
-                            {q.tipo === 'verdadeiro_falso' && 'Verdadeiro ou Falso'}
-                            {q.tipo === 'dissertativa' && 'Dissertativa'}
-                          </span>
-                          {hasImageInQ && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 inline-flex items-center gap-1">
-                              <ImageIcon size={11} /> Com Figura
-                            </span>
-                          )}
-                          {q.habilidadeBNCC && (
-                            <span className="text-[11px] font-bold font-mono px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {q.habilidadeBNCC}
-                            </span>
-                          )}
-                          {q.dificuldade && (
-                            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                              q.dificuldade === 'facil' ? 'bg-emerald-100 text-emerald-800' :
-                              q.dificuldade === 'dificil' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {q.dificuldade}
-                            </span>
-                          )}
-
-                          {compactQuestionList && (
-                            <span className="text-xs text-slate-600 truncate max-w-xs sm:max-w-md ml-1">
-                              {(q.enunciado || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || '(Questão com figura)'}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
-                            <span className="text-xs text-slate-500 font-medium">Pontos:</span>
-                            <input
-                              type="number"
-                              step="0.25"
-                              min="0"
-                              value={q.pontuacao}
-                              onChange={e => {
-                                const val = Math.max(0, Number(e.target.value))
-                                setExam(p => ({
-                                  ...p,
-                                  questoes: p.questoes?.map((item, i) => i === idx ? { ...item, pontuacao: val } : item)
-                                }))
-                              }}
-                              className="w-14 h-6 px-1 rounded bg-white border border-slate-300 text-slate-900 text-xs font-bold text-center focus:outline-none focus:border-sky-500"
-                            />
-                          </div>
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+                              <span className="text-xs text-slate-500 font-medium">Pontos:</span>
+                              <input
+                                type="number"
+                                step="0.25"
+                                min="0"
+                                value={q.pontuacao}
+                                onChange={e => {
+                                  const val = Math.max(0, Number(e.target.value))
+                                  setExam(p => ({
+                                    ...p,
+                                    questoes: p.questoes?.map((item, i) => i === idx ? { ...item, pontuacao: val } : item)
+                                  }))
+                                }}
+                                style={{ width: '58px', height: '26px', padding: '0 4px' }}
+                                className="rounded bg-white border border-slate-300 text-slate-900 text-xs font-bold text-center focus:outline-none focus:border-sky-500"
+                              />
+                            </div>
 
                           <button
                             type="button"
@@ -1372,6 +1452,7 @@ export function ExamWizard({ initialExam, isEditing = false }: ExamWizardProps) 
                           )}
                         </>
                       )}
+                      </div>
                     </div>
                   )
                 })}

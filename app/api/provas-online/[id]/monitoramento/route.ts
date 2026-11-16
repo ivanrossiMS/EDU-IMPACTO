@@ -34,7 +34,7 @@ export async function GET(
 
   // 1. Fetch all students in the assigned classes or target list
   let alunosQuery = adminClient.from('alunos').select('id, nome, matricula, turma, serie, foto, status')
-  if (prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
+  if (prova.alunosModo === 'especificos' && prova.alunosEspecificos && prova.alunosEspecificos.length > 0) {
     alunosQuery = alunosQuery.in('id', prova.alunosEspecificos)
   } else if (prova.turmas && prova.turmas.length > 0) {
     const { data: turmasDb } = await adminClient.from('turmas').select('id, codigo, nome')
@@ -64,6 +64,23 @@ export async function GET(
   const tentativas = await dbGetTentativasByProvaId(provaId)
   const totalQuestoes = (prova.questoes || []).length || 1
   const now = Date.now()
+
+  // Ensure any student who actually has an attempt is included in validStudents so no active/submitted attempt is ever hidden
+  const existingIds = new Set(validStudents.map((s: any) => s.id))
+  for (const t of tentativas) {
+    if (t.alunoId && !existingIds.has(t.alunoId)) {
+      validStudents.push({
+        id: t.alunoId,
+        nome: t.alunoNome || 'Estudante',
+        matricula: t.alunoMatricula || '',
+        turma: t.turmaId || prova.turmas?.[0] || 'Sem Turma',
+        serie: '',
+        foto: '',
+        status: 'ativo'
+      })
+      existingIds.add(t.alunoId)
+    }
+  }
 
   // Fetch occurrences for these attempts
   const tentativaIds = tentativas.map(t => t.id)
