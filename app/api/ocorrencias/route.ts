@@ -116,14 +116,16 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(ocorrencias.map(row => {
-    const turmaId = row.dados?.turma;
+    const turmaId = row.dados?.turma_id || row.dados?.turma;
     const resolvedAlunoId = String(row.aluno_id || row.dados?.alunoId || row.dados?.aluno_id || '').replace(/^a_?/, '').trim();
+    const resolvedAno = String(row.dados?.ano || row.dados?.ano_letivo || row.dados?.anoLetivo || (row.data ? String(row.data).slice(0, 4) : '') || '').trim();
     return { 
       ...row, 
       ...(row.dados || {}),
+      ano: resolvedAno || undefined,
       alunoId: resolvedAlunoId,
       aluno_id: resolvedAlunoId,
-      turmaNome: turmaId && turmasDict[turmaId] ? turmasDict[turmaId] : turmaId
+      turmaNome: turmaId && turmasDict[turmaId] ? turmasDict[turmaId] : (row.dados?.turmaNome || row.dados?.turma || row.turma || turmaId)
     };
   }))
 }
@@ -345,7 +347,8 @@ export async function POST(request: Request) {
     })
 
     const resolvedId = String(data.aluno_id || (data.dados as any)?.alunoId || '').replace(/^a_?/, '').trim()
-    return NextResponse.json({ ...data, ...(data.dados || {}), alunoId: resolvedId, aluno_id: resolvedId }, { status: 201 })
+    const resolvedAno = String((data.dados as any)?.ano || (data.dados as any)?.ano_letivo || (data.data ? String(data.data).slice(0, 4) : '') || '').trim()
+    return NextResponse.json({ ...data, ...(data.dados || {}), ano: resolvedAno || undefined, alunoId: resolvedId, aluno_id: resolvedId }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
@@ -372,6 +375,7 @@ function buildRow(o: any, senderName?: string, senderId?: string) {
     rest.responsavel && rest.responsavel !== 'Colaborador'
       ? rest.responsavel
       : (senderName || rest.responsavel || 'Colaborador')
+  const resolvedAno = String(rest.ano || rest.anoLetivo || rest.ano_letivo || (data ? String(data).slice(0, 4) : '') || '').trim()
   return {
     id: id || `OC-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
     aluno_id: resolvedAlunoId,
@@ -381,6 +385,7 @@ function buildRow(o: any, senderName?: string, senderId?: string) {
     status: status || 'aberta',
     dados: {
       ...rest,
+      ano: resolvedAno || rest.ano,
       responsavel: effectiveResponsavel,
       registradoPor: rest.registradoPor || effectiveResponsavel,
       ...(senderId && !rest.usuarioId ? { usuarioId: senderId } : {}),

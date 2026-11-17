@@ -35,6 +35,7 @@ export function PageContent({
   readOnly = false,
   totalPages = 0,
   adicionarPaginaRedacao = false,
+  adicionarTabelaPeriodica = false,
   lineHeight = 1.5,
   textAlign = 'justify',
   showGabarito = true,
@@ -45,7 +46,20 @@ export function PageContent({
   const effectiveLeft = pageMargin?.left ?? leftMarginOffset ?? -25;
   const effectiveRight = pageMargin?.right ?? rightMarginOffset ?? -20;
 
-  const isLastRedacaoPage = adicionarPaginaRedacao && pIndex === totalPages - 1 && pIndex > 0;
+  const tpUrl = config?.tabela_periodica_modelo_pdf_url || config?.provas_header_layout?._tabela_periodica_backup?.url;
+  const tpOutrasUrl = config?.tabela_periodica_modelo_pdf_outras_paginas_url || config?.provas_header_layout?._tabela_periodica_backup?.outras_url;
+  const hasTpOutras = Boolean(tpOutrasUrl);
+
+  const isTpSecondPage = adicionarTabelaPeriodica && hasTpOutras && pIndex === totalPages - 1 && pIndex > 0;
+  const isTpFirstPage = adicionarTabelaPeriodica && (
+    hasTpOutras 
+      ? (pIndex === totalPages - 2 && pIndex > 0)
+      : (pIndex === totalPages - 1 && pIndex > 0)
+  );
+  const isTabelaPeriodicaPage = isTpFirstPage || isTpSecondPage;
+
+  const redacaoOffset = (adicionarTabelaPeriodica ? (hasTpOutras ? 2 : 1) : 0);
+  const isLastRedacaoPage = adicionarPaginaRedacao && pIndex === (totalPages - 1 - redacaoOffset) && pIndex > 0;
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
   const [altLinesModalOpen, setAltLinesModalOpen] = useState<{ qId: string, altId: string, altParts: any[], q: any, a: any } | null>(null);
   const [altLinesCount, setAltLinesCount] = useState<number>(3);
@@ -63,11 +77,15 @@ export function PageContent({
     ? config?.redacao_enem_modelo_pdf_url
     : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url);
 
-  const internalBgUrl = isLastRedacaoPage
-    ? config?.redacao_enem_modelo_pdf_outras_paginas_url
-    : (simulado?.isRedacao
+  const internalBgUrl = isTpSecondPage
+    ? tpOutrasUrl
+    : isTpFirstPage
+      ? tpUrl
+      : isLastRedacaoPage
         ? config?.redacao_enem_modelo_pdf_outras_paginas_url
-        : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url));
+        : (simulado?.isRedacao
+            ? config?.redacao_enem_modelo_pdf_outras_paginas_url
+            : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url));
 
   useEffect(() => {
     setCoverImgFailed(false);

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText, Maximize2, Sparkles, Eye, EyeOff, ZoomIn, ZoomOut, AlignLeft, AlignJustify, PanelLeftClose, PanelLeftOpen, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText, Maximize2, Sparkles, Eye, EyeOff, ZoomIn, ZoomOut, AlignLeft, AlignJustify, PanelLeftClose, PanelLeftOpen, CheckCircle2, Atom } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -241,6 +241,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
     return {};
   });
   const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(prova?.config_estudio?.adicionar_pagina_redacao || false);
+  const [adicionarTabelaPeriodica, setAdicionarTabelaPeriodica] = useState<boolean>(prova?.config_estudio?.adicionar_tabela_periodica || false);
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
   const [savingMargins, setSavingMargins] = useState(false)
@@ -323,6 +324,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_bottom: bottomMarginOffset,
         page_margins: pageMargins,
         adicionar_pagina_redacao: adicionarPaginaRedacao,
+        adicionar_tabela_periodica: adicionarTabelaPeriodica,
         header_layout: headerLayout
       }
 
@@ -359,6 +361,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_bottom: bottomMarginOffset,
         page_margins: pageMargins,
         adicionar_pagina_redacao: adicionarPaginaRedacao,
+        adicionar_tabela_periodica: adicionarTabelaPeriodica,
         header_layout: headerLayout
       }
 
@@ -439,6 +442,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_bottom: bottomMarginOffset,
         page_margins: pageMargins,
         adicionar_pagina_redacao: adicionarPaginaRedacao,
+        adicionar_tabela_periodica: adicionarTabelaPeriodica,
         header_layout: headerLayout
       };
 
@@ -451,7 +455,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, lineHeight, questionSpacing, textAlign, adicionarPaginaRedacao, headerLayout, mounted]);
+  }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, lineHeight, questionSpacing, textAlign, adicionarPaginaRedacao, adicionarTabelaPeriodica, headerLayout, mounted]);
 
   const mappedQuestoes = useMemo(() => {
     return safeLocalQuestoes.map((rawQ, idx) => {
@@ -1007,6 +1011,30 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                     {adicionarPaginaRedacao ? '✓ Folha de Redação Incluída (Remover)' : '+ Incluir Folha de Redação'}
                   </button>
                 </div>
+
+                {/* Tabela Periódica */}
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
+                    <Atom size={15} color="#6366f1" /> Tabela Periódica
+                  </label>
+                  <p style={{ color: '#64748b', fontSize: 11.5, marginBottom: 10, lineHeight: 1.4 }}>
+                    Anexa a folha de consulta da tabela periódica configurada ao final da prova.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAdicionarTabelaPeriodica(!adicionarTabelaPeriodica)}
+                    style={{
+                      width: '100%', padding: '10px', borderRadius: 10,
+                      background: adicionarTabelaPeriodica ? 'rgba(99,102,241,0.12)' : '#f8fafc',
+                      color: adicionarTabelaPeriodica ? '#4f46e5' : '#475569',
+                      border: `1px solid ${adicionarTabelaPeriodica ? '#6366f1' : '#cbd5e1'}`,
+                      fontWeight: 700, cursor: 'pointer', fontSize: 12.5,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                    }}
+                  >
+                    {adicionarTabelaPeriodica ? '✓ Tabela Periódica Incluída (Remover)' : '+ Incluir Tabela Periódica'}
+                  </button>
+                </div>
               </>
             )}
 
@@ -1370,6 +1398,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             pageMargins={pageMargins}
             onPageMarginChange={handlePageMarginChange}
             adicionarPaginaRedacao={adicionarPaginaRedacao}
+            adicionarTabelaPeriodica={adicionarTabelaPeriodica}
             onPaginatingChange={setIsPaginating}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {

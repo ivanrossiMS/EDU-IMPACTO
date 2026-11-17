@@ -50,6 +50,7 @@ interface PaginationEngineProps {
   pageMargins?: PageMarginsMap;
   onPageMarginChange?: (pageIndex: number, delta: Partial<PageMargin>) => void;
   adicionarPaginaRedacao?: boolean;
+  adicionarTabelaPeriodica?: boolean;
   onPaginatingChange?: (isPaginating: boolean) => void;
   lineHeight?: number;
   questionSpacing?: number;
@@ -351,10 +352,13 @@ export function PaginationEngine({
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
   pageMargins, onPageMarginChange,
-  readOnly = false, adicionarPaginaRedacao, onPaginatingChange,
+  readOnly = false, adicionarPaginaRedacao, adicionarTabelaPeriodica, onPaginatingChange,
   lineHeight = 1.5, questionSpacing = 28, textAlign = 'justify',
   showGabarito = true, cleanPreviewMode = false, zoom = 100, onPagesCountChange
 }: PaginationEngineProps) {
+  const effectiveAdicionarPaginaRedacao = Boolean(adicionarPaginaRedacao ?? simulado?.config_estudio?.adicionar_pagina_redacao);
+  const effectiveAdicionarTabelaPeriodica = Boolean(adicionarTabelaPeriodica ?? simulado?.config_estudio?.adicionar_tabela_periodica);
+
   const measureMeta = useMemo(() => buildQuestionMeasureMeta(questoes), [questoes]);
   const measureMetaKey = useMemo(
     () => measureMeta.map((m) => `${m.qKey}:${m.altKeys.join(',')}`).join('|'),
@@ -1128,8 +1132,16 @@ export function PaginationEngine({
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
-      if (forceExtraPage || adicionarPaginaRedacao) {
+      if (forceExtraPage || effectiveAdicionarPaginaRedacao) {
         newPages.push(Array.from({ length: columns }, () => []));
+      }
+
+      if (effectiveAdicionarTabelaPeriodica) {
+        newPages.push(Array.from({ length: columns }, () => []));
+        const tpOutras = config?.tabela_periodica_modelo_pdf_outras_paginas_url || config?.provas_header_layout?._tabela_periodica_backup?.outras_url;
+        if (tpOutras) {
+          newPages.push(Array.from({ length: columns }, () => []));
+        }
       }
 
       const mergedPages = newPages.map((page: any[]) => {
@@ -1172,7 +1184,7 @@ export function PaginationEngine({
       setIsPaginating(false);
     }, 300);
     
-  }, [questoesKey, measureMetaKey, columns, enunciadoFontSize, alternativasFontSize, lineHeight, questionSpacing, textAlign, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
+  }, [questoesKey, measureMetaKey, columns, enunciadoFontSize, alternativasFontSize, lineHeight, questionSpacing, textAlign, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, effectiveAdicionarPaginaRedacao, effectiveAdicionarTabelaPeriodica, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey, config]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const MM = 3.7795275591;
@@ -1535,7 +1547,8 @@ export function PaginationEngine({
               onPageMarginChange={onPageMarginChange}
               readOnly={readOnly}
               totalPages={pages.length}
-              adicionarPaginaRedacao={adicionarPaginaRedacao}
+              adicionarPaginaRedacao={effectiveAdicionarPaginaRedacao}
+              adicionarTabelaPeriodica={effectiveAdicionarTabelaPeriodica}
             />
           </div>
         ))}
@@ -1591,7 +1604,8 @@ export function PaginationEngine({
                 onPageMarginChange={onPageMarginChange}
                 readOnly={true}
                 totalPages={pages.length}
-                adicionarPaginaRedacao={adicionarPaginaRedacao}
+                adicionarPaginaRedacao={effectiveAdicionarPaginaRedacao}
+                adicionarTabelaPeriodica={effectiveAdicionarTabelaPeriodica}
               />
             </div>
           ))}

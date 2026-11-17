@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Upload, Image as ImageIcon, Loader2, Save, Download } from 'lucide-react'
+import { Settings, Upload, Image as ImageIcon, Loader2, Save, Download, Atom } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
@@ -43,6 +43,15 @@ export default function SimuladosConfiguracoesPage() {
   const redacaoFileInputCapaRef = useRef<HTMLInputElement>(null)
   const redacaoFileInputOutrasRef = useRef<HTMLInputElement>(null)
 
+  const [tabelaPeriodicaUrl, setTabelaPeriodicaUrl] = useState('')
+  const [tabelaPeriodicaOutrasUrl, setTabelaPeriodicaOutrasUrl] = useState('')
+
+  const [uploadingTabelaPeriodica, setUploadingTabelaPeriodica] = useState(false)
+  const [uploadingTabelaPeriodicaOutras, setUploadingTabelaPeriodicaOutras] = useState(false)
+
+  const tabelaPeriodicaFileInputRef = useRef<HTMLInputElement>(null)
+  const tabelaPeriodicaOutrasFileInputRef = useRef<HTMLInputElement>(null)
+
 
   useEffect(() => {
     async function loadConfig() {
@@ -56,6 +65,10 @@ export default function SimuladosConfiguracoesPage() {
           if ((data as any).redacao_enem_modelo_pdf_url) setRedacaoCapaUrl((data as any).redacao_enem_modelo_pdf_url)
           if ((data as any).redacao_enem_modelo_pdf_outras_paginas_url) setRedacaoOutrasUrl((data as any).redacao_enem_modelo_pdf_outras_paginas_url)
 
+          const tp = (data as any).tabela_periodica_modelo_pdf_url || (data as any).provas_header_layout?._tabela_periodica_backup?.url
+          const tpOutras = (data as any).tabela_periodica_modelo_pdf_outras_paginas_url || (data as any).provas_header_layout?._tabela_periodica_backup?.outras_url
+          if (tp) setTabelaPeriodicaUrl(tp)
+          if (tpOutras) setTabelaPeriodicaOutrasUrl(tpOutras)
         }
       } catch (e) {
         // Table might not exist yet
@@ -105,7 +118,23 @@ export default function SimuladosConfiguracoesPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const payload = { 
+      // Carregar layout atual para fallback
+      const { data: currentData } = await (supabase as any)
+        .from('simulados_configuracoes')
+        .select('provas_header_layout')
+        .eq('id', 'default')
+        .maybeSingle()
+
+      const currentHeaderLayout = currentData?.provas_header_layout || {}
+      const updatedHeaderLayout = {
+        ...currentHeaderLayout,
+        _tabela_periodica_backup: {
+          url: tabelaPeriodicaUrl,
+          outras_url: tabelaPeriodicaOutrasUrl
+        }
+      }
+
+      const fullPayload = { 
         id: 'default', 
         modelo_pdf_url: modeloCapaUrl, 
         modelo_pdf_outras_paginas_url: modeloOutrasUrl,
@@ -115,12 +144,35 @@ export default function SimuladosConfiguracoesPage() {
         redacao_enem_modelo_pdf_url: redacaoCapaUrl,
         redacao_enem_modelo_pdf_outras_paginas_url: redacaoOutrasUrl,
 
+        tabela_periodica_modelo_pdf_url: tabelaPeriodicaUrl,
+        tabela_periodica_modelo_pdf_outras_paginas_url: tabelaPeriodicaOutrasUrl,
+        provas_header_layout: updatedHeaderLayout,
+
         updated_at: new Date().toISOString() 
       }
       
-      const { error } = await (supabase as any).from('simulados_configuracoes').upsert(payload)
+      const { error } = await (supabase as any).from('simulados_configuracoes').upsert(fullPayload)
       
       if (error) {
+        // Se as novas colunas ainda não foram migradas no Postgres/Supabase
+        if (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('tabela_periodica')) {
+          const fallbackPayload = {
+            id: 'default',
+            modelo_pdf_url: modeloCapaUrl,
+            modelo_pdf_outras_paginas_url: modeloOutrasUrl,
+            provas_modelo_pdf_url: provasModeloCapaUrl,
+            provas_modelo_pdf_outras_paginas_url: provasModeloOutrasUrl,
+            redacao_enem_modelo_pdf_url: redacaoCapaUrl,
+            redacao_enem_modelo_pdf_outras_paginas_url: redacaoOutrasUrl,
+            provas_header_layout: updatedHeaderLayout,
+            updated_at: new Date().toISOString()
+          }
+          const { error: fallbackError } = await (supabase as any).from('simulados_configuracoes').upsert(fallbackPayload)
+          if (fallbackError) throw fallbackError
+
+          toast.success('Configurações salvas com sucesso!')
+          return
+        }
         throw error
       }
       toast.success('Configurações salvas com sucesso!')
@@ -128,8 +180,6 @@ export default function SimuladosConfiguracoesPage() {
       console.error(err)
       if (err.message?.includes('does not exist') || err.code === '42P01') {
         toast.warning('A tabela simulados_configuracoes ainda não existe. Crie-a no Supabase.')
-      } else if (err.code === 'PGRST204' || err.message?.includes('schema cache')) {
-        toast.warning('O banco ainda não reconheceu as novas colunas. Recarregue o cache do schema no Supabase.')
       } else {
         toast.error('Erro ao salvar: ' + err.message)
       }
@@ -427,7 +477,7 @@ export default function SimuladosConfiguracoesPage() {
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 600, cursor: uploadingRedacaoCapa ? 'wait' : 'pointer', fontSize: 13 }}>
                             {uploadingRedacaoCapa ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                             Trocar
-                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoCapaUrl, setUploadingProvasCapa, redacaoFileInputCapaRef)} ref={redacaoFileInputCapaRef} disabled={uploadingRedacaoCapa} />
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoCapaUrl, setUploadingRedacaoCapa, redacaoFileInputCapaRef)} ref={redacaoFileInputCapaRef} disabled={uploadingRedacaoCapa} />
                           </label>
                           <a href={redacaoCapaUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
                             <Download size={16} />
@@ -450,7 +500,7 @@ export default function SimuladosConfiguracoesPage() {
                             <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem</span>
                           </>
                         )}
-                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoCapaUrl, setUploadingProvasCapa, redacaoFileInputCapaRef)} ref={redacaoFileInputCapaRef} disabled={uploadingRedacaoCapa} />
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoCapaUrl, setUploadingRedacaoCapa, redacaoFileInputCapaRef)} ref={redacaoFileInputCapaRef} disabled={uploadingRedacaoCapa} />
                       </label>
                     )}
                   </div>
@@ -474,7 +524,7 @@ export default function SimuladosConfiguracoesPage() {
                           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, cursor: uploadingRedacaoOutras ? 'wait' : 'pointer', fontSize: 13 }}>
                             {uploadingRedacaoOutras ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                             Trocar
-                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoOutrasUrl, setUploadingProvasOutras, redacaoFileInputOutrasRef)} ref={redacaoFileInputOutrasRef} disabled={uploadingRedacaoOutras} />
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoOutrasUrl, setUploadingRedacaoOutras, redacaoFileInputOutrasRef)} ref={redacaoFileInputOutrasRef} disabled={uploadingRedacaoOutras} />
                           </label>
                           <a href={redacaoOutrasUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
                             <Download size={16} />
@@ -497,26 +547,130 @@ export default function SimuladosConfiguracoesPage() {
                             <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem (Opcional)</span>
                           </>
                         )}
-                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoOutrasUrl, setUploadingProvasOutras, redacaoFileInputOutrasRef)} ref={redacaoFileInputOutrasRef} disabled={uploadingRedacaoOutras} />
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setRedacaoOutrasUrl, setUploadingRedacaoOutras, redacaoFileInputOutrasRef)} ref={redacaoFileInputOutrasRef} disabled={uploadingRedacaoOutras} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              </div>
+
+              {/* Card 4: TABELA PERIÓDICA */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 24, padding: '24px 32px 32px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Atom size={22} color="#6366f1" />
+                  Configurações de Tabela Periódica
+                </h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
+                
+                {/* Bloco 1: Imagem da Tabela Periódica */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#6366f1" />
+                    Imagem da Tabela Periódica
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será anexada como folha de consulta da <b>Tabela Periódica</b> nas Provas e Simulados.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {tabelaPeriodicaUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={tabelaPeriodicaUrl} alt="Modelo Tabela Periódica" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(99,102,241,0.1)', color: '#6366f1', fontWeight: 600, cursor: uploadingTabelaPeriodica ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingTabelaPeriodica ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setTabelaPeriodicaUrl, setUploadingTabelaPeriodica, tabelaPeriodicaFileInputRef)} ref={tabelaPeriodicaFileInputRef} disabled={uploadingTabelaPeriodica} />
+                          </label>
+                          <a href={tabelaPeriodicaUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingTabelaPeriodica ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingTabelaPeriodica ? (
+                          <>
+                            <Loader2 size={24} color="#6366f1" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(99,102,241,0.1)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setTabelaPeriodicaUrl, setUploadingTabelaPeriodica, tabelaPeriodicaFileInputRef)} ref={tabelaPeriodicaFileInputRef} disabled={uploadingTabelaPeriodica} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bloco 2: Verso / Dados Adicionais */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#64748b" />
+                    Verso / Demais Páginas (Opcional)
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será exibida caso o material de consulta de química/física possua uma <b>segunda página</b>.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {tabelaPeriodicaOutrasUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={tabelaPeriodicaOutrasUrl} alt="Modelo Tabela Periódica Verso" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, cursor: uploadingTabelaPeriodicaOutras ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingTabelaPeriodicaOutras ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setTabelaPeriodicaOutrasUrl, setUploadingTabelaPeriodicaOutras, tabelaPeriodicaOutrasFileInputRef)} ref={tabelaPeriodicaOutrasFileInputRef} disabled={uploadingTabelaPeriodicaOutras} />
+                          </label>
+                          <a href={tabelaPeriodicaOutrasUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingTabelaPeriodicaOutras ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingTabelaPeriodicaOutras ? (
+                          <>
+                            <Loader2 size={24} color="#64748b" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100,116,139,0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem (Opcional)</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setTabelaPeriodicaOutrasUrl, setUploadingTabelaPeriodicaOutras, tabelaPeriodicaOutrasFileInputRef)} ref={tabelaPeriodicaOutrasFileInputRef} disabled={uploadingTabelaPeriodicaOutras} />
                       </label>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-
-            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', paddingTop: 16 }}>
-              <button onClick={handleSave} disabled={saving || (!modeloCapaUrl && !modeloOutrasUrl)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 15, cursor: (saving || (!modeloCapaUrl && !modeloOutrasUrl)) ? 'not-allowed' : 'pointer', opacity: (saving || (!modeloCapaUrl && !modeloOutrasUrl)) ? 0.6 : 1, transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-                {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                Salvar Configurações
-              </button>
-            </div>
-            </div>
-            
           </div>
-        )}
+
+          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', paddingTop: 16 }}>
+            <button onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 28px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 10, fontWeight: 600, fontSize: 15, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              Salvar Configurações
+            </button>
+          </div>
         </div>
-      </motion.div>
-    </div>
-  )
+      )}
+      </div>
+    </motion.div>
+  </div>
+)
 }

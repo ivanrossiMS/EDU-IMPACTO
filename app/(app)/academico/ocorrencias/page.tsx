@@ -21,15 +21,65 @@ import OcorrenciasPushConfigSection from '@/components/ocorrencias/OcorrenciasPu
 
 const cleanAlunoId = (id: any) => String(id || '').replace(/^a_?/, '').trim()
 
-const doesOcMatchTurma = (o: any, turmaObj: any) => {
+const getOcAno = (o: any, turmasList?: any[]): string => {
+  if (!o) return ''
+  const directAno = o.ano || o.ano_letivo || o.dados?.ano || o.dados?.ano_letivo || o.dados?.anoLetivo
+  if (directAno && String(directAno).trim()) {
+    return String(directAno).trim()
+  }
+
+  // Se tem turma_id ou turma associada, busca na lista de turmas
+  const tId = String(o.turma_id || o.turmaId || o.dados?.turma_id || o.dados?.turmaId || '').trim()
+  if (tId && Array.isArray(turmasList)) {
+    const t = turmasList.find((item: any) => String(item.id) === tId)
+    if (t?.ano) return String(t.ano).trim()
+  }
+
+  const oTurma = String(o.turma || o.dados?.turma || '').trim()
+  if (oTurma && Array.isArray(turmasList)) {
+    const t = turmasList.find((item: any) => String(item.id) === oTurma)
+    if (t?.ano) return String(t.ano).trim()
+  }
+
+  // Extrair do campo data: YYYY-MM-DD ou DD/MM/YYYY
+  const d = String(o.data || o.dados?.data || '').trim()
+  if (d) {
+    const mIso = d.match(/^(\d{4})-\d{2}-\d{2}/)
+    if (mIso) return mIso[1]
+    const mBr = d.match(/^\d{2}\/\d{2}\/(\d{4})/)
+    if (mBr) return mBr[1]
+  }
+
+  // Extrair do created_at
+  const c = String(o.created_at || o.createdAt || '').trim()
+  if (c) {
+    const m = c.match(/^(\d{4})/)
+    if (m) return m[1]
+  }
+
+  return ''
+}
+
+const doesOcMatchTurma = (o: any, turmaObj: any, turmasList?: any[]) => {
   if (!o || !turmaObj) return false
+
+  // Verificação de ano letivo: se ambos possuem ano, devem coincidir!
+  const ocAno = getOcAno(o, turmasList)
+  const tAno = turmaObj.ano ? String(turmaObj.ano).trim() : ''
+  if (ocAno && tAno && ocAno !== tAno) {
+    return false
+  }
+
   const tId = String(turmaObj.id || '').trim().toLowerCase()
   const tNome = String(turmaObj.nome || '').trim().toLowerCase()
   const tCodigo = String(turmaObj.codigo || '').trim().toLowerCase()
 
   const oTurma = String(o.turma || '').trim().toLowerCase()
-  const oTurmaId = String(o.turma_id || '').trim().toLowerCase().replace(/^sync-/, '')
-  const oTurmaNome = String(o.turmaNome || '').trim().toLowerCase()
+  const oTurmaId = String(o.turma_id || o.turmaId || o.dados?.turma_id || o.dados?.turmaId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^sync-/, '')
+  const oTurmaNome = String(o.turmaNome || o.dados?.turmaNome || '').trim().toLowerCase()
 
   if (tId && (oTurma === tId || oTurmaId === tId || oTurma === `sync-${tId}`)) return true
   if (tNome && (oTurma === tNome || oTurmaNome === tNome)) return true
@@ -82,10 +132,18 @@ const parseOcorrenciaDescricao = (rawDescricao?: string) => {
   }
 }
 
-const BLANK: Omit<Ocorrencia, 'id' | 'createdAt'> = {
+type OcorrenciaForm = Omit<Ocorrencia, 'id' | 'createdAt'> & {
+  ano?: string
+  turma_id?: string
+  turmaNome?: string
+}
+
+const BLANK: OcorrenciaForm = {
   alunoId: '',
   alunoNome: '',
   turma: '',
+  turma_id: '',
+  ano: '',
   descricao: '',
   data: new Date().toISOString().split('T')[0],
   responsavel: '',
@@ -435,8 +493,8 @@ function OcorrenciaModal({
   setValidationErrors,
   isEditing,
 }: {
-  form: Omit<Ocorrencia, 'id' | 'createdAt'>
-  setForm: React.Dispatch<React.SetStateAction<Omit<Ocorrencia, 'id' | 'createdAt'>>>
+  form: OcorrenciaForm
+  setForm: React.Dispatch<React.SetStateAction<OcorrenciaForm>>
   onSave: () => void
   onClose: () => void
   alunosDaTurma: { id: string; nome: string; turma: string }[]
@@ -451,7 +509,10 @@ function OcorrenciaModal({
   const hasError = (fieldId: string) => validationErrors.some(e => e.field === fieldId)
   const clearError = (fieldId: string) => setValidationErrors(prev => prev.filter(err => err.field !== fieldId))
 
-  const matchedTurma = turmas.find((t: any) => t.nome === form.turma || t.id === form.turma)
+  const matchedTurma =
+    (form.turma_id ? turmas.find((t: any) => t.id === form.turma_id) : null) ||
+    (form.ano ? turmas.find((t: any) => (t.nome === form.turma || t.id === form.turma) && String(t.ano) === String(form.ano)) : null) ||
+    turmas.find((t: any) => t.nome === form.turma || t.id === form.turma)
 
   return (
     <div
@@ -561,7 +622,16 @@ function OcorrenciaModal({
                 selectedId={form.alunoId}
                 selectedTurma={form.turma}
                 onChange={(id, nome, turma) => {
-                  setForm(p => ({ ...p, alunoId: id, alunoNome: nome, turma: turma || p.turma }))
+                  const tNome = turma || form.turma
+                  const tObj = turmas.find((t: any) => t.nome === tNome || t.id === tNome)
+                  setForm(p => ({
+                    ...p,
+                    alunoId: id,
+                    alunoNome: nome,
+                    turma: tNome,
+                    turma_id: tObj?.id || p.turma_id,
+                    ano: p.ano || (tObj?.ano ? String(tObj.ano) : p.ano),
+                  }))
                   clearError('alunoId')
                 }}
                 alunosDaTurma={alunosDaTurma}
@@ -596,7 +666,7 @@ function OcorrenciaModal({
                   color: '#475569',
                   fontWeight: 600,
                 }}
-                value={matchedTurma?.ano || new Date().getFullYear()}
+                value={form.ano || (matchedTurma?.ano ? String(matchedTurma.ano) : new Date().getFullYear())}
                 readOnly
               />
             </div>
@@ -954,8 +1024,8 @@ function OcorrenciaModal({
 
 type QuickDrawerState =
   | { type: 'ocorrencia'; ocorrenciaId: string }
-  | { type: 'aluno'; alunoId: string; alunoNome: string; turma: string }
-  | { type: 'turma'; turmaNome: string }
+  | { type: 'aluno'; alunoId: string; alunoNome: string; turma: string; ano?: string | number }
+  | { type: 'turma'; turmaNome: string; turmaId?: string; ano?: string | number }
   | { type: 'status'; statusFilter: 'todas' | 'pendentes' | 'confirmadas' }
   | null
 
@@ -1018,6 +1088,46 @@ export default function OcorrenciasPage() {
   const [filtroTurmasRapido, setFiltroTurmasRapido] = useState<'todas' | 'com_ocorrencias' | 'com_pendencias'>('todas')
   const [ordenarTurmasPorOcorrencias, setOrdenarTurmasPorOcorrencias] = useState(true)
 
+  // Anos letivos disponíveis coletados de todas as fontes (calendário, turmas e ocorrências)
+  const anosDisponiveis = useMemo(() => {
+    const anos = new Set<string>()
+    ;(cfgCalendarioLetivo || []).forEach((c: any) => {
+      if (c?.ano) anos.add(String(c.ano).trim())
+    })
+    ;(turmas || []).forEach((t: any) => {
+      if (t?.ano) anos.add(String(t.ano).trim())
+    })
+    ;(ocorrencias || []).forEach((o: any) => {
+      const a = getOcAno(o, turmas)
+      if (a) anos.add(a)
+    })
+    return Array.from(anos).sort((a, b) => Number(b) - Number(a))
+  }, [cfgCalendarioLetivo, turmas, ocorrencias])
+
+  const initializedAnoRef = useRef(false)
+  useEffect(() => {
+    if (initializedAnoRef.current) return
+    const vigente = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
+    if (vigente?.ano) {
+      setFiltroAno(String(vigente.ano))
+      initializedAnoRef.current = true
+    } else if (anosDisponiveis.length > 0) {
+      setFiltroAno(anosDisponiveis[0])
+      initializedAnoRef.current = true
+    }
+  }, [cfgCalendarioLetivo, anosDisponiveis])
+
+  // Ocorrências e turmas isoladas do ano letivo selecionado
+  const ocorrenciasDoAno = useMemo(() => {
+    if (filtroAno === 'todos') return ocorrencias
+    return ocorrencias.filter(o => getOcAno(o, turmas) === filtroAno)
+  }, [ocorrencias, filtroAno, turmas])
+
+  const turmasDoAno = useMemo(() => {
+    if (filtroAno === 'todos') return turmas
+    return turmas.filter((t: any) => String(t.ano).trim() === filtroAno)
+  }, [turmas, filtroAno])
+
   // Estados para o modo "Registros Diretos"
   const [filtroStatusDireto, setFiltroStatusDireto] = useState<'todas' | 'pendentes' | 'confirmadas' | 'anexo'>('todas')
   const [buscaDireta, setBuscaDireta] = useState('')
@@ -1028,13 +1138,6 @@ export default function OcorrenciasPage() {
   const [quickDrawer, setQuickDrawer] = useState<QuickDrawerState>(null)
   const drawerDialogRef = useRef<HTMLDialogElement>(null)
   const registrosSectionRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const vigente = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
-    if (vigente) {
-      setFiltroAno(String(vigente.ano))
-    }
-  }, [cfgCalendarioLetivo])
 
   // Sincronização do <dialog closedby="any"> + fallback para browsers sem suporte nativo a closedBy
   useEffect(() => {
@@ -1091,15 +1194,20 @@ export default function OcorrenciasPage() {
       levels = cfgNiveisEnsino.filter((n: any) => n.nome === filtroSeg)
     }
     const allSeries = levels.flatMap((n: any) => n.series || [])
-    return [...new Set(allSeries.map((s: any) => s.nome))].sort()
-  }, [cfgNiveisEnsino, filtroSeg])
+    const uniqueSeries = [...new Set(allSeries.map((s: any) => s.nome))].sort()
+    const seriesInTurmas = new Set(turmasDoAno.map((t: any) => t.serie).filter(Boolean))
+    if (seriesInTurmas.size > 0) {
+      return uniqueSeries.filter(s => seriesInTurmas.has(s))
+    }
+    return uniqueSeries
+  }, [cfgNiveisEnsino, filtroSeg, turmasDoAno])
 
   const [filtroStatus, setFiltroStatus] = useState<'todas' | 'pendentes' | 'confirmadas'>('todas')
   const [busca, setBusca] = useState('')
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<Ocorrencia, 'id' | 'createdAt'>>(BLANK)
+  const [form, setForm] = useState<OcorrenciaForm>(BLANK)
   const [metaCriacao, setMetaCriacao] = useState('')
   const [metaConfirmacao, setMetaConfirmacao] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -1132,7 +1240,7 @@ export default function OcorrenciasPage() {
       return alunos.map((a: any) => ({
         id: a.id,
         nome: a.nome,
-        turma: getAlunoTurmaCursando(a) || a.turma || '',
+        turma: getAlunoTurmaCursando(a, filtroAno === 'todos' ? undefined : filtroAno) || a.turma || '',
       }))
     }
     return alunos
@@ -1147,24 +1255,24 @@ export default function OcorrenciasPage() {
       .map((a: any) => ({
         id: a.id,
         nome: a.nome,
-        turma: selectedTurmaObj?.nome || getAlunoTurmaCursando(a) || a.turma || '',
+        turma: selectedTurmaObj?.nome || getAlunoTurmaCursando(a, filtroAno === 'todos' ? undefined : filtroAno) || a.turma || '',
       }))
-  }, [alunos, turmaSel, form.turma, turmas, selectedTurmaObj])
+  }, [alunos, turmaSel, form.turma, turmas, selectedTurmaObj, filtroAno])
 
   const todosAlunosMapped = useMemo(
     () =>
       alunos.map((a: any) => ({
         id: a.id,
         nome: a.nome,
-        turma: getAlunoTurmaCursando(a) || a.turma || '',
+        turma: getAlunoTurmaCursando(a, filtroAno === 'todos' ? undefined : filtroAno) || a.turma || '',
       })),
-    [alunos]
+    [alunos, filtroAno]
   )
 
   const ocDaTurma = turmaSel
-    ? ocorrencias.filter(o =>
+    ? ocorrenciasDoAno.filter(o =>
         selectedTurmaObj
-          ? doesOcMatchTurma(o, selectedTurmaObj)
+          ? doesOcMatchTurma(o, selectedTurmaObj, turmas)
           : String(o.turma || '').trim().toLowerCase() === String(turmaSel).trim().toLowerCase()
       )
     : []
@@ -1184,13 +1292,21 @@ export default function OcorrenciasPage() {
     return filtered.slice(start, start + itemsPerPage)
   }, [filtered, currentPage, itemsPerPage])
 
-  const openNew = (prefill?: Partial<Omit<Ocorrencia, 'id' | 'createdAt'>>) => {
+  const openNew = (prefill?: Partial<OcorrenciaForm>) => {
     setQuickDrawer(null)
     setEditingId(null)
     setMetaCriacao('')
     setMetaConfirmacao('')
+    const vigCal = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
+    const defaultAno =
+      prefill?.ano ||
+      (selectedTurmaObj?.ano ? String(selectedTurmaObj.ano) : '') ||
+      (filtroAno !== 'todos' ? filtroAno : (vigCal?.ano ? String(vigCal.ano) : String(new Date().getFullYear())))
+
     setForm({
       ...BLANK,
+      ano: defaultAno,
+      turma_id: prefill?.turma_id || (selectedTurmaObj?.id ? String(selectedTurmaObj.id) : ''),
       data: new Date().toISOString().split('T')[0],
       responsavel: currentUser?.nome || '',
       turma: turmaSel ?? '',
@@ -1211,10 +1327,13 @@ export default function OcorrenciasPage() {
     setMetaCriacao(parsed.lancadoRaw)
     setMetaConfirmacao(parsed.confirmadoRaw)
 
+    const ocAno = getOcAno(oc, turmas)
     setForm({
       alunoId: oc.alunoId || oc.aluno_id || '',
       alunoNome: oc.alunoNome || '',
       turma: oc.turmaNome || oc.turma || '',
+      turma_id: oc.turma_id || oc.turmaId || oc.dados?.turma_id || oc.dados?.turmaId || '',
+      ano: ocAno,
       descricao: parsed.textoLimpo,
       data: oc.data || new Date().toISOString().split('T')[0],
       responsavel: oc.responsavel || '',
@@ -1267,10 +1386,28 @@ export default function OcorrenciasPage() {
       userInfo = `[Lançado por: ${currentUser?.nome || 'Usuário'} em ${dataHora}]`
     }
 
+    const matchedTurma = turmas.find(
+      (t: any) =>
+        t.nome === (turmaSel ?? form.turma) ||
+        String(t.id) === String(form.turma_id || form.turma)
+    )
+
+    const vigCal = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
+    const effectiveAno =
+      form.ano ||
+      (matchedTurma?.ano ? String(matchedTurma.ano) : '') ||
+      (filtroAno !== 'todos' ? filtroAno : (vigCal?.ano ? String(vigCal.ano) : String(new Date().getFullYear())))
+
+    const effectiveTurmaId = matchedTurma?.id ? String(matchedTurma.id) : (form.turma_id || '')
+    const effectiveTurmaNome = matchedTurma?.nome || form.turma || ''
+
     const payload = {
       ...form,
       id: editingId,
-      turma: turmaSel ?? form.turma,
+      ano: effectiveAno,
+      turma_id: effectiveTurmaId,
+      turma: turmaSel ?? effectiveTurmaNome,
+      turmaNome: effectiveTurmaNome,
       descricao: form.descricao ? `${userInfo}\n${form.descricao}` : userInfo,
     }
     try {
@@ -1394,15 +1531,15 @@ export default function OcorrenciasPage() {
     }, 60)
   }
 
-  // Dados agregados globais
-  const totalOC = ocorrencias.length
-  const pendentes = ocorrencias.filter(o => !o.ciencia_responsavel).length
-  const confirmadas = ocorrencias.filter(o => o.ciencia_responsavel).length
-  const comAnexo = ocorrencias.filter(o => !!o.anexoUrl).length
+  // Dados agregados globais (escopados no ano letivo selecionado)
+  const totalOC = ocorrenciasDoAno.length
+  const pendentes = ocorrenciasDoAno.filter(o => !o.ciencia_responsavel).length
+  const confirmadas = ocorrenciasDoAno.filter(o => o.ciencia_responsavel).length
+  const comAnexo = ocorrenciasDoAno.filter(o => !!o.anexoUrl).length
 
   const reincidentes = useMemo(() => {
     const map: Record<string, { id: string; nome: string; turma: string; count: number; pendentes: number }> = {}
-    ocorrencias.forEach(o => {
+    ocorrenciasDoAno.forEach(o => {
       const aId = cleanAlunoId(o.alunoId || o.aluno_id)
       if (!aId) return
       if (!map[aId]) {
@@ -1418,35 +1555,34 @@ export default function OcorrenciasPage() {
       if (!o.ciencia_responsavel) map[aId].pendentes++
     })
     return Object.values(map).sort((a, b) => b.count - a.count)
-  }, [ocorrencias])
+  }, [ocorrenciasDoAno])
 
   const ultimasOC = useMemo(() => {
-    return [...ocorrencias]
+    return [...ocorrenciasDoAno]
       .sort((a, b) => {
         const dateA = a.createdAt || a.created_at || a.data || ''
         const dateB = b.createdAt || b.created_at || b.data || ''
         return dateB.localeCompare(dateA)
       })
       .slice(0, 5)
-  }, [ocorrencias])
+  }, [ocorrenciasDoAno])
 
-  // Enriquecimento das turmas com contagens para ordenação e filtros rápidos
+  // Enriquecimento das turmas com contagens para ordenação e filtros rápidos (escopado no ano letivo)
   const turmasComMetricas = useMemo(() => {
-    const base = turmas.filter((t: any) => {
+    const base = turmasDoAno.filter((t: any) => {
       const levelOfTurma = cfgNiveisEnsino.find((n: any) => n.series?.some((s: any) => s.nome === t.serie))
       const levelName = levelOfTurma?.nome || ''
-      const matchAno = filtroAno === 'todos' || String(t.ano) === filtroAno
       const matchSeg = filtroSeg === 'todos' || levelName === filtroSeg
       const matchSerie = !filtroBuscaHome || t.serie === filtroBuscaHome
       const matchTexto =
         !buscaTurmaTexto.trim() ||
         t.nome?.toLowerCase().includes(buscaTurmaTexto.toLowerCase()) ||
         t.serie?.toLowerCase().includes(buscaTurmaTexto.toLowerCase())
-      return matchAno && matchSeg && matchSerie && matchTexto
+      return matchSeg && matchSerie && matchTexto
     })
 
     const enriched = base.map((turma: any) => {
-      const ocTurma = ocorrencias.filter(o => doesOcMatchTurma(o, turma))
+      const ocTurma = ocorrenciasDoAno.filter(o => doesOcMatchTurma(o, turma, turmas))
       const pendTurma = ocTurma.filter(o => !o.ciencia_responsavel).length
       const confTurma = ocTurma.filter(o => o.ciencia_responsavel).length
       const alunosTurma = alunos.filter(
@@ -1482,30 +1618,30 @@ export default function OcorrenciasPage() {
 
     return filteredByQuick
   }, [
-    turmas,
+    turmasDoAno,
     cfgNiveisEnsino,
-    filtroAno,
     filtroSeg,
     filtroBuscaHome,
     buscaTurmaTexto,
-    ocorrencias,
+    ocorrenciasDoAno,
     alunos,
     filtroTurmasRapido,
     ordenarTurmasPorOcorrencias,
+    turmas,
   ])
 
   const countTurmasComOc = useMemo(
-    () => turmas.filter((t: any) => ocorrencias.some(o => doesOcMatchTurma(o, t))).length,
-    [turmas, ocorrencias]
+    () => turmasDoAno.filter((t: any) => ocorrenciasDoAno.some(o => doesOcMatchTurma(o, t, turmas))).length,
+    [turmasDoAno, ocorrenciasDoAno, turmas]
   )
   const countTurmasComPend = useMemo(
-    () => turmas.filter((t: any) => ocorrencias.some(o => doesOcMatchTurma(o, t) && !o.ciencia_responsavel)).length,
-    [turmas, ocorrencias]
+    () => turmasDoAno.filter((t: any) => ocorrenciasDoAno.some(o => doesOcMatchTurma(o, t, turmas) && !o.ciencia_responsavel)).length,
+    [turmasDoAno, ocorrenciasDoAno, turmas]
   )
 
-  // Registros diretos filtrados
+  // Registros diretos filtrados (escopados no ano letivo selecionado)
   const ocorrenciasDiretasFiltradas = useMemo(() => {
-    return [...ocorrencias]
+    return [...ocorrenciasDoAno]
       .sort((a, b) => {
         const dateA = a.createdAt || a.created_at || a.data || ''
         const dateB = b.createdAt || b.created_at || b.data || ''
@@ -1516,8 +1652,13 @@ export default function OcorrenciasPage() {
         if (filtroStatusDireto === 'confirmadas' && !o.ciencia_responsavel) return false
         if (filtroStatusDireto === 'anexo' && !o.anexoUrl) return false
         if (filtroTurmaDireta !== 'todas') {
-          const tObj = turmas.find((t: any) => t.nome === filtroTurmaDireta || String(t.id) === filtroTurmaDireta)
-          if (tObj ? !doesOcMatchTurma(o, tObj) : (o.turmaNome || o.turma) !== filtroTurmaDireta) return false
+          const tObj =
+            turmas.find(
+              (t: any) =>
+                (t.nome === filtroTurmaDireta || String(t.id) === filtroTurmaDireta) &&
+                (filtroAno === 'todos' || String(t.ano) === filtroAno)
+            ) || turmas.find((t: any) => t.nome === filtroTurmaDireta || String(t.id) === filtroTurmaDireta)
+          if (tObj ? !doesOcMatchTurma(o, tObj, turmas) : (o.turmaNome || o.turma) !== filtroTurmaDireta) return false
         }
         if (buscaDireta.trim()) {
           const q = buscaDireta.toLowerCase()
@@ -1529,7 +1670,7 @@ export default function OcorrenciasPage() {
         }
         return true
       })
-  }, [ocorrencias, filtroStatusDireto, filtroTurmaDireta, buscaDireta, turmas])
+  }, [ocorrenciasDoAno, filtroStatusDireto, filtroTurmaDireta, buscaDireta, turmas, filtroAno])
 
   const ocorrenciasDiretasPaginadas = useMemo(() => {
     const start = (paginaDireta - 1) * itemsPerPage
@@ -1631,6 +1772,26 @@ export default function OcorrenciasPage() {
                 {turmaLabel}
               </span>
             )}
+
+            {(() => {
+              const oAno = getOcAno(oc, turmas)
+              if (!oAno) return null
+              return (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#1d4ed8',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    padding: '2px 7px',
+                    borderRadius: '6px',
+                  }}
+                >
+                  Ano {oAno}
+                </span>
+              )
+            })()}
 
             {oc.anexoUrl && (
               <span
@@ -1861,19 +2022,28 @@ export default function OcorrenciasPage() {
 
     const drawerAlunoOcorrencias =
       quickDrawer?.type === 'aluno'
-        ? ocorrencias
+        ? ocorrenciasDoAno
             .filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === cleanAlunoId(quickDrawer.alunoId))
             .sort((a, b) => (b.createdAt || b.data || '').localeCompare(a.createdAt || a.data || ''))
         : []
 
     const drawerTurmaObj =
-      quickDrawer?.type === 'turma' ? turmas.find((t: any) => t.nome === quickDrawer.turmaNome) : null
+      quickDrawer?.type === 'turma'
+        ? quickDrawer.turmaId
+          ? turmas.find((t: any) => String(t.id) === String(quickDrawer.turmaId))
+          : turmas.find(
+              (t: any) =>
+                t.nome === quickDrawer.turmaNome &&
+                (filtroAno === 'todos' || String(t.ano) === filtroAno)
+            ) || turmas.find((t: any) => t.nome === quickDrawer.turmaNome)
+        : null
+
     const drawerTurmaOcorrencias =
       quickDrawer?.type === 'turma'
-        ? ocorrencias
+        ? ocorrenciasDoAno
             .filter(o =>
               drawerTurmaObj
-                ? doesOcMatchTurma(o, drawerTurmaObj)
+                ? doesOcMatchTurma(o, drawerTurmaObj, turmas)
                 : String(o.turma || '').toLowerCase() === quickDrawer.turmaNome.toLowerCase()
             )
             .sort((a, b) => (b.createdAt || b.data || '').localeCompare(a.createdAt || a.data || ''))
@@ -1881,7 +2051,7 @@ export default function OcorrenciasPage() {
 
     const drawerStatusOcorrencias =
       quickDrawer?.type === 'status'
-        ? ocorrencias
+        ? ocorrenciasDoAno
             .filter(o =>
               quickDrawer.statusFilter === 'todas'
                 ? true
@@ -1923,7 +2093,8 @@ export default function OcorrenciasPage() {
               const parsed = parseOcorrenciaDescricao(activeOc.descricao)
               const turmaLabel = activeOc.turmaNome || activeOc.turma || 'Sem turma'
               const aId = cleanAlunoId(activeOc.alunoId || activeOc.aluno_id)
-              const totalDoAluno = ocorrencias.filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === aId).length
+              const totalDoAluno = ocorrenciasDoAno.filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === aId).length
+              const totalGeralAluno = ocorrencias.filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === aId).length
 
               return (
                 <>
@@ -1998,6 +2169,7 @@ export default function OcorrenciasPage() {
                             {turmaLabel} • Data: {formatDateBR(activeOc.data)}
                           </div>
                         </div>
+
                       </div>
                       <button
                         type="button"
@@ -2154,6 +2326,7 @@ export default function OcorrenciasPage() {
                             <div style={{ fontSize: 11, color: '#0369a1' }}>Clique para visualizar o arquivo em nova aba</div>
                           </div>
                         </div>
+
                         <a
                           href={activeOc.anexoUrl}
                           target="_blank"
@@ -2464,6 +2637,7 @@ export default function OcorrenciasPage() {
                       alunoId: quickDrawer.alunoId,
                       alunoNome: quickDrawer.alunoNome,
                       turma: quickDrawer.turma,
+                      ano: String(quickDrawer.ano || (filtroAno !== 'todos' ? filtroAno : '')),
                     })
                   }
                   style={{
@@ -2524,12 +2698,28 @@ export default function OcorrenciasPage() {
                   >
                     Visualização Rápida da Turma
                   </div>
-                  <h2
-                    id="quickDrawerTitle"
-                    style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff' }}
-                  >
-                    {quickDrawer.turmaNome}
-                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h2
+                      id="quickDrawerTitle"
+                      style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff' }}
+                    >
+                      {quickDrawer.turmaNome}
+                    </h2>
+                    {(quickDrawer.ano || (filtroAno !== 'todos' && filtroAno)) && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: 'rgba(255,255,255,0.2)',
+                          color: '#fff',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                        }}
+                      >
+                        Ano {quickDrawer.ano || filtroAno}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
                     {drawerTurmaOcorrencias.length} ocorrência(s) registrada(s) nesta turma
                   </div>
@@ -2580,7 +2770,13 @@ export default function OcorrenciasPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => openNew({ turma: quickDrawer.turmaNome })}
+                  onClick={() =>
+                    openNew({
+                      turma: quickDrawer.turmaNome,
+                      turma_id: quickDrawer.turmaId,
+                      ano: String(quickDrawer.ano || (filtroAno !== 'todos' ? filtroAno : '')),
+                    })
+                  }
                   style={{
                     marginLeft: 'auto',
                     padding: '6px 12px',
@@ -2737,18 +2933,37 @@ export default function OcorrenciasPage() {
                 Gestão Disciplinar
               </span>
             </div>
-            <h1
-              style={{
-                fontFamily: 'Outfit, sans-serif',
-                fontWeight: 900,
-                fontSize: 30,
-                color: '#0f172a',
-                margin: 0,
-                letterSpacing: '-0.6px',
-              }}
-            >
-              Ocorrências Escolares
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h1
+                style={{
+                  fontFamily: 'Outfit, sans-serif',
+                  fontWeight: 900,
+                  fontSize: 30,
+                  color: '#0f172a',
+                  margin: 0,
+                  letterSpacing: '-0.6px',
+                }}
+              >
+                Ocorrências Escolares
+              </h1>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 12px',
+                  borderRadius: 10,
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: '#1d4ed8',
+                }}
+              >
+                <Calendar size={14} />
+                {filtroAno === 'todos' ? 'Todos os Anos Letivos' : `Ano Letivo ${filtroAno}`}
+              </span>
+            </div>
             <p style={{ fontSize: 13.5, color: '#64748b', margin: '4px 0 0 0' }}>
               Monitore o comportamento, acompanhe ciências e clique em qualquer indicador para inspecionar os registros.
             </p>
@@ -3524,7 +3739,7 @@ export default function OcorrenciasPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      Todas as Turmas ({turmas.length})
+                      Todas as Turmas ({turmasDoAno.length})
                     </button>
                     <button
                       type="button"
@@ -3647,30 +3862,28 @@ export default function OcorrenciasPage() {
                     )}
                   </div>
 
-                  <div style={{ width: '140px' }}>
-                    {cfgCalendarioLetivo.length === 0 ? (
-                      <Skeleton w="100%" h="42px" />
-                    ) : (
-                      <select
-                        className="form-input"
-                        style={{
-                          height: '42px',
-                          borderRadius: '10px',
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          fontSize: '13.5px',
-                        }}
-                        value={filtroAno}
-                        onChange={e => setFiltroAno(e.target.value)}
-                      >
-                        <option value="todos">Anos Letivos</option>
-                        {cfgCalendarioLetivo.map((c: any) => (
-                          <option key={c.id} value={c.ano}>
-                            {c.ano}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                  <div style={{ width: '150px' }}>
+                    <select
+                      className="form-input"
+                      style={{
+                        height: '42px',
+                        borderRadius: '10px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '13.5px',
+                        fontWeight: 600,
+                        color: '#1e40af',
+                      }}
+                      value={filtroAno}
+                      onChange={e => setFiltroAno(e.target.value)}
+                    >
+                      <option value="todos">Todos os Anos</option>
+                      {anosDisponiveis.map(ano => (
+                        <option key={ano} value={ano}>
+                          {ano}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div style={{ width: '160px' }}>
@@ -3847,7 +4060,7 @@ export default function OcorrenciasPage() {
                           return (
                             <tr
                               key={turma.id}
-                              onClick={() => setQuickDrawer({ type: 'turma', turmaNome: turma.nome })}
+                              onClick={() => setQuickDrawer({ type: 'turma', turmaNome: turma.nome, turmaId: turma.id, ano: turma.ano })}
                               style={{
                                 background: '#ffffff',
                                 cursor: 'pointer',
@@ -3973,7 +4186,7 @@ export default function OcorrenciasPage() {
                                   {hasOc && (
                                     <button
                                       type="button"
-                                      onClick={() => setQuickDrawer({ type: 'turma', turmaNome: turma.nome })}
+                                      onClick={() => setQuickDrawer({ type: 'turma', turmaNome: turma.nome, turmaId: turma.id, ano: turma.ano })}
                                       style={{
                                         height: '32px',
                                         padding: '0 10px',
@@ -4015,7 +4228,7 @@ export default function OcorrenciasPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => openNew({ turma: turma.nome })}
+                                    onClick={() => openNew({ turma: turma.nome, turma_id: turma.id, ano: String(turma.ano || filtroAno || '') })}
                                     style={{
                                       height: '32px',
                                       padding: '0 12px',
@@ -4144,6 +4357,34 @@ export default function OcorrenciasPage() {
                     />
                   </div>
 
+                  <div style={{ width: 170 }}>
+                    <select
+                      className="form-input"
+                      style={{
+                        width: '100%',
+                        height: 42,
+                        borderRadius: 10,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        fontSize: 13.5,
+                        fontWeight: 600,
+                        color: '#0f172a',
+                      }}
+                      value={filtroAno}
+                      onChange={e => {
+                        setFiltroAno(e.target.value)
+                        setFiltroTurmaDireta('todas')
+                      }}
+                    >
+                      <option value="todos">Todos os Anos</option>
+                      {anosDisponiveis.map(ano => (
+                        <option key={ano} value={ano}>
+                          Ano {ano}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div style={{ width: 240 }}>
                     <select
                       className="form-input"
@@ -4158,8 +4399,8 @@ export default function OcorrenciasPage() {
                       value={filtroTurmaDireta}
                       onChange={e => setFiltroTurmaDireta(e.target.value)}
                     >
-                      <option value="todas">Todas as Turmas</option>
-                      {turmas.map((t: any) => (
+                      <option value="todas">Todas as Turmas ({turmasDoAno.length})</option>
+                      {turmasDoAno.map((t: any) => (
                         <option key={t.id} value={t.nome}>
                           {t.nome}
                         </option>
@@ -4267,10 +4508,19 @@ export default function OcorrenciasPage() {
                         .filter((a: any) => a.nome.toLowerCase().includes(buscaAlunoHome.toLowerCase()))
                         .slice(0, 12)
                     : []
-                const ocDoAluno = alunoSel
+                const todasOcDoAluno = alunoSel
                   ? ocorrencias
                       .filter(o => cleanAlunoId(o.alunoId || o.aluno_id) === cleanAlunoId(alunoSel.id))
-                      .sort((a, b) => (b.createdAt || b.data || '').localeCompare(a.createdAt || a.data || ''))
+                      .sort((a, b) => {
+                        const dateA = a.createdAt || a.created_at || a.data || ''
+                        const dateB = b.createdAt || b.created_at || b.data || ''
+                        return dateB.localeCompare(dateA)
+                      })
+                  : []
+                const ocDoAluno = alunoSel
+                  ? (filtroAno === 'todos'
+                      ? todasOcDoAluno
+                      : todasOcDoAluno.filter(o => getOcAno(o, turmas) === String(filtroAno)))
                   : []
 
                 const printRelatorio = () => {
@@ -4310,10 +4560,48 @@ export default function OcorrenciasPage() {
                         marginBottom: '20px',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14.5, color: '#0f172a' }}>
-                          🔍 Buscar Dossiê Individual de Aluno
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 12,
+                          flexWrap: 'wrap',
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 800, fontSize: 14.5, color: '#0f172a' }}>
+                            🔍 Buscar Dossiê Individual de Aluno
+                          </div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <Calendar size={13} style={{ color: '#2563eb' }} />
+                            <select
+                              className="form-input"
+                              style={{
+                                height: 32,
+                                borderRadius: 8,
+                                background: '#eff6ff',
+                                border: '1px solid #bfdbfe',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: '#1d4ed8',
+                                padding: '0 8px',
+                                cursor: 'pointer',
+                              }}
+                              value={filtroAno}
+                              onChange={e => setFiltroAno(e.target.value)}
+                            >
+                              <option value="todos">Todos os Anos</option>
+                              {anosDisponiveis.map(ano => (
+                                <option key={ano} value={ano}>
+                                  Ano {ano}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
+
                         {alunoSel && (
                           <button
                             type="button"
@@ -4448,6 +4736,7 @@ export default function OcorrenciasPage() {
                             ))}
                           </div>
                         </div>
+
                       )}
 
                       {isLoadingAlunos ? (
@@ -4461,7 +4750,7 @@ export default function OcorrenciasPage() {
                         !alunoSel && (
                           <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
                             {filteredAlunos.map((a: any) => {
-                              const countOc = ocorrencias.filter(
+                              const countOc = (filtroAno === 'todos' ? ocorrencias : ocorrenciasDoAno).filter(
                                 o => cleanAlunoId(o.alunoId || o.aluno_id) === cleanAlunoId(a.id)
                               ).length
                               return (
@@ -4549,7 +4838,7 @@ export default function OcorrenciasPage() {
                               {alunoSel.nome}
                             </div>
                             <div style={{ fontSize: 13, color: '#64748b' }}>
-                              {alunoSel.turma} • {ocDoAluno.length} ocorrência(s) no histórico
+                              {alunoSel.turma} • {ocDoAluno.length} ocorrência(s) {filtroAno !== 'todos' ? `em ${filtroAno}` : 'no histórico'}
                             </div>
                           </div>
 
@@ -4622,6 +4911,7 @@ export default function OcorrenciasPage() {
                                   alunoId: alunoSel.id,
                                   alunoNome: alunoSel.nome,
                                   turma: alunoSel.turma,
+                                  ano: String(filtroAno !== 'todos' ? filtroAno : ''),
                                 })
                               }
                               style={{
@@ -4643,6 +4933,45 @@ export default function OcorrenciasPage() {
                             </button>
                           </div>
                         </div>
+
+                        {filtroAno !== 'todos' && todasOcDoAluno.length > ocDoAluno.length && (
+                          <div
+                            style={{
+                              marginBottom: 16,
+                              padding: '12px 18px',
+                              borderRadius: 14,
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: 10,
+                              fontSize: 13,
+                              color: '#1e3a8a',
+                            }}
+                          >
+                            <span>
+                              Exibindo <strong>{ocDoAluno.length}</strong> registro(s) do ano letivo <strong>{filtroAno}</strong>. O aluno possui <strong>{todasOcDoAluno.length}</strong> ocorrência(s) no total de outros anos.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setFiltroAno('todos')}
+                              style={{
+                                border: 'none',
+                                background: '#2563eb',
+                                color: '#fff',
+                                padding: '6px 12px',
+                                borderRadius: 8,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Ver Histórico Completo ({todasOcDoAluno.length})
+                            </button>
+                          </div>
+                        )}
 
                         {ocDoAluno.length === 0 ? (
                           <div
@@ -4829,7 +5158,9 @@ export default function OcorrenciasPage() {
   }
 
   // ── Vista interna: Ocorrências da Turma Selecionada ──────────────────────
-  const turmaObj = turmas.find((t: any) => t.nome === turmaSel)
+  const turmaObj =
+    (filtroAno !== 'todos' ? turmas.find((t: any) => t.nome === turmaSel && String(t.ano) === String(filtroAno)) : null) ||
+    turmas.find((t: any) => t.nome === turmaSel)
   const color = SEG_COLORS[turmaObj?.serie ?? ''] ?? '#3b82f6'
 
   const printRelatorioTurma = () => {
@@ -4882,6 +5213,24 @@ export default function OcorrenciasPage() {
               <span style={{ padding: '3px 10px', borderRadius: 20, background: `${color}15`, color, fontSize: 11, fontWeight: 700 }}>
                 {turmaObj?.serie}
               </span>
+              {(turmaObj?.ano || (filtroAno !== 'todos' && filtroAno)) && (
+                <span
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: 20,
+                    background: '#eff6ff',
+                    color: '#2563eb',
+                    border: '1px solid #bfdbfe',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Calendar size={11} /> Ano {turmaObj?.ano || filtroAno}
+                </span>
+              )}
             </div>
             <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>
               {ocDaTurma.length} ocorrência(s) • {alunosDaTurmaAtual.length} alunos matriculados
@@ -4947,7 +5296,13 @@ export default function OcorrenciasPage() {
               gap: '8px',
               boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
             }}
-            onClick={() => openNew({ turma: turmaSel })}
+            onClick={() =>
+              openNew({
+                turma: turmaSel,
+                turma_id: turmaObj?.id,
+                ano: String(turmaObj?.ano || (filtroAno !== 'todos' ? filtroAno : '')),
+              })
+            }
           >
             <Plus size={16} /> Nova Ocorrência
           </button>
@@ -5073,7 +5428,13 @@ export default function OcorrenciasPage() {
                   alignItems: 'center',
                   gap: 6,
                 }}
-                onClick={() => openNew({ turma: turmaSel })}
+                onClick={() =>
+              openNew({
+                turma: turmaSel,
+                turma_id: turmaObj?.id,
+                ano: String(turmaObj?.ano || (filtroAno !== 'todos' ? filtroAno : '')),
+              })
+            }
               >
                 <Plus size={14} /> Nova Ocorrência
               </button>
