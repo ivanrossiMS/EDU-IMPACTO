@@ -100,6 +100,7 @@ export default function PortariaLogsPage() {
 
   const statusBadge = (st: string) => {
     if (st === 'sucesso') return { bg: 'rgba(16,185,129,0.06)', border: 'rgba(16,185,129,0.2)', color: '#10b981', label: '✅ Sucesso' }
+    if (st === 'negado') return { bg: 'rgba(244,63,94,0.08)', border: 'rgba(244,63,94,0.25)', color: '#e11d48', label: '🚫 Negado / Bloqueado' }
     if (st === 'falha') return { bg: 'rgba(244,63,94,0.06)', border: 'rgba(244,63,94,0.2)', color: '#f43f5e', label: '❌ Falha' }
     return { bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.2)', color: '#f59e0b', label: '⚠️ Inconsistência' }
   }

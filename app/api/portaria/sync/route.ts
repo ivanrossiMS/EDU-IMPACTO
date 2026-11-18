@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -40,15 +41,20 @@ export async function POST(req: NextRequest) {
     // Buscar alunos
     let alunosQuery = supabase
       .from('alunos')
-      .select('id, nome, matricula, foto, status')
+      .select('id, nome, matricula, foto, status, dados')
       .or('status.neq.inativo,status.is.null')
 
     if (aluno_id) {
       alunosQuery = alunosQuery.eq('id', aluno_id)
     }
 
-    const { data: alunos, error: alunoErr } = await alunosQuery
+    const [{ data: alunos, error: alunoErr }, { data: configRow }] = await Promise.all([
+      alunosQuery,
+      supabase.from('configuracoes').select('valor').eq('chave', 'portaria_config').maybeSingle(),
+    ])
     if (alunoErr) throw alunoErr
+
+    const bloquearSaidaAtivo = configRow?.valor?.bloquear_saida_nao_autorizados !== false
 
     if (!alunos || alunos.length === 0) {
       return NextResponse.json({ error: 'Nenhum aluno ativo encontrado' }, { status: 404 })
@@ -61,6 +67,18 @@ export async function POST(req: NextRequest) {
       login: (device.configuracao as any)?.login || 'admin',
       password: (device.configuracao as any)?.password || 'admin',
     })
+
+    let exitBlockGroupId: number | null = null
+    if (isMaster150Device(device)) {
+      try {
+        const exitCfg = await client.ensureExitBlockingRuleConfigured()
+        if (exitCfg.configured && exitCfg.groupId) {
+          exitBlockGroupId = exitCfg.groupId
+        }
+      } catch (exitErr: any) {
+        console.warn('[Portaria Sync] Regra de saída falhou:', exitErr.message)
+      }
+    }
 
     const results: any[] = []
 
@@ -80,6 +98,13 @@ export async function POST(req: NextRequest) {
       try {
         // Criar/atualizar usuário no iDFace
         await client.createUser(numericId, aluno.nome, codigo)
+        await client.ensureUserDefaultGroup(numericId, 1)
+
+        if (exitBlockGroupId) {
+          const autorizado = resolveStudentAutorizadoSairSozinho(aluno, (aluno as any).dados)
+          const deveBloquear = bloquearSaidaAtivo && !autorizado
+          await client.syncStudentExitBlockGroup(numericId, deveBloquear, exitBlockGroupId).catch(() => {})
+        }
 
         let fotoEnviada = false
 

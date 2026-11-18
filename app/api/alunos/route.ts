@@ -1,6 +1,7 @@
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
+import { parseBooleanSairSozinho, resolveStudentAutorizadoSairSozinho } from '@/lib/portariaUtils'
 import {
   cleanupOneSignalForInactiveStudent,
   isStudentInactiveStatus,
@@ -28,33 +29,6 @@ import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studen
 import { invalidateAlunosCache, invalidateGruposCache, getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 
 export const dynamic = 'force-dynamic'
-
-function parseBooleanSairSozinho(val: any): boolean | undefined {
-  if (typeof val === 'boolean') return val
-  if (typeof val === 'number') return val === 1
-  if (typeof val === 'string') {
-    const s = val.trim().toLowerCase()
-    if (['true', 'sim', 's', '1', 'autorizado'].includes(s)) return true
-    if (['false', 'nao', 'não', 'n', '0', 'nao autorizado', 'não autorizado'].includes(s)) return false
-  }
-  return undefined
-}
-
-function resolveStudentAutorizadoSairSozinho(student: any, d: any = student?.dados || {}): boolean {
-  const candidates = [
-    student?.autorizadoSairSozinho,
-    d?.autorizadoSairSozinho,
-    student?.sairSozinho,
-    d?.sairSozinho,
-    student?.saude?.autorizaSaida,
-    d?.saude?.autorizaSaida,
-  ]
-  for (const c of candidates) {
-    const parsed = parseBooleanSairSozinho(c)
-    if (parsed !== undefined) return parsed
-  }
-  return false
-}
 
 function cleanNameString(str: any): string {
   if (!str) return ''

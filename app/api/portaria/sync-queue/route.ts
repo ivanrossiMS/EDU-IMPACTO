@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth, resolveUserRole } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
+import { resolveStudentAutorizadoSairSozinho, resolveStudentNumericId, isStudentActiveStatus } from '@/lib/portariaUtils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -66,11 +67,47 @@ async function getRegistradosHoje(sentido: 'entrada' | 'saida' = 'entrada') {
   }
 }
 
+async function getBlockedExitStudentIds(bloquearAtivo: boolean): Promise<{ synced: boolean; ids: number[] }> {
+  if (!bloquearAtivo) return { synced: true, ids: [] }
+  try {
+    const blockedSet = new Set<number>()
+    let from = 0
+    const pageSize = 1000
+    while (true) {
+      const { data, error } = await supabase
+        .from('alunos')
+        .select('id, matricula, status, dados')
+        .or('status.neq.inativo,status.is.null')
+        .range(from, from + pageSize - 1)
+      if (error) throw error
+      if (!data || data.length === 0) break
+
+      for (const a of data) {
+        if (!isStudentActiveStatus(a.status)) continue
+        if (!resolveStudentAutorizadoSairSozinho(a, a.dados)) {
+          const numId = resolveStudentNumericId(a)
+          if (numId && numId > 0) blockedSet.add(numId)
+        }
+      }
+
+      if (data.length < pageSize) break
+      from += pageSize
+    }
+    return { synced: true, ids: Array.from(blockedSet).sort((a, b) => a - b) }
+  } catch (err: any) {
+    console.error('[getBlockedExitStudentIds Error]', err?.message)
+    return { synced: false, ids: [] }
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const dispositivoId = searchParams.get('dispositivo_id')
     const limitParam = parseInt(searchParams.get('limit') || '100', 10)
+    const includeExitRules =
+      searchParams.get('include_exit_rules') === '1' ||
+      searchParams.get('include_exit_rules') === 'true'
 
     let query = supabase
       .from('portaria_sync')
@@ -120,6 +157,11 @@ export async function GET(req: NextRequest) {
     // deixando o próprio /api/portaria/webhook aplicar a regra de 'permitir_multiplas_entradas' na frequência e no Push.
     const permitir_multiplas_entradas = true
     const permitir_multiplas_entradas_erp = !!portariaConfig.permitir_multiplas_entradas
+    const bloquear_saida_nao_autorizados = portariaConfig.bloquear_saida_nao_autorizados !== false
+
+    const exitRulesData = includeExitRules
+      ? await getBlockedExitStudentIds(bloquear_saida_nao_autorizados)
+      : null
 
     if (!pendingRows || pendingRows.length === 0) {
       return NextResponse.json({
@@ -130,9 +172,15 @@ export async function GET(req: NextRequest) {
         dispositivos,
         total: count || 0,
         permitir_multiplas_entradas,
+        bloquear_saida_nao_autorizados,
+        ...(exitRulesData ? {
+          exit_rules_synced: exitRulesData.synced,
+          bloqueados_saida_ids: exitRulesData.ids,
+        } : {}),
         config: {
           permitir_multiplas_entradas,
-          permitir_multiplas_entradas_erp
+          permitir_multiplas_entradas_erp,
+          bloquear_saida_nao_autorizados,
         }
       })
     }
@@ -222,6 +270,7 @@ export async function GET(req: NextRequest) {
         matricula: a?.matricula || (numeric_id ? String(numeric_id) : ''),
         foto: (a && isActive) ? a.foto : null,
         acao,
+        autorizado_sair_sozinho: (a && isActive) ? resolveStudentAutorizadoSairSozinho(a, a.dados) : false,
         erro_detalhe: row.erro_detalhe || null
       })
     }
@@ -250,9 +299,15 @@ export async function GET(req: NextRequest) {
       dispositivos,
       total: realTotal,
       permitir_multiplas_entradas,
+      bloquear_saida_nao_autorizados,
+      ...(exitRulesData ? {
+        exit_rules_synced: exitRulesData.synced,
+        bloqueados_saida_ids: exitRulesData.ids,
+      } : {}),
       config: {
         permitir_multiplas_entradas,
-        permitir_multiplas_entradas_erp
+        permitir_multiplas_entradas_erp,
+        bloquear_saida_nao_autorizados,
       }
     })
   } catch (err: any) {

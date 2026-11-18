@@ -120,11 +120,40 @@ def main():
     except Exception as e:
         print(f"   ℹ️ Consulta a remote_terminals: {e}")
 
+    # 3.5. Grupos e Regras de Acesso (Bloqueio de Saída)
+    print(f"\n🛡️ GRUPOS E REGRAS DE ACESSO (Modo 1):")
+    try:
+        grp_res = post_json(f"{base_url}/load_objects.fcgi", {"object": "groups"}, cookie=session)
+        grupos = grp_res.get("groups", [])
+        for g in grupos:
+            print(f"   • Grupo ID {g.get('id')}: \"{g.get('name', '')}\"")
+            if g.get("name") == "EDU_BLOQUEIO_SAIDA_SOZINHO":
+                ug_res = post_json(f"{base_url}/load_objects.fcgi", {
+                    "object": "user_groups",
+                    "where": {"user_groups": {"group_id": g.get("id")}},
+                    "fields": ["user_id"]
+                }, cookie=session)
+                print(f"     ↳ Alunos bloqueados na saída neste grupo: {len(ug_res.get('user_groups', []))}")
+
+        ar_res = post_json(f"{base_url}/load_objects.fcgi", {"object": "access_rules"}, cookie=session)
+        par_res = post_json(f"{base_url}/load_objects.fcgi", {"object": "portal_access_rules"}, cookie=session)
+        gar_res = post_json(f"{base_url}/load_objects.fcgi", {"object": "group_access_rules"}, cookie=session)
+        pars = par_res.get("portal_access_rules", [])
+        gars = gar_res.get("group_access_rules", [])
+        for ar in ar_res.get("access_rules", []):
+            rid = ar.get("id")
+            tipo_txt = "BLOQUEIO (type=0)" if ar.get("type") == 0 else f"LIBERACAO (type={ar.get('type')})"
+            p_ids = [str(p.get("portal_id")) for p in pars if p.get("access_rule_id") == rid]
+            g_ids = [str(g.get("group_id")) for g in gars if g.get("access_rule_id") == rid]
+            print(f"   • Regra ID {rid}: \"{ar.get('name', '')}\" [{tipo_txt}] | Portais={','.join(p_ids) or 'todos'} | Grupos={','.join(g_ids) or '-'}")
+    except Exception as e:
+        print(f"   ℹ️ Consulta a regras/grupos: {e}")
+
     # 4. Últimos Logs de Acesso
     print(f"\n📋 ÚLTIMOS 10 REGISTROS DE ACESSO (access_logs):")
-    print("-" * 65)
-    print(f" {'ID Log':<8} | {'Aluno ID':<9} | {'Data e Hora':<19} | {'Portal':<8} | Sentido Detectado")
-    print("-" * 65)
+    print("-" * 78)
+    print(f" {'ID Log':<8} | {'Aluno ID':<9} | {'Data e Hora':<19} | {'Portal':<6} | {'Ev':<3} | Sentido Detectado")
+    print("-" * 78)
 
     try:
         logs_res = post_json(f"{base_url}/load_objects.fcgi", {
@@ -144,15 +173,17 @@ def main():
                 dt = datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M:%S") if ts else "?"
                 pid = l.get("portal_id", l.get("portal", 0))
                 cid = l.get("component_id", 0)
+                ev = l.get("event", "?")
+                ev_tag = " [NEGADO]" if str(ev) == "6" else ""
 
                 if pid in (1, 101) or cid == 810373890 or l.get("door_id") == 1:
-                    sentido = "🚪 SAÍDA (Rua das Garças / .154)"
+                    sentido = f"🚪 SAÍDA (Rua das Garças / .154){ev_tag}"
                 elif pid in (2, 102) or cid == 810373889 or l.get("door_id") == 2 or pid == 0:
-                    sentido = "🟢 ENTRADA (Portaria Principal / .150)"
+                    sentido = f"🟢 ENTRADA (Portaria Principal / .150){ev_tag}"
                 else:
-                    sentido = f"ℹ️ Portal {pid}"
+                    sentido = f"ℹ️ Portal {pid}{ev_tag}"
 
-                print(f" {str(lid):<8} | {str(uid):<9} | {dt:<19} | {str(pid):<8} | {sentido}")
+                print(f" {str(lid):<8} | {str(uid):<9} | {dt:<19} | {str(pid):<6} | {str(ev):<3} | {sentido}")
 
     except Exception as e:
         print(f"❌ Erro ao ler access_logs: {e}")

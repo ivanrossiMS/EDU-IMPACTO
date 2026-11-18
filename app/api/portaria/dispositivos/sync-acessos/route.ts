@@ -257,9 +257,10 @@ export async function POST(req: NextRequest) {
           if (!existingDate || (x.logDate && existingDate !== x.logDate)) {
             return true
           }
-          // Se for evento reconhecido de entrada e o aluno ainda não tem entrada válida em frequencias nessa data, reprocessar!
+          // Se for evento reconhecido e liberado de entrada e o aluno ainda não tem entrada válida em frequencias nessa data, reprocessar!
           const uid = x.log.user_id ? String(x.log.user_id).trim() : ''
-          if (uid && uid !== '0' && x.logDate && !existingFreqValidSet.has(`${uid}_${x.logDate}`)) {
+          const isDeniedLog = Number(x.log.event) === 6
+          if (!isDeniedLog && uid && uid !== '0' && x.logDate && !existingFreqValidSet.has(`${uid}_${x.logDate}`)) {
             return true
           }
           return false

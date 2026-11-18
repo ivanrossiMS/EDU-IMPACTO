@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -33,10 +34,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Nenhuma pendência na fila para processar.', processed: 0, total: 0 })
   }
 
-  // 2. Buscar dispositivos
-  const { data: devices } = await supabase
-    .from('portaria_dispositivos')
-    .select('*')
+  // 2. Buscar dispositivos e configuração de bloqueio de saída
+  const [{ data: devices }, { data: configRow }] = await Promise.all([
+    supabase.from('portaria_dispositivos').select('*'),
+    supabase.from('configuracoes').select('valor').eq('chave', 'portaria_config').maybeSingle(),
+  ])
+  const bloquearSaidaAtivo = configRow?.valor?.bloquear_saida_nao_autorizados !== false
 
   const devicesMap = new Map<string, any>()
   for (const d of devices || []) {
@@ -81,6 +84,7 @@ export async function POST(req: NextRequest) {
 
   // Pool de clientes iDFace por IP
   const clientsCache = new Map<string, ControliDClient>()
+  const exitGroupCache = new Map<string, number | null>()
   function getClientForDevice(dev: any): ControliDClient | null {
     if (!dev?.ip) return null
     if (clientsCache.has(dev.ip)) return clientsCache.get(dev.ip)!
@@ -92,6 +96,20 @@ export async function POST(req: NextRequest) {
     })
     clientsCache.set(dev.ip, client)
     return client
+  }
+
+  async function getExitGroupIdForMaster(dev: any, client: ControliDClient): Promise<number | null> {
+    if (!isMaster150Device(dev)) return null
+    if (exitGroupCache.has(dev.ip)) return exitGroupCache.get(dev.ip) ?? null
+    try {
+      const res = await client.ensureExitBlockingRuleConfigured()
+      const gid = res.configured && res.groupId ? res.groupId : null
+      exitGroupCache.set(dev.ip, gid)
+      return gid
+    } catch {
+      exitGroupCache.set(dev.ip, null)
+      return null
+    }
   }
 
   const stream = new ReadableStream({
@@ -181,6 +199,16 @@ export async function POST(req: NextRequest) {
                 } catch {
                   try {
                     await client.updateUser(numericId, a?.nome?.slice(0, 30) || `Aluno ${numericId}`)
+                  } catch {}
+                }
+
+                await client.ensureUserDefaultGroup(numericId, 1)
+                const exitGroupId = await getExitGroupIdForMaster(dev, client)
+                if (exitGroupId) {
+                  const autorizado = resolveStudentAutorizadoSairSozinho(a, a?.dados)
+                  const deveBloquear = bloquearSaidaAtivo && !autorizado
+                  try {
+                    await client.syncStudentExitBlockGroup(numericId, deveBloquear, exitGroupId)
                   } catch {}
                 }
 

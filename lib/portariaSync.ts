@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
 import { isValidStudentPhoto } from '@/lib/utils'
+import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,6 +128,9 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
     }
 
     const hasValidPhoto = isValidStudentPhoto(student.foto)
+    const autorizadoSairSozinho = resolveStudentAutorizadoSairSozinho(student, student.dados)
+    const bloquearSaidaAtivo = config.bloquear_saida_nao_autorizados !== false
+    const deveBloquearSaida = bloquearSaidaAtivo && !autorizadoSairSozinho
 
     await Promise.allSettled(devices.map(async (dev) => {
       // 1. Enfileirar como 'pendente' no banco online (para que a catraca/script local busque)
@@ -150,6 +154,18 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
 
         // Cadastrar/atualizar cadastro básico do usuário no leitor
         await client.createUser(numericId, student.nome, codigo)
+        await client.ensureUserDefaultGroup(numericId, 1)
+
+        if (isMaster150Device(dev)) {
+          try {
+            const exitCfg = await client.ensureExitBlockingRuleConfigured()
+            if (exitCfg.configured && exitCfg.groupId) {
+              await client.syncStudentExitBlockGroup(numericId, deveBloquearSaida, exitCfg.groupId)
+            }
+          } catch (exitErr: any) {
+            console.warn(`⚠️ [Portaria Sync Direto] Regra de saída falhou em "${dev.nome}":`, exitErr.message)
+          }
+        }
         console.log(`✅ [Portaria Sync Direto] Cadastro básico de "${student.nome}" enviado para "${dev.nome}"`)
 
         let fotoEnviada = false

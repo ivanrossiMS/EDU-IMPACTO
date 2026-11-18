@@ -506,14 +506,26 @@ export async function POST(req: Request) {
       }
     }
 
+    // Verificar código de evento do log Control iD (7 = Acesso Concedido, 6 = Acesso Negado por regra/bloqueio)
+    const rawAccessEvent =
+      payload.access_event ??
+      payload.object_changes?.[0]?.values?.event ??
+      payload.access_logs?.event ??
+      (typeof payload.event === 'number' || typeof payload.event === 'string' ? payload.event : null)
+    const accessEventNum =
+      rawAccessEvent !== undefined && rawAccessEvent !== null && rawAccessEvent !== '' && !isNaN(Number(rawAccessEvent))
+        ? Number(rawAccessEvent)
+        : null
+    const isBlockedByDeviceRule = accessEventNum === 6
+
     // Determinar status do evento:
-    // sucesso       → aluno identificado
-    // negado        → face não reconhecida pelo equipamento (user_id = 0)
+    // sucesso       → aluno identificado e acesso liberado
+    // negado        → face não reconhecida (user_id = 0) OU bloqueado por regra da catraca (event = 6)
     // inconsistencia → user_id presente mas aluno não encontrado
     // falha         → payload sem identificação nenhuma
     let eventStatus: string
-    if (userIdNum === 0) {
-      // Face presente mas não cadastrada na catraca → negado
+    if (userIdNum === 0 || isBlockedByDeviceRule) {
+      // Face não cadastrada OU bloqueio ativo na catraca (ex: saída bloqueada) → negado
       eventStatus = 'negado'
     } else if (alunoId) {
       // Aluno identificado → Sempre confirmado como sucesso

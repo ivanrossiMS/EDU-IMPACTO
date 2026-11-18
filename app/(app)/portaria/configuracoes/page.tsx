@@ -16,6 +16,7 @@ interface PortariaConfig {
   remover_inativos_automaticamente: boolean
   reenviar_foto_ao_atualizar: boolean
   permitir_multiplas_entradas?: boolean
+  bloquear_saida_nao_autorizados?: boolean
   intervalo_sync_minutos: number
   fallback_matricula_como_codigo: boolean
   token_seguranca_webhook: string
@@ -26,6 +27,7 @@ const DEFAULT_CONFIG: PortariaConfig = {
   remover_inativos_automaticamente: true,
   reenviar_foto_ao_atualizar: true,
   permitir_multiplas_entradas: false,
+  bloquear_saida_nao_autorizados: true,
   intervalo_sync_minutos: 30,
   fallback_matricula_como_codigo: true,
   token_seguranca_webhook: '',
@@ -306,6 +308,32 @@ export default function PortariaConfigPage() {
         msg: enable
           ? '⚡ Modo Ativado: O sistema agora registrará TODAS as entradas dos alunos nas catracas!'
           : '🔒 Modo Restaurado: O sistema registrará apenas a 1ª entrada do dia (outras serão ignoradas).',
+        type: 'success'
+      })
+    } catch (err: any) {
+      setToast({ msg: err.message || 'Erro ao atualizar configuração', type: 'error' })
+      setConfig(config)
+    } finally {
+      setSaving(false)
+      setTimeout(() => setToast(null), 4500)
+    }
+  }
+
+  const handleToggleBloquearSaida = async (enable: boolean) => {
+    const updatedConfig = { ...config, bloquear_saida_nao_autorizados: enable }
+    setConfig(updatedConfig)
+    setSaving(true)
+    try {
+      const res = await fetch('/api/configuracoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'portaria_config', valor: updatedConfig }),
+      })
+      if (!res.ok) throw new Error('Erro ao salvar configuração no servidor')
+      setToast({
+        msg: enable
+          ? '🛡️ Bloqueio de saída ativado: o sincronizador aplicará o bloqueio na saída .150/.154 automaticamente.'
+          : '🔓 Bloqueio de saída pausado: o sincronizador liberará a saída na .150/.154 na próxima auditoria (até 5 min).',
         type: 'success'
       })
     } catch (err: any) {
@@ -680,6 +708,14 @@ export default function PortariaConfigPage() {
                     </span>
                   </div>
                 </div>
+
+                <Toggle
+                  value={config.bloquear_saida_nao_autorizados !== false}
+                  onChange={handleToggleBloquearSaida}
+                  label="Bloquear saída de alunos não autorizados a sair sozinhos"
+                  desc="Na catraca 192.168.1.150 (Saída .154), bloqueia o giro de saída mantendo a entrada funcionando normalmente"
+                  icon={<ShieldAlert size={18} />}
+                />
 
                 <Toggle
                   value={config.fallback_matricula_como_codigo}

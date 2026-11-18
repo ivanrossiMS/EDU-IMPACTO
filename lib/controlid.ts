@@ -288,6 +288,206 @@ export class ControliDClient {
     })
   }
 
+  // ─── Generic Object Access & Exit Blocking Rules ──────────────────
+  async loadObjects(object: string, opts: { where?: any; fields?: string[]; limit?: number; order?: any } = {}): Promise<any> {
+    const body: any = { object }
+    if (opts.where) body.where = opts.where
+    if (opts.fields) body.fields = opts.fields
+    if (opts.limit) body.limit = opts.limit
+    if (opts.order) body.order = opts.order
+    return this.request('load_objects.fcgi', body)
+  }
+
+  async createObjects(object: string, values: any[]): Promise<any> {
+    return this.request('create_objects.fcgi', { object, values })
+  }
+
+  async modifyObjects(object: string, values: any, where: any): Promise<any> {
+    return this.request('modify_objects.fcgi', { object, values, where })
+  }
+
+  async destroyObjects(object: string, where: any): Promise<any> {
+    return this.request('destroy_objects.fcgi', { object, where })
+  }
+
+  async ensureUserDefaultGroup(userId: number, groupId = 1): Promise<void> {
+    try {
+      const existing = await this.loadObjects('user_groups', {
+        where: { user_groups: { user_id: userId, group_id: groupId } },
+      })
+      if (!existing?.user_groups?.length) {
+        await this.createObjects('user_groups', [{ user_id: userId, group_id: groupId }])
+      }
+    } catch {
+      // Ignora se já vinculado
+    }
+  }
+
+  /**
+   * Garante na catraca Mestre (.150) a estrutura de bloqueio exclusivo para o portal de SAÍDA:
+   * - Grupo "EDU_BLOQUEIO_SAIDA_SOZINHO"
+   * - Horário 24h "EDU_24H_BLOQUEIO"
+   * - Regra de acesso type=0 (Bloqueio) "EDU_REGRA_BLOQUEIO_SAIDA"
+   * - Vínculo exclusivo no portal de Saída (nunca na Entrada!)
+   */
+  async ensureExitBlockingRuleConfigured(): Promise<{ configured: boolean; groupId?: number; portalId?: number; reason?: string }> {
+    const GROUP_NAME = 'EDU_BLOQUEIO_SAIDA_SOZINHO'
+    const RULE_NAME = 'EDU_REGRA_BLOQUEIO_SAIDA'
+    const TZ_NAME = 'EDU_24H_BLOQUEIO'
+
+    const portalsRes = await this.loadObjects('portals')
+    const portals: any[] = portalsRes?.portals || []
+    if (portals.length < 2) {
+      return {
+        configured: false,
+        reason: `Apenas ${portals.length} portal encontrado na catraca; bloqueio exclusivo de saída exige 2 portais distintos.`,
+      }
+    }
+
+    let exitPortalId: number | null = null
+    let entryPortalId: number | null = null
+
+    for (const p of portals) {
+      const pid = Number(p.id)
+      const name = String(p.name || '').toLowerCase()
+      const isExitName = /sa[ií]da|gar[cç]as|exit|extern/.test(name) && !/entrada/.test(name)
+      const isEntryName = /entrada|entry|principal|m[eé]dio/.test(name) && !/sa[ií]da|saida/.test(name)
+      if (isExitName && !exitPortalId) exitPortalId = pid
+      if (isEntryName && !entryPortalId) entryPortalId = pid
+    }
+
+    if (!exitPortalId) {
+      try {
+        const logsRes = await this.loadObjects('access_logs', { limit: 100, order: ['id', 'descending'] })
+        const logs: any[] = logsRes?.access_logs || []
+        for (const l of logs) {
+          const cid = Number(l.component_id || 0)
+          const did = Number(l.door_id || 0)
+          const pid = Number(l.portal_id || l.portal || 0)
+          if ((cid === 810373890 || did === 1) && pid > 0 && pid !== entryPortalId) {
+            exitPortalId = pid
+            break
+          }
+        }
+      } catch {
+        // Fallback abaixo
+      }
+    }
+
+    if (!exitPortalId) {
+      const hasPortal1 = portals.some(p => Number(p.id) === 1)
+      const hasPortal2 = portals.some(p => Number(p.id) === 2)
+      if (hasPortal1 && hasPortal2 && entryPortalId !== 1) {
+        exitPortalId = 1
+      }
+    }
+
+    if (!exitPortalId || exitPortalId === entryPortalId) {
+      return {
+        configured: false,
+        reason: 'Não foi possível distinguir com segurança o Portal de Saída do Portal de Entrada.',
+      }
+    }
+
+    // 1. Grupo
+    const groupsRes = await this.loadObjects('groups', { where: { groups: { name: GROUP_NAME } } })
+    let groupId: number | undefined = groupsRes?.groups?.[0]?.id ? Number(groupsRes.groups[0].id) : undefined
+    if (!groupId) {
+      const created = await this.createObjects('groups', [{ name: GROUP_NAME }])
+      groupId = Number(created?.ids?.[0])
+    }
+
+    // 2. Fuso 24h
+    const tzRes = await this.loadObjects('time_zones', { where: { time_zones: { name: TZ_NAME } } })
+    let tzId: number | undefined = tzRes?.time_zones?.[0]?.id ? Number(tzRes.time_zones[0].id) : undefined
+    if (!tzId) {
+      const created = await this.createObjects('time_zones', [{ name: TZ_NAME }])
+      tzId = Number(created?.ids?.[0])
+    }
+
+    const spansRes = await this.loadObjects('time_spans', { where: { time_spans: { time_zone_id: tzId } } })
+    if (!spansRes?.time_spans?.length && tzId) {
+      try {
+        await this.createObjects('time_spans', [{
+          time_zone_id: tzId,
+          start: 0,
+          end: 86399,
+          sun: 1, mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1,
+          hol1: 1, hol2: 1, hol3: 1,
+        }])
+      } catch {
+        await this.createObjects('time_spans', [{
+          time_zone_id: tzId,
+          start: 0,
+          end: 86399,
+          sun: 1, mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1,
+        }])
+      }
+    }
+
+    // 3. Regra de Bloqueio (type = 0)
+    const rulesRes = await this.loadObjects('access_rules', { where: { access_rules: { name: RULE_NAME } } })
+    let ruleId: number | undefined = rulesRes?.access_rules?.[0]?.id ? Number(rulesRes.access_rules[0].id) : undefined
+    if (!ruleId) {
+      const created = await this.createObjects('access_rules', [{ name: RULE_NAME, type: 0, priority: 0 }])
+      ruleId = Number(created?.ids?.[0])
+    } else if (Number(rulesRes.access_rules[0].type) !== 0) {
+      await this.modifyObjects('access_rules', { type: 0, priority: 0 }, { access_rules: { id: ruleId } })
+    }
+
+    if (!groupId || !tzId || !ruleId) {
+      return { configured: false, reason: 'Falha ao obter IDs de grupo/regra/horário na catraca.' }
+    }
+
+    // 4. Vínculo regra <-> horário
+    const artzRes = await this.loadObjects('access_rule_time_zones', {
+      where: { access_rule_time_zones: { access_rule_id: ruleId, time_zone_id: tzId } },
+    })
+    if (!artzRes?.access_rule_time_zones?.length) {
+      await this.createObjects('access_rule_time_zones', [{ access_rule_id: ruleId, time_zone_id: tzId }])
+    }
+
+    // 5. Vínculo grupo <-> regra
+    const garRes = await this.loadObjects('group_access_rules', {
+      where: { group_access_rules: { group_id: groupId, access_rule_id: ruleId } },
+    })
+    if (!garRes?.group_access_rules?.length) {
+      await this.createObjects('group_access_rules', [{ group_id: groupId, access_rule_id: ruleId }])
+    }
+
+    // 6. Vínculo portal <-> regra (APENAS portal de Saída!)
+    const parRes = await this.loadObjects('portal_access_rules', {
+      where: { portal_access_rules: { access_rule_id: ruleId } },
+    })
+    const existingPortals = (parRes?.portal_access_rules || []).map((r: any) => Number(r.portal_id))
+    for (const pId of existingPortals) {
+      if (pId !== exitPortalId) {
+        await this.destroyObjects('portal_access_rules', {
+          portal_access_rules: { portal_id: pId, access_rule_id: ruleId },
+        })
+      }
+    }
+    if (!existingPortals.includes(exitPortalId)) {
+      await this.createObjects('portal_access_rules', [{ portal_id: exitPortalId, access_rule_id: ruleId }])
+    }
+
+    return { configured: true, groupId, portalId: exitPortalId }
+  }
+
+  async syncStudentExitBlockGroup(userId: number, blockExit: boolean, blockGroupId: number): Promise<void> {
+    const existing = await this.loadObjects('user_groups', {
+      where: { user_groups: { user_id: userId, group_id: blockGroupId } },
+    })
+    const isLinked = Boolean(existing?.user_groups?.length)
+    if (blockExit && !isLinked) {
+      await this.createObjects('user_groups', [{ user_id: userId, group_id: blockGroupId }])
+    } else if (!blockExit && isLinked) {
+      await this.destroyObjects('user_groups', {
+        user_groups: { user_id: userId, group_id: blockGroupId },
+      })
+    }
+  }
+
   // ─── System Controls ──────────────────────────────────────────────
   async reboot(): Promise<any> {
     return this.request('reboot.fcgi', {})
