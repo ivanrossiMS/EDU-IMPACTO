@@ -344,41 +344,41 @@ export class ControliDClient {
       }
     }
 
+    const portalIds = new Set(portals.map(p => Number(p.id)).filter(id => id > 0))
     let exitPortalId: number | null = null
     let entryPortalId: number | null = null
 
-    for (const p of portals) {
-      const pid = Number(p.id)
-      const name = String(p.name || '').toLowerCase()
-      const isExitName = /sa[ií]da|gar[cç]as|exit|extern/.test(name) && !/entrada/.test(name)
-      const isEntryName = /entrada|entry|principal|m[eé]dio/.test(name) && !/sa[ií]da|saida/.test(name)
-      if (isExitName && !exitPortalId) exitPortalId = pid
-      if (isEntryName && !entryPortalId) entryPortalId = pid
-    }
-
-    if (!exitPortalId) {
-      try {
-        const logsRes = await this.loadObjects('access_logs', { limit: 100, order: ['id', 'descending'] })
-        const logs: any[] = logsRes?.access_logs || []
-        for (const l of logs) {
-          const cid = Number(l.component_id || 0)
-          const did = Number(l.door_id || 0)
-          const pid = Number(l.portal_id || l.portal || 0)
-          if ((cid === 810373890 || did === 1) && pid > 0 && pid !== entryPortalId) {
-            exitPortalId = pid
-            break
-          }
-        }
-      } catch {
-        // Fallback abaixo
+    // 1. Prioridade máxima: component_id real nos access_logs (810373890 = Saída .154, 810373889 = Entrada .150)
+    try {
+      const logsRes = await this.loadObjects('access_logs', { limit: 150, order: ['id', 'descending'] })
+      const logs: any[] = logsRes?.access_logs || []
+      for (const l of logs) {
+        const cid = Number(l.component_id || 0)
+        const pid = Number(l.portal_id || l.portal || 0)
+        if (pid <= 0 || !portalIds.has(pid)) continue
+        if (!exitPortalId && cid === 810373890 && pid !== entryPortalId) exitPortalId = pid
+        if (!entryPortalId && cid === 810373889 && pid !== exitPortalId) entryPortalId = pid
+        if (exitPortalId && entryPortalId) break
       }
+    } catch {
+      // Fallback abaixo
     }
 
+    // 2. Fallback determinístico pelo mapeamento físico da .150 (Portal 1 = Saída, Portal 2 = Entrada)
+    if (!exitPortalId && portalIds.has(1) && portalIds.has(2) && entryPortalId !== 1) {
+      exitPortalId = 1
+      if (!entryPortalId) entryPortalId = 2
+    }
+
+    // 3. Último recurso: nomes dos portais
     if (!exitPortalId) {
-      const hasPortal1 = portals.some(p => Number(p.id) === 1)
-      const hasPortal2 = portals.some(p => Number(p.id) === 2)
-      if (hasPortal1 && hasPortal2 && entryPortalId !== 1) {
-        exitPortalId = 1
+      for (const p of portals) {
+        const pid = Number(p.id)
+        const name = String(p.name || '').toLowerCase()
+        const isExitName = /sa[ií]da|gar[cç]as|exit|extern/.test(name) && !/entrada/.test(name)
+        const isEntryName = /entrada|entry|principal|m[eé]dio/.test(name) && !/sa[ií]da|saida/.test(name)
+        if (isExitName && !exitPortalId && pid !== entryPortalId) exitPortalId = pid
+        if (isEntryName && !entryPortalId && pid !== exitPortalId) entryPortalId = pid
       }
     }
 

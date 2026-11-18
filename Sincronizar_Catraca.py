@@ -758,56 +758,59 @@ def carregar_todos_objetos_catraca(cat, obj_name, where=None, fields=None, timeo
 def detectar_portal_saida_150(cat):
     """
     Identifica com segurança o portal de SAÍDA vs ENTRADA na catraca Mestre .150.
-    Retorna (exit_portal_id, entry_portal_id, motivo_erro).
-    Trava de segurança: jamais retorna um portal compartilhado se houver menos de 2 portais.
+    Prioridade 1: component_id real nos access_logs (810373890 = Saida .154, 810373889 = Entrada .150),
+    pois os nomes de fabrica dos portais na controladora podem estar invertidos fisicamente.
+    Prioridade 2: Portal 1 = Saida / Portal 2 = Entrada (padrao fisico desta catraca).
+    Prioridade 3: Nomes dos portais (fallback apenas se nao houver IDs 1 e 2).
     """
     r_portals = call_catraca_fcgi(cat, "load_objects.fcgi", {"object": "portals"}, timeout=4)
     portals = (r_portals or {}).get("portals", [])
     if len(portals) < 2:
         return None, None, f"Catraca .150 retornou {len(portals)} portal(is); sao necessarios 2 portais distintos (Entrada e Saida)."
 
+    portal_ids = {int(p.get("id") or 0) for p in portals}
     exit_portal_id = None
     entry_portal_id = None
 
-    for p in portals:
-        pid = int(p.get("id") or 0)
-        pname = str(p.get("name") or "").lower()
-        is_exit_name = any(k in pname for k in ("saida", "saída", "garcas", "garças", "exit", "extern")) and ("entrada" not in pname)
-        is_entry_name = any(k in pname for k in ("entrada", "entry", "principal", "medio", "médio")) and ("saida" not in pname and "saída" not in pname)
-        if is_exit_name and exit_portal_id is None:
-            exit_portal_id = pid
-        if is_entry_name and entry_portal_id is None:
-            entry_portal_id = pid
+    # 1. Prioridade maxima: component_id real gravado nos access_logs da catraca
+    try:
+        r_logs = call_catraca_fcgi(cat, "load_objects.fcgi", {
+            "object": "access_logs",
+            "limit": 150,
+            "order": ["id", "descending"]
+        }, timeout=4)
+        for l in (r_logs or {}).get("access_logs", []):
+            pid = int(l.get("portal_id") or l.get("portal") or 0)
+            cid = int(l.get("component_id") or 0)
+            if pid <= 0 or pid not in portal_ids:
+                continue
+            if exit_portal_id is None and cid == 810373890 and pid != entry_portal_id:
+                exit_portal_id = pid
+            if entry_portal_id is None and cid == 810373889 and pid != exit_portal_id:
+                entry_portal_id = pid
+            if exit_portal_id and entry_portal_id:
+                break
+    except Exception:
+        pass
 
-    # Confirmar via access_logs recentes (Comp 810373890 / Door 1 = Saida; Comp 810373889 / Door 2 = Entrada)
-    if exit_portal_id is None or entry_portal_id is None:
-        try:
-            r_logs = call_catraca_fcgi(cat, "load_objects.fcgi", {
-                "object": "access_logs",
-                "limit": 100,
-                "order": ["id", "descending"]
-            }, timeout=4)
-            for l in (r_logs or {}).get("access_logs", []):
-                pid = int(l.get("portal_id") or l.get("portal") or 0)
-                cid = int(l.get("component_id") or 0)
-                did = int(l.get("door_id") or l.get("door") or 0)
-                if pid <= 0:
-                    continue
-                if exit_portal_id is None and (cid == 810373890 or did == 1) and pid != entry_portal_id:
-                    exit_portal_id = pid
-                if entry_portal_id is None and (cid == 810373889 or did == 2) and pid != exit_portal_id:
-                    entry_portal_id = pid
-                if exit_portal_id and entry_portal_id:
-                    break
-        except Exception:
-            pass
-
-    if exit_portal_id is None:
-        portal_ids = {int(p.get("id") or 0) for p in portals}
-        if 1 in portal_ids and 2 in portal_ids and entry_portal_id != 1:
+    # 2. Fallback deterministico pelo mapeamento fisico da catraca .150 (Portal 1 = Saida, Portal 2 = Entrada)
+    if exit_portal_id is None and 1 in portal_ids and 2 in portal_ids:
+        if entry_portal_id != 1:
             exit_portal_id = 1
             if entry_portal_id is None:
                 entry_portal_id = 2
+
+    # 3. Ultimo recurso: nomes dos portais
+    if exit_portal_id is None:
+        for p in portals:
+            pid = int(p.get("id") or 0)
+            pname = str(p.get("name") or "").lower()
+            is_exit_name = any(k in pname for k in ("saida", "saída", "garcas", "garças", "exit", "extern")) and ("entrada" not in pname)
+            is_entry_name = any(k in pname for k in ("entrada", "entry", "principal", "medio", "médio")) and ("saida" not in pname and "saída" not in pname)
+            if is_exit_name and exit_portal_id is None and pid != entry_portal_id:
+                exit_portal_id = pid
+            if is_entry_name and entry_portal_id is None and pid != exit_portal_id:
+                entry_portal_id = pid
 
     if not exit_portal_id or exit_portal_id == entry_portal_id:
         resumo = ", ".join([f"ID={p.get('id')}('{p.get('name', '')}')" for p in portals])
