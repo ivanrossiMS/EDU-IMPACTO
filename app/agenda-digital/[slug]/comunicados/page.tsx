@@ -284,15 +284,19 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     return () => window.removeEventListener('agenda-digital:conversas-updated', handleConversasUpdated);
   }, [queryClient]);
   
-  // Auto-open comunicado if queryId is present (only once)
-  const hasAutoOpened = useRef(false)
+  // Auto-open comunicado if queryId is present (supports repeated push clicks in the same session)
+  const lastAutoOpenedQueryIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!queryId || hasAutoOpened.current) return;
+    if (!queryId) {
+      lastAutoOpenedQueryIdRef.current = null;
+      return;
+    }
+    if (lastAutoOpenedQueryIdRef.current === queryId) return;
 
     const target = comunicados.find((c: any) => String(c.id) === String(queryId))
     if (target) {
       setSelectedComunicado(target)
-      hasAutoOpened.current = true
+      lastAutoOpenedQueryIdRef.current = queryId
       
       // Remove query param from URL so it doesn't trigger again on refresh
       try {
@@ -305,14 +309,16 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     }
 
     if (!loading) {
+      let isCancelled = false;
       const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
       apiFetch(`/api/comunicados?id=${encodeURIComponent(queryId)}${slugParam}`)
-        .then(res => res.json())
+        .then(res => (res.ok ? res.json() : null))
         .then(data => {
+          if (isCancelled || !data) return;
           const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
           if (item && (item.id || item.titulo)) {
             setSelectedComunicado(item);
-            hasAutoOpened.current = true;
+            lastAutoOpenedQueryIdRef.current = queryId;
             try {
               const urlParams = new URLSearchParams(window.location.search);
               urlParams.delete('id');
@@ -322,6 +328,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           }
         })
         .catch(err => console.error("Error auto-opening single comunicado in slug page:", err));
+      return () => {
+        isCancelled = true;
+      };
     }
   }, [queryId, comunicados, loading, router, resolvedParams?.slug])
 
@@ -335,8 +344,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       } else {
         const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
         apiFetch(`/api/comunicados?id=${encodeURIComponent(comId)}${slugParam}`)
-          .then(res => res.json())
+          .then(res => (res.ok ? res.json() : null))
           .then(data => {
+            if (!data) return;
             const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
             if (item && (item.id || item.titulo)) {
               setSelectedComunicado(item);

@@ -520,6 +520,7 @@ export async function middleware(request: NextRequest) {
     const blockedForFamily = [
       '/agenda-digital/colaborador',
       '/agenda-digital/admin',
+      '/api/comunicados/lembrete',
       '/api/auth/reset-access',
       '/api/auth/migrate',
       '/api/auth/debug-db',

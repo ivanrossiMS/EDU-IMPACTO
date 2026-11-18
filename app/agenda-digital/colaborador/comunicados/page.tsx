@@ -1066,14 +1066,18 @@ function ColaboradorComunicadosContent() {
   }, [setComunicadosLocally, setComunicados]);
 
   // Auto-open comunicado if queryId is present in URL or via custom event
-  const hasAutoOpened = useRef(false)
+  const lastAutoOpenedQueryIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!queryId || hasAutoOpened.current) return;
+    if (!queryId) {
+      lastAutoOpenedQueryIdRef.current = null;
+      return;
+    }
+    if (lastAutoOpenedQueryIdRef.current === queryId) return;
 
     const target = (comunicados || []).find((c: any) => String(c.id) === String(queryId));
     if (target) {
       setSelectedComunicado(target);
-      hasAutoOpened.current = true;
+      lastAutoOpenedQueryIdRef.current = queryId;
       try {
         const urlParams = new URLSearchParams(window.location.search);
         urlParams.delete('id');
@@ -1084,14 +1088,14 @@ function ColaboradorComunicadosContent() {
     }
 
     let isCancelled = false;
-    fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
-      .then(res => res.json())
+    apiFetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
+      .then(res => (res.ok ? res.json() : null))
       .then(data => {
-        if (isCancelled) return;
+        if (isCancelled || !data) return;
         const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
         if (item && (item.id || item.titulo)) {
           setSelectedComunicado(item);
-          hasAutoOpened.current = true;
+          lastAutoOpenedQueryIdRef.current = queryId;
           try {
             const urlParams = new URLSearchParams(window.location.search);
             urlParams.delete('id');
@@ -1115,9 +1119,10 @@ function ColaboradorComunicadosContent() {
       if (target) {
         setSelectedComunicado(target);
       } else {
-        fetch(`/api/comunicados?id=${encodeURIComponent(comId)}`)
-          .then(res => res.json())
+        apiFetch(`/api/comunicados?id=${encodeURIComponent(comId)}`)
+          .then(res => (res.ok ? res.json() : null))
           .then(data => {
+            if (!data) return;
             const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
             if (item && (item.id || item.titulo)) {
               setSelectedComunicado(item);
@@ -2673,6 +2678,35 @@ function ColaboradorComunicadosContent() {
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
           const canEditSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
           const canEditReportSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
+          const canSendReminderSelected = Boolean(
+            !isMirroring &&
+            (isUserAdmin || isMasterAdmin || isAuthor) &&
+            selectedComunicado?.status !== 'rascunho' &&
+            selectedComunicado?.status !== 'agendado'
+          );
+
+          const handleSendReminderSelected = async (
+            comunicadoTarget: any,
+            options: { mode: 'all' | 'unread'; customMessage?: string }
+          ) => {
+            const res = await apiFetch('/api/comunicados/lembrete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: comunicadoTarget.id,
+                mode: options.mode,
+                customMessage: options.customMessage,
+              }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              return {
+                ok: false,
+                error: data?.error || 'Não foi possível enviar o lembrete.',
+              };
+            }
+            return data;
+          };
 
           return (
             <ComunicadoViewModal
@@ -2711,6 +2745,14 @@ function ColaboradorComunicadosContent() {
               onForward={(c) => {
                  setSelectedComunicado(null);
                  handleForwardComunicado(c);
+              }}
+              onSendReminder={canSendReminderSelected ? handleSendReminderSelected : undefined}
+              onReminderSent={(updatedCom) => {
+                setSelectedComunicado(updatedCom);
+                const updateFn = (prev: any) =>
+                  (prev || []).map((x: any) => (String(x.id) === String(updatedCom.id) ? updatedCom : x));
+                if (setComunicadosLocally) setComunicadosLocally(updateFn);
+                else if (setComunicados) setComunicados(updateFn);
               }}
             />
           );

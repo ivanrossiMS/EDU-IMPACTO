@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2, Printer, Search, RefreshCw, Copy, Check, Phone, MessageCircle, UserCheck, RotateCcw, Clock, FileSpreadsheet, DollarSign, ShieldCheck } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2, Printer, Search, RefreshCw, Copy, Check, Phone, MessageCircle, UserCheck, RotateCcw, Clock, FileSpreadsheet, DollarSign, ShieldCheck, BellRing, AlertTriangle } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
@@ -162,6 +162,9 @@ interface ComunicadoViewModalProps {
   onEdit?: (comunicado: any) => void
   onDelete?: (id: string) => void
   onForward?: (comunicado: any) => void
+  onSendReminder?: (comunicado: any, options: { mode: 'all' | 'unread'; customMessage?: string }) => Promise<any>
+  onReminderSent?: (updatedComunicado: any, result: any) => void
+  initialOpenReminder?: boolean
   initialFocusComments?: boolean
   isAlunoView?: boolean
   currentUserObj?: any
@@ -190,6 +193,9 @@ export function ComunicadoViewModal({
   onEdit,
   onDelete,
   onForward,
+  onSendReminder,
+  onReminderSent,
+  initialOpenReminder = false,
   initialFocusComments = false,
   isAlunoView = false,
   currentUserObj
@@ -239,6 +245,17 @@ export function ComunicadoViewModal({
         if (prev?.id === next?.id && prev?.enquete && prevEnqTime > nextEnqTime) {
           next.enquete = prev.enquete
           next.dados = { ...(next.dados || {}), enquete: prev.enquete }
+        }
+        const prevRemCount = Array.isArray(prev?.lembretes_historico || prev?.dados?.lembretes_historico)
+          ? (prev?.lembretes_historico || prev?.dados?.lembretes_historico).length
+          : 0
+        const nextRemCount = Array.isArray(next?.lembretes_historico || next?.dados?.lembretes_historico)
+          ? (next?.lembretes_historico || next?.dados?.lembretes_historico).length
+          : 0
+        if (prev?.id === next?.id && prevRemCount > nextRemCount) {
+          const hist = prev?.lembretes_historico || prev?.dados?.lembretes_historico
+          next.lembretes_historico = hist
+          next.dados = { ...(next.dados || {}), lembretes_historico: hist }
         }
         return next
       })
@@ -511,6 +528,66 @@ export function ComunicadoViewModal({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [showDestinatariosModal, setShowDestinatariosModal] = useState(false)
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
+  const [showReminderModal, setShowReminderModal] = useState(Boolean(initialOpenReminder))
+  const [reminderMode, setReminderMode] = useState<'all' | 'unread'>('all')
+  const [reminderCustomMsg, setReminderCustomMsg] = useState('')
+  const [isSendingReminder, setIsSendingReminder] = useState(false)
+  const [reminderFeedback, setReminderFeedback] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (initialOpenReminder && onSendReminder && comunicado?.status !== 'rascunho' && comunicado?.status !== 'agendado') {
+      setReminderFeedback(null)
+      setShowReminderModal(true)
+    }
+  }, [initialOpenReminder, onSendReminder, comunicado?.id, comunicado?.status])
+
+  const canShowReminderButton = Boolean(
+    onSendReminder &&
+    comunicado?.id &&
+    comunicado?.status !== 'rascunho' &&
+    comunicado?.status !== 'agendado'
+  )
+
+  const handleTriggerSendReminder = async () => {
+    if (!onSendReminder || !comunicado?.id || isSendingReminder) return
+    setIsSendingReminder(true)
+    setReminderFeedback(null)
+    try {
+      const result = await onSendReminder(comunicado, {
+        mode: reminderMode,
+        customMessage: reminderCustomMsg.trim() || undefined,
+      })
+      if (result && result.ok === false) {
+        setReminderFeedback({
+          type: 'error',
+          text: result.error || 'Não foi possível enviar o lembrete.',
+        })
+        return
+      }
+      if (result?.lembretes_historico) {
+        const updatedCom = {
+          ...comunicado,
+          lembretes_historico: result.lembretes_historico,
+          dados: { ...(comunicado.dados || {}), lembretes_historico: result.lembretes_historico },
+        }
+        setComunicado(updatedCom)
+        onReminderSent?.(updatedCom, result)
+      }
+      const noSubsOnly = result?.sent === 0 && (result?.noSubscribers || 0) > 0
+      setReminderFeedback({
+        type: noSubsOnly ? 'warning' : 'success',
+        text: result?.message || 'Lembrete enviado com sucesso!',
+      })
+      setReminderCustomMsg('')
+    } catch (err: any) {
+      setReminderFeedback({
+        type: 'error',
+        text: err?.message || 'Erro inesperado ao enviar lembrete.',
+      })
+    } finally {
+      setIsSendingReminder(false)
+    }
+  }
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const commentsSectionRef = useRef<HTMLDivElement>(null)
@@ -1932,6 +2009,46 @@ export function ComunicadoViewModal({
             background: linear-gradient(90deg, #10b981 0%, #059669 100%);
             border-radius: 999px;
             transition: inline-size 0.35s ease;
+          }
+          .cvm-actions-footer {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-top: 1px solid rgba(226, 232, 240, 0.7);
+            padding: 12px 14px;
+            padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+            position: sticky;
+            bottom: 0;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            box-shadow: 0 -10px 40px -10px rgba(0,0,0,0.06);
+            flex-wrap: wrap;
+          }
+          .cvm-actions-main {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1 1 240px;
+            min-width: 0;
+          }
+          .cvm-actions-icons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-left: auto;
+          }
+          @media (max-width: 520px) {
+            .cvm-actions-main {
+              flex: 1 1 100%;
+            }
+            .cvm-actions-icons {
+              width: 100%;
+              justify-content: flex-end;
+            }
           }
         `}} />
 
@@ -3567,127 +3684,157 @@ export function ComunicadoViewModal({
           )}
 
           {/* ACTIONS FOOTER */}
-          {(onEdit || onDelete || onForward || destinatariosStr) && (
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              borderTop: '1px solid rgba(226, 232, 240, 0.7)',
-              padding: '12px 14px',
-              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
-              position: 'sticky',
-              bottom: 0,
-              zIndex: 20,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: onForward ? 'space-between' : 'flex-end',
-              gap: 8,
-              boxShadow: '0 -10px 40px -10px rgba(0,0,0,0.06)'
-            }}>
-              {onForward && (
-                <motion.button 
-                  whileHover={{ scale: 1.02, y: -1 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
-                  style={{ 
-                    flex: 1, 
-                    height: 44,
-                    minWidth: 0,
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    gap: 8, 
-                    padding: '0 16px', 
-                    borderRadius: 14, 
-                    border: '1px solid rgba(99, 102, 241, 0.2)', 
-                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
-                    color: '#ffffff', 
-                    fontSize: 14, 
-                    fontWeight: 700, 
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    boxShadow: '0 8px 20px -6px rgba(79, 70, 229, 0.5)',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  <Send size={17} style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
-                  <span>Encaminhar</span>
-                </motion.button>
+          {(onEdit || onDelete || onForward || canShowReminderButton || destinatariosStr) && (
+            <div className="cvm-actions-footer">
+              {(onForward || canShowReminderButton) && (
+                <div className="cvm-actions-main">
+                  {onForward && (
+                    <motion.button 
+                      whileHover={{ scale: 1.02, y: -1 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
+                      style={{ 
+                        flex: 1, 
+                        height: 44,
+                        minWidth: 0,
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: 8, 
+                        padding: '0 16px', 
+                        borderRadius: 14, 
+                        border: '1px solid rgba(99, 102, 241, 0.2)', 
+                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
+                        color: '#ffffff', 
+                        fontSize: 14, 
+                        fontWeight: 700, 
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        boxShadow: '0 8px 20px -6px rgba(79, 70, 229, 0.5)',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      <Send size={17} style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
+                      <span>Encaminhar</span>
+                    </motion.button>
+                  )}
+                  {canShowReminderButton && (
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02, y: -1 }}
+                      whileTap={{ scale: 0.96 }}
+                      onClick={(e: any) => {
+                        e.stopPropagation();
+                        setReminderFeedback(null);
+                        setShowReminderModal(true);
+                      }}
+                      title="Enviar nova notificação push de lembrete para os destinatários"
+                      aria-label="Enviar lembrete"
+                      style={{
+                        flex: onForward ? '0 1 auto' : 1,
+                        height: 44,
+                        minWidth: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '0 16px',
+                        borderRadius: 14,
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        color: '#ffffff',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        boxShadow: '0 8px 20px -6px rgba(217, 119, 6, 0.45)',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.12)'
+                      }}
+                    >
+                      <BellRing size={17} style={{ flexShrink: 0 }} />
+                      <span>Enviar lembrete</span>
+                    </motion.button>
+                  )}
+                </div>
               )}
-              {destinatariosStr && (
-                <motion.button 
-                  whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={(e: any) => { e.stopPropagation(); setShowDestinatariosModal(true); }} 
-                  title="Ver Destinatários"
-                  aria-label="Ver Destinatários"
-                  style={{ 
-                    width: 44,
-                    height: 44,
-                    flexShrink: 0,
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    borderRadius: 14, 
-                    border: '1px solid #e2e8f0', 
-                    background: '#ffffff', 
-                    color: '#475569', 
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
-                  }}
-                >
-                  <Users size={18} />
-                </motion.button>
-              )}
-              {onEdit && (
-                <motion.button 
-                  whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
-                  title="Editar"
-                  aria-label="Editar"
-                  style={{ 
-                    width: 44,
-                    height: 44,
-                    flexShrink: 0,
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    borderRadius: 14, 
-                    border: '1px solid #e2e8f0', 
-                    background: '#ffffff', 
-                    color: '#475569', 
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
-                  }}
-                >
-                  <Edit2 size={18} />
-                </motion.button>
-              )}
-              {onDelete && (
-                <motion.button 
-                  whileHover={{ scale: 1.05, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
-                  title="Excluir"
-                  aria-label="Excluir"
-                  style={{ 
-                    width: 44,
-                    height: 44,
-                    flexShrink: 0,
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    borderRadius: 14, 
-                    border: '1px solid rgba(239, 68, 68, 0.25)', 
-                    background: 'rgba(239, 68, 68, 0.08)', 
-                    color: '#ef4444', 
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px -4px rgba(239, 68, 68, 0.15)'
-                  }}
-                >
-                  <Trash2 size={18} />
-                </motion.button>
+              {(destinatariosStr || onEdit || onDelete) && (
+                <div className="cvm-actions-icons">
+                  {destinatariosStr && (
+                    <motion.button 
+                      whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={(e: any) => { e.stopPropagation(); setShowDestinatariosModal(true); }} 
+                      title="Ver Destinatários"
+                      aria-label="Ver Destinatários"
+                      style={{ 
+                        width: 44,
+                        height: 44,
+                        flexShrink: 0,
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        borderRadius: 14, 
+                        border: '1px solid #e2e8f0', 
+                        background: '#ffffff', 
+                        color: '#475569', 
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
+                      }}
+                    >
+                      <Users size={18} />
+                    </motion.button>
+                  )}
+                  {onEdit && (
+                    <motion.button 
+                      whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
+                      title="Editar"
+                      aria-label="Editar"
+                      style={{ 
+                        width: 44,
+                        height: 44,
+                        flexShrink: 0,
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        borderRadius: 14, 
+                        border: '1px solid #e2e8f0', 
+                        background: '#ffffff', 
+                        color: '#475569', 
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
+                      }}
+                    >
+                      <Edit2 size={18} />
+                    </motion.button>
+                  )}
+                  {onDelete && (
+                    <motion.button 
+                      whileHover={{ scale: 1.05, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                      title="Excluir"
+                      aria-label="Excluir"
+                      style={{ 
+                        width: 44,
+                        height: 44,
+                        flexShrink: 0,
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        borderRadius: 14, 
+                        border: '1px solid rgba(239, 68, 68, 0.25)', 
+                        background: 'rgba(239, 68, 68, 0.08)', 
+                        color: '#ef4444', 
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px -4px rgba(239, 68, 68, 0.15)'
+                      }}
+                    >
+                      <Trash2 size={18} />
+                    </motion.button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -3801,7 +3948,375 @@ export function ComunicadoViewModal({
         )}
       </AnimatePresence>
 
-      {/* Modal Detalhado de Pagantes e Controle de Cobrança (Admin / Staff) */}
+      {/* Modal de Confirmação e Envio de Lembrete Push */}
+      <AnimatePresence>
+        {showReminderModal && canShowReminderButton && (() => {
+          const remHistory: any[] = Array.isArray(comunicado?.lembretes_historico || comunicado?.dados?.lembretes_historico)
+            ? (comunicado?.lembretes_historico || comunicado?.dados?.lembretes_historico)
+            : [];
+          const lastRem = remHistory[0] || null;
+          const tituloCom = String(comunicado?.titulo || 'Comunicado').trim();
+          const previewTitle = `🔔 Lembrete: ${tituloCom}`;
+          const trimmedCustom = reminderCustomMsg.trim();
+          const previewBody = trimmedCustom
+            ? `Nome do aluno: ${trimmedCustom}`
+            : `Lembrete de ${currentUserName || comunicado?.autor || 'Equipe Escolar'}: confira o comunicado "${tituloCom}". Toque para abrir!`;
+
+          return (
+            <motion.div
+              key="send-reminder-modal"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                if (!isSendingReminder) setShowReminderModal(false);
+              }}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.62)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                zIndex: 100025,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 16 }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  width: '100%',
+                  maxWidth: 480,
+                  maxHeight: '90vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.35)',
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  padding: '20px 22px',
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <div style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 14,
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <BellRing size={21} color="#ffffff" />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff' }}>
+                        Enviar lembrete
+                      </h3>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
+                        Nova notificação push com abertura direta do comunicado
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSendingReminder}
+                    onClick={() => setShowReminderModal(false)}
+                    aria-label="Fechar modal de lembrete"
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      border: 'none',
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '20px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {lastRem && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      background: '#fffbeb',
+                      border: '1px solid #fde68a',
+                      fontSize: 12,
+                      color: '#92400e',
+                      fontWeight: 600,
+                    }}>
+                      <Clock size={14} style={{ flexShrink: 0, color: '#d97706' }} />
+                      <span>
+                        Último lembrete em{' '}
+                        {new Date(lastRem.sentAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                        {lastRem.sentByName ? ` por ${lastRem.sentByName}` : ''}
+                        {typeof lastRem.sent === 'number' ? ` (${lastRem.sent} enviado${lastRem.sent === 1 ? '' : 's'})` : ''}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Público-alvo */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Quem deve receber o lembrete?
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                      <button
+                        type="button"
+                        disabled={isSendingReminder}
+                        onClick={() => setReminderMode('all')}
+                        style={{
+                          textAlign: 'left',
+                          padding: '12px 14px',
+                          borderRadius: 14,
+                          border: reminderMode === 'all' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                          background: reminderMode === 'all' ? '#fffbeb' : '#ffffff',
+                          cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                            Todos os destinatários
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            Reenvia o alerta push para todos os destinatários deste comunicado
+                          </div>
+                        </div>
+                        <div style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          border: reminderMode === 'all' ? '5px solid #f59e0b' : '2px solid #cbd5e1',
+                          flexShrink: 0,
+                        }} />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isSendingReminder}
+                        onClick={() => setReminderMode('unread')}
+                        style={{
+                          textAlign: 'left',
+                          padding: '12px 14px',
+                          borderRadius: 14,
+                          border: reminderMode === 'unread' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                          background: reminderMode === 'unread' ? '#fffbeb' : '#ffffff',
+                          cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                            {comunicado?.exigeCiencia ? 'Apenas pendentes (sem leitura ou ciência)' : 'Apenas quem ainda não leu'}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            {comunicado?.exigeCiencia
+                              ? 'Envia somente para quem ainda não abriu ou não confirmou ciência'
+                              : 'Ignora quem já abriu o comunicado e notifica apenas os pendentes'}
+                          </div>
+                        </div>
+                        <div style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          border: reminderMode === 'unread' ? '5px solid #f59e0b' : '2px solid #cbd5e1',
+                          flexShrink: 0,
+                        }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mensagem personalizada opcional */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label htmlFor="cvm-reminder-custom-msg" style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Mensagem personalizada (opcional)
+                      </label>
+                      <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+                        {reminderCustomMsg.length}/160
+                      </span>
+                    </div>
+                    <input
+                      id="cvm-reminder-custom-msg"
+                      type="text"
+                      maxLength={160}
+                      disabled={isSendingReminder}
+                      value={reminderCustomMsg}
+                      onChange={e => setReminderCustomMsg(e.target.value)}
+                      placeholder="Ex: Último dia para confirmação e pagamento é 20/11!"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        border: '1px solid #cbd5e1',
+                        fontSize: 13,
+                        color: '#0f172a',
+                        background: '#ffffff',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+
+                  {/* Prévia da notificação */}
+                  <div style={{
+                    background: '#0f172a',
+                    color: '#f8fafc',
+                    borderRadius: 16,
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: '#94a3b8', textTransform: 'uppercase' }}>
+                      Prévia da notificação no celular • Ao tocar abre este comunicado
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: '#ffffff', lineHeight: 1.3 }}>
+                      {previewTitle}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.4 }}>
+                      {previewBody}
+                    </div>
+                  </div>
+
+                  {reminderFeedback && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      padding: '11px 13px',
+                      borderRadius: 12,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      lineHeight: 1.4,
+                      background:
+                        reminderFeedback.type === 'success'
+                          ? '#f0fdf4'
+                          : reminderFeedback.type === 'warning'
+                            ? '#fffbeb'
+                            : '#fef2f2',
+                      border:
+                        reminderFeedback.type === 'success'
+                          ? '1px solid #bbf7d0'
+                          : reminderFeedback.type === 'warning'
+                            ? '1px solid #fde68a'
+                            : '1px solid #fecaca',
+                      color:
+                        reminderFeedback.type === 'success'
+                          ? '#166534'
+                          : reminderFeedback.type === 'warning'
+                            ? '#92400e'
+                            : '#b91c1c',
+                    }}>
+                      {reminderFeedback.type === 'success' ? (
+                        <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                      ) : (
+                        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                      )}
+                      <span>{reminderFeedback.text}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div style={{
+                  padding: '14px 22px',
+                  borderTop: '1px solid #e2e8f0',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 10,
+                }}>
+                  <button
+                    type="button"
+                    disabled={isSendingReminder}
+                    onClick={() => setShowReminderModal(false)}
+                    style={{
+                      padding: '10px 16px',
+                      borderRadius: 12,
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#475569',
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {reminderFeedback?.type === 'success' ? 'Fechar' : 'Cancelar'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSendingReminder}
+                    onClick={handleTriggerSendReminder}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: '#ffffff',
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                      cursor: isSendingReminder ? 'wait' : 'pointer',
+                      opacity: isSendingReminder ? 0.8 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      boxShadow: '0 6px 16px -4px rgba(217, 119, 6, 0.45)',
+                    }}
+                  >
+                    {isSendingReminder ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Enviando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <BellRing size={16} />
+                        <span>{reminderFeedback?.type === 'success' ? 'Enviar novamente' : 'Disparar lembrete'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
       <AnimatePresence>
         {selectedCobrancaModalId && (() => {
           const activeCob = (cobrancasList || []).find((c: any) => String(c.id) === String(selectedCobrancaModalId)) || cobrancasList?.[0];

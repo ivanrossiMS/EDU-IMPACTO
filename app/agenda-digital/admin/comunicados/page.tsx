@@ -11,7 +11,7 @@ import { useFormularios } from '@/lib/formulariosContext'
 import { useRelatorios } from '@/lib/relatoriosContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { 
-  Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
+  Bell, BellRing, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
   ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash, RotateCw, ChevronDown,
@@ -312,6 +312,7 @@ export default function ADAdminComunicados() {
   const [showComposer, setShowComposer] = useState(false)
   const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
   const [viewingComFocusComments, setViewingComFocusComments] = useState(false)
+  const [viewingComOpenReminder, setViewingComOpenReminder] = useState(false)
   const [viewingReportPayload, setViewingReportPayload] = useState<any>(null)
   const [activePreviewStudent, setActivePreviewStudent] = useState<any>(null)
   const [viewingDestCom, setViewingDestCom] = useState<ADComunicado | null>(null)
@@ -2477,6 +2478,22 @@ export default function ADAdminComunicados() {
 
                 {/* Column: Actions */}
                 <div className="ad-comunicado-actions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {c.status !== 'rascunho' && c.status !== 'agendado' && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ width: 34, height: 34, padding: 0, borderRadius: 10, color: '#d97706', border: '1px solid #fde68a', background: '#fffbeb' }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setViewingComFocusComments(false);
+                        setViewingComOpenReminder(true);
+                        setViewingCom(c);
+                      }}
+                      title="Enviar lembrete push"
+                    >
+                      <BellRing size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
@@ -2840,6 +2857,7 @@ export default function ADAdminComunicados() {
           isAdminMode={canManageComunicadoComments(viewingCom)}
           isStaff={true}
           initialFocusComments={viewingComFocusComments}
+          initialOpenReminder={viewingComOpenReminder}
           alunos={alunos}
           colaboradores={colaboradores}
           turmas={turmas}
@@ -2849,22 +2867,53 @@ export default function ADAdminComunicados() {
           onCiencia={() => {}}
           onClose={() => {
             setViewingComFocusComments(false);
+            setViewingComOpenReminder(false);
             setViewingCom(null);
           }}
           onEdit={(c) => {
             setViewingComFocusComments(false);
+            setViewingComOpenReminder(false);
             setViewingCom(null);
             openEdit(c);
           }}
           onDelete={(id) => {
             setViewingComFocusComments(false);
+            setViewingComOpenReminder(false);
             setViewingCom(null);
             handleDeleteSingleComunicado(id);
           }}
           onForward={(c) => {
             setViewingComFocusComments(false);
+            setViewingComOpenReminder(false);
             setViewingCom(null);
             handleReenviar(c);
+          }}
+          onSendReminder={
+            viewingCom.status !== 'rascunho' && viewingCom.status !== 'agendado'
+              ? async (comunicadoTarget, options) => {
+                  const res = await apiFetch('/api/comunicados/lembrete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      id: comunicadoTarget.id,
+                      mode: options.mode,
+                      customMessage: options.customMessage,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    return { ok: false, error: data?.error || 'Não foi possível enviar o lembrete.' };
+                  }
+                  return data;
+                }
+              : undefined
+          }
+          onReminderSent={(updatedCom) => {
+            setViewingCom(updatedCom);
+            const updateFn = (prev: any) =>
+              (prev || []).map((x: any) => (String(x.id) === String(updatedCom.id) ? updatedCom : x));
+            if (setComunicadosLocally) setComunicadosLocally(updateFn);
+            else if (setComunicados) setComunicados(updateFn);
           }}
           setOpenedReportPayload={(str) => setViewingReportPayload({ string: str, editMode: false })}
           onEditReportPayload={(str) => setViewingReportPayload({ string: str, editMode: true })}
