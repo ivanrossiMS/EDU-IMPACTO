@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { GraduationCap, Calendar, Users, LogOut, ShieldCheck, Lock } from 'lucide-react'
+import { GraduationCap, Calendar, Users, LogOut, CheckCircle2, XCircle } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
 import { resolveStudentAutorizadoSairSozinho } from '@/lib/portariaUtils'
 
@@ -126,7 +126,7 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 4,
-              padding: '3px 8px',
+              padding: '3px 7px',
               borderRadius: 999,
               background: podeSairSozinho
                 ? 'rgba(16, 185, 129, 0.1)'
@@ -144,11 +144,11 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
             }}
           >
             {podeSairSozinho ? (
-              <ShieldCheck size={10} strokeWidth={2.5} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <CheckCircle2 size={11} strokeWidth={2.5} color="#10b981" aria-hidden="true" style={{ flexShrink: 0 }} />
             ) : (
-              <Lock size={9.5} strokeWidth={2.5} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <XCircle size={11} strokeWidth={2.5} color="#ef4444" aria-hidden="true" style={{ flexShrink: 0 }} />
             )}
-            <span>{podeSairSozinho ? 'Sai sozinho' : 'Não sai só'}</span>
+            <span>Sair Sozinho</span>
           </div>
         )}
       </div>
