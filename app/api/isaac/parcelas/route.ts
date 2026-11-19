@@ -367,10 +367,16 @@ export async function GET(request: Request) {
       }
     })
 
+    const financialLinkGuardianId = preloadedLinks?.find((l: any) => l.resp_financeiro === true)?.responsavel_id
+
     return NextResponse.json({
       parcelas,
       summary,
-      guardianId: loggedRespId || Array.from(guardianIds)[0] || null,
+      guardianId:
+        loggedRespId ||
+        (financialLinkGuardianId ? String(financialLinkGuardianId).trim() : null) ||
+        Array.from(guardianIds)[0] ||
+        null,
       alunoId: alunoIdParam || null,
       ano,
       meta: {

@@ -5,10 +5,85 @@ import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { fetchSingleStudentPhoto } from '@/lib/studentPhotoCache'
-import Image from 'next/image'
-import { Tv, Clock, User, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
+import { Tv, Clock, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+const tvTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Campo_Grande',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+const tvDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'long',
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+})
+
+// Shared 15s tick across cards so MonitorContent never re-renders on a timer
+const tickListeners = new Set<(secs: number) => void>()
+let tickIntervalId: ReturnType<typeof setInterval> | null = null
+let currentTickSecs = Math.floor(Date.now() / 1000)
+
+function useMonitorTick() {
+  const [secs, setSecs] = useState(currentTickSecs)
+  useEffect(() => {
+    const listener = (nextSecs: number) => setSecs(nextSecs)
+    tickListeners.add(listener)
+    if (!tickIntervalId) {
+      tickIntervalId = setInterval(() => {
+        currentTickSecs = Math.floor(Date.now() / 1000)
+        tickListeners.forEach(fn => fn(currentTickSecs))
+      }, 15000)
+    }
+    return () => {
+      tickListeners.delete(listener)
+      if (tickListeners.size === 0 && tickIntervalId) {
+        clearInterval(tickIntervalId)
+        tickIntervalId = null
+      }
+    }
+  }, [])
+  return secs
+}
+
+let sharedTvAudioCtx: AudioContext | null = null
+
+function playSchoolChime() {
+  try {
+    if (typeof window === 'undefined') return Promise.resolve()
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextClass) return Promise.resolve()
+    if (!sharedTvAudioCtx || sharedTvAudioCtx.state === 'closed') {
+      sharedTvAudioCtx = new AudioContextClass()
+    }
+    const ctx = sharedTvAudioCtx
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+
+    const now = ctx.currentTime
+    const notes = [523.25, 659.25, 783.99] // C5 - E5 - G5 harmonic announcement chord
+
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, now + i * 0.15)
+      gain.gain.setValueAtTime(0.001, now + i * 0.15)
+      gain.gain.exponentialRampToValueAtTime(0.22, now + i * 0.15 + 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 0.5)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + i * 0.15)
+      osc.stop(now + i * 0.15 + 0.55)
+    })
+
+    return new Promise<void>(resolve => setTimeout(resolve, 650))
+  } catch {
+    return Promise.resolve()
+  }
+}
+
 function fmtTime(iso?: string) {
   if (!iso) return ''
   try {
@@ -22,7 +97,7 @@ function fmtTime(iso?: string) {
     }
     const d = new Date(str)
     if (isNaN(d.getTime())) return str
-    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+    return tvTimeFormatter.format(d)
   } catch {
     return String(iso)
   }
@@ -89,8 +164,8 @@ const TVLiveClock = React.memo(function TVLiveClock() {
 })
 
 // ── Monitor Card - Full Background Photo ──────────────────────────────────────
-const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index, nowSecs }: { call: PickupCall, index: number, nowSecs?: number }) {
-  const { config } = useSaida()
+const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index, displayClass, urgentLimitSecs }: { call: PickupCall, index: number, displayClass: string, urgentLimitSecs: number }) {
+  const nowSecs = useMonitorTick()
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
   const [photoError, setPhotoError] = useState(false)
 
@@ -117,8 +192,7 @@ const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index,
   const secs = elapsedSec(call.calledAt, nowSecs)
 
   const mins = Math.floor(secs / 60)
-  const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
-  const urgent = secs > urgentLimit
+  const urgent = secs > urgentLimitSecs
   const accentColor = urgent ? '#ef4444' : '#06b6d4'
   const initials = call.studentName.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
   const animDelay = `${Math.min(index * 0.08, 0.4)}s`
@@ -130,14 +204,8 @@ const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index,
     >
       {/* Background Image / Initials Gradient */}
       {(resolvedPhoto && !photoError) ? (
-        <>
-          {/* Blurred Background Backdrop for premium ambient fill */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={resolvedPhoto} alt="" onError={() => setPhotoError(true)} className="tv-card-photo-blur-backdrop" />
-          {/* Crisp, uncropped centered foreground photo */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={resolvedPhoto} alt={call.studentName} onError={() => setPhotoError(true)} className="tv-card-photo-bg" />
-        </>
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={resolvedPhoto} alt={call.studentName} decoding="async" onError={() => setPhotoError(true)} className="tv-card-photo-bg" />
       ) : (
         <div className="tv-card-photo-bg-initials" style={{ background: `linear-gradient(135deg, ${accentColor} 0%, #171717 100%)` }}>
           {initials}
@@ -162,7 +230,7 @@ const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index,
         {/* Class Badge */}
         <div className="tv-card-class-badge-modern" style={{ borderColor: `${accentColor}80`, color: '#fff' }}>
           <span style={{ color: accentColor, fontWeight: 900, marginRight: 6 }}>•</span>
-          {call.studentClass}
+          {displayClass}
         </div>
 
         {/* Footer Info Row */}
@@ -198,8 +266,8 @@ const byTimeDesc = (a: PickupCall, b: PickupCall) =>
   new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime()
 
 // ── Secondary Student Card for Bottom Grid ──────────────────────────────────
-const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, index, nowSecs }: { call: PickupCall, index: number, nowSecs?: number }) {
-  const { config } = useSaida()
+const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, index, displayClass, urgentLimitSecs }: { call: PickupCall, index: number, displayClass: string, urgentLimitSecs: number }) {
+  const nowSecs = useMonitorTick()
   const initials = call.studentName.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
   const secs = elapsedSec(call.calledAt, nowSecs)
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
@@ -225,8 +293,7 @@ const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, in
     return () => { isMounted = false }
   }, [call.studentPhoto, call.studentId])
 
-  const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
-  const urgent = secs > urgentLimit
+  const urgent = secs > urgentLimitSecs
   const accentColor = urgent ? '#ef4444' : '#06b6d4'
   const animDelay = `${Math.min(index * 0.05, 0.4)}s`
   
@@ -240,14 +307,13 @@ const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, in
         bottom: 0,
         width: 4,
         background: accentColor,
-        boxShadow: `0 0 10px ${accentColor}`
       }} />
 
       {/* Mini Photo/Initials */}
       <div className="tv-secondary-card-avatar">
         {(resolvedPhoto && !photoError) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={resolvedPhoto} alt={call.studentName} onError={() => setPhotoError(true)} className="tv-secondary-card-photo" />
+          <img src={resolvedPhoto} alt={call.studentName} decoding="async" onError={() => setPhotoError(true)} className="tv-secondary-card-photo" />
         ) : (
           <div className="tv-secondary-card-initials" style={{ background: `linear-gradient(135deg, ${accentColor}, #4f46e5)` }}>
             {initials}
@@ -263,7 +329,7 @@ const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, in
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span className="tv-secondary-card-class" style={{ color: accentColor, borderColor: `${accentColor}33` }}>
-            {call.studentClass}
+            {displayClass}
           </span>
           
           <span className="tv-secondary-card-guardian" title={call.guardianName}>
@@ -316,14 +382,9 @@ function MonitorContent() {
   const [displayCalls, setDisplayCalls] = useState<PickupCall[]>([])
   const [audioUnlocked, setAudioUnlocked] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [nowSecs, setNowSecs] = useState(() => Math.floor(Date.now() / 1000))
   const spokenRef = useRef<Set<string>>(new Set())
-
-  // Atualiza tempo dos cartões a cada 10 segundos ao invés de 1s (reduz 90% dos renders)
-  useEffect(() => {
-    const iv = setInterval(() => setNowSecs(Math.floor(Date.now() / 1000)), 10000)
-    return () => clearInterval(iv)
-  }, [])
+  const urgentLimitSecs = ((config?.tvUrgentTime ?? 5) * 60)
+  const todayFormatted = useMemo(() => tvDateFormatter.format(new Date()), [])
 
   // Mapa de turmas para consulta O(1) instantânea
   const turmaNameMap = useMemo(() => {
@@ -462,41 +523,69 @@ function MonitorContent() {
       const displayTimeMs = Math.max(0, Number(config?.tvDisplayTime ?? 0)) * 1000
 
       // Alunos que saíram sozinhos (catraca ou manual) NUNCA aparecem na TV e removem chamadas anteriores imediatamente
-      const soloExitStudentIds = new Set(
-        activeCalls
-          .filter(c => c.studentId != null && c.status !== 'cancelled' && isSaiuSozinhoCall(c))
-          .map(c => String(c.studentId))
-      )
+      const soloExitStudentIds = new Set<string>()
+      const fullyConfirmedStudentIds = new Set<string>()
 
-      const fullyConfirmedStudentIds = new Set(
-        activeCalls
-          .filter(c => {
-            if (c.status !== 'confirmed' || c.studentId == null) return false
-            if (isSaiuSozinhoCall(c)) return true
-            if (displayTimeMs <= 0) return true
+      for (let i = 0; i < activeCalls.length; i++) {
+        const c = activeCalls[i]
+        if (c.studentId == null) continue
+        const sid = String(c.studentId)
+        if (c.status !== 'cancelled' && isSaiuSozinhoCall(c)) {
+          soloExitStudentIds.add(sid)
+        }
+        if (c.status === 'confirmed') {
+          if (isSaiuSozinhoCall(c) || displayTimeMs <= 0) {
+            fullyConfirmedStudentIds.add(sid)
+          } else {
             const confTime = c.confirmedAt ? new Date(c.confirmedAt).getTime() : 0
-            return !confTime || (now - confTime) >= displayTimeMs
-          })
-          .map(c => String(c.studentId))
-      )
+            if (!confTime || (now - confTime) >= displayTimeMs) {
+              fullyConfirmedStudentIds.add(sid)
+            }
+          }
+        }
+      }
 
-      const visibleCalls = activeCalls.filter(c => {
-        if (c.studentId == null) return false
-        // Nunca exibir no Monitor TV alunos que estão saindo sozinhos (catraca ou registro manual)
-        if (isSaiuSozinhoCall(c)) return false
-        if (soloExitStudentIds.has(String(c.studentId))) return false
-        if (fullyConfirmedStudentIds.has(String(c.studentId))) return false
-        if (c.status === 'waiting' || c.status === 'called') return true
-        if (c.status === 'confirmed' && displayTimeMs > 0 && c.confirmedAt) {
+      const visibleCalls: PickupCall[] = []
+      for (let i = 0; i < activeCalls.length; i++) {
+        const c = activeCalls[i]
+        if (c.studentId == null) continue
+        if (isSaiuSozinhoCall(c)) continue
+        const sid = String(c.studentId)
+        if (soloExitStudentIds.has(sid)) continue
+        if (fullyConfirmedStudentIds.has(sid)) continue
+        if (c.status === 'waiting' || c.status === 'called') {
+          visibleCalls.push(c)
+        } else if (c.status === 'confirmed' && displayTimeMs > 0 && c.confirmedAt) {
           // Apenas mantém na TV por tvDisplayTime se a chamada existiu antes da confirmação (não foi criada direto como confirmada)
           const calledTime = c.calledAt ? new Date(c.calledAt).getTime() : 0
           const confTime = new Date(c.confirmedAt).getTime()
-          if (!calledTime || Math.abs(confTime - calledTime) < 1500) return false
-          return confTime > 0 && (now - confTime) < displayTimeMs
+          if (calledTime && Math.abs(confTime - calledTime) >= 1500 && confTime > 0 && (now - confTime) < displayTimeMs) {
+            visibleCalls.push(c)
+          }
         }
-        return false
+      }
+
+      const nextCalls = visibleCalls.sort(byTimeDesc).slice(0, 25)
+      setDisplayCalls(prev => {
+        if (
+          prev.length === nextCalls.length &&
+          prev.every((p, idx) => {
+            const n = nextCalls[idx]
+            return (
+              p.id === n.id &&
+              p.status === n.status &&
+              p.calledAt === n.calledAt &&
+              p.confirmedAt === n.confirmedAt &&
+              p.studentClass === n.studentClass &&
+              p.guardianName === n.guardianName &&
+              p.studentPhoto === n.studentPhoto
+            )
+          })
+        ) {
+          return prev
+        }
+        return nextCalls
       })
-      setDisplayCalls(visibleCalls.sort(byTimeDesc).slice(0, 25))
     }
 
     updateDisplay()
@@ -565,47 +654,6 @@ function MonitorContent() {
     displayCallsRef.current = displayCalls
   }, [turmas, config, audioUnlocked, displayCalls])
 
-// ── School Chime Synthesizer (High Fidelity Web Audio API) ────────────────────
-function playSchoolChime() {
-  try {
-    if (typeof window === 'undefined') return Promise.resolve()
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
-    if (!AudioContextClass) return Promise.resolve()
-    const ctx = new AudioContextClass()
-    if (ctx.state === 'suspended') ctx.resume()
-
-    const now = ctx.currentTime
-    const notes = [523.25, 659.25, 783.99] // C5 - E5 - G5 harmonic announcement chord
-
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(freq, now + i * 0.15)
-      gain.gain.setValueAtTime(0.001, now + i * 0.15)
-      gain.gain.exponentialRampToValueAtTime(0.22, now + i * 0.15 + 0.04)
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 0.5)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start(now + i * 0.15)
-      osc.stop(now + i * 0.15 + 0.55)
-    })
-
-    return new Promise<void>(resolve =>
-      setTimeout(() => {
-        try {
-          if (ctx.state !== 'closed') {
-            void ctx.close().catch(() => {})
-          }
-        } catch {}
-        resolve()
-      }, 650)
-    )
-  } catch (e) {
-    return Promise.resolve()
-  }
-}
-
   // Realtime events listener
   useEffect(() => {
     const unsub = on('*', payload => {
@@ -671,17 +719,11 @@ function playSchoolChime() {
 
   return (
     <div className="tv-fullscreen-container">
-      {/* ── Background blobs ── */}
-      <div className="bg-blobs">
-        <div className="blob blob-1" />
-        <div className="blob blob-2" />
-      </div>
-
       {/* ── AUDIO UNLOCK OVERLAY ── */}
       {!audioUnlocked && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(4, 11, 22, 0.96)', backdropFilter: 'blur(30px)',
+          background: 'rgba(4, 11, 22, 0.98)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
@@ -818,8 +860,7 @@ function playSchoolChime() {
           alignItems: 'center',
           justifyContent: 'space-between',
           borderBottom: '2px solid rgba(6, 182, 212, 0.18)',
-          background: 'rgba(5, 12, 28, 0.45)',
-          backdropFilter: 'blur(20px)',
+          background: 'rgba(5, 12, 28, 0.88)',
           zIndex: 10
         }}>
           {/* Left: Icon and App Name */}
@@ -935,8 +976,7 @@ function playSchoolChime() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, width: '100%' }}>
                   {displayCalls.slice(0, 8).map((call, idx) => {
                     const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
-                    const mappedCall = { ...call, studentClass: tName }
-                    return <MonitorStudentCard key={call.id} call={mappedCall} index={idx} nowSecs={nowSecs} />
+                    return <MonitorStudentCard key={call.id} call={call} index={idx} displayClass={tName} urgentLimitSecs={urgentLimitSecs} />
                   })}
                 </div>
               </div>
@@ -975,8 +1015,7 @@ function playSchoolChime() {
                   }}>
                     {displayCalls.slice(8).map((call, idx) => {
                       const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
-                      const mappedCall = { ...call, studentClass: tName }
-                      return <MonitorSecondaryCard key={call.id} call={mappedCall} index={idx} nowSecs={nowSecs} />
+                      return <MonitorSecondaryCard key={call.id} call={call} index={idx} displayClass={tName} urgentLimitSecs={urgentLimitSecs} />
                     })}
                   </div>
                 </div>
@@ -987,24 +1026,24 @@ function playSchoolChime() {
 
         {/* Footer */}
         <div style={{
-          background: 'rgba(0,0,0,0.4)',
+          background: 'rgba(2, 6, 18, 0.9)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
           padding: '32px 48px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           fontSize: 14, color: '#64748b', fontWeight: 700, flexShrink: 0,
-          zIndex: 10, backdropFilter: 'blur(20px)'
+          zIndex: 10
         }}>
           <span>IMPACTO EDU · Sistema de Gestão Escolar</span>
-          <span>Portaria Digital · {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
+          <span>Portaria Digital · {todayFormatted}</span>
         </div>
       </div>
 
       {/* ── ADVANCED FLOATING TV CONTROL PANEL ── */}
       <div style={{
         position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-        display: 'flex', flexDirection: 'column', gap: 10, background: 'rgba(15, 23, 42, 0.94)',
+        display: 'flex', flexDirection: 'column', gap: 10, background: 'rgba(15, 23, 42, 0.96)',
         border: '1px solid rgba(255,255,255,0.12)', padding: '14px 18px',
-        borderRadius: 16, backdropFilter: 'blur(20px)',
+        borderRadius: 16,
         boxShadow: '0 20px 48px rgba(0,0,0,0.6)',
         transition: 'opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
         opacity: showControls ? 1 : 0,
@@ -1077,8 +1116,6 @@ function playSchoolChime() {
 
       {mounted && (
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
-        
         /* ── Strict Fullscreen Override ── */
         html, body, #__next {
           width: 100% !important;
@@ -1096,7 +1133,10 @@ function playSchoolChime() {
         .tv-fullscreen-container {
           width: 100vw;
           height: 100vh;
-          background: #020612;
+          background:
+            radial-gradient(circle at 12% 10%, rgba(6, 182, 212, 0.12), transparent 42%),
+            radial-gradient(circle at 88% 90%, rgba(99, 102, 241, 0.1), transparent 45%),
+            #020612;
           position: relative;
           overflow: hidden;
           display: flex;
@@ -1117,29 +1157,17 @@ function playSchoolChime() {
           max-width: 390px;
           margin: 0 auto;
           width: 100%;
+          background: radial-gradient(circle at 50% 35%, rgba(15, 23, 42, 0.92), #060b19);
           border: 1.5px solid rgba(255, 255, 255, 0.08);
-          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
-          backdrop-filter: blur(20px);
-          transition: all 0.4s cubic-bezier(0.2, 1, 0.2, 1);
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+          transition: transform 0.3s cubic-bezier(0.2, 1, 0.2, 1), border-color 0.3s ease;
           display: flex;
           flex-direction: column;
           justify-content: flex-end;
           padding: 22px;
           box-sizing: border-box;
-          animation: cardEnter 0.5s cubic-bezier(0.2, 1, 0.2, 1) backwards;
-          will-change: transform, opacity;
-        }
-
-        .tv-card-photo-blur-backdrop {
-          position: absolute;
-          inset: -15px;
-          width: calc(100% + 30px);
-          height: calc(100% + 30px);
-          object-fit: cover;
-          z-index: 0;
-          filter: blur(24px) brightness(0.65) saturate(1.4);
-          pointer-events: none;
-          transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
+          animation: cardEnter 0.45s cubic-bezier(0.2, 1, 0.2, 1) backwards;
+          contain: layout paint;
         }
 
         .tv-card-photo-bg {
@@ -1149,8 +1177,6 @@ function playSchoolChime() {
           height: 100%;
           object-fit: contain;
           z-index: 1;
-          transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
-          filter: brightness(1.15) contrast(1.05) saturate(1.05);
         }
 
         .tv-card-photo-bg-initials {
@@ -1179,50 +1205,21 @@ function playSchoolChime() {
           transform: translateY(-4px);
         }
 
-        /* Ambient Glow Shadows & Aura Pulsing */
+        /* Ambient Glow Borders */
         .tv-card-normal-glow {
-          border-color: rgba(6, 182, 212, 0.15);
-          animation: cardEnter 0.5s cubic-bezier(0.2, 1, 0.2, 1) backwards, auraPulseNormal 3.2s ease-in-out infinite;
+          border-color: rgba(6, 182, 212, 0.35);
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 18px rgba(6, 182, 212, 0.18);
         }
         .tv-card-normal-glow:hover {
-          border-color: rgba(6, 182, 212, 0.6);
-          box-shadow: 0 20px 48px rgba(6, 182, 212, 0.35), 0 0 35px rgba(6, 182, 212, 0.25);
+          border-color: rgba(6, 182, 212, 0.65);
         }
 
         .tv-card-urgent-glow {
-          border-color: rgba(239, 68, 68, 0.3);
-          animation: cardEnter 0.5s cubic-bezier(0.2, 1, 0.2, 1) backwards, auraPulseUrgent 2s ease-in-out infinite, cardFloatUrgent 4s ease-in-out infinite;
+          border-color: rgba(239, 68, 68, 0.65);
+          box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 24px rgba(239, 68, 68, 0.28);
         }
         .tv-card-urgent-glow:hover {
-          border-color: rgba(239, 68, 68, 0.75);
-          box-shadow: 0 20px 48px rgba(239, 68, 68, 0.45), 0 0 40px rgba(239, 68, 68, 0.3);
-        }
-
-        @keyframes auraPulseNormal {
-          0%, 100% {
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), 0 0 12px rgba(6, 182, 212, 0.22), inset 0 0 8px rgba(6, 182, 212, 0.08);
-            border-color: rgba(6, 182, 212, 0.15);
-          }
-          50% {
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), 0 0 38px rgba(6, 182, 212, 0.75), inset 0 0 20px rgba(6, 182, 212, 0.35);
-            border-color: rgba(6, 182, 212, 0.65);
-          }
-        }
-
-        @keyframes auraPulseUrgent {
-          0%, 100% {
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), 0 0 15px rgba(239, 68, 68, 0.25), inset 0 0 10px rgba(239, 68, 68, 0.12);
-            border-color: rgba(239, 68, 68, 0.3);
-          }
-          50% {
-            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35), 0 0 48px rgba(239, 68, 68, 0.88), inset 0 0 25px rgba(239, 68, 68, 0.45);
-            border-color: rgba(239, 68, 68, 0.88);
-          }
-        }
-
-        @keyframes cardFloatUrgent {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
+          border-color: rgba(239, 68, 68, 0.85);
         }
 
         /* Optimized Soft Dark Gradient Overlay for higher photo visibility */
@@ -1242,7 +1239,7 @@ function playSchoolChime() {
           pointer-events: none;
         }
 
-        /* ── Modern Animated Vertical Separator Line ── */
+        /* ── Modern Static Vertical Separator Line ── */
         .tv-vertical-neon-separator {
           position: absolute;
           left: 50%;
@@ -1253,47 +1250,14 @@ function playSchoolChime() {
           background: linear-gradient(
             to bottom,
             rgba(0, 210, 255, 0.02) 0%,
-            rgba(0, 210, 255, 0.3) 25%,
-            rgba(0, 210, 255, 0.3) 75%,
+            rgba(0, 210, 255, 0.45) 25%,
+            rgba(0, 210, 255, 0.45) 75%,
             rgba(0, 210, 255, 0.02) 100%
           );
-          box-shadow: 0 0 10px rgba(0, 210, 255, 0.12);
+          box-shadow: 0 0 10px rgba(0, 210, 255, 0.14);
           z-index: 5;
           pointer-events: none;
-          overflow: hidden;
           border-radius: 4px;
-        }
-
-        .tv-vertical-neon-separator::after {
-          content: '';
-          position: absolute;
-          top: -150px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 4px;
-          height: 150px;
-          background: linear-gradient(
-            to bottom,
-            transparent,
-            rgba(0, 210, 255, 0.8),
-            #ffffff,
-            rgba(0, 210, 255, 0.8),
-            transparent
-          );
-          box-shadow: 0 0 15px rgba(0, 210, 255, 0.95), 
-                      0 0 30px rgba(0, 210, 255, 0.6),
-                      0 0 45px rgba(0, 210, 255, 0.3);
-          border-radius: 4px;
-          animation: laserTravel 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        }
-
-        @keyframes laserTravel {
-          0% {
-            top: -150px;
-          }
-          100% {
-            top: 100%;
-          }
         }
 
         /* Top Right Status Badges */
@@ -1313,29 +1277,19 @@ function playSchoolChime() {
         }
 
         @keyframes pulseWaiting {
-          0% {
-            transform: scale(1);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-          }
-          50% {
-            transform: scale(1.06);
-            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.8);
-          }
-          100% {
-            transform: scale(1);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-          }
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.86; transform: scale(1.03); }
         }
 
         .badge-waiting {
           background: #f59e0b;
           color: #ffffff;
-          animation: pulseWaiting 1.5s infinite ease-in-out;
+          animation: pulseWaiting 2s infinite ease-in-out;
         }
 
         .badge-urgent {
           background: #ef4444;
-          animation: pulseUrgent 1.2s infinite alternate;
+          animation: pulseUrgent 1.5s infinite alternate;
         }
 
         /* Text overlay containers */
@@ -1417,31 +1371,8 @@ function playSchoolChime() {
           letter-spacing: 0.05em;
         }
 
-        /* Ambient blobs */
-        .bg-blobs {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-          overflow: hidden;
-        }
-        .blob {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(100px);
-          opacity: 0.25;
-          animation: floatBlob 25s infinite alternate ease-in-out;
-        }
-        .blob-1 { top: -10%; left: -10%; width: 500px; height: 500px; background: rgba(6, 182, 212, 0.25); }
-        .blob-2 { bottom: -10%; right: -10%; width: 600px; height: 600px; background: rgba(99, 102, 241, 0.2); animation-delay: -12s; }
-
-        @keyframes floatBlob {
-          from { transform: translate(0, 0) scale(1); }
-          to { transform: translate(10%, 10%) scale(1.15); }
-        }
-
         @keyframes cardEnter {
-          from { opacity: 0; transform: translateY(40px) scale(0.96); }
+          from { opacity: 0; transform: translateY(32px) scale(0.96); }
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
 
@@ -1451,7 +1382,7 @@ function playSchoolChime() {
         }
 
         .tv-pulse-icon {
-          animation: pulseUrgent 1.2s infinite alternate;
+          animation: pulseUrgent 1.5s infinite alternate;
         }
 
         /* ── Skeletons ── */
@@ -1486,23 +1417,22 @@ function playSchoolChime() {
           display: flex;
           align-items: center;
           gap: 14px;
-          background: rgba(15, 23, 42, 0.45);
-          border: 1.5px solid rgba(255, 255, 255, 0.06);
+          background: rgba(15, 23, 42, 0.82);
+          border: 1.5px solid rgba(255, 255, 255, 0.08);
           border-radius: 20px;
           padding: 12px 18px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-          backdrop-filter: blur(10px);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.22);
           animation: cardEnter 0.4s ease-out backwards;
           position: relative;
           overflow: hidden;
           box-sizing: border-box;
-          transition: all 0.3s cubic-bezier(0.2, 1, 0.2, 1);
+          transition: transform 0.25s cubic-bezier(0.2, 1, 0.2, 1), border-color 0.25s ease;
+          contain: layout paint;
         }
 
         .tv-secondary-card-item:hover {
           transform: translateY(-2px);
-          border-color: rgba(168, 85, 247, 0.3);
-          box-shadow: 0 10px 24px rgba(168, 85, 247, 0.1);
+          border-color: rgba(168, 85, 247, 0.35);
         }
 
         .tv-secondary-card-avatar {

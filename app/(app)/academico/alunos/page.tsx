@@ -1939,7 +1939,7 @@ export default function AlunosPage() {
           `${editingAlunoId ? 'Atualização' : 'Cadastro'} do aluno ${newAluno.nome}`,
           { registroId: realId, detalhesDepois: newAluno }
         )
-        queryClient.invalidateQueries({ queryKey: ['alunos'] })
+        await queryClient.invalidateQueries({ queryKey: ['alunos'] }).catch(() => {})
         queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
         queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
         toggleModal()

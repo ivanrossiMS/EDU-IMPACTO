@@ -15,7 +15,6 @@ import { BoletimImageModal } from '../../components/BoletimImageModal'
 import { generateBoletimImage, type GeneratedBoletimImage } from '../../components/boletimImageGenerator'
 import { toast } from 'sonner'
 import { useApiQuery } from '@/hooks/useApi'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import {
@@ -32,18 +31,7 @@ import {
 
 export default function ADNotasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital();
-
-  if (adConfig?.permissoes?.visualizarNotas === false) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <EmptyStateCard 
-          title="Acesso Restrito"
-          description="A visualização de boletim e notas está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
-          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
-        />
-      </div>
-    );
-  }
+  const isNotasRestricted = adConfig?.permissoes?.visualizarNotas === false;
 
   const { aluno } = useSelectedStudent()
   const { currentUser } = useApp()
@@ -59,7 +47,7 @@ export default function ADNotasPage({ params }: { params: any }) {
     ['boletins', targetAlunoId],
     `/api/boletins?aluno_id=${targetAlunoId}`,
     undefined,
-    { enabled: !!targetAlunoId }
+    { enabled: !!targetAlunoId && !isNotasRestricted }
   )
 
   const queryClient = useQueryClient()
@@ -83,20 +71,33 @@ export default function ADNotasPage({ params }: { params: any }) {
     }
   });
 
-  
+  const turmaNameLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of turmas) {
+      if (!t?.nome) continue;
+      if (t.id != null) map.set(String(t.id), t.nome);
+      if (t.codigo != null) map.set(String(t.codigo), t.nome);
+      map.set(String(t.nome), t.nome);
+    }
+    return map;
+  }, [turmas]);
+
   // Extrair anos disponíveis de todos os boletins
   const todosBoletins = useMemo(() => {
     return (responseData?.data || []).map((b: any) => {
-      const dados = typeof b.dados === 'string' ? JSON.parse(b.dados) : (b.dados || {});
+      let dados: any = {};
+      if (typeof b.dados === 'string') {
+        try { dados = JSON.parse(b.dados); } catch { dados = {}; }
+      } else {
+        dados = b.dados || {};
+      }
       const ano = dados.ano || new Date(b.created_at).getFullYear().toString();
-      
       const turmaRef = b.turma_id || b.turma;
-      const tObj = turmas.find((t: any) => String(t.id) === String(turmaRef) || String(t.codigo) === String(turmaRef) || String(t.nome) === String(turmaRef));
-      const nomeTurma = b.turmaNome || tObj?.nome || b.turma || 'Sem Turma';
-      
+      const nomeTurma = b.turmaNome || (turmaRef != null ? turmaNameLookup.get(String(turmaRef)) : undefined) || b.turma || 'Sem Turma';
+
       return { ...b, parsedDados: dados, anoStr: String(ano), nomeTurma };
     });
-  }, [responseData, turmas]);
+  }, [responseData, turmaNameLookup]);
 
   const anosDisponiveis = useMemo(() => {
     const anos = todosBoletins.map((b: any) => b.anoStr);
@@ -106,6 +107,18 @@ export default function ADNotasPage({ params }: { params: any }) {
     }
     return unicos as string[];
   }, [todosBoletins]);
+
+  const turmasPorAno = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const ano of anosDisponiveis) {
+      const set = new Set<string>();
+      for (const b of todosBoletins) {
+        if (b.anoStr === ano && b.nomeTurma) set.add(b.nomeTurma);
+      }
+      map.set(ano, Array.from(set).sort());
+    }
+    return map;
+  }, [anosDisponiveis, todosBoletins]);
 
   const [selectedYear, setSelectedYear] = useState<string>('');
 
@@ -233,7 +246,7 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   // Cálculo da Média Anual de todas as disciplinas com base nos bimestres lançados
   const disciplinasAnuais = useMemo(() => {
-    if (!boletins.length || bimestresDisponiveis.length === 0) return []
+    if (!isMediaAnual || !boletins.length || bimestresDisponiveis.length === 0) return []
 
     const discMap = new Map<string, {
       nome: string
@@ -297,10 +310,6 @@ export default function ADNotasPage({ params }: { params: any }) {
       const sortedBims = [...entry.bimesters].sort((a, b) => a.bimNum - b.bimNum)
       const lancados = sortedBims.filter(b => b.lancado)
 
-      // Regra oficial de Média Anual com recuperação semestral (2º e 4º bimestres):
-      // 1º Semestre = (B1 + B2) / 2 -> Com rec: (MS1 + Rec1) / 2
-      // 2º Semestre = (B3 + B4) / 2 -> Com rec: (MS2 + Rec2) / 2
-      // Média Anual = Média dos semestres ponderada pelos bimestres cursados
       const calculo = calcularMediaAnualDisciplina(sortedBims)
 
       list.push({
@@ -316,7 +325,7 @@ export default function ADNotasPage({ params }: { params: any }) {
     })
 
     return list.sort((a, b) => a.nome.localeCompare(b.nome))
-  }, [boletins, bimestresDisponiveis])
+  }, [isMediaAnual, boletins, bimestresDisponiveis])
 
   const disciplinasAnuaisAbaixo = useMemo(() => {
     return disciplinasAnuais.filter(d => d.mediaFNum < 7.0)
@@ -336,20 +345,17 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   useEffect(() => {
     if (!aluno?.id || boletins.length === 0) return;
-    
-    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
 
-    const searchParams = new URLSearchParams(window.location.search);
-    const espelharRespId = searchParams.get('espelhar_responsavel');
-    const espelharAluno = searchParams.get('espelhar_aluno') === 'true';
-    if (espelharRespId || espelharAluno) return; // Do not mark as read in mirror mode
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('espelhar_responsavel') || sp.get('espelhar_aluno') === 'true') return;
 
-    // Check which ones are unread
+    // Reutiliza parsedDados já extraído em todosBoletins (zero JSON.parse repetido)
     const unreadIds = boletins
       .filter((b: any) => {
-        const dados = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados || {};
+        const dados = b.parsedDados || (typeof b.dados === 'string' ? (() => { try { return JSON.parse(b.dados) } catch { return {} } })() : (b.dados || {}));
         const leituras = b.leituras || dados.leituras || {};
         return !leituras[currentReaderId];
       })
@@ -372,7 +378,7 @@ export default function ADNotasPage({ params }: { params: any }) {
       })
       .catch(err => console.error('Failed to mark notas as read:', err));
     }
-  }, [boletins, aluno?.id]);
+  }, [boletins, aluno?.id, currentUser?.id]);
 
   const boletimAtual = useMemo(() => {
     if (!selectedBimestreId) return null
@@ -393,10 +399,6 @@ export default function ADNotasPage({ params }: { params: any }) {
 
   const disciplinasAbaixo = useMemo(() => {
     return disciplinas.filter((d: any) => d.mediaFNum < 7.0)
-  }, [disciplinas])
-
-  const disciplinasAprovadas = useMemo(() => {
-    return disciplinas.filter((d: any) => d.mediaFNum >= 7.0)
   }, [disciplinas])
 
   const mediaGlobal = useMemo(() => {
@@ -472,6 +474,18 @@ export default function ADNotasPage({ params }: { params: any }) {
     }
   }
 
+  if (isNotasRestricted) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+        <EmptyStateCard
+          title="Acesso Restrito"
+          description="A visualização de boletim e notas está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
+          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
+        />
+      </div>
+    );
+  }
+
   if (!aluno) return null
 
   if (isLoading) {
@@ -487,101 +501,80 @@ export default function ADNotasPage({ params }: { params: any }) {
   if (boletins.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          style={{ 
-            background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', 
-            padding: '80px 40px', 
-            borderRadius: 32, 
-            textAlign: 'center', 
-            border: '1px solid rgba(255,255,255,0.8)', 
-            boxShadow: '0 20px 40px rgba(15, 23, 42, 0.03), inset 0 2px 10px rgba(255,255,255,1)',
+        <div
+          style={{
+            background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
+            padding: '80px 40px',
+            borderRadius: 32,
+            textAlign: 'center',
+            border: '1px solid rgba(226, 232, 240, 0.85)',
+            boxShadow: '0 16px 32px rgba(15, 23, 42, 0.04)',
             position: 'relative',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            maxWidth: 500
+            maxWidth: 500,
+            animation: 'adFadeIn 0.25s ease'
           }}
         >
-          {/* Subtle background glow */}
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 300, height: 300, background: 'radial-gradient(circle, rgba(59, 130, 246, 0.04) 0%, rgba(255,255,255,0) 70%)', zIndex: 0 }} />
-
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
-            style={{ 
-              width: 80, 
-              height: 80, 
-              borderRadius: '50%', 
-              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
-              display: 'flex', 
-              alignItems: 'center', 
+          <div
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
               marginBottom: 24,
               position: 'relative',
               zIndex: 1,
-              boxShadow: '0 8px 24px rgba(59, 130, 246, 0.15), inset 0 2px 4px rgba(255,255,255,0.9)'
+              boxShadow: '0 8px 20px rgba(59, 130, 246, 0.14)'
             }}
           >
             <GraduationCap size={40} color="#2563eb" strokeWidth={1.5} />
-            <motion.div 
-              animate={{ rotate: 360 }} 
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            <div
               style={{ position: 'absolute', inset: -10, border: '1px dashed rgba(59, 130, 246, 0.3)', borderRadius: '50%' }}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.5, type: 'spring' }}
+            <div
               style={{ position: 'absolute', top: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
             >
               <Sparkles size={16} color="#3b82f6" />
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
 
-          <motion.h3 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+          <h3
             style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 12, letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}
           >
             Nenhum Boletim
-          </motion.h3>
-          
-          <motion.p 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
+          </h3>
+
+          <p
             style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
           >
             Ainda não há notas ou boletins lançados para este aluno no sistema. Novas avaliações aparecerão aqui automaticamente.
-          </motion.p>
-        </motion.div>
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+    <div style={{ animation: 'adFadeIn 0.25s ease' }}>
           <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
         <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>Boletim e Notas</h2>
       </div>
 
-      {/* Filters Glassmorphism Card Ultra Modern */}
-      <div className="no-print" style={{ 
-        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.92) 100%)', 
-        backdropFilter: 'blur(16px)', 
-        WebkitBackdropFilter: 'blur(16px)',
-        border: '1.5px solid rgba(226, 232, 240, 0.85)', 
-        borderRadius: 22, 
-        padding: '14px', 
+      {/* Filters Card Ultra Modern */}
+      <div className="no-print" style={{
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%)',
+        border: '1.5px solid rgba(226, 232, 240, 0.85)',
+        borderRadius: 22,
+        padding: '14px',
         marginBottom: 20,
-        boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.07), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff',
+        boxShadow: '0 8px 24px -6px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(0, 0, 0, 0.02)',
         position: 'relative'
       }}>
         {/* Top Row: Turma Selector + Download PDF Button */}
@@ -609,7 +602,7 @@ export default function ADNotasPage({ params }: { params: any }) {
             >
               {anosDisponiveis.map((ano: string) => (
                  <optgroup key={ano} label={`Ano Letivo: ${ano}`}>
-                   {Array.from(new Set(todosBoletins.filter((b:any)=>b.anoStr === ano).map((b:any)=>b.nomeTurma))).sort().map((turma: any) => (
+                   {(turmasPorAno.get(ano) || []).map((turma: string) => (
                       <option key={`${ano}|${turma}`} value={`${ano}|${turma}`}>
                         {turma.includes(ano) ? turma : `${turma} • ${ano}`}
                       </option>
@@ -859,9 +852,7 @@ export default function ADNotasPage({ params }: { params: any }) {
           ) : (
             <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
               {/* Card Resumo Global Anual */}
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
+              <div
                 className="print-global-card"
                 style={{
                   padding: '16px 20px',
@@ -871,13 +862,13 @@ export default function ADNotasPage({ params }: { params: any }) {
                   border: `1px solid ${diagnosticoAnual?.cardBorder || '#e0e7ff'}`,
                   position: 'relative',
                   overflow: 'hidden',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 12
+                  gap: 12,
+                  animation: 'adFadeIn 0.2s ease'
                 }}
               >
-                <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnosticoAnual?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
 
                 {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
@@ -961,7 +952,7 @@ export default function ADNotasPage({ params }: { params: any }) {
                     </span>
                   )}
                 </div>
-              </motion.div>
+              </div>
 
 
               {/* Tabela de Disciplinas Anuais */}
@@ -997,10 +988,7 @@ export default function ADNotasPage({ params }: { params: any }) {
           boletimAtual && (
             <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
               {/* Card Resumo Global com Diagnóstico Pedagógico */}
-              <motion.div 
-                initial={{ scale: 0.95, opacity: 0 }} 
-                animate={{ scale: 1, opacity: 1 }} 
-                key={boletimAtual.id}
+              <div
                 className="print-global-card"
                 style={{ 
                   padding: '16px 20px', 
@@ -1010,13 +998,13 @@ export default function ADNotasPage({ params }: { params: any }) {
                   border: `1px solid ${diagnostico?.cardBorder || '#e0e7ff'}`, 
                   position: 'relative', 
                   overflow: 'hidden', 
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 12
+                  gap: 12,
+                  animation: 'adFadeIn 0.2s ease'
                 }}
               >
-                <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnostico?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
                 
                 {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
@@ -1100,7 +1088,7 @@ export default function ADNotasPage({ params }: { params: any }) {
                     </span>
                   )}
                 </div>
-              </motion.div>
+              </div>
 
           {/* Tabela de Disciplinas Modernizada */}
           <div className="print-disciplinas-wrapper" style={{ background: '#fff', borderRadius: 24, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
@@ -1116,26 +1104,19 @@ export default function ADNotasPage({ params }: { params: any }) {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <AnimatePresence mode="wait">
-                <motion.div 
-                  key={selectedBimestreId} 
-                  initial={{ opacity: 0 }} 
-                  animate={{ opacity: 1 }} 
-                  exit={{ opacity: 0 }} 
-                  transition={{ duration: 0.3 }}
-                  className="print-disciplinas-grid"
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))', gap: 16 }}
-                >
-                  {disciplinas.map((d: any, i: number) => (
-                    <DisciplinaBimestreCard
-                      key={`${d.nome}-${i}`}
-                      disciplina={d}
-                      index={i}
-                      printClass="print-disciplina-item"
-                    />
-                  ))}
-                </motion.div>
-              </AnimatePresence>
+              <div
+                className="print-disciplinas-grid"
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))', gap: 16 }}
+              >
+                {disciplinas.map((d: any, i: number) => (
+                  <DisciplinaBimestreCard
+                    key={`${selectedBimestreId}-${d.nome}-${i}`}
+                    disciplina={d}
+                    index={i}
+                    printClass="print-disciplina-item"
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1258,6 +1239,6 @@ export default function ADNotasPage({ params }: { params: any }) {
         imageData={boletimImageData}
         isGenerating={isGeneratingBoletimImage}
       />
-    </motion.div>
+    </div>
   )
 }

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 export interface VoiceOptions {
   rate?: number    // 0.1 – 2.0 (default 1.0)
@@ -28,6 +28,7 @@ const MAX_VOICE_QUEUE_SIZE = 12
 export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([])
   const queue = useRef<QueueItem[]>([])
   const processing = useRef(false)
   const defaultOptsRef = useRef(defaultOpts)
@@ -38,7 +39,11 @@ export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
   // Load voices (async on Chrome)
   useEffect(() => {
     if (!isSupported) return
-    const load = () => setVoices(window.speechSynthesis.getVoices())
+    const load = () => {
+      const list = window.speechSynthesis.getVoices()
+      voicesRef.current = list
+      setVoices(list)
+    }
     load()
     window.speechSynthesis.addEventListener('voiceschanged', load)
     return () => {
@@ -61,14 +66,15 @@ export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
     utterance.volume = merged.volume ?? 1.0
     utterance.lang   = 'pt-BR'
 
+    const availableVoices = voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices()
     if (merged.voiceURI) {
-      const v = window.speechSynthesis.getVoices().find(x => x.voiceURI === merged.voiceURI)
+      const v = availableVoices.find(x => x.voiceURI === merged.voiceURI)
       if (v) utterance.voice = v
     } else {
       // pick best pt-BR voice
-      const ptVoice = window.speechSynthesis.getVoices().find(v =>
+      const ptVoice = availableVoices.find(v =>
         v.lang.startsWith('pt') && v.localService
-      ) || window.speechSynthesis.getVoices().find(v => v.lang.startsWith('pt'))
+      ) || availableVoices.find(v => v.lang.startsWith('pt'))
       if (ptVoice) utterance.voice = ptVoice
     }
 
@@ -113,5 +119,8 @@ export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
     processing.current = false
   }, [isSupported])
 
-  return { speak, cancel, isSpeaking, isSupported, voices }
+  return useMemo(
+    () => ({ speak, cancel, isSpeaking, isSupported, voices }),
+    [speak, cancel, isSpeaking, isSupported, voices]
+  )
 }

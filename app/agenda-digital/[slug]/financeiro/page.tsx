@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wallet,
   CheckCircle2,
@@ -216,18 +215,29 @@ function getCompetenceLabel(competenceStr: string): string {
   }
 }
 
+const BRASILIA_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+let _cachedTodayDayStr = ''
+let _cachedTodayDayAt = 0
+
 function getTodayDateStrBrasilia(): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date())
-  } catch {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const nowMs = Date.now()
+  if (_cachedTodayDayStr && nowMs - _cachedTodayDayAt < 10000) {
+    return _cachedTodayDayStr
   }
+  try {
+    _cachedTodayDayStr = BRASILIA_DAY_FORMATTER.format(new Date(nowMs))
+  } catch {
+    const d = new Date(nowMs)
+    _cachedTodayDayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  _cachedTodayDayAt = nowMs
+  return _cachedTodayDayStr
 }
 
 function checkIsOverdue(parcela: Parcela): boolean {
@@ -283,7 +293,7 @@ function FinancialSkeletonLoader() {
 
 // ─── Card de Parcela com Badge do Aluno Bem Visível ──────────────────────────
 
-function MobileInvoiceCard({
+const MobileInvoiceCard = React.memo(function MobileInvoiceCard({
   parcela,
   onOpenPix,
 }: {
@@ -303,18 +313,13 @@ function MobileInvoiceCard({
   const competenceFormatted = getCompetenceLabel(parcela.competencia)
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.2 }}
+    <div
       style={{
         background: '#ffffff',
         borderRadius: 22,
         border: `1.5px solid ${isVencida ? '#fecaca' : isDueToday ? '#fde68a' : isExpanded ? '#cbd5e1' : '#edf2f7'}`,
         boxShadow: isExpanded
-          ? '0 10px 25px -4px rgba(0, 0, 0, 0.06)'
+          ? '0 10px 22px -4px rgba(0, 0, 0, 0.06)'
           : '0 2px 8px -2px rgba(0, 0, 0, 0.03)',
         overflow: 'hidden',
         transition: 'border-color 0.2s ease',
@@ -464,8 +469,8 @@ function MobileInvoiceCard({
       {/* Botão Pagar com Pix Rápido Direto no Card se A Vencer */}
       {canPay && (
         <div style={{ padding: '0 16px 16px' }}>
-          <motion.button
-            whileTap={{ scale: 0.98 }}
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation()
               onOpenPix(parcela)
@@ -490,102 +495,94 @@ function MobileInvoiceCard({
           >
             <Smartphone size={15} />
             Pagar ({parcela.valorFormatado})
-          </motion.button>
+          </button>
         </div>
       )}
 
       {/* Detalhes Expandidos (Acordeão) */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden' }}
+      {isExpanded && (
+        <div style={{ animation: 'adFadeIn 0.15s ease' }}>
+          <div
+            style={{
+              padding: '14px 18px 18px',
+              borderTop: '1px solid #f1f5f9',
+              background: '#f8fafc',
+              fontSize: 12,
+            }}
           >
-            <div
-              style={{
-                padding: '14px 18px 18px',
-                borderTop: '1px solid #f1f5f9',
-                background: '#f8fafc',
-                fontSize: 12,
-              }}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Valor Base</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginTop: 1 }}>{parcela.valorBaseFormatado}</div>
-                </div>
-
-                {parcela.descontos?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 10, color: '#059669', fontWeight: 800, textTransform: 'uppercase' }}>Desconto</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#059669', marginTop: 1 }}>
-                      −{parcela.descontos[0]?.valor}
-                    </div>
-                  </div>
-                )}
-
-                {parcela.multa > 0 && (
-                  <div>
-                    <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 800, textTransform: 'uppercase' }}>Multa</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginTop: 1 }}>+{parcela.multaFormatado}</div>
-                  </div>
-                )}
-
-                {parcela.juros > 0 && (
-                  <div>
-                    <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 800, textTransform: 'uppercase' }}>Juros</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginTop: 1 }}>+{parcela.jurosFormatado}</div>
-                  </div>
-                )}
-
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Aluno(a)</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: '#3730a3', marginTop: 1 }}>{parcela.aluno || '—'}</div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Identificador</div>
-                  <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748b', marginTop: 1 }}>{parcela.id.slice(0, 10)}...</div>
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Valor Base</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginTop: 1 }}>{parcela.valorBaseFormatado}</div>
               </div>
 
-              {/* Botão Boleto se houver */}
-              {parcela.receivables?.[0]?.bank_slip_url && (
-                <a
-                  href={parcela.receivables[0].bank_slip_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: 12,
-                    border: '1.5px solid #e2e8f0',
-                    background: '#ffffff',
-                    color: '#334155',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                  }}
-                >
-                  <ExternalLink size={14} color="#64748b" />
-                  Abrir Boleto Bancário em PDF
-                </a>
+              {parcela.descontos?.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#059669', fontWeight: 800, textTransform: 'uppercase' }}>Desconto</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#059669', marginTop: 1 }}>
+                    −{parcela.descontos[0]?.valor}
+                  </div>
+                </div>
               )}
+
+              {parcela.multa > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 800, textTransform: 'uppercase' }}>Multa</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginTop: 1 }}>+{parcela.multaFormatado}</div>
+                </div>
+              )}
+
+              {parcela.juros > 0 && (
+                <div>
+                  <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 800, textTransform: 'uppercase' }}>Juros</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#dc2626', marginTop: 1 }}>+{parcela.jurosFormatado}</div>
+                </div>
+              )}
+
+              <div>
+                <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Aluno(a)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: '#3730a3', marginTop: 1 }}>{parcela.aluno || '—'}</div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Identificador</div>
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748b', marginTop: 1 }}>{parcela.id.slice(0, 10)}...</div>
+              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+
+            {/* Botão Boleto se houver */}
+            {parcela.receivables?.[0]?.bank_slip_url && (
+              <a
+                href={parcela.receivables[0].bank_slip_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: '1.5px solid #e2e8f0',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                <ExternalLink size={14} color="#64748b" />
+                Abrir Boleto Bancário em PDF
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
-}
+})
 
 // ─── Componente de Acesso Restrito (Ultra Moderno) ───────────────────────────
 
@@ -732,10 +729,7 @@ function RestrictedFinancialAccessView({
       </div>
 
       {/* ── CARD ULTRA MODERNO DE RESTRIÇÃO DE ACESSO ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
+      <div
         style={{
           background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
           borderRadius: 28,
@@ -749,6 +743,7 @@ function RestrictedFinancialAccessView({
           alignItems: 'center',
           textAlign: 'center',
           gap: 20,
+          animation: 'adFadeIn 0.2s ease',
         }}
       >
         {/* Glow de fundo estético */}
@@ -1233,7 +1228,7 @@ function RestrictedFinancialAccessView({
           <ShieldCheck size={14} style={{ color: '#10b981' }} />
           <span>Ambiente protegido com criptografia de ponta a ponta • LGPD (Lei nº 13.709/2018)</span>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }
@@ -1282,8 +1277,9 @@ export default function ADFinanceiroPage() {
 
   // ── Fetch Dados ────────────────────────────────────────────────────────────
   const fetchFinanceiro = useCallback(async (ano: AnoFilter, force = false) => {
+    const cacheKey = `${studentRef || 'all'}_${ano}`
     // 1. Se já está no cache local do browser e não forçou refresh, exibe imediatamente (0ms)
-    const cached = cacheByYearRef.current[ano]
+    const cached = cacheByYearRef.current[cacheKey]
     if (!force && cached) {
       setData(cached)
       setLoading(false)
@@ -1321,7 +1317,7 @@ export default function ADFinanceiroPage() {
         throw new Error(json.error || 'Não foi possível carregar as informações financeiras.')
       }
 
-      cacheByYearRef.current[ano] = json
+      cacheByYearRef.current[cacheKey] = json
       setData(json)
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -1370,15 +1366,29 @@ export default function ADFinanceiroPage() {
     }
   }, [isYearDropdownOpen])
 
-  // Lista única de alunos para filtro rápido quando houver mais de 1 filho
-  const uniqueStudents = useMemo(() => {
-    if (!data?.parcelas) return []
-    const names = Array.from(new Set(data.parcelas.map((p) => p.aluno).filter(Boolean)))
-    return names
+  // Lista única de alunos e contagens pré-computadas em passagem única O(N)
+  const { uniqueStudents, studentInvoiceCounts } = useMemo(() => {
+    const byStudent = new Map<string, number>()
+    let total = 0
+    if (data?.parcelas) {
+      for (const p of data.parcelas) {
+        const isActive = p.status !== 'CANCELED' || p.valorPago > 0
+        if (isActive) total++
+        if (p.aluno) {
+          if (!byStudent.has(p.aluno)) byStudent.set(p.aluno, 0)
+          if (isActive) byStudent.set(p.aluno, (byStudent.get(p.aluno) || 0) + 1)
+        }
+      }
+    }
+    return {
+      uniqueStudents: Array.from(byStudent.keys()),
+      studentInvoiceCounts: { total, byStudent },
+    }
   }, [data])
 
-  // Lista estruturada de alunos para a Declaração de IRPF
+  // Lista estruturada de alunos para a Declaração de IRPF (computada apenas quando modal abre)
   const alunosOptions = useMemo(() => {
+    if (!irpfModalOpen) return []
     const map = new Map<string, { id?: string; nome: string; turma?: string }>()
 
     // 1. Inclui todos os alunos vinculados ao responsável (da sessão/família)
@@ -1422,7 +1432,7 @@ export default function ADFinanceiroPage() {
     }
 
     return Array.from(map.values())
-  }, [data, currentStudent, meusAlunos])
+  }, [irpfModalOpen, data, currentStudent, meusAlunos])
 
   // ── Filtro de Faturas ──────────────────────────────────────────────────────
   const filteredList = useMemo(() => {
@@ -1468,16 +1478,6 @@ export default function ADFinanceiroPage() {
         : 'Código Pix em processamento ou não disponível para esta modalidade. Você também pode acessar o portal isaac ou consultar a secretaria da escola.',
     })
   }, [])
-
-  // Próxima fatura para destaque
-  const proximaFaturaObj = useMemo(() => {
-    if (!data?.parcelas) return null
-    return (
-      data.parcelas
-        .filter((p) => (p.status === 'OPEN' || checkIsOverdue(p)) && p.valorEfetivo > 0)
-        .sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())[0] || null
-    )
-  }, [data])
 
   // ── Permissão Geral da Instituição ──────────────────────────────────────────
   if (adConfig?.permissoes?.visualizarFinanceiro === false) {
@@ -1572,14 +1572,12 @@ export default function ADFinanceiroPage() {
       <div
         className="no-print"
         style={{
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.92) 100%)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%)',
           borderRadius: 22,
           border: '1.5px solid rgba(226, 232, 240, 0.85)',
           padding: '16px',
           marginBottom: 16,
-          boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.07), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff',
+          boxShadow: '0 10px 24px -6px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(0, 0, 0, 0.02)',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
@@ -1664,8 +1662,8 @@ export default function ADFinanceiroPage() {
           </div>
 
           {/* Lado Direito: Botão Declaração IRPF */}
-          <motion.button
-            whileTap={{ scale: 0.96 }}
+          <button
+            type="button"
             onClick={() => setIrpfModalOpen(true)}
             title="Gerar Declaração Anual de IRPF / Quitação de Débitos"
             style={{
@@ -1682,7 +1680,7 @@ export default function ADFinanceiroPage() {
               fontSize: 11.5,
               cursor: 'pointer',
               boxShadow: '0 2px 6px rgba(79, 70, 229, 0.1)',
-              transition: 'all 0.2s',
+              transition: 'transform 0.15s ease',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
@@ -1702,7 +1700,7 @@ export default function ADFinanceiroPage() {
             >
               PDF
             </span>
-          </motion.button>
+          </button>
         </div>
 
         {/* Linha 2: Seletor de Ano (Full Width) + Botão Atualizar */}
@@ -1732,7 +1730,7 @@ export default function ADFinanceiroPage() {
                 boxShadow: isYearDropdownOpen
                   ? '0 4px 14px rgba(79, 70, 229, 0.15)'
                   : '0 2px 6px rgba(15, 23, 42, 0.03)',
-                transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
                 userSelect: 'none',
                 boxSizing: 'border-box',
               }}
@@ -1790,115 +1788,110 @@ export default function ADFinanceiroPage() {
             </div>
 
             {/* Menu Suspenso da Lista Ultra Moderna */}
-            <AnimatePresence>
-              {isYearDropdownOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                  transition={{ duration: 0.15, ease: 'easeOut' }}
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    marginTop: 6,
-                    background: '#ffffff',
-                    border: '1.5px solid #e2e8f0',
-                    borderRadius: 14,
-                    padding: 6,
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
-                    zIndex: 60,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
-                  {ANOS.map((ano) => {
-                    const isSelected = selectedAno === ano
-                    const isCurrent = ano === '2026'
+            {isYearDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: 6,
+                  background: '#ffffff',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: 14,
+                  padding: 6,
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                  zIndex: 60,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  animation: 'adFadeIn 0.12s ease',
+                }}
+              >
+                {ANOS.map((ano) => {
+                  const isSelected = selectedAno === ano
+                  const isCurrent = ano === '2026'
 
-                    return (
-                      <div
-                        key={ano}
-                        onClick={() => {
-                          setSelectedAno(ano)
-                          setIsYearDropdownOpen(false)
-                        }}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 10,
-                          border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
-                          background: isSelected ? '#f5f3ff' : '#ffffff',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                          transition: 'all 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected) e.currentTarget.style.background = '#f8fafc'
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSelected) e.currentTarget.style.background = '#ffffff'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 8,
-                              background: isSelected ? '#4f46e5' : '#f1f5f9',
-                              color: isSelected ? '#ffffff' : '#475569',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 11,
-                              fontWeight: 800,
-                            }}
-                          >
-                            {ano.slice(-2)}
-                          </div>
-
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 800,
-                                  color: isSelected ? '#4338ca' : '#0f172a',
-                                }}
-                              >
-                                Ano Letivo {ano}
-                              </span>
-                              {isCurrent && (
-                                <span
-                                  style={{
-                                    fontSize: 9.5,
-                                    fontWeight: 800,
-                                    color: '#059669',
-                                    background: '#ecfdf5',
-                                    border: '1px solid #a7f3d0',
-                                    padding: '1px 5px',
-                                    borderRadius: 5,
-                                  }}
-                                >
-                                  Vigente
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                  return (
+                    <div
+                      key={ano}
+                      onClick={() => {
+                        setSelectedAno(ano)
+                        setIsYearDropdownOpen(false)
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 10,
+                        border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
+                        background: isSelected ? '#f5f3ff' : '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        transition: 'background-color 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = '#f8fafc'
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = '#ffffff'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: isSelected ? '#4f46e5' : '#f1f5f9',
+                            color: isSelected ? '#ffffff' : '#475569',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 11,
+                            fontWeight: 800,
+                          }}
+                        >
+                          {ano.slice(-2)}
                         </div>
 
-                        {isSelected && <CheckCircle2 size={16} color="#4f46e5" />}
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 800,
+                                color: isSelected ? '#4338ca' : '#0f172a',
+                              }}
+                            >
+                              Ano Letivo {ano}
+                            </span>
+                            {isCurrent && (
+                              <span
+                                style={{
+                                  fontSize: 9.5,
+                                  fontWeight: 800,
+                                  color: '#059669',
+                                  background: '#ecfdf5',
+                                  border: '1px solid #a7f3d0',
+                                  padding: '1px 5px',
+                                  borderRadius: 5,
+                                }}
+                              >
+                                Vigente
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    )
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
+
+                      {isSelected && <CheckCircle2 size={16} color="#4f46e5" />}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Botão Atualizar */}
@@ -2055,19 +2048,17 @@ export default function ADFinanceiroPage() {
 
       {/* ── Conteúdo Carregado ───────────────────────────────────────────────── */}
       {!loading && !error && !notFound && data && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+        <div style={{ animation: 'adFadeIn 0.2s ease' }}>
 
           {/* ── CARD DE DÉBITO TOTAL EM ATRASO (Renderizado APENAS quando houver pendências) ── */}
           {Boolean((data.summary.quantidadeVencidas ?? 0) > 0 || (data.summary.totalVencido ?? 0) > 0) && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
+            <div
               style={{
                 background: 'linear-gradient(145deg, #1e1b4b 0%, #450a0a 100%)',
                 borderRadius: 22,
                 padding: '18px',
                 marginBottom: 14,
-                boxShadow: '0 10px 28px -4px rgba(220, 38, 38, 0.25)',
+                boxShadow: '0 10px 24px -4px rgba(220, 38, 38, 0.22)',
                 color: '#ffffff',
                 position: 'relative',
                 overflow: 'hidden',
@@ -2158,7 +2149,7 @@ export default function ADFinanceiroPage() {
                 <ExternalLink size={16} />
                 Regularizar Débito
               </a>
-            </motion.div>
+            </div>
           )}
 
           {/* ── Sub-Métricas: A Vencer e Total Liquidado (2 Colunas Compactas) ── */}
@@ -2238,7 +2229,7 @@ export default function ADFinanceiroPage() {
                 {
                   key: 'todas' as TabKey,
                   label: 'Todas',
-                  count: data.parcelas.filter((p) => p.status !== 'CANCELED' || p.valorPago > 0).length,
+                  count: studentInvoiceCounts.total,
                 },
               ].map((tab) => (
                 <button
@@ -2293,8 +2284,8 @@ export default function ADFinanceiroPage() {
                 }}
               >
                 {/* Botão: Todos os Filhos */}
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
+                <button
+                  type="button"
                   onClick={() => setSelectedStudentFilter('todos')}
                   style={{
                     padding: '8px 14px',
@@ -2311,7 +2302,7 @@ export default function ADFinanceiroPage() {
                     alignItems: 'center',
                     gap: 7,
                     boxShadow: selectedStudentFilter === 'todos' ? '0 4px 12px rgba(79, 70, 229, 0.25)' : '0 1px 3px rgba(0,0,0,0.02)',
-                    transition: 'all 0.2s',
+                    transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
                   }}
                 >
                   <Users size={14} color={selectedStudentFilter === 'todos' ? '#ffffff' : '#64748b'} />
@@ -2326,16 +2317,14 @@ export default function ADFinanceiroPage() {
                       borderRadius: 100,
                     }}
                   >
-                    {data.parcelas.filter((p) => p.status !== 'CANCELED' || p.valorPago > 0).length}
+                    {studentInvoiceCounts.total}
                   </span>
-                </motion.button>
+                </button>
 
                 {/* Botões Individuais de cada Aluno */}
                 {uniqueStudents.map((stName) => {
                   const isSelected = selectedStudentFilter === stName
-                  const studentInvoiceCount = data.parcelas.filter(
-                    (p) => p.aluno === stName && (p.status !== 'CANCELED' || p.valorPago > 0)
-                  ).length
+                  const studentInvoiceCount = studentInvoiceCounts.byStudent.get(stName) || 0
                   const initials = stName
                     .split(' ')
                     .filter(Boolean)
@@ -2345,9 +2334,9 @@ export default function ADFinanceiroPage() {
                     .toUpperCase()
 
                   return (
-                    <motion.button
+                    <button
+                      type="button"
                       key={stName}
-                      whileTap={{ scale: 0.97 }}
                       onClick={() => setSelectedStudentFilter(stName)}
                       style={{
                         padding: '6px 14px 6px 8px',
@@ -2364,7 +2353,7 @@ export default function ADFinanceiroPage() {
                         alignItems: 'center',
                         gap: 8,
                         boxShadow: isSelected ? '0 4px 12px rgba(79, 70, 229, 0.25)' : '0 1px 3px rgba(0,0,0,0.02)',
-                        transition: 'all 0.2s',
+                        transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
                       }}
                     >
                       {/* Avatar com Iniciais */}
@@ -2397,7 +2386,7 @@ export default function ADFinanceiroPage() {
                       >
                         {studentInvoiceCount}
                       </span>
-                    </motion.button>
+                    </button>
                   )
                 })}
               </div>
@@ -2406,43 +2395,38 @@ export default function ADFinanceiroPage() {
 
           {/* ── Lista de Faturas (Cards com Badge do Aluno) ──────────────────── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <AnimatePresence mode="popLayout">
-              {filteredList.length === 0 ? (
-                <motion.div
-                  key="empty"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  style={{
-                    background: '#ffffff',
-                    border: '1.5px dashed #cbd5e1',
-                    borderRadius: 20,
-                    padding: '36px 18px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <Receipt size={32} color="#94a3b8" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: '#334155', marginBottom: 4 }}>
-                    Nenhuma fatura encontrada
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>
-                    {selectedStudentFilter !== 'todos'
-                      ? `Nenhuma fatura encontrada para ${selectedStudentFilter}.`
-                      : activeTab === 'emAberto'
-                      ? `Não existem faturas a vencer para ${selectedAno}.`
-                      : `Nenhum registro para esta seleção em ${selectedAno}.`}
-                  </div>
-                </motion.div>
-              ) : (
-                filteredList.map((parcela) => (
-                  <MobileInvoiceCard
-                    key={parcela.id}
-                    parcela={parcela}
-                    onOpenPix={handleTriggerPix}
-                  />
-                ))
-              )}
-            </AnimatePresence>
+            {filteredList.length === 0 ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1.5px dashed #cbd5e1',
+                  borderRadius: 20,
+                  padding: '36px 18px',
+                  textAlign: 'center',
+                  animation: 'adFadeIn 0.15s ease',
+                }}
+              >
+                <Receipt size={32} color="#94a3b8" style={{ margin: '0 auto 8px', opacity: 0.6 }} />
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: '#334155', marginBottom: 4 }}>
+                  Nenhuma fatura encontrada
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  {selectedStudentFilter !== 'todos'
+                    ? `Nenhuma fatura encontrada para ${selectedStudentFilter}.`
+                    : activeTab === 'emAberto'
+                    ? `Não existem faturas a vencer para ${selectedAno}.`
+                    : `Nenhum registro para esta seleção em ${selectedAno}.`}
+                </div>
+              </div>
+            ) : (
+              filteredList.map((parcela) => (
+                <MobileInvoiceCard
+                  key={parcela.id}
+                  parcela={parcela}
+                  onOpenPix={handleTriggerPix}
+                />
+              ))
+            )}
           </div>
 
           {/* Rodapé de Confiança */}
@@ -2462,7 +2446,7 @@ export default function ADFinanceiroPage() {
             <ShieldCheck size={14} color="#10b981" />
             <span>Dados financeiros integrados com a plataforma isaac.</span>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* ── Modal de Pagamento Pix ───────────────────────────────────────────── */}

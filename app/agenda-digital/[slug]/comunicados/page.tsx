@@ -1,7 +1,5 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
-import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, AlertCircle, Calendar, Loader2, ChevronDown, RotateCw, Vote, FileCheck2, MessageSquare } from 'lucide-react'
@@ -102,6 +100,10 @@ const getAnexoType = (anexoStr: string) => {
 
 import { useApp } from '@/lib/context'
 
+const comDayFormatter = new Intl.DateTimeFormat('pt-BR', { day: '2-digit' });
+const comMonthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short' });
+const comTimeFormatter = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
 export default function ADComunicadosPage({ params }: { params: any }) {
   const queryClient = useQueryClient()
   const { adAlert } = useAgendaDigital()
@@ -113,19 +115,21 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
-  const turmaObj = turmas.find((t: any) => t && (
-    String(t.id) === String(rawTurma) || 
-    String(t.codigo) === String(rawTurma) ||
-    (t.nome && typeof rawTurma === 'string' && t.nome.toLowerCase().includes(rawTurma.toLowerCase()))
-  ))
-  const turmaNome = turmaObj?.nome || (aluno as any)?.turmaNome || (aluno as any)?.turma_nome || (aluno as any)?.dados?.turma_nome || rawTurma
+  const turmaNome = useMemo(() => {
+    const turmaObj = (turmas || []).find((t: any) => t && (
+      String(t.id) === String(rawTurma) || 
+      String(t.codigo) === String(rawTurma) ||
+      (t.nome && typeof rawTurma === 'string' && t.nome.toLowerCase().includes(rawTurma.toLowerCase()))
+    ))
+    return turmaObj?.nome || (aluno as any)?.turmaNome || (aluno as any)?.turma_nome || (aluno as any)?.dados?.turma_nome || rawTurma
+  }, [turmas, rawTurma, aluno])
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
   const { data: comunicadosData, isLoading: loading, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 10, { enabled: true })
-  const comunicados = comunicadosData?.pages?.flat() || []
+  const comunicados = useMemo(() => comunicadosData?.pages?.flat() || [], [comunicadosData?.pages])
   useEffect(() => {
-    if (comunicados && comunicados.length > 0) {
+    if (comunicados.length > 0) {
       seedComunicadosRespostasCache(comunicados);
     }
   }, [comunicados]);
@@ -597,12 +601,28 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
   const [maximizedPdfStr, setMaximizedPdfStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
-  const openedFormObj: FormTemplate | undefined = forms.find(x => x.name === openedFormStr?.replace('Formulário: ', ''))
+  const openedFormObj = useMemo<FormTemplate | undefined>(
+    () => (openedFormStr ? forms.find(x => x.name === openedFormStr.replace('Formulário: ', '')) : undefined),
+    [forms, openedFormStr]
+  )
 
-  const previousSubmission = openedFormObj 
-    ? submissions.find(sub => sub.formId === openedFormObj.id && sub.studentName === resolvedParams.slug)
-    : null;
-  const hasResponded = !!previousSubmission;
+  const previousSubmission = useMemo(
+    () => (openedFormObj ? submissions.find(sub => sub.formId === openedFormObj.id && sub.studentName === resolvedParams.slug) : null),
+    [openedFormObj, submissions, resolvedParams.slug]
+  )
+  const hasResponded = !!previousSubmission
+
+  const alunosModalProp = useMemo(
+    () => aluno
+      ? [{ ...aluno, turma_nome: turmaNome || aluno.turma_nome || aluno.turma }]
+      : (resolvedParams?.slug ? [{ id: resolvedParams.slug, turma_nome: turmaNome || undefined }] : []),
+    [aluno, turmaNome, resolvedParams?.slug]
+  )
+
+  const espelharRespId = searchParams?.get('espelhar_responsavel')
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true'
+  const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId)
 
   
   const isAlunoLogado = Boolean(
@@ -758,75 +778,16 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '0px 0px 32px 0px', borderRadius: '32px', overflow: 'hidden', background: 'transparent' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
-          0%, 100% {
-            transform: scale(1);
-            box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.15), 0 0 10px rgba(0, 210, 255, 0.5), 0 0 5px rgba(255, 0, 128, 0.4);
-          }
-          50% {
-            transform: scale(1.1);
-            box-shadow: 0 0 0 6px rgba(0, 210, 255, 0.3), 0 0 20px rgba(0, 210, 255, 0.8), 0 0 12px rgba(255, 0, 128, 0.7);
-          }
-        }
-        @keyframes pulseGlowRead {
-          0%, 100% {
-            transform: scale(1);
-            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1), 0 0 6px rgba(99, 102, 241, 0.2);
-          }
-          50% {
-            transform: scale(1.05);
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 0 10px rgba(99, 102, 241, 0.4);
-          }
-        }
-        @keyframes neonLaserFlow {
-          0% {
-            background-position: 0% 0%;
-            box-shadow: 0 0 6px rgba(0, 210, 255, 0.5), 0 0 12px rgba(255, 0, 128, 0.3);
-          }
-          50% {
-            background-position: 0% 100%;
-            box-shadow: 0 0 14px rgba(0, 210, 255, 0.8), 0 0 24px rgba(255, 0, 128, 0.6);
-          }
-          100% {
-            background-position: 0% 0%;
-            box-shadow: 0 0 6px rgba(0, 210, 255, 0.5), 0 0 12px rgba(255, 0, 128, 0.3);
-          }
-        }
-        @keyframes neonLaserFlowRead {
-          0% {
-            background-position: 0% 0%;
-            box-shadow: 0 0 4px rgba(99, 102, 241, 0.2);
-          }
-          50% {
-            background-position: 0% 100%;
-            box-shadow: 0 0 8px rgba(99, 102, 241, 0.4), 0 0 12px rgba(168, 85, 247, 0.2);
-          }
-          100% {
-            background-position: 0% 0%;
-            box-shadow: 0 0 4px rgba(99, 102, 241, 0.2);
-          }
-        }
-        @keyframes floatBg {
-          0% { transform: translateY(0px) rotate(0deg) scale(1); }
-          50% { transform: translateY(-15px) rotate(6deg) scale(1.08); }
-          100% { transform: translateY(0px) rotate(0deg) scale(1); }
-        }
-        @keyframes pulseGlowAmbient {
-          0%, 100% { opacity: 0.3; transform: scale(1) translate(0px, 0px); }
-          50% { opacity: 0.55; transform: scale(1.2) translate(-30px, 30px); }
-        }
-        @keyframes pulseGlowAmbientTwo {
-          0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
-          50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.06); opacity: 0.85; }
         }
         .ad-page-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(245, 247, 255, 0.72) 100%) !important;
-          backdrop-filter: blur(20px) !important;
-          -webkit-backdrop-filter: blur(20px) !important;
+          background: rgba(255, 255, 255, 0.96) !important;
           border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
-          box-shadow: 0 16px 36px -10px rgba(99, 102, 241, 0.14), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 0 #ffffff !important;
+          box-shadow: 0 10px 24px -8px rgba(99, 102, 241, 0.12), 0 2px 6px rgba(0, 0, 0, 0.03) !important;
           border-radius: 24px !important;
           padding: 14px 20px !important;
           margin-top: 0px !important;
@@ -834,7 +795,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           gap: 16px !important;
           position: relative !important;
           box-sizing: border-box !important;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          transition: transform 0.2s ease, border-color 0.2s ease !important;
         }
 
         .ad-com-header-icon-box {
@@ -876,15 +837,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           padding-right: 30px !important;
           border-radius: 9999px !important;
           border: 1.5px solid rgba(203, 213, 225, 0.8) !important;
-          background: rgba(255, 255, 255, 0.85) !important;
-          backdrop-filter: blur(12px) !important;
+          background: rgba(255, 255, 255, 0.96) !important;
           box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
           font-size: 13px !important;
           font-weight: 500 !important;
           color: #0f172a !important;
           letter-spacing: -0.01em !important;
           outline: none !important;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          transition: width 0.2s ease, border-color 0.2s ease, background-color 0.2s ease !important;
           box-sizing: border-box !important;
         }
         .ad-search-input-ultra::placeholder {
@@ -896,17 +856,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           width: 230px !important;
           background: #ffffff !important;
           border-color: #6366f1 !important;
-          box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.18), 0 0 0 2.5px rgba(99, 102, 241, 0.12) !important;
+          box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.16) !important;
         }
 
         .ad-feed-card {
-          backdrop-filter: blur(16px) !important;
-          -webkit-backdrop-filter: blur(16px) !important;
-          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease !important;
         }
         .ad-feed-card:hover {
           transform: translateY(-2px) !important;
-          box-shadow: 0 16px 36px -6px rgba(99, 102, 241, 0.14), inset 0 1px 1px #ffffff !important;
         }
 
         .ad-com-author {
@@ -1018,15 +975,13 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           min-height: 36px !important;
           border-radius: 50% !important;
           padding: 0 !important;
-          background: rgba(255, 255, 255, 0.75) !important;
+          background: rgba(255, 255, 255, 0.96) !important;
           color: #64748b !important;
           border: 1px solid rgba(226, 232, 240, 0.9) !important;
           box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
           cursor: pointer !important;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
           flex-shrink: 0 !important;
-          backdrop-filter: blur(8px) !important;
-          -webkit-backdrop-filter: blur(8px) !important;
         }
         .ad-com-btn-refresh:hover:not(:disabled) {
           background: #ffffff !important;
@@ -1047,34 +1002,6 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           border-color: rgba(99, 102, 241, 0.3) !important;
         }
       `}} />
-
-      {/* Floating Animated Nebula Glows */}
-      <div className="ad-hide-mobile" style={{
-        position: 'absolute',
-        top: '5%',
-        left: '10%',
-        width: 380,
-        height: 380,
-        background: 'radial-gradient(circle, rgba(0, 210, 255, 0.25) 0%, transparent 70%)',
-        filter: 'blur(60px)',
-        animation: 'pulseGlowAmbient 10s ease-in-out infinite',
-        pointerEvents: 'none',
-        zIndex: 0
-      }} />
-      <div className="ad-hide-mobile" style={{
-        position: 'absolute',
-        bottom: '10%',
-        right: '5%',
-        width: 450,
-        height: 450,
-        background: 'radial-gradient(circle, rgba(255, 0, 128, 0.18) 0%, transparent 70%)',
-        filter: 'blur(70px)',
-        animation: 'pulseGlowAmbientTwo 14s ease-in-out infinite',
-        pointerEvents: 'none',
-        zIndex: 0
-      }} />
-
-
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
@@ -1222,14 +1149,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               if (!isNaN(d.getTime())) parsedDate = d;
             } catch(e) {}
             
-            const day = parsedDate.toLocaleDateString('pt-BR', { day: '2-digit' });
-            const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
-            const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            
-            const espelharRespId = searchParams?.get('espelhar_responsavel');
-            const espelharColabId = searchParams?.get('espelhar_colaborador');
-            const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
-            const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+            const day = comDayFormatter.format(parsedDate);
+            const month = comMonthFormatter.format(parsedDate).replace('.', '').toUpperCase();
+            const time = comTimeFormatter.format(parsedDate);
             
             const currentReaderId = isMirroring ? (espelharRespId || espelharColabId || resolvedParams.slug) : (currentUser?.id || '');
             const legacyResponsavelId = isMirroring
@@ -1299,11 +1221,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             );
 
             return (
-              <motion.div 
+              <div 
                 key={c.id} 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(index * 0.03, 0.25) }}
                 style={{ display: 'flex', position: 'relative', paddingBottom: index !== paginatedComunicados.length - 1 ? 8 : 0, contentVisibility: 'auto', containIntrinsicSize: 'auto 260px' }}
               >
                 {/* Timeline Laser Connector */}
@@ -1315,10 +1234,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     left: 88, 
                     width: 2, 
                     backgroundImage: isRead 
-                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.05), rgba(99,102,241,0.3), rgba(168, 85, 247, 0.3), rgba(99, 102, 241, 0.05))' 
-                      : 'linear-gradient(to bottom, rgba(0, 210, 255, 0.1), #00d2ff, #ff0080, rgba(255, 0, 128, 0.1))',
-                    backgroundSize: '100% 200%',
-                    animation: isRead ? 'neonLaserFlowRead 4s ease-in-out infinite' : 'neonLaserFlow 3s ease-in-out infinite',
+                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.12), rgba(99,102,241,0.32), rgba(168, 85, 247, 0.25), rgba(99, 102, 241, 0.1))' 
+                      : 'linear-gradient(to bottom, rgba(0, 210, 255, 0.2), #00d2ff, #ff0080, rgba(255, 0, 128, 0.2))',
                     zIndex: 0,
                     borderRadius: 2
                   }} />
@@ -1348,9 +1265,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     width: 14, 
                     height: 14, 
                     borderRadius: '50%', 
-                    background: isRead ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4))' : 'linear-gradient(135deg, #00d2ff, #ff0080)', 
+                    background: isRead ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(168, 85, 247, 0.5))' : 'linear-gradient(135deg, #00d2ff, #ff0080)', 
                     border: '3px solid #f8fafc',
-                    animation: isRead ? 'pulseGlowRead 3s ease-in-out infinite' : 'pulseGlow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     zIndex: 2 
                   }} />
                 </div>
@@ -1360,25 +1276,23 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                   style={{ 
                     flex: 1, 
                     background: c._isNew 
-                      ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 255, 0.9) 100%)' 
+                      ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 250, 255, 0.97) 100%)' 
                       : (isRead 
-                          ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(248, 250, 255, 0.6) 100%)' 
-                          : 'linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 255, 0.8) 100%)'), 
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
+                          ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 255, 0.88) 100%)' 
+                          : 'linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.95) 100%)'), 
                     borderRadius: 22, 
                     padding: '24px 28px',
                     cursor: 'pointer',
                     border: '1.5px solid',
                     borderColor: c._isNew 
                       ? '#6366f1' 
-                      : (isRead ? 'rgba(224, 231, 255, 0.7)' : 'rgba(224, 231, 255, 0.95)'),
+                      : (isRead ? 'rgba(224, 231, 255, 0.85)' : 'rgba(224, 231, 255, 0.95)'),
                     boxShadow: c._isNew 
-                      ? '0 16px 36px -6px rgba(99, 102, 241, 0.28), inset 0 1px 1px #ffffff' 
+                      ? '0 12px 28px -6px rgba(99, 102, 241, 0.22)' 
                       : (isRead 
-                          ? '0 4px 14px -3px rgba(99, 102, 241, 0.05), inset 0 1px 1px #ffffff' 
-                          : '0 12px 28px -6px rgba(99, 102, 241, 0.09), inset 0 1px 1px #ffffff'),
-                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                          ? '0 4px 12px -3px rgba(99, 102, 241, 0.05)' 
+                          : '0 8px 20px -6px rgba(99, 102, 241, 0.09)'),
+                    transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease',
                     position: 'relative',
                     overflow: 'hidden',
                     animation: c._isNew ? 'pulseGlow 2s infinite' : undefined,
@@ -1392,7 +1306,6 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     prefetchComunicadoMessages(c, false, resolvedParams?.slug);
                   }}
                   onClick={() => {
-                    markComunicadoAsRead(c);
                     setSelectedComunicado(c);
                   }}
                   onMouseEnter={e => {
@@ -1654,24 +1567,22 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     </div>
                   )}
                 </div>
-              </motion.div>
+              </div>
             )
           })}
               {hasMoreToDisplay && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 24, gap: 10 }}>
-                  <motion.button 
-                    whileHover={!(isFetchingMore || isFetchingNextPage) ? { scale: 1.02, translateY: -1 } : {}}
-                    whileTap={!(isFetchingMore || isFetchingNextPage) ? { scale: 0.98 } : {}}
-                    onClick={handleLoadMore} 
+                  <button
+                    onClick={handleLoadMore}
                     disabled={isFetchingMore || isFetchingNextPage}
                     className="ad-btn-load-more"
-                    style={{ 
-                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', 
-                      color: '#ffffff', 
-                      padding: '12px 28px', 
-                      borderRadius: 100, 
-                      border: 'none', 
-                      fontWeight: 700, 
+                    style={{
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      color: '#ffffff',
+                      padding: '12px 28px',
+                      borderRadius: 100,
+                      border: 'none',
+                      fontWeight: 700,
                       fontSize: 13.5,
                       letterSpacing: -0.2,
                       cursor: (isFetchingMore || isFetchingNextPage) ? 'not-allowed' : 'pointer',
@@ -1679,8 +1590,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 8,
-                      boxShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.4), 0 2px 6px rgba(0, 0, 0, 0.06)',
-                      transition: 'all 0.2s ease',
+                      boxShadow: '0 6px 14px -4px rgba(79, 70, 229, 0.35)',
+                      transition: 'transform 0.15s ease, opacity 0.15s ease',
                       opacity: (isFetchingMore || isFetchingNextPage) ? 0.75 : 1,
                     }}
                   >
@@ -1695,7 +1606,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                         <ChevronDown size={16} strokeWidth={2.5} />
                       </>
                     )}
-                  </motion.button>
+                  </button>
                 </div>
               )}
               {!hasMoreToDisplay && paginatedComunicados.length >= 10 && (
@@ -1718,27 +1629,25 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           )
         })()}
         
-        <AnimatePresence>
-          {selectedComunicado && (
-            <ComunicadoViewModal
-              comunicado={selectedComunicado}
-              onClose={() => setSelectedComunicado(null)}
-              onCiencia={handleCiencia}
-              currentUserSlug={resolvedParams.slug}
-              currentUserName={currentUser?.nome || aluno?.nome || 'Familiar / Aluno'}
-              currentUserAvatar={currentUser?.foto || aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
-              isAdminMode={false}
-              isAlunoView={isAlunoLogado}
-              currentUserObj={currentUser}
-              alunos={aluno ? [{ ...aluno, turma_nome: turmaNome || aluno.turma_nome || aluno.turma }] : (resolvedParams?.slug ? [{ id: resolvedParams.slug, turma_nome: turmaNome || undefined }] : [])}
-              setOpenedFormStr={setOpenedFormStr}
-              setMaximizedImageStr={setMaximizedImageStr}
-              setMaximizedVideoStr={setMaximizedVideoStr}
-              setMaximizedPdfStr={setMaximizedPdfStr}
-              setOpenedReportPayload={setOpenedReportPayloadStr}
-            />
-          )}
-        </AnimatePresence>
+        {selectedComunicado && (
+          <ComunicadoViewModal
+            comunicado={selectedComunicado}
+            onClose={() => setSelectedComunicado(null)}
+            onCiencia={handleCiencia}
+            currentUserSlug={resolvedParams.slug}
+            currentUserName={currentUser?.nome || aluno?.nome || 'Familiar / Aluno'}
+            currentUserAvatar={currentUser?.foto || aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
+            isAdminMode={false}
+            isAlunoView={isAlunoLogado}
+            currentUserObj={currentUser}
+            alunos={alunosModalProp}
+            setOpenedFormStr={setOpenedFormStr}
+            setMaximizedImageStr={setMaximizedImageStr}
+            setMaximizedVideoStr={setMaximizedVideoStr}
+            setMaximizedPdfStr={setMaximizedPdfStr}
+            setOpenedReportPayload={setOpenedReportPayloadStr}
+          />
+        )}
       </div>
 
       <ReportPayloadView
@@ -1750,12 +1659,11 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         targetStudentAvatar={aluno?.foto || aluno?.foto_url || aluno?.dados?.foto || aluno?.dados?.avatarUrl || null}
       />
 
-      <AnimatePresence>
-{/* Formulário/Relatório Simulado */}
+      {/* Formulário/Relatório Simulado */}
       {openedFormStr && (
         <Portal>
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', zIndex: 2147483647, transform: 'translateZ(9999px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setOpenedFormStr(null)}>
-           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: 40, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'adFadeIn 0.15s ease' }} onClick={() => setOpenedFormStr(null)}>
+            <div className="card" style={{ padding: 40, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)' }} onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 16 }}>
                  <div style={{ width: 48, height: 48, borderRadius: 24, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FileText color="#3b82f6" />
@@ -1880,61 +1788,52 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                    }}>Enviar Respostas Seguras</button>
                  )}
               </div>
-           </motion.div>
-        </motion.div>
+            </div>
+          </div>
         </Portal>
       )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {/* Modal de Imagem Maximizada com Pinch Zoom (Pinça) */}
-        {maximizedImageStr && (
-          <ImagePinchZoomModal
-            src={maximizedImageStr}
-            onClose={() => setMaximizedImageStr(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Modal de Imagem Maximizada com Pinch Zoom (Pinça) */}
+      {maximizedImageStr && (
+        <ImagePinchZoomModal
+          src={maximizedImageStr}
+          onClose={() => setMaximizedImageStr(null)}
+        />
+      )}
 
-      <AnimatePresence>
-        {/* Modal de Vídeo */}
-        {maximizedVideoStr && (
-          <Portal>
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'none', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMaximizedVideoStr(null)}>
-            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.85)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedVideoStr(null); }}>
+      {/* Modal de Vídeo */}
+      {maximizedVideoStr && (
+        <Portal>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'adFadeIn 0.15s ease' }} onClick={() => setMaximizedVideoStr(null)}>
+            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s, border-color 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(15,23,42,0.85)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedVideoStr(null); }}>
               <X size={24} />
             </button>
-            <motion.video 
-              src={maximizedVideoStr} 
-              initial={{scale:0.8, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.8, opacity:0}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              style={{ maxWidth: '95vw', maxHeight: '95vh', borderRadius: 16, boxShadow: '0 32px 128px rgba(15,23,42,0.85)', background: '#000' }} 
+            <video
+              src={maximizedVideoStr}
+              style={{ maxWidth: '95vw', maxHeight: '95vh', borderRadius: 16, boxShadow: '0 24px 64px rgba(15,23,42,0.75)', background: '#000', animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
               controls autoPlay
-              onClick={e => e.stopPropagation()} 
+              onClick={e => e.stopPropagation()}
             />
-          </motion.div>
-          </Portal>
-        )}
-      </AnimatePresence>
+          </div>
+        </Portal>
+      )}
 
-      <AnimatePresence>
-        {/* Modal de PDF Maximizada */}
-        {maximizedPdfStr && (
-          <Portal>
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'none', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMaximizedPdfStr(null)}>
-            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onClick={(e) => { e.stopPropagation(); setMaximizedPdfStr(null); }}>
+      {/* Modal de PDF Maximizada */}
+      {maximizedPdfStr && (
+        <Portal>
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'adFadeIn 0.15s ease' }} onClick={() => setMaximizedPdfStr(null)}>
+            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s, border-color 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onClick={(e) => { e.stopPropagation(); setMaximizedPdfStr(null); }}>
               <X size={24} />
             </button>
-            <motion.div 
-              initial={{scale:0.8, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.8, opacity:0}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              style={{ width: '95vw', height: '95vh', borderRadius: 16, boxShadow: '0 32px 128px rgba(15,23,42,0.85)', background: '#fff', overflow: 'hidden' }} 
-              onClick={e => e.stopPropagation()} 
+            <div
+              style={{ width: '95vw', height: '95vh', borderRadius: 16, boxShadow: '0 24px 64px rgba(15,23,42,0.75)', background: '#fff', overflow: 'hidden', animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+              onClick={e => e.stopPropagation()}
             >
               <iframe src={maximizedPdfStr} style={{ width: '100%', height: '100%', border: 'none' }} title="Visualizador de PDF" />
-            </motion.div>
-          </motion.div>
-          </Portal>
-        )}
-      </AnimatePresence>
+            </div>
+          </div>
+        </Portal>
+      )}
       <style jsx global>{`
         @media (max-width: 640px) {
           .mobile-content-wrapper { padding-left: 0 !important; padding-right: 0 !important; }

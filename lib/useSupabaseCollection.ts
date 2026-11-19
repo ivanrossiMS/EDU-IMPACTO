@@ -49,13 +49,34 @@ export function hasDataChanged(prev: any, next: any): boolean {
     for (let i = 0; i < prev.length; i++) {
       const p = prev[i]
       const n = next[i]
-      if (p?.id !== n?.id) return true
-      if (p?.status !== n?.status) return true
-      if (p?.confirmedAt !== n?.confirmedAt) return true
-      if (p?.calledAt !== n?.calledAt) return true
-      if (p?.updated_at !== n?.updated_at) return true
+      if (p === n) continue
+      if (!p || !n) return true
+      if (p.id !== n.id) return true
+      if (p.status !== n.status) return true
+      if (p.confirmedAt !== n.confirmedAt) return true
+      if (p.calledAt !== n.calledAt) return true
+      if (p.updated_at !== n.updated_at) return true
+      if (p.guardianName !== n.guardianName) return true
+      if (p.targetTime !== n.targetTime) return true
+      if (p.confirmedOut !== n.confirmedOut) return true
+      if (p.studentPhoto !== n.studentPhoto) return true
+      const pKeys = Object.keys(p)
+      const nKeys = Object.keys(n)
+      if (pKeys.length !== nKeys.length) return true
+      for (let k = 0; k < pKeys.length; k++) {
+        const key = pKeys[k]
+        const pv = p[key]
+        const nv = n[key]
+        if (pv !== nv) {
+          if (typeof pv === 'object' && pv !== null && typeof nv === 'object' && nv !== null) {
+            if (JSON.stringify(pv) !== JSON.stringify(nv)) return true
+          } else {
+            return true
+          }
+        }
+      }
     }
-    return JSON.stringify(prev) !== JSON.stringify(next)
+    return false
   }
   return JSON.stringify(prev) !== JSON.stringify(next)
 }

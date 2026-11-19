@@ -503,15 +503,13 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
   const alNomeX = col1X + fontBold.widthOfTextAtSize('ALUNO(A): ', 7.2)
   page.drawText(sanitize(data.aluno.nome), { x: alNomeX, y: y - 12, size: 7.5, font: fontBold, color: colorDark })
 
-  const col2X = marginLeft + 230
-  page.drawText('MATRICULA: ', { x: col2X, y: y - 12, size: 7, font: fontBold, color: colorMuted })
-  const matX = col2X + fontBold.widthOfTextAtSize('MATRICULA: ', 7)
-  page.drawText(sanitize(data.aluno.matricula), { x: matX, y: y - 12, size: 7.5, font: fontCourierBold, color: colorDark })
-
-  const col3X = marginLeft + 330
-  page.drawText('TURMA/SERIE: ', { x: col3X, y: y - 12, size: 7, font: fontBold, color: colorMuted })
-  const turX = col3X + fontBold.widthOfTextAtSize('TURMA/SERIE: ', 7)
-  page.drawText(sanitize(data.aluno.turma), { x: turX, y: y - 12, size: 7.5, font: fontBold, color: colorDark })
+  const matLabel = 'MATRICULA: '
+  const matVal = sanitize(data.aluno.matricula)
+  const matLabelW = fontBold.widthOfTextAtSize(matLabel, 7)
+  const matValW = fontCourierBold.widthOfTextAtSize(matVal, 7.5)
+  const col2X = pageWidth - marginRight - 8 - matLabelW - matValW
+  page.drawText(matLabel, { x: col2X, y: y - 12, size: 7, font: fontBold, color: colorMuted })
+  page.drawText(matVal, { x: col2X + matLabelW, y: y - 12, size: 7.5, font: fontCourierBold, color: colorDark })
 
   y = y - studentBarHeight - 10
 
@@ -880,7 +878,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
     color: colorBorder,
   })
 
-  const footer1 = `${sanitize(data.escola.nomeFantasia)} - ${sanitize(data.escola.segmento)}`
+  const footer1 = sanitize(data.escola.nomeFantasia)
   const footer1W = fontBold.widthOfTextAtSize(footer1, 7.2)
   page.drawText(footer1, {
     x: marginLeft + (contentWidth - footer1W) / 2,

@@ -25,7 +25,6 @@ import { useApp } from '@/lib/context'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { addOrUpdateCachedMessage, removeCachedMessage } from '@/lib/comunicadosRespostasCache'
@@ -124,12 +123,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (Array.isArray(data)) {
           setMeusAlunos(data)
           if (data.length > 0) {
-            possibleKeys.forEach(k => {
-              try {
-                localStorage.setItem(k, JSON.stringify(data))
-                localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }))
-              } catch (_) {}
-            })
+            try {
+              const serialized = JSON.stringify(data)
+              const metaSerialized = JSON.stringify({ data, ts: Date.now() })
+              possibleKeys.forEach(k => {
+                try {
+                  localStorage.setItem(k, serialized)
+                  localStorage.setItem(`${k}-meta`, metaSerialized)
+                } catch (_) {}
+              })
+            } catch (_) {}
           }
         }
       })
@@ -146,6 +149,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       return
     }
 
+    const isLikelyFamily =
+      currentUser?.perfil === 'Família' ||
+      currentUser?.cargo === 'Aluno' ||
+      currentUser?.cargo === 'Responsável'
+    if (isLikelyFamily) return
+
     // Busca da sessão do Supabase Auth caso o localStorage não tenha hidratado com colaborador_id
     supabase.auth.getUser().then((res: any) => {
       const meta = res?.data?.user?.user_metadata
@@ -154,7 +163,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         setExtraStaffIds([String(cId).replace(/^f_?/, '').trim().toLowerCase()])
       }
     }).catch(() => {})
-  }, [currentUser?.id, currentUser?.colaborador_id, currentUser?.system_user_id])
+  }, [currentUser?.id, currentUser?.colaborador_id, currentUser?.system_user_id, currentUser?.perfil, currentUser?.cargo])
 
   const isStaffUser = Boolean(
     currentUser?.colaborador_id ||
@@ -1100,6 +1109,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
           knownMomentLikesRef.current[momentId] = newLikes
           knownMomentCommentsRef.current[momentId] = newComments
+          const likeKeys = Object.keys(knownMomentLikesRef.current)
+          if (likeKeys.length > 80) {
+            delete knownMomentLikesRef.current[likeKeys[0]]
+            delete knownMomentCommentsRef.current[likeKeys[0]]
+          }
 
           if (addedLikes.length > 0) {
             addedLikes.forEach(likerName => {
@@ -1480,7 +1494,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   return (
     <>
       <PushPermissionBanner />
-      <Toaster position="top-right" richColors />
       {children}
     </>
   )

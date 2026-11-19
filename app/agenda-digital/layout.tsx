@@ -22,9 +22,143 @@ import { isGlobalNavOverlayActive } from '@/lib/navigation/pageReadiness'
 
 
 
+const AGENDA_ROOT_STYLES = `
+  .ad-mesh-bg {
+    background-color: var(--ad-bg-color, #ffffff) !important;
+    background-image: var(--ad-bg-mesh) !important;
+  }
+
+  /* Esconde a interface do ERP */
+  .sidebar { display: none !important; }
+  .topbar { display: none !important; }
+  .main-content { padding-left: 0 !important; }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .ad-mobile-status-bar {
+    display: none;
+  }
+
+  .ad-main-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    position: relative;
+    background: transparent;
+    min-width: 0;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ad-content-inner {
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    z-index: 10;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .ad-banner-global {
+    width: 100%;
+    position: relative;
+    display: block;
+    flex-shrink: 0;
+    background: #0A0F24;
+    overflow: hidden;
+    aspect-ratio: 1600 / 400;
+    min-height: 110px;
+    max-height: var(--ad-banner-max-h, 360px);
+  }
+
+  .ad-banner-global img,
+  .ad-banner-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1600 / 400;
+    min-height: 110px;
+    max-height: var(--ad-banner-max-h, 360px);
+    object-fit: var(--ad-banner-fit, cover);
+    margin: 0;
+  }
+
+  .ad-banner-skeleton {
+    background: #0f172a !important;
+  }
+
+  .ad-content-inner.ad-has-banner {
+    margin-top: 0px;
+    padding-top: 0px !important;
+  }
+
+  @media (max-width: 768px) {
+    .ad-mobile-status-bar {
+      display: block;
+      position: sticky;
+      top: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      height: env(safe-area-inset-top, 0px);
+      min-height: env(safe-area-inset-top, 0px);
+      background: #0A0F24 !important;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .ad-banner-global {
+      position: relative !important;
+      width: 100% !important;
+      height: auto !important;
+      aspect-ratio: 1600 / 400 !important;
+      min-height: 105px !important;
+      max-height: 260px !important;
+      background: #0A0F24 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      display: block !important;
+    }
+    .ad-banner-global img,
+    .ad-banner-img {
+      display: block !important;
+      width: 100% !important;
+      height: 100% !important;
+      aspect-ratio: 1600 / 400 !important;
+      min-height: 105px !important;
+      max-height: 260px !important;
+      object-fit: var(--ad-banner-fit, cover) !important;
+      margin: 0 !important;
+    }
+
+    .ad-content-inner {
+      padding: 16px !important;
+      padding-top: 16px !important;
+      padding-bottom: 100px !important;
+      box-sizing: border-box !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+    }
+    .ad-content-inner.ad-has-banner {
+      margin-top: 0px !important;
+      padding-top: 0px !important;
+    }
+  }
+`
+
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated, loadingPath, moduleTransition } = useApp()
+  const pathname = usePathname()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+  const isEntryRouterPage = Boolean(
+    pathname === '/agenda-digital' ||
+    pathname?.includes('/agenda-digital/selecionar-aluno') ||
+    pathname?.includes('/agenda-digital/selecionar-perfil-admin')
+  )
 
   if (!hydrated && loadingPath !== 'logout' && !moduleTransition) {
     return <AgendaLuxuryLoader isLoading={true} statusText="Iniciando Agenda Digital..." />
@@ -34,7 +168,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
   if (isFamily) {
     return (
       <FormulariosProvider>
-        <SaidaProvider enabled={true}>
+        <SaidaProvider enabled={!isEntryRouterPage}>
           <AgendaDigitalProvider isFamily={isFamily}>
             <AgendaDigitalLayoutInner>
               {children}
@@ -49,7 +183,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
     <DataProvider>
       <FormulariosProvider>
         <RelatoriosProvider>
-          <SaidaProvider enabled={true}>
+          <SaidaProvider enabled={!isEntryRouterPage}>
             <AgendaDigitalProvider isFamily={isFamily}>
               <AgendaDigitalLayoutInner>
                 {children}
@@ -237,153 +371,21 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <>
 
-      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100dvh', width: '100vw', overflow: 'hidden' }}>
-        <style dangerouslySetInnerHTML={{__html: `
-          :root {
-            --ad-bg-mesh: ${activeMesh};
-            --ad-bg-color: #ffffff;
-            --ad-accent-primary: ${corPrimaria};
-          }
-          .ad-mesh-bg {
-            background-color: var(--ad-bg-color) !important;
-            background-image: var(--ad-bg-mesh) !important;
-            background-attachment: fixed !important;
-          }
-          
-          /* Esconde a interface do ERP */
-          .sidebar { display: none !important; }
-          .topbar { display: none !important; }
-          .main-content { padding-left: 0 !important; }
-          
-          .no-scrollbar::-webkit-scrollbar { display: none; }
-          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-          .ad-mobile-status-bar {
-            display: none;
-          }
-
-          .ad-main-scroll {
-            flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            overscroll-behavior-y: contain;
-            position: relative;
-            background: transparent;
-            min-width: 0;
-            width: 100%;
-          }
-
-          .ad-content-inner {
-            padding: 32px;
-            max-width: 1400px;
-            margin: 0 auto;
-            width: 100%;
-            position: relative;
-            z-index: 10;
-            box-sizing: border-box;
-            min-width: 0;
-          }
-
-          .ad-banner-global {
-            width: 100%;
-            position: relative;
-            display: block;
-            flex-shrink: 0;
-            background: #0A0F24;
-            overflow: hidden;
-            aspect-ratio: 1600 / 400;
-            min-height: 110px;
-            max-height: ${bannerMaxHeightDesktop};
-          }
-
-          .ad-banner-global img,
-          .ad-banner-img {
-            display: block;
-            width: 100%;
-            height: 100%;
-            aspect-ratio: 1600 / 400;
-            min-height: 110px;
-            max-height: ${bannerMaxHeightDesktop};
-            object-fit: ${ajusteBanner};
-            margin: 0;
-            transform: translateZ(0);
-            backface-visibility: hidden;
-          }
-
-          .ad-banner-skeleton {
-            background: linear-gradient(90deg, #090e24 0%, #151e3f 50%, #090e24 100%) !important;
-            background-size: 200% 100%;
-            animation: adBannerShimmer 1.5s infinite ease-in-out;
-          }
-
-          @keyframes adBannerShimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-          }
-
-          .ad-content-inner.ad-has-banner {
-            margin-top: 0px;
-            padding-top: 0px !important;
-          }
-
-
-          @media (max-width: 1024px) {
-            /* .ad-sidebar-container handled by component logic */
-          }
-          
-          @media (max-width: 768px) {
-            .ad-mobile-status-bar {
-              display: block;
-              position: sticky;
-              top: 0;
-              left: 0;
-              right: 0;
-              width: 100%;
-              height: env(safe-area-inset-top, 0px);
-              min-height: env(safe-area-inset-top, 0px);
-              background: #0A0F24 !important;
-              z-index: 100;
-              flex-shrink: 0;
-            }
-
-            .ad-banner-global {
-              position: relative !important;
-              width: 100% !important;
-              height: auto !important;
-              aspect-ratio: 1600 / 400 !important;
-              min-height: 105px !important;
-              max-height: 260px !important;
-              background: #0A0F24 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              display: block !important;
-            }
-            .ad-banner-global img,
-            .ad-banner-img {
-              display: block !important;
-              width: 100% !important;
-              height: 100% !important;
-              aspect-ratio: 1600 / 400 !important;
-              min-height: 105px !important;
-              max-height: 260px !important;
-              object-fit: ${ajusteBanner} !important;
-              margin: 0 !important;
-            }
-
-            .ad-content-inner {
-              padding: 16px !important;
-              padding-top: 16px !important;
-              padding-bottom: 100px !important;
-              box-sizing: border-box !important;
-              max-width: 100% !important;
-              min-width: 0 !important;
-            }
-            .ad-content-inner.ad-has-banner {
-              margin-top: 0px !important;
-              padding-top: 0px !important;
-            }
-          }
-        `}} />
+      <div
+        className="agenda-digital-wrapper ad-mesh-bg"
+        style={{
+          display: 'flex',
+          height: '100dvh',
+          width: '100vw',
+          overflow: 'hidden',
+          '--ad-bg-mesh': activeMesh,
+          '--ad-bg-color': '#ffffff',
+          '--ad-accent-primary': corPrimaria,
+          '--ad-banner-fit': ajusteBanner,
+          '--ad-banner-max-h': bannerMaxHeightDesktop,
+        } as React.CSSProperties}
+      >
+        <style dangerouslySetInnerHTML={{ __html: AGENDA_ROOT_STYLES }} />
         
         {!isRouterPage && (
           <div className="ad-sidebar-container">

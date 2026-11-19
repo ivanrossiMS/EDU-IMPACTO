@@ -9,7 +9,6 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import React, { use, useState, useEffect, useMemo, useRef } from 'react'
 import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert, AlertCircle, RotateCw, Download } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { useApp } from '@/lib/context'
@@ -52,10 +51,18 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
   const { data: fetchMomentosData, isLoading: loading, isError, error, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
-  const fetchMomentos = fetchMomentosData?.pages?.flat() || []
-  
+  const fetchMomentos = useMemo(() => fetchMomentosData?.pages?.flat() || [], [fetchMomentosData])
+
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
+  const preloadedMediaUrlsRef = useRef<Set<string>>(new Set());
+  const preloadMomentoMediaUrl = React.useCallback((url?: string | null) => {
+    if (typeof window === 'undefined' || !url || preloadedMediaUrlsRef.current.has(url)) return;
+    if (preloadedMediaUrlsRef.current.size > 60) preloadedMediaUrlsRef.current.clear();
+    preloadedMediaUrlsRef.current.add(url);
+    const img = new Image();
+    img.src = url;
+  }, []);
 
   // Flag de permissão: se falso, esconde todos os comentários e o input
   const canComment = adConfig?.permissoes?.comentariosMural !== false
@@ -233,10 +240,15 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     }
   }
 
-  const todasTurmasDoAluno = useMemo<string[]>(() => {
-    if (!aluno) return []
-    return getAlunoTodasTurmasEGrupos(aluno, turmas, grupos).map((x: string) => x.toLowerCase())
-  }, [aluno, turmas, grupos])
+  const turmaNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    turmas.forEach((t: any) => {
+      if (t?.id != null) map.set(String(t.id), t.nome)
+      if (t?.codigo != null) map.set(String(t.codigo), t.nome)
+      if (t?.nome) map.set(String(t.nome), t.nome)
+    })
+    return map
+  }, [turmas])
 
 
   // Momentos filtrados e autorizados com segurança pelo backend e checagem defensiva para este aluno
@@ -400,21 +412,26 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       setHighlightedId(String(targetItem.id));
       hasScrolledToItem.current = true;
 
+      let retryTimer: ReturnType<typeof setTimeout> | null = null;
       const tryScroll = (attempts = 0) => {
         const el = document.getElementById(`momento-${targetItem.id}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else if (attempts < 5) {
-          setTimeout(() => tryScroll(attempts + 1), 150);
+          retryTimer = setTimeout(() => tryScroll(attempts + 1), 150);
         }
       };
 
-      setTimeout(() => tryScroll(0), 120);
+      const initTimer = setTimeout(() => tryScroll(0), 120);
 
       const timer = setTimeout(() => {
         setHighlightedId(null);
       }, 6000);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(initTimer);
+        if (retryTimer) clearTimeout(retryTimer);
+        clearTimeout(timer);
+      };
     }
   }, [queryItemId, meusMomentos, visibleCount]);
 
@@ -427,50 +444,30 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       overflow: 'visible'
     }}>
       <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@300;400;600;800&display=swap');
-        
-        @keyframes floatRandom {
-          0% { transform: translateY(0px) rotate(0deg) scale(1); }
-          50% { transform: translateY(-25px) rotate(180deg) scale(1.15); }
-          100% { transform: translateY(0px) rotate(360deg) scale(1); }
-        }
-        
-        @keyframes gradientMove {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        
         /* Inject dynamic, highly colorful full-viewport premium warm-cool pastel gradient */
         .ad-main-scroll {
           background: transparent !important;
           position: relative !important;
         }
 
-        .floating-icon {
-          position: absolute;
-          pointer-events: none;
-          z-index: 1;
-          filter: drop-shadow(0 8px 16px rgba(0,0,0,0.06));
-        }
-        
         .polaroid-card {
           background: #ffffff !important;
           padding: 18px 18px 24px 18px !important;
           border-radius: 16px !important;
           border: 1px solid rgba(255, 255, 255, 0.9) !important;
-          box-shadow: 0 20px 45px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.02) !important;
+          box-shadow: 0 12px 28px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02) !important;
           width: 100% !important;
           max-width: 480px !important;
           display: flex !important;
           flex-direction: column !important;
-          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease !important;
           cursor: pointer !important;
         }
-        .polaroid-card:hover {
-          transform: rotate(0deg) scale(1.04) translateY(-10px) !important;
-          box-shadow: 0 40px 80px rgba(99, 102, 241, 0.2), 0 6px 20px rgba(0,0,0,0.05) !important;
-          border-color: rgba(99, 102, 241, 0.3) !important;
+        @media (hover: hover) {
+          .polaroid-card:hover {
+            transform: rotate(0deg) scale(1.03) translateY(-6px) !important;
+            border-color: rgba(99, 102, 241, 0.3) !important;
+          }
         }
 
         .media-item-hover .expand-overlay {
@@ -484,12 +481,10 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         .ad-familiar-momentos-header {
           margin: 24px 16px 32px 16px;
           padding: 22px 28px;
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
           border-radius: 24px;
-          border: 1px solid rgba(255, 255, 255, 0.9);
-          box-shadow: 0 20px 40px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 1);
+          border: 1px solid rgba(226, 232, 240, 0.9);
+          box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
           display: flex;
           align-items: center;
           gap: 24px;
@@ -504,11 +499,11 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           border-radius: 20px;
           display: flex;
           align-items: center;
-          justify-content: center;
+          justifyContent: center;
           border: 1px solid rgba(255, 255, 255, 0.8);
-          box-shadow: 0 10px 22px rgba(99, 102, 241, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+          box-shadow: 0 8px 18px rgba(99, 102, 241, 0.1);
           transform: rotate(-5deg);
-          transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
           flex-shrink: 0;
         }
 
@@ -579,51 +574,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         }
       `}} />
 
-      {/* Decorative Blur Blobs */}
-      <div className="ad-hide-mobile" style={{
-        position: 'absolute',
-        top: '15%',
-        left: '5%',
-        width: '320px',
-        height: '320px',
-        borderRadius: '50%',
-        background: 'rgba(236, 72, 153, 0.15)',
-        filter: 'blur(80px)',
-        pointerEvents: 'none',
-        zIndex: 0
-      }} />
-      <div className="ad-hide-mobile" style={{
-        position: 'absolute',
-        bottom: '25%',
-        right: '5%',
-        width: '360px',
-        height: '360px',
-        borderRadius: '50%',
-        background: 'rgba(99, 102, 241, 0.15)',
-        filter: 'blur(90px)',
-        pointerEvents: 'none',
-        zIndex: 0
-      }} />
-
-      {/* Floating Modern Icons Background Layer */}
-      <div className="ad-hide-mobile" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
-        <div className="floating-icon" style={{ top: '8%', left: '8%', color: 'rgba(99, 102, 241, 0.35)', animation: 'floatRandom 14s ease-in-out infinite' }}><Heart size={28} fill="rgba(99, 102, 241, 0.15)" /></div>
-        <div className="floating-icon" style={{ top: '15%', left: '85%', color: 'rgba(236, 72, 153, 0.4)', animation: 'floatRandom 16s ease-in-out infinite 1s' }}><Sparkles size={24} /></div>
-        <div className="floating-icon" style={{ top: '40%', left: '5%', color: 'rgba(245, 158, 11, 0.35)', animation: 'floatRandom 12s ease-in-out infinite 2s' }}><Smile size={30} /></div>
-        <div className="floating-icon" style={{ top: '60%', left: '90%', color: 'rgba(16, 185, 129, 0.3)', animation: 'floatRandom 15s ease-in-out infinite 0.5s' }}><Camera size={26} /></div>
-        <div className="floating-icon" style={{ top: '75%', left: '10%', color: 'rgba(139, 92, 246, 0.35)', animation: 'floatRandom 18s ease-in-out infinite 2.5s' }}><Star size={26} fill="rgba(139, 92, 246, 0.15)" /></div>
-        <div className="floating-icon" style={{ top: '85%', left: '80%', color: 'rgba(239, 68, 68, 0.35)', animation: 'floatRandom 13s ease-in-out infinite 3.5s' }}><Heart size={28} fill="rgba(239, 68, 68, 0.15)" /></div>
-        <div className="floating-icon" style={{ top: '5%', left: '70%', color: 'rgba(59, 130, 246, 0.35)', animation: 'floatRandom 15s ease-in-out infinite 1.5s' }}><Sparkles size={26} /></div>
-        <div className="floating-icon" style={{ top: '28%', left: '92%', color: 'rgba(236, 72, 153, 0.4)', animation: 'floatRandom 17s ease-in-out infinite 0.3s' }}><Camera size={24} /></div>
-        <div className="floating-icon" style={{ top: '52%', left: '12%', color: 'rgba(245, 158, 11, 0.35)', animation: 'floatRandom 14s ease-in-out infinite 2.8s' }}><Star size={28} fill="rgba(245, 158, 11, 0.15)" /></div>
-      </div>
-
+      {/* Decorative Static Ambient Layers replaced for performance */}
       <div style={{ position: 'relative', zIndex: 10 }}>
         {/* ULTRA MODERN HEADER */}
         <div className="ad-familiar-momentos-header">
-          {/* Subtle animated gradient overlay inside the header */}
+          {/* Subtle static gradient overlay inside the header */}
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(236,72,153,0.04) 50%, rgba(245,158,11,0.03) 100%)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)', backgroundSize: '100% 200%', animation: 'gradientMove 3s ease infinite', borderRadius: '20px 0 0 20px' }} />
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)', borderRadius: '20px 0 0 20px' }} />
           
           <div 
             className="ad-familiar-momentos-icon"
@@ -703,21 +660,20 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
             {loading || !aluno ? (
               <MomentoSkeleton count={2} />
             ) : isError ? (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{ 
-                  background: '#ffffff', 
-                  padding: '50px 24px', 
-                  borderRadius: 32, 
-                  textAlign: 'center', 
-                  border: '1px solid #fee2e2', 
-                  boxShadow: '0 10px 30px rgba(239, 68, 68, 0.05)',
+              <div
+                style={{
+                  background: '#ffffff',
+                  padding: '50px 24px',
+                  borderRadius: 32,
+                  textAlign: 'center',
+                  border: '1px solid #fee2e2',
+                  boxShadow: '0 10px 24px rgba(239, 68, 68, 0.05)',
                   maxWidth: 480,
                   margin: '0 auto',
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  animation: 'adFadeIn 0.25s ease'
                 }}
               >
                 <div style={{
@@ -754,24 +710,21 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                     fontSize: '0.875rem',
                     border: 'none',
                     cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(219, 39, 119, 0.3)'
+                    boxShadow: '0 4px 12px rgba(219, 39, 119, 0.25)'
                   }}
                 >
                   <RotateCw size={15} /> Tentar novamente
                 </button>
-              </motion.div>
+              </div>
             ) : (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                style={{ 
-                  background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', 
-                  padding: '80px 40px', 
-                  borderRadius: 32, 
-                  textAlign: 'center', 
-                  border: '1px solid rgba(255,255,255,0.8)', 
-                  boxShadow: '0 20px 40px rgba(15, 23, 42, 0.03), inset 0 2px 10px rgba(255,255,255,1)',
+              <div
+                style={{
+                  background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
+                  padding: '80px 40px',
+                  borderRadius: 32,
+                  textAlign: 'center',
+                  border: '1px solid rgba(226, 232, 240, 0.85)',
+                  boxShadow: '0 16px 32px rgba(15, 23, 42, 0.04)',
                   position: 'relative',
                   overflow: 'hidden',
                   display: 'flex',
@@ -779,64 +732,48 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                   alignItems: 'center',
                   justifyContent: 'center',
                   maxWidth: 500,
-                  margin: '0 auto'
+                  margin: '0 auto',
+                  animation: 'adFadeIn 0.25s ease'
                 }}
               >
-                {/* Subtle background glow */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 300, height: 300, background: 'radial-gradient(circle, rgba(236, 72, 153, 0.04) 0%, rgba(255,255,255,0) 70%)', zIndex: 0 }} />
-
-                <motion.div 
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
-                  style={{ 
-                    width: 80, 
-                    height: 80, 
-                    borderRadius: '50%', 
-                    background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                <div
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     marginBottom: 24,
                     position: 'relative',
                     zIndex: 1,
-                    boxShadow: '0 8px 24px rgba(236, 72, 153, 0.15), inset 0 2px 4px rgba(255,255,255,0.9)'
+                    boxShadow: '0 8px 20px rgba(236, 72, 153, 0.14)'
                   }}
                 >
                   <Camera size={40} color="#db2777" strokeWidth={1.5} />
-                  <motion.div 
-                    animate={{ rotate: 360 }} 
-                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                  <div
                     style={{ position: 'absolute', inset: -10, border: '1px dashed rgba(236, 72, 153, 0.3)', borderRadius: '50%' }}
                   />
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.5, type: 'spring' }}
+                  <div
                     style={{ position: 'absolute', top: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
                   >
                     <Sparkles size={16} color="#ec4899" />
-                  </motion.div>
-                </motion.div>
+                  </div>
+                </div>
 
-                <motion.h3 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3, duration: 0.5 }}
+                <h3
                   style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 12, letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}
                 >
                   Nenhum Momento Registrado
-                </motion.h3>
-                
-                <motion.p 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4, duration: 0.5 }}
+                </h3>
+
+                <p
                   style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
                 >
                   Ainda não há fotos publicadas hoje. Fique de olho, em breve novidades aparecerão por aqui!
-                </motion.p>
-              </motion.div>
+                </p>
+              </div>
             )}
           </div>
         ) : (
@@ -921,10 +858,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                             }
                             const classes = m.targetClasses || [];
                             if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
-                            const classNames = classes.map((c: string) => {
-                              const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome) === String(c));
-                              return turmaMatch ? turmaMatch.nome : c;
-                            });
+                            const classNames = classes.map((c: string) => turmaNameMap.get(String(c)) || c);
                             if (classNames.length > 2) return `${classNames.length} Turmas`;
                             return classNames.join(', ');
                           })()
@@ -952,16 +886,6 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                       if (mediaList.length === 0) return null
                       const activeIndex = currentMediaIndex[m.id] || 0
                       const med = mediaList[activeIndex]
-                      
-                      // Pré-carrega a próxima mídia do card (apenas se válida)
-                      if (typeof window !== 'undefined' && mediaList.length > 1) {
-                        const nextMed = mediaList[(activeIndex + 1) % mediaList.length]
-                        if (nextMed && nextMed.type !== 'video' && nextMed.url && !failedMediaUrls[nextMed.url]) {
-                          const img = new Image()
-                          img.src = nextMed.url
-                          if (typeof img.decode === 'function') img.decode().catch(() => {})
-                        }
-                      }
 
                       return (
                         <div style={{ width: '100%', height: '100%' }}>
@@ -1033,7 +957,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                       setFailedMediaUrls(prev => ({ ...prev, [med.url]: true }));
                                     }}
                                   />
-                                  <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>
+                                  <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <Maximize2 color="white" size={32} />
                                   </div>
                                 </>
@@ -1044,7 +968,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                           {mediaList.length > 1 && (
                             <>
                               <button 
-                                onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex > 0 ? activeIndex - 1 : mediaList.length - 1 })) }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const prevIdx = activeIndex > 0 ? activeIndex - 1 : mediaList.length - 1;
+                                  const nextAfter = prevIdx > 0 ? prevIdx - 1 : mediaList.length - 1;
+                                  const prefetchCandidate = mediaList[nextAfter];
+                                  if (prefetchCandidate && prefetchCandidate.type !== 'video') preloadMomentoMediaUrl(prefetchCandidate.url);
+                                  setCurrentMediaIndex(p => ({ ...p, [m.id]: prevIdx }));
+                                }}
                                 style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}
@@ -1052,7 +983,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                 <ChevronLeft size={20} />
                               </button>
                               <button 
-                                onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex < mediaList.length - 1 ? activeIndex + 1 : 0 })) }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const nextIdx = activeIndex < mediaList.length - 1 ? activeIndex + 1 : 0;
+                                  const prefetchCandidate = mediaList[(nextIdx + 1) % mediaList.length];
+                                  if (prefetchCandidate && prefetchCandidate.type !== 'video') preloadMomentoMediaUrl(prefetchCandidate.url);
+                                  setCurrentMediaIndex(p => ({ ...p, [m.id]: nextIdx }));
+                                }} 
                                 style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
                                 onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}

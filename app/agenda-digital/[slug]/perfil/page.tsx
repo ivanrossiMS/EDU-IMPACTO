@@ -1,8 +1,7 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { LoadingGlass } from '@/components/LoadingGlass'
@@ -25,13 +24,230 @@ import {
 } from '@/app/agenda-digital/components/AutorizacaoFinanceiraModal'
 import { AutorizacaoSaidaSozinhoSection } from '@/app/agenda-digital/components/AutorizacaoSaidaSozinhoSection'
 
+const PERFIL_PAGE_STYLES = `
+  .avatar-edit-overlay:hover {
+    opacity: 1 !important;
+  }
+
+  /* ── Segmented Control Dock Ultra Moderno ── */
+  .ad-perfil-tabs-bar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 20px;
+    box-shadow: 0 8px 20px -8px rgba(79, 70, 229, 0.08), 0 2px 6px rgba(15, 23, 42, 0.03);
+  }
+
+  .ad-perfil-tab-btn {
+    position: relative;
+    min-width: 0;
+    padding: 11px 12px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #475569;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: 'Outfit', Inter, sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ad-perfil-tab-btn:hover:not(.active) {
+    background: #f8fafc;
+    color: #0f172a;
+  }
+
+  .ad-perfil-tab-btn.active {
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #7c3aed 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 18px -4px rgba(79, 70, 229, 0.36);
+  }
+
+  .ad-perfil-tab-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #eef2ff;
+    color: #4f46e5;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .ad-perfil-tab-btn.active .ad-perfil-tab-icon {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+  }
+
+  .ad-perfil-tab-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.15;
+  }
+
+  /* ── Card Principal de Seção ── */
+  .ad-perfil-section-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 26px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    padding: 26px;
+    box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.02);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Bento Grid (Dados Gerais) ── */
+  .ad-bento-top-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .ad-bento-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ad-resp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .ad-pw-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ad-pw-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 14px;
+    padding: 0 8px 0 14px;
+    min-height: 48px;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .ad-pw-input-wrapper:focus-within {
+    background: #ffffff;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3.5px rgba(79, 70, 229, 0.12);
+  }
+
+  .ad-pw-input-wrapper.has-error {
+    border-color: #ef4444;
+    background: #fef2f2;
+  }
+
+  .ad-pw-input-wrapper.has-success {
+    border-color: #10b981;
+  }
+
+  input.ad-pw-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-family: 'Outfit', Inter, sans-serif;
+    font-size: 15px !important;
+    font-weight: 600;
+    color: #0f172a !important;
+    padding: 12px 4px !important;
+  }
+
+  input.ad-pw-input::placeholder {
+    color: #94a3b8 !important;
+    font-weight: 500;
+  }
+
+  @media (max-width: 680px) {
+    .ad-perfil-tabs-bar {
+      gap: 5px;
+      padding: 5px;
+      border-radius: 18px;
+      margin-bottom: 16px;
+    }
+
+    .ad-perfil-tab-btn {
+      flex-direction: column;
+      gap: 5px;
+      padding: 10px 4px;
+      border-radius: 14px;
+      font-size: 11px;
+    }
+
+    .ad-perfil-tab-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+    }
+
+    .ad-perfil-section-card {
+      padding: 18px 16px !important;
+      border-radius: 22px !important;
+      gap: 16px !important;
+    }
+
+    .ad-bento-top-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .ad-bento-top-grid > div:last-child {
+      grid-column: 1 / -1;
+    }
+
+    .ad-bento-contact-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .ad-pw-grid {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    input.ad-pw-input {
+      font-size: 16px !important;
+    }
+
+    .ad-pw-submit-btn {
+      width: 100%;
+    }
+  }
+`
+
 export default function ADPerfilPage() {
   const queryClient = useQueryClient()
   const { currentUser, setCurrentUser } = useApp()
   const { turmas = [] } = useData()
   const { aluno: basicAluno, userAccessRole } = useSelectedStudent()
   const slug = basicAluno?.id
-  
+  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'senha'>('geral')
+
   const { data: responseData, isLoading, error, refetch } = useApiQuery<any>(
     ['aluno', slug], 
     slug ? `/api/alunos/${slug}` : '',
@@ -40,7 +256,7 @@ export default function ADPerfilPage() {
   )
   const aluno = responseData?.data || null
 
-  // Autorizações financeiras e histórico de auditoria
+  // Autorizações financeiras: buscadas somente quando a aba Responsáveis é aberta
   const { data: authData, refetch: refetchAuth } = useQuery({
     queryKey: ['agenda', 'autorizacoes-financeiras', slug],
     queryFn: async () => {
@@ -49,8 +265,16 @@ export default function ADPerfilPage() {
       if (!res.ok) return null
       return res.json()
     },
-    enabled: !!slug
+    enabled: !!slug && activeTab === 'responsaveis'
   })
+
+  const authRespById = useMemo(() => {
+    const map = new Map<string, any>()
+    for (const ar of authData?.responsaveis || []) {
+      if (ar?.id != null) map.set(String(ar.id).trim(), ar)
+    }
+    return map
+  }, [authData])
 
   // Modal de autorização financeira
   const [authModalOpen, setAuthModalOpen] = useState(false)
@@ -207,8 +431,6 @@ export default function ADPerfilPage() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'senha'>('geral')
-
   const [isEditingEmail, setIsEditingEmail] = useState(false)
   const [emailInput, setEmailInput] = useState('')
   const [isEditingPhone, setIsEditingPhone] = useState(false)
@@ -221,6 +443,13 @@ export default function ADPerfilPage() {
   const [pwError, setPwError] = useState('')
   const [pwSuccess, setPwSuccess] = useState(false)
   const [isChangingPw, setIsChangingPw] = useState(false)
+  const pwSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (pwSuccessTimerRef.current) clearTimeout(pwSuccessTimerRef.current)
+    }
+  }, [])
 
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
@@ -286,7 +515,8 @@ export default function ADPerfilPage() {
       setPwSuccess(true)
       setPwForm({ atual: '', nova: '', confirmar: '' })
       toast.success('Senha alterada com sucesso!')
-      setTimeout(() => setPwSuccess(false), 6000)
+      if (pwSuccessTimerRef.current) clearTimeout(pwSuccessTimerRef.current)
+      pwSuccessTimerRef.current = setTimeout(() => setPwSuccess(false), 6000)
     } catch (err: any) {
       const msg = err?.message || 'Erro de conexão ao tentar alterar a senha.'
       setPwError(msg)
@@ -342,9 +572,12 @@ export default function ADPerfilPage() {
         body: JSON.stringify({ [field]: value })
       })
       if (!res.ok) throw new Error('Falha ao salvar')
-      
-      aluno[field] = value
-      
+
+      queryClient.setQueryData(['aluno', slug], (old: any) => {
+        if (!old?.data) return old
+        return { ...old, data: { ...old.data, [field]: value } }
+      })
+
       if (field === 'email') setIsEditingEmail(false)
       if (field === 'telefone') setIsEditingPhone(false)
       toast.success('Informação atualizada com sucesso!')
@@ -369,16 +602,6 @@ export default function ADPerfilPage() {
       rawAutSaida === true ||
       (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
   }
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
-  } as const
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 14 },
-    visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 320, damping: 26 } }
-  } as const
 
   const tabsConfig = [
     {
@@ -424,223 +647,7 @@ export default function ADPerfilPage() {
 
   return (
     <div className="ad-perfil-root" style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 88, fontFamily: 'Outfit, Inter, sans-serif' }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        .avatar-edit-overlay:hover {
-          opacity: 1 !important;
-        }
-
-        /* ── Segmented Control Dock Ultra Moderno ── */
-        .ad-perfil-tabs-bar {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 6px;
-          padding: 6px;
-          margin-bottom: 20px;
-          background: rgba(255, 255, 255, 0.92);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          border-radius: 20px;
-          box-shadow: 0 10px 30px -8px rgba(79, 70, 229, 0.08), 0 2px 8px rgba(15, 23, 42, 0.03);
-        }
-
-        .ad-perfil-tab-btn {
-          position: relative;
-          min-width: 0;
-          padding: 11px 12px;
-          border-radius: 14px;
-          border: 1px solid transparent;
-          background: transparent;
-          color: #475569;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          font-family: 'Outfit', Inter, sans-serif;
-          font-size: 13px;
-          font-weight: 800;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-          user-select: none;
-          -webkit-tap-highlight-color: transparent;
-        }
-
-        .ad-perfil-tab-btn:hover:not(.active) {
-          background: #f8fafc;
-          color: #0f172a;
-        }
-
-        .ad-perfil-tab-btn.active {
-          background: linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #7c3aed 100%);
-          color: #ffffff;
-          box-shadow: 0 8px 20px -4px rgba(79, 70, 229, 0.42);
-        }
-
-        .ad-perfil-tab-icon {
-          width: 28px;
-          height: 28px;
-          border-radius: 9px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          background: #eef2ff;
-          color: #4f46e5;
-          transition: all 0.2s ease;
-        }
-
-        .ad-perfil-tab-btn.active .ad-perfil-tab-icon {
-          background: rgba(255, 255, 255, 0.22);
-          color: #ffffff;
-        }
-
-        .ad-perfil-tab-label {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          line-height: 1.15;
-        }
-
-        /* ── Card Principal de Seção ── */
-        .ad-perfil-section-card {
-          background: rgba(255, 255, 255, 0.96);
-          border-radius: 26px;
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          padding: 26px;
-          box-shadow: 0 16px 40px -12px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.02);
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        /* ── Bento Grid (Dados Gerais) ── */
-        .ad-bento-top-grid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .ad-bento-contact-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-
-        .ad-resp-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 16px;
-        }
-
-        .ad-pw-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 14px;
-        }
-
-        .ad-pw-input-wrapper {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: #f8fafc;
-          border: 1.5px solid #cbd5e1;
-          border-radius: 14px;
-          padding: 0 8px 0 14px;
-          min-height: 48px;
-          transition: all 0.2s ease;
-        }
-
-        .ad-pw-input-wrapper:focus-within {
-          background: #ffffff;
-          border-color: #4f46e5;
-          box-shadow: 0 0 0 3.5px rgba(79, 70, 229, 0.12);
-        }
-
-        .ad-pw-input-wrapper.has-error {
-          border-color: #ef4444;
-          background: #fef2f2;
-        }
-
-        .ad-pw-input-wrapper.has-success {
-          border-color: #10b981;
-        }
-
-        input.ad-pw-input {
-          flex: 1;
-          min-width: 0;
-          width: 100%;
-          border: none !important;
-          outline: none !important;
-          background: transparent !important;
-          box-shadow: none !important;
-          font-family: 'Outfit', Inter, sans-serif;
-          font-size: 15px !important;
-          font-weight: 600;
-          color: #0f172a !important;
-          padding: 12px 4px !important;
-        }
-
-        input.ad-pw-input::placeholder {
-          color: #94a3b8 !important;
-          font-weight: 500;
-        }
-
-        @media (max-width: 680px) {
-          .ad-perfil-tabs-bar {
-            gap: 5px;
-            padding: 5px;
-            border-radius: 18px;
-            margin-bottom: 16px;
-          }
-
-          .ad-perfil-tab-btn {
-            flex-direction: column;
-            gap: 5px;
-            padding: 10px 4px;
-            border-radius: 14px;
-            font-size: 11px;
-          }
-
-          .ad-perfil-tab-icon {
-            width: 28px;
-            height: 28px;
-            border-radius: 9px;
-          }
-
-          .ad-perfil-section-card {
-            padding: 18px 16px !important;
-            border-radius: 22px !important;
-            gap: 16px !important;
-          }
-
-          .ad-bento-top-grid {
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-          }
-
-          .ad-bento-top-grid > div:last-child {
-            grid-column: 1 / -1;
-          }
-
-          .ad-bento-contact-grid {
-            grid-template-columns: 1fr;
-            gap: 12px;
-          }
-
-          .ad-pw-grid {
-            grid-template-columns: 1fr;
-            gap: 14px;
-          }
-
-          input.ad-pw-input {
-            font-size: 16px !important;
-          }
-
-          .ad-pw-submit-btn {
-            width: 100%;
-          }
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: PERFIL_PAGE_STYLES }} />
 
       {/* Segmented Control Dock Ultra Moderno */}
       <div
@@ -653,10 +660,10 @@ export default function ADPerfilPage() {
           gap: 6,
           padding: 6,
           marginBottom: 18,
-          background: 'rgba(255, 255, 255, 0.92)',
+          background: 'rgba(255, 255, 255, 0.96)',
           borderRadius: 20,
           border: '1px solid rgba(226, 232, 240, 0.95)',
-          boxShadow: '0 10px 30px -8px rgba(79, 70, 229, 0.08), 0 2px 8px rgba(15, 23, 42, 0.03)',
+          boxShadow: '0 8px 20px -8px rgba(79, 70, 229, 0.08), 0 2px 6px rgba(15, 23, 42, 0.03)',
         }}
       >
         {tabsConfig.map(tab => {
@@ -703,12 +710,10 @@ export default function ADPerfilPage() {
       </div>
 
       {/* Tab Contents */}
-      <motion.div variants={containerVariants} initial="hidden" animate="visible">
-        <AnimatePresence mode="wait">
-          
+      <div>
           {/* TAB 1: DADOS GERAIS */}
           {activeTab === 'geral' && (
-            <motion.div key="geral" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'adFadeIn 0.18s ease' }}>
               
               <div
                 className="ad-perfil-section-card"
@@ -1137,12 +1142,12 @@ export default function ADPerfilPage() {
                 }}
               />
 
-            </motion.div>
+            </div>
           )}
 
           {/* TAB 2: RESPONSAVEIS & AUTORIZADOS */}
           {activeTab === 'responsaveis' && (
-            <motion.div key="responsaveis" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'adFadeIn 0.18s ease' }}>
               
               <div
                 className="ad-perfil-section-card"
@@ -1187,7 +1192,7 @@ export default function ADPerfilPage() {
                 {/* Responsaveis Grid */}
                 <div className="ad-resp-grid">
                   {responsaveisList.map((resp: any, i: number) => {
-                    const authResp = (authData?.responsaveis || []).find((ar: any) => String(ar.id).trim() === String(resp.id).trim())
+                    const authResp = resp?.id != null ? authRespById.get(String(resp.id).trim()) : undefined
                     const isFin = Boolean(resp.respFinanceiro || resp.financeiro || authResp?.respFinanceiro || resp.tipo === 'Financeiro' || resp.tipo === 'Ambos')
                     const isPed = Boolean(resp.respPedagogico || resp.pedagogico || authResp?.respPedagogico || resp.tipo === 'Pedagógico' || resp.tipo === 'Ambos')
                     const latestAudit = authResp?.latestAudit || null
@@ -1199,7 +1204,7 @@ export default function ADPerfilPage() {
                     
                     return (
                       <div
-                        key={i}
+                        key={resp.id || i}
                         style={{
                           padding: 18,
                           borderRadius: 20,
@@ -1234,7 +1239,7 @@ export default function ADPerfilPage() {
                                   <Loader2 size={22} className="animate-spin" color="#4338ca" />
                                 ) : displayFoto ? (
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={displayFoto} alt={resp.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <img src={displayFoto} alt={resp.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
                                   getInitials(resp.nome)
                                 )}
@@ -1410,13 +1415,13 @@ export default function ADPerfilPage() {
                                   boxShadow: isFin ? '0 2px 10px rgba(22, 163, 74, 0.35)' : 'none'
                                 }}
                               >
-                                <motion.div
-                                  layout
-                                  transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                                <div
                                   style={{
                                     position: 'absolute',
                                     top: 3,
-                                    left: isFin ? 25 : 3,
+                                    left: 3,
+                                    transform: `translateX(${isFin ? 22 : 0}px)`,
+                                    transition: 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)',
                                     width: 22,
                                     height: 22,
                                     borderRadius: '50%',
@@ -1432,7 +1437,7 @@ export default function ADPerfilPage() {
                                   ) : isFin ? (
                                     <CheckCircle2 size={12} color="#16a34a" />
                                   ) : null}
-                                </motion.div>
+                                </div>
                               </button>
                             </div>
 
@@ -1533,12 +1538,12 @@ export default function ADPerfilPage() {
                 }}
               />
 
-            </motion.div>
+            </div>
           )}
 
           {/* TAB 3: ALTERAR SENHA (SEM REQUISITOS MÍNIMOS) */}
           {activeTab === 'senha' && (
-            <motion.div key="senha" variants={itemVariants} exit={{ opacity: 0, y: -14 }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, animation: 'adFadeIn 0.18s ease' }}>
               <div
                 className="ad-perfil-section-card"
                 style={{
@@ -1946,11 +1951,10 @@ export default function ADPerfilPage() {
                   </form>
                 )}
               </div>
-            </motion.div>
+            </div>
           )}
 
-        </AnimatePresence>
-      </motion.div>
+      </div>
 
       {/* Hidden File Input for Avatar Upload */}
       <input 
@@ -1962,22 +1966,20 @@ export default function ADPerfilPage() {
       />
 
       {/* Modal de Autorização Financeira com Registro de Auditoria */}
-      <AnimatePresence>
-        {authModalOpen && (
-          <AutorizacaoFinanceiraModal
-            isOpen={authModalOpen}
-            onClose={() => setAuthModalOpen(false)}
-            targetResponsavel={selectedTargetResp}
-            aluno={{ id: aluno.id, nome: aluno.nome }}
-            titularNome={titularNome}
-            currentLoggedUserName={currentLoggedUserName}
-            outrosAlunos={authData?.outrosAlunosEmComum || []}
-            historico={authData?.historico || []}
-            initialMode={authModalMode}
-            onConfirm={handleConfirmAuthorization}
-          />
-        )}
-      </AnimatePresence>
+      {authModalOpen && (
+        <AutorizacaoFinanceiraModal
+          isOpen={authModalOpen}
+          onClose={() => setAuthModalOpen(false)}
+          targetResponsavel={selectedTargetResp}
+          aluno={{ id: aluno.id, nome: aluno.nome }}
+          titularNome={titularNome}
+          currentLoggedUserName={currentLoggedUserName}
+          outrosAlunos={authData?.outrosAlunosEmComum || []}
+          historico={authData?.historico || []}
+          initialMode={authModalMode}
+          onConfirm={handleConfirmAuthorization}
+        />
+      )}
     </div>
   )
 }

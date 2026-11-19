@@ -47,6 +47,21 @@ function normalizeString(str?: string | null): string {
     .trim()
 }
 
+function isLinkFinanceiro(link: any): boolean {
+  return Boolean(
+    link &&
+      (link.resp_financeiro === true ||
+        link.is_financeiro === true ||
+        String(link.tipo || '').toLowerCase() === 'financeiro')
+  )
+}
+
+function isJsonRespFinanceiro(r: any): boolean {
+  return Boolean(
+    r && (r.isFinanceiro === true || r.respFinanceiro === true || r.resp_financeiro === true)
+  )
+}
+
 function getDataExtenso(date: Date = new Date()): string {
   const meses = [
     'Janeiro',
@@ -234,6 +249,9 @@ export async function GET(request: Request) {
   let dbResponsavel: any = null
   let responsaveisDisponiveis: any[] = []
   let alunosDisponiveis: any[] = []
+  const allFamilyGuardianIds = new Set<string>()
+  const nonFinancialStudentRefs = new Set<string>()
+  const nonFinancialStudentNames = new Set<string>()
 
   // Se o responsavelId ou CPF foi explicitamente passado
   if (responsavelIdParam) {
@@ -246,12 +264,33 @@ export async function GET(request: Request) {
   } else if (responsavelCpfParam) {
     const cleanCpf = cleanDigits(responsavelCpfParam)
     if (cleanCpf) {
+      const formattedCpf = formatCPF(cleanCpf)
       const { data: resp } = await supabase
         .from('responsaveis')
         .select('*')
-        .or(`dados->>cpf.eq.${cleanCpf},dados->>cpf.ilike.%${cleanCpf}%`)
+        .or(`dados->>cpf.eq.${cleanCpf},dados->>cpf.eq.${formattedCpf},dados->>cpf.ilike.%${cleanCpf}%`)
         .maybeSingle()
       if (resp) dbResponsavel = resp
+    }
+  }
+
+  // Se foi solicitado explicitamente um responsável por ID/CPF e ele não existe no cadastro
+  if ((responsavelIdParam || responsavelCpfParam) && !dbResponsavel && !dbAluno) {
+    return NextResponse.json(
+      { error: 'Responsável financeiro declarado não encontrado para emissão da declaração.' },
+      { status: 404 }
+    )
+  }
+
+  // Se for usuário responsável logado pelo portal da família (fallback para user.email)
+  if (!dbResponsavel && !dbAluno && user?.email) {
+    const { data: resp } = await supabase
+      .from('responsaveis')
+      .select('*')
+      .eq('email', user.email)
+      .maybeSingle()
+    if (resp) {
+      dbResponsavel = resp
     }
   }
 
@@ -267,7 +306,67 @@ export async function GET(request: Request) {
     }
   }
 
-  // Se temos um Aluno identificado, buscar todos os seus responsáveis vinculados
+  // Se buscamos apenas por Responsável (sem aluno pré-selecionado), descobrir os alunos
+  // para os quais ele é ESTRITAMENTE o responsável financeiro declarado.
+  if (!dbAluno && dbResponsavel) {
+    const { data: respLinks } = await supabase
+      .from('aluno_responsavel')
+      .select('aluno_id, parentesco, resp_financeiro, is_financeiro, tipo')
+      .eq('responsavel_id', dbResponsavel.id)
+
+    const financialLinks = (respLinks || []).filter(isLinkFinanceiro)
+    const nonFinancialLinks = (respLinks || []).filter((l: any) => !isLinkFinanceiro(l))
+
+    if (nonFinancialLinks.length > 0) {
+      const nonFinRefs = nonFinancialLinks.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
+      nonFinRefs.forEach((r: string) => nonFinancialStudentRefs.add(r))
+      const { data: nonFinStudents } = await supabase
+        .from('alunos')
+        .select('id, matricula, nome')
+        .or(`id.in.(${nonFinRefs.join(',')}),matricula.in.(${nonFinRefs.join(',')})`)
+      for (const st of nonFinStudents || []) {
+        if (st.id) nonFinancialStudentRefs.add(String(st.id).trim())
+        if (st.matricula) nonFinancialStudentRefs.add(String(st.matricula).trim())
+        if (st.nome) nonFinancialStudentNames.add(normalizeString(st.nome))
+      }
+    }
+
+    if (financialLinks.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'A declaração de IRPF só pode ser emitida em nome do responsável financeiro declarado. Este responsável não é o responsável financeiro de nenhum aluno.',
+        },
+        { status: 403 }
+      )
+    }
+
+    const studentRefs = financialLinks.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
+    const { data: studentList } = await supabase
+      .from('alunos')
+      .select('*')
+      .or(`id.in.(${studentRefs.join(',')}),matricula.in.(${studentRefs.join(',')})`)
+
+    alunosDisponiveis = (studentList || []).map((s: any) => ({
+      id: String(s.id),
+      nome: s.nome,
+      matricula: s.matricula || s.id,
+      turma: s.turma,
+      status: s.status,
+      foto: s.foto || s.dados?.foto || s.dados?.avatarUrl || null,
+    }))
+
+    if (studentList && studentList.length > 0) {
+      dbAluno = studentList[0]
+    } else {
+      return NextResponse.json(
+        { error: 'Nenhum aluno vinculado encontrado para este responsável financeiro.' },
+        { status: 404 }
+      )
+    }
+  }
+
+  // Se temos um Aluno identificado, validar os responsáveis financeiros declarados
   if (dbAluno) {
     const studentRefs = [
       dbAluno.id,
@@ -283,67 +382,155 @@ export async function GET(request: Request) {
       .select('*')
       .in('aluno_id', studentRefs)
 
+    let allLinkedResponsaveis: any[] = []
+
     if (links && links.length > 0) {
       const respIds = Array.from(
         new Set(links.map((l: any) => String(l.responsavel_id).trim()).filter(Boolean))
       )
+      respIds.forEach((id) => allFamilyGuardianIds.add(id))
+
       if (respIds.length > 0) {
         const { data: respList } = await supabase
           .from('responsaveis')
           .select('*')
           .in('id', respIds)
 
-        responsaveisDisponiveis = (respList || []).map((r: any) => {
-          const l = links.find((link: any) => String(link.responsavel_id).trim() === String(r.id).trim()) || {}
+        allLinkedResponsaveis = (respList || []).map((r: any) => {
+          const respLinks = links.filter((link: any) => String(link.responsavel_id).trim() === String(r.id).trim())
+          const firstLink = respLinks[0] || {}
+          const isFinanceiro = respLinks.some((link: any) => isLinkFinanceiro(link))
           return {
             id: String(r.id),
             nome: r.nome || 'Responsável',
             cpf: formatCPF(r.cpf || r.dados?.cpf),
             email: r.email || '',
             telefone: r.telefone || '',
-            parentesco: l.parentesco || r.parentesco || 'Responsável',
-            isFinanceiro: Boolean(l.resp_financeiro || l.is_financeiro || r.isFinanceiro),
+            parentesco: firstLink.parentesco || r.parentesco || 'Responsável',
+            isFinanceiro,
           }
         })
       }
     }
 
-    // Fallback: verificar responsáveis armazenados no JSON de dados do aluno
-    if (responsaveisDisponiveis.length === 0 && dbAluno.dados?.responsaveis && Array.isArray(dbAluno.dados.responsaveis)) {
-      responsaveisDisponiveis = dbAluno.dados.responsaveis.map((r: any, idx: number) => ({
+    // Fallback: verificar responsáveis armazenados no JSON de dados do aluno (sem assumir idx === 0)
+    if (allLinkedResponsaveis.length === 0 && dbAluno.dados?.responsaveis && Array.isArray(dbAluno.dados.responsaveis)) {
+      allLinkedResponsaveis = dbAluno.dados.responsaveis.map((r: any, idx: number) => ({
         id: String(r.id || `json-${idx}`),
         nome: r.nome || 'Responsável',
         cpf: formatCPF(r.cpf),
         email: r.email || '',
         telefone: r.telefone || '',
         parentesco: r.parentesco || 'Responsável',
-        isFinanceiro: Boolean(r.isFinanceiro || r.resp_financeiro || idx === 0),
+        isFinanceiro: isJsonRespFinanceiro(r),
       }))
     }
 
-    // Se nenhum responsável selecionado ainda, pegar o financeiro ou o primeiro disponível
-    if (!dbResponsavel) {
-      const fin = responsaveisDisponiveis.find((r) => r.isFinanceiro) || responsaveisDisponiveis[0]
-      if (fin) {
+    // Somente responsáveis financeiros declarados podem constar na declaração
+    const responsaveisFinanceiros = allLinkedResponsaveis.filter((r) => r.isFinanceiro)
+
+    if (responsaveisFinanceiros.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'Este aluno não possui um responsável financeiro declarado no cadastro. Defina o responsável financeiro antes de emitir a declaração.',
+        },
+        { status: 400 }
+      )
+    }
+
+    responsaveisDisponiveis = responsaveisFinanceiros
+
+    // Se não for staff, garante que o usuário autenticado é um dos responsáveis financeiros declarados
+    if (!isStaff) {
+      const userEmailLower = user?.email ? String(user.email).trim().toLowerCase() : ''
+      const ownMetaRespId = user?.user_metadata?.responsavel_id ? String(user.user_metadata.responsavel_id).trim() : ''
+      const userIsDeclaredFinancial = responsaveisFinanceiros.some((r) => {
+        const rId = String(r.id).trim()
+        const rEmail = String(r.email || '').trim().toLowerCase()
+        return (
+          allowedRespIds.has(rId) ||
+          (ownMetaRespId && rId === ownMetaRespId) ||
+          (userEmailLower && rEmail && rEmail === userEmailLower)
+        )
+      })
+      if (!userIsDeclaredFinancial) {
+        return NextResponse.json(
+          { error: 'Acesso restrito: Apenas o responsável financeiro declarado pode emitir a declaração de IRPF.' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Se um responsável específico foi informado (via parâmetro ou seleção prévia),
+    // validar que ele é um dos responsáveis financeiros declarados deste aluno.
+    if (responsavelIdParam || responsavelCpfParam || dbResponsavel) {
+      const requestedId = dbResponsavel?.id ? String(dbResponsavel.id).trim() : responsavelIdParam ? String(responsavelIdParam).trim() : ''
+      const requestedCpfClean = responsavelCpfParam
+        ? cleanDigits(responsavelCpfParam)
+        : cleanDigits(dbResponsavel?.cpf || dbResponsavel?.dados?.cpf)
+
+      const matchedFin = responsaveisFinanceiros.find(
+        (r) =>
+          (requestedId && String(r.id).trim() === requestedId) ||
+          (requestedCpfClean && cleanDigits(r.cpf) === requestedCpfClean)
+      )
+
+      if (!matchedFin) {
+        return NextResponse.json(
+          {
+            error:
+              'A declaração de IRPF só pode ser emitida em nome do responsável financeiro declarado para este aluno.',
+          },
+          { status: 403 }
+        )
+      }
+
+      if (!dbResponsavel || String(dbResponsavel.id).trim() !== String(matchedFin.id).trim()) {
         const { data: resp } = await supabase
           .from('responsaveis')
           .select('*')
-          .eq('id', fin.id)
+          .eq('id', matchedFin.id)
           .maybeSingle()
-        dbResponsavel = resp || fin
+        dbResponsavel = resp || matchedFin
       }
+    } else {
+      const fin = responsaveisFinanceiros[0]
+      const { data: resp } = await supabase
+        .from('responsaveis')
+        .select('*')
+        .eq('id', fin.id)
+        .maybeSingle()
+      dbResponsavel = resp || fin
     }
   }
 
-  // Se buscamos por Responsável, descobrir os alunos vinculados a ele em aluno_responsavel
-  if (dbResponsavel) {
-    const { data: links } = await supabase
+  // Descobrir todos os alunos vinculados onde o responsável selecionado é o financeiro declarado
+  if (dbResponsavel && dbResponsavel.id && alunosDisponiveis.length === 0) {
+    const { data: respLinks } = await supabase
       .from('aluno_responsavel')
-      .select('aluno_id, parentesco, resp_financeiro')
+      .select('aluno_id, parentesco, resp_financeiro, is_financeiro, tipo')
       .eq('responsavel_id', dbResponsavel.id)
 
-    if (links && links.length > 0) {
-      const studentRefs = links.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
+    const financialLinks = (respLinks || []).filter(isLinkFinanceiro)
+    const nonFinancialLinks = (respLinks || []).filter((l: any) => !isLinkFinanceiro(l))
+
+    if (nonFinancialLinks.length > 0) {
+      const nonFinRefs = nonFinancialLinks.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
+      nonFinRefs.forEach((r: string) => nonFinancialStudentRefs.add(r))
+      const { data: nonFinStudents } = await supabase
+        .from('alunos')
+        .select('id, matricula, nome')
+        .or(`id.in.(${nonFinRefs.join(',')}),matricula.in.(${nonFinRefs.join(',')})`)
+      for (const st of nonFinStudents || []) {
+        if (st.id) nonFinancialStudentRefs.add(String(st.id).trim())
+        if (st.matricula) nonFinancialStudentRefs.add(String(st.matricula).trim())
+        if (st.nome) nonFinancialStudentNames.add(normalizeString(st.nome))
+      }
+    }
+
+    if (financialLinks.length > 0) {
+      const studentRefs = financialLinks.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
       const { data: studentList } = await supabase
         .from('alunos')
         .select('id, nome, matricula, turma, status, foto, dados')
@@ -357,31 +544,13 @@ export async function GET(request: Request) {
         status: s.status,
         foto: s.foto || s.dados?.foto || s.dados?.avatarUrl || null,
       }))
-
-      if (alunosDisponiveis.length > 0 && !dbAluno) {
-        dbAluno = studentList?.[0]
-      }
-    }
-  }
-
-  // Se for usuário responsável logado pelo portal da família (fallback para user.email)
-  if (!dbResponsavel && !dbAluno) {
-    if (user?.email) {
-      const { data: resp } = await supabase
-        .from('responsaveis')
-        .select('*')
-        .eq('email', user.email)
-        .maybeSingle()
-      if (resp) {
-        dbResponsavel = resp
-      }
     }
   }
 
   const guardianExternalId = dbResponsavel ? String(dbResponsavel.id).trim() : responsavelIdParam ? String(responsavelIdParam).trim() : null
 
-  // Descobre todos os IDs de responsáveis legais vinculados ao aluno
-  const validFamilyGuardianIds = new Set<string>()
+  // Descobre todos os IDs de responsáveis vinculados ao aluno para localizar parcelas do contrato no Isaac
+  const validFamilyGuardianIds = new Set<string>(allFamilyGuardianIds)
   if (guardianExternalId) validFamilyGuardianIds.add(guardianExternalId)
   for (const r of responsaveisDisponiveis) {
     if (r.id) validFamilyGuardianIds.add(String(r.id).trim())
@@ -417,18 +586,18 @@ export async function GET(request: Request) {
 
   const guardianCpfClean = resolvedGuardianCpf ? cleanDigits(resolvedGuardianCpf) : null
 
-  // Filtrar parcelas que pertencem a este responsável ou à família
+  // Filtrar parcelas que pertencem estritamente a este responsável financeiro
   const guardianInstallments = allInstallments.filter((item) => {
     const itemGuardianExt = String(item.guardian?.external_id || '').trim()
     const itemGuardianTax = cleanDigits(item.guardian?.tax_id)
 
     if (guardianExternalId && itemGuardianExt === guardianExternalId) return true
     if (guardianCpfClean && itemGuardianTax === guardianCpfClean) return true
-    if (validFamilyGuardianIds.size > 0 && validFamilyGuardianIds.has(itemGuardianExt)) return true
     return false
   })
 
-  // Enriquecer alunosDisponiveis com quaisquer outros alunos encontrados nas parcelas do Isaac para este responsável
+  // Enriquecer alunosDisponiveis com outros alunos encontrados no Isaac para este responsável financeiro,
+  // ignorando qualquer aluno em que este responsável NÃO seja financeiro declarado.
   if (guardianInstallments.length > 0) {
     const mapStudents = new Map<string, any>()
     for (const a of alunosDisponiveis) {
@@ -438,7 +607,11 @@ export async function GET(request: Request) {
     for (const it of guardianInstallments) {
       if (it.student?.name) {
         const key = normalizeString(it.student.name)
-        if (!mapStudents.has(key)) {
+        const itemStExt = String(it.student.external_id || '').trim()
+        const isExplicitlyNonFinancial =
+          (itemStExt && nonFinancialStudentRefs.has(itemStExt)) || nonFinancialStudentNames.has(key)
+
+        if (!isExplicitlyNonFinancial && !mapStudents.has(key)) {
           const newStudent = {
             id: String(it.student.external_id || it.student.id || `isaac-${key}`),
             nome: it.student.name,
@@ -696,7 +869,9 @@ export async function GET(request: Request) {
       (guardianCpfClean && cleanDigits(it.guardian?.tax_id) === guardianCpfClean)
   )?.guardian
 
-  const guardianSample = mensalidadesPagas[0]?.guardian || matchedGuardianForResp || guardianInstallments[0]?.guardian
+  const guardianSample = !dbResponsavel
+    ? (mensalidadesPagas[0]?.guardian || matchedGuardianForResp || guardianInstallments[0]?.guardian)
+    : matchedGuardianForResp
   const studentSample = mensalidadesPagas[0]?.student
 
   const responsavelInfo = {

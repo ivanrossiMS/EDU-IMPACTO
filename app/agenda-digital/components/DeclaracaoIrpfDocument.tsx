@@ -431,14 +431,6 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                 <strong style={{ color: '#475569' }}>MATRÍCULA:</strong>{' '}
                 <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{aluno.matricula}</span>
               </div>
-              <div>
-                <strong style={{ color: '#475569' }}>TURMA / SÉRIE:</strong>{' '}
-                <span style={{ fontWeight: 800, color: '#0f172a' }}>{aluno.turma}</span>
-              </div>
-              <div>
-                <strong style={{ color: '#475569' }}>SEGMENTO:</strong>{' '}
-                <span style={{ fontWeight: 700 }}>{escola.segmento}</span>
-              </div>
             </div>
 
             {/* ── 4. TEXTO DECLARATÓRIO FORMAL ───────────────────────────────── */}
@@ -715,7 +707,7 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
             }}
           >
             <div style={{ fontWeight: 700, color: '#334155' }}>
-              {escola.nomeFantasia} — {escola.segmento}
+              {escola.nomeFantasia}
             </div>
             <div>
               Rua Alagoas, 1081 - Jardim dos Estados, Campo Grande/MS • Tel: (67) 3025-5585 • impacto@colegioimpacto.net • www.colegioimpacto.net

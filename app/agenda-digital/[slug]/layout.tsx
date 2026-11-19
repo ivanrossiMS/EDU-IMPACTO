@@ -4,13 +4,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut, MonitorSmartphone, X } from 'lucide-react'
+import { LogOut, X } from 'lucide-react'
 
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { useSaida } from '@/lib/saidaContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext'
 import { getAlunoTurnoDisplay, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
@@ -94,7 +92,6 @@ export default function ADInnerLayout({
   const { turmas = [] } = useData()
   const { adConfig, setAdLoading, chatGroups: grupos = [] } = useAgendaDigital()
   const { currentUser, hydrated, setLoadingPath } = useApp()
-  const { activeCalls = [] } = useSaida()
   
   const pathname = usePathname()
   const router = useRouter()
@@ -328,7 +325,10 @@ export default function ADInnerLayout({
     return nomeTurma.split('-')[0].trim()
   }, [aluno, turmas])
 
-  const cleanTurno = getAlunoTurnoDisplay(aluno, turmas, grupos)
+  const cleanTurno = useMemo(
+    () => getAlunoTurnoDisplay(aluno, turmas, grupos),
+    [aluno, turmas, grupos]
+  )
 
   const userAccessRole = useMemo(() => {
     if (!isMirrorModeActive && (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria')) {
@@ -341,6 +341,11 @@ export default function ADInnerLayout({
       parentesco: vinculo.parentesco || 'Responsável'
     }
   }, [vinculo, currentUser, isMirrorModeActive])
+
+  const selectedStudentContextValue = useMemo(
+    () => ({ aluno, vinculo, userAccessRole, meusAlunos, isLoadingProfile: isLoading }),
+    [aluno, vinculo, userAccessRole, meusAlunos, isLoading]
+  )
 
   const handleLogout = useCallback(async () => {
     setLoadingPath('logout')
@@ -379,7 +384,7 @@ export default function ADInnerLayout({
       {isMirrorModeActive && (
         <div style={{
           position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10000,
-          background: 'rgba(239, 68, 68, 0.95)', backdropFilter: 'blur(12px)',
+          background: 'rgba(220, 38, 38, 0.96)',
           color: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', borderBottom: '1px solid rgba(255,255,255,0.1)'
         }}>
@@ -398,7 +403,7 @@ export default function ADInnerLayout({
             href="/agenda-digital/admin/espelhar" 
             style={{
               background: '#fff', color: '#ef4444', padding: '8px 16px', borderRadius: 8, 
-              fontSize: 13, fontWeight: 800, textDecoration: 'none', transition: 'all 0.2s', 
+              fontSize: 13, fontWeight: 800, textDecoration: 'none', transition: 'background-color 0.15s ease', 
               display: 'flex', alignItems: 'center', gap: 6
             }}
           >
@@ -410,67 +415,67 @@ export default function ADInnerLayout({
 
       {/* Switcher de Aluno Overlay (Famílias com mais de 1 filho) */}
       <PortalWrapper>
-        <AnimatePresence>
-          {switcherOpen && (
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              style={{ 
-                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                background: 'rgba(15, 23, 42, 0.85)', zIndex: 9999, 
-                display: 'flex', alignItems: 'center', justifyContent: 'center' 
+        {switcherOpen && (
+          <div 
+            style={{ 
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(15, 23, 42, 0.88)', zIndex: 9999, 
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: 'adFadeIn 0.15s ease'
+            }} 
+            onClick={() => setSwitcherOpen(false)}
+          >
+            <div 
+              className="ad-modal-container" 
+              style={{
+                background: 'hsl(var(--bg-surface))',
+                borderRadius: 24,
+                padding: 32,
+                width: '100%',
+                maxWidth: 480,
+                boxShadow: '0 20px 48px rgba(0,0,0,0.22)',
+                animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)'
               }} 
-              onClick={() => setSwitcherOpen(false)}
+              onClick={e => e.stopPropagation()}
             >
-              <motion.div 
-                initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-                animate={{ scale: 1, opacity: 1, y: 0 }} 
-                exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-                transition={{ type: "spring", stiffness: 300, damping: 25 }} 
-                className="ad-modal-container" 
-                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} 
-                onClick={e => e.stopPropagation()}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                  <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
-                  <button onClick={() => setSwitcherOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
-                    <X size={24} />
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {meusAlunos.map((a: any) => (
-                    <div 
-                      key={a.id} 
-                      className="ad-switcher-item" 
-                      onClick={() => {
-                        const newPath = (pathname || '').replace(/^\/agenda-digital\/[^/]+/, `/agenda-digital/${a.id}`)
-                        router.push(newPath)
-                        setSwitcherOpen(false)
-                      }} 
-                      style={{ 
-                        display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, 
-                        border: `1px solid ${a.id === aluno?.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, 
-                        background: a.id === aluno?.id ? 'rgba(99,102,241,0.05)' : 'transparent', 
-                        cursor: 'pointer', transition: 'all 0.2s' 
-                      }}
-                    >
-                      <div className="avatar" style={{ width: 48, height: 48, fontSize: 18, background: 'var(--gradient-purple)', color: 'white' }}>
-                        {getInitials(a.nome)}
-                      </div>
-                      <div>
-                        <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
-                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>
-                          Turma {a.turma_nome || a.turma || 'S/T'}
-                        </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
+                <button onClick={() => setSwitcherOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
+                  <X size={24} />
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {meusAlunos.map((a: any) => (
+                  <div 
+                    key={a.id} 
+                    className="ad-switcher-item" 
+                    onClick={() => {
+                      const newPath = (pathname || '').replace(/^\/agenda-digital\/[^/]+/, `/agenda-digital/${a.id}`)
+                      router.push(newPath)
+                      setSwitcherOpen(false)
+                    }} 
+                    style={{ 
+                      display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, 
+                      border: `1px solid ${a.id === aluno?.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, 
+                      background: a.id === aluno?.id ? 'rgba(99,102,241,0.05)' : 'transparent', 
+                      cursor: 'pointer', transition: 'background-color 0.15s ease, border-color 0.15s ease' 
+                    }}
+                  >
+                    <div className="avatar" style={{ width: 48, height: 48, fontSize: 18, background: 'var(--gradient-purple)', color: 'white' }}>
+                      {getInitials(a.nome)}
+                    </div>
+                    <div>
+                      <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
+                      <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>
+                        Turma {a.turma_nome || a.turma || 'S/T'}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </PortalWrapper>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
@@ -518,7 +523,7 @@ export default function ADInnerLayout({
         {/* 4. Área de Conteúdo da Página com Contexto de Aluno Selecionado */}
         <div className="ad-main-grid" style={{ marginTop: 12 }}>
           <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
-            <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos, isLoadingProfile: isLoading }}>
+            <SelectedStudentProvider value={selectedStudentContextValue}>
               {children}
             </SelectedStudentProvider>
           </div>

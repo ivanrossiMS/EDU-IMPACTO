@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, usePathname } from 'next/navigation'
 import { useApp, saveSetting } from '@/lib/context'
 import {
@@ -10,6 +10,133 @@ import {
 // Retirado imports de Server Actions para evitar erros de registro no servidor (usando endpoints HTTP tradicionais)
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage } from '@/lib/mediaCompressor'
+
+const MEU_PERFIL_STYLES = `
+  .meu-perfil-container {
+    color: #0f172a;
+  }
+  .meu-perfil-container .card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #0f172a !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  }
+  .meu-perfil-container .page-title {
+    color: #0f172a !important;
+  }
+  .meu-perfil-container .page-subtitle {
+    color: #64748b !important;
+  }
+  .meu-perfil-container .form-label {
+    color: #0f172a !important;
+  }
+  .meu-perfil-container input,
+  .meu-perfil-container textarea {
+    color: #0f172a !important;
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+  }
+  .meu-perfil-container input::placeholder,
+  .meu-perfil-container textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+  .profile-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+  }
+  .info-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .comp-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .edit-fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .meu-perfil-container .pw-field-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 0 6px 0 12px;
+    min-height: 44px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .meu-perfil-container .pw-field-box:focus-within {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  }
+  .meu-perfil-container .pw-field-box.pw-field-error {
+    border-color: #ef4444 !important;
+  }
+  .meu-perfil-container .pw-field-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+  .meu-perfil-container input.pw-field-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 10px 4px !important;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    color: #0f172a !important;
+  }
+  .meu-perfil-container .pw-field-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #64748b;
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .meu-perfil-container .pw-field-toggle:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  @media (max-width: 768px) {
+    .profile-grid {
+      grid-template-columns: 1fr !important;
+      gap: 16px !important;
+    }
+    .info-fields-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .comp-fields-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .edit-fields-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .meu-perfil-container input.pw-field-input {
+      font-size: 16px !important;
+      padding: 11px 4px !important;
+    }
+  }
+`
 
 interface UserProfile {
   bio: string
@@ -35,6 +162,183 @@ function getProfileExtra(userId: string): UserProfile {
 function setProfileExtra(userId: string, data: UserProfile) {
   localStorage.setItem(`edu-profile-extra-${userId}`, JSON.stringify(data))
 }
+
+// ── Seção Isolada de Troca de Senha (evita re-renderizar a página ao digitar) ──
+const PasswordChangeCard = React.memo(function PasswordChangeCard({ userId }: { userId: string }) {
+  const [pwForm, setPwForm] = useState({ atual: '', nova: '', confirmar: '' })
+  const [showPw, setShowPw] = useState({ atual: false, nova: false, confirmar: false })
+  const [pwError, setPwError] = useState('')
+  const [pwSuccess, setPwSuccess] = useState(false)
+  const [isChangingPw, setIsChangingPw] = useState(false)
+  const pwTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (pwTimerRef.current) clearTimeout(pwTimerRef.current)
+    }
+  }, [])
+
+  const changePw = async () => {
+    if (!userId || isChangingPw) return
+    setPwError('')
+    setPwSuccess(false)
+
+    if (!pwForm.atual) return setPwError('Informe a senha atual')
+    if (!pwForm.nova) return setPwError('Informe a nova senha')
+    if (pwForm.nova !== pwForm.confirmar) return setPwError('As senhas não coincidem')
+    if (pwForm.atual === pwForm.nova) return setPwError('A nova senha deve ser diferente da senha atual')
+
+    setIsChangingPw(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: pwForm.atual,
+          newPassword: pwForm.nova,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setPwError(data.error || 'Não foi possível alterar a senha. Verifique sua senha atual.')
+        return
+      }
+
+      setSenha(userId, pwForm.nova)
+      setPwSuccess(true)
+      setPwForm({ atual: '', nova: '', confirmar: '' })
+      if (pwTimerRef.current) clearTimeout(pwTimerRef.current)
+      pwTimerRef.current = setTimeout(() => setPwSuccess(false), 5000)
+    } catch (err: any) {
+      setPwError(err?.message || 'Erro de conexão ao tentar alterar a senha.')
+    } finally {
+      setIsChangingPw(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Segurança — Trocar Senha</div>
+          <div style={{ fontSize: 11, color: '#64748b' }}>Altere sua senha de acesso quando desejar</div>
+        </div>
+      </div>
+
+      {pwSuccess && (
+        <div style={{ padding: '12px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, color: '#10b981', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Check size={14} />Senha alterada com sucesso!
+        </div>
+      )}
+      {pwError && (
+        <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, marginBottom: 14 }}>
+          ⚠️ {pwError}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Senha atual */}
+        <div>
+          <label className="form-label" style={{ color: '#0f172a' }}>Senha atual</label>
+          <div className="pw-field-box">
+            <span className="pw-field-icon">
+              <Lock size={15} />
+            </span>
+            <input
+              className="pw-field-input"
+              type={showPw.atual ? 'text' : 'password'}
+              value={pwForm.atual}
+              onChange={e => setPwForm(p => ({ ...p, atual: e.target.value }))}
+              placeholder="Digite a senha atual"
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              className="pw-field-toggle"
+              aria-label={showPw.atual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
+              onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}
+            >
+              {showPw.atual ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Nova senha */}
+        <div>
+          <label className="form-label" style={{ color: '#0f172a' }}>Nova senha</label>
+          <div className="pw-field-box">
+            <span className="pw-field-icon">
+              <Lock size={15} />
+            </span>
+            <input
+              className="pw-field-input"
+              type={showPw.nova ? 'text' : 'password'}
+              value={pwForm.nova}
+              onChange={e => setPwForm(p => ({ ...p, nova: e.target.value }))}
+              placeholder="Digite a nova senha"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              className="pw-field-toggle"
+              aria-label={showPw.nova ? 'Ocultar nova senha' : 'Mostrar nova senha'}
+              onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}
+            >
+              {showPw.nova ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Confirmar */}
+        <div>
+          <label className="form-label" style={{ color: '#0f172a' }}>Confirmar nova senha</label>
+          <div className={`pw-field-box ${pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? 'pw-field-error' : ''}`}>
+            <span className="pw-field-icon">
+              <Lock size={15} />
+            </span>
+            <input
+              className="pw-field-input"
+              type={showPw.confirmar ? 'text' : 'password'}
+              value={pwForm.confirmar}
+              onChange={e => setPwForm(p => ({ ...p, confirmar: e.target.value }))}
+              placeholder="Repita a nova senha"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              className="pw-field-toggle"
+              aria-label={showPw.confirmar ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'}
+              onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}
+            >
+              {showPw.confirmar ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {pwForm.confirmar && pwForm.nova !== pwForm.confirmar && (
+            <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>⚠️ As senhas não coincidem</div>
+          )}
+          {pwForm.confirmar && pwForm.nova === pwForm.confirmar && pwForm.nova && (
+            <div style={{ fontSize: 11, color: '#10b981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={10} />Senhas coincidem</div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            className="btn btn-primary"
+            onClick={changePw}
+            disabled={isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {isChangingPw ? <Loader2 size={14} className="animate-spin" /> : <Key size={13} />}
+            {isChangingPw ? 'Alterando Senha...' : 'Alterar Senha'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
 
 export default function MeuPerfilPage(props?: any) {
   const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
@@ -68,16 +372,15 @@ export default function MeuPerfilPage(props?: any) {
   const canEdit = !isMirroring
   const [form, setForm] = useState<UserProfile>(extra)
   const [saved, setSaved] = useState(false)
-
-  // ── Senha
-  const [pwForm, setPwForm] = useState({ atual: '', nova: '', confirmar: '' })
-  const [showPw, setShowPw] = useState({ atual: false, nova: false, confirmar: false })
-  const [pwError, setPwError] = useState('')
-  const [pwSuccess, setPwSuccess] = useState(false)
-  const [isChangingPw, setIsChangingPw] = useState(false)
-
   const [dbEmail, setDbEmail] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [])
 
   // Carrega o extra profile e busca dados atualizados da API
   useEffect(() => {
@@ -92,10 +395,12 @@ export default function MeuPerfilPage(props?: any) {
     setExtra(loaded)
     setForm(loaded)
 
+    const controller = new AbortController()
     // Buscar dados completos da API de usuários
-    fetch('/api/configuracoes/usuarios')
+    fetch('/api/configuracoes/usuarios', { signal: controller.signal })
       .then(r => r.json())
       .then(users => {
+        if (controller.signal.aborted) return
         if (Array.isArray(users)) {
           // Procurar pelo ID (prioridade), Email ou Nome (como último recurso)
           const me = users.find(u => 
@@ -107,7 +412,6 @@ export default function MeuPerfilPage(props?: any) {
           if (me) {
              const oficialEmail = me.email || me.dados?.email
              if (oficialEmail) setDbEmail(oficialEmail)
-             
              const remoteFoto = me.foto || me.dados?.foto
              const remoteBio = me.dados?.bio || ''
              const remoteTelefone = me.telefone || me.dados?.telefone || ''
@@ -141,8 +445,13 @@ export default function MeuPerfilPage(props?: any) {
           }
         }
       })
-      .catch(err => console.error('[MeuPerfil] Erro ao buscar dados da API:', err))
-  }, [currentUser?.id])
+      .catch(err => {
+        if (err?.name !== 'AbortError') {
+          console.error('[MeuPerfil] Erro ao buscar dados da API:', err)
+        }
+      })
+    return () => controller.abort()
+  }, [currentUser?.id, effectiveUser?.id])
 
   const saveProfile = async () => {
     if (!effectiveUser) return
@@ -175,47 +484,8 @@ export default function MeuPerfilPage(props?: any) {
 
     setEditMode(false)
     setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
-
-  const changePw = async () => {
-    if (!effectiveUser || isChangingPw) return
-    setPwError('')
-    setPwSuccess(false)
-
-    if (!pwForm.atual) return setPwError('Informe a senha atual')
-    if (!pwForm.nova) return setPwError('Informe a nova senha')
-    if (pwForm.nova !== pwForm.confirmar) return setPwError('As senhas não coincidem')
-    if (pwForm.atual === pwForm.nova) return setPwError('A nova senha deve ser diferente da senha atual')
-
-    setIsChangingPw(true)
-    try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: pwForm.atual,
-          newPassword: pwForm.nova,
-        }),
-      })
-
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        setPwError(data.error || 'Não foi possível alterar a senha. Verifique sua senha atual.')
-        return
-      }
-
-      // Sincroniza também no cache local por compatibilidade
-      setSenha(effectiveUser.id, pwForm.nova)
-      setPwSuccess(true)
-      setPwForm({ atual: '', nova: '', confirmar: '' })
-      setTimeout(() => setPwSuccess(false), 5000)
-    } catch (err: any) {
-      setPwError(err?.message || 'Erro de conexão ao tentar alterar a senha.')
-    } finally {
-      setIsChangingPw(false)
-    }
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
   }
 
   const getInitials = (nome: string) =>
@@ -240,132 +510,7 @@ export default function MeuPerfilPage(props?: any) {
 
   return (
     <div className="meu-perfil-container" style={{ maxWidth: 980, margin: '0 auto', color: '#0f172a' }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        .meu-perfil-container {
-          color: #0f172a;
-        }
-        .meu-perfil-container .card {
-          background: #ffffff !important;
-          border: 1px solid #e2e8f0 !important;
-          color: #0f172a !important;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-        }
-        .meu-perfil-container .page-title {
-          color: #0f172a !important;
-        }
-        .meu-perfil-container .page-subtitle {
-          color: #64748b !important;
-        }
-        .meu-perfil-container .form-label {
-          color: #0f172a !important;
-        }
-        .meu-perfil-container input,
-        .meu-perfil-container textarea {
-          color: #0f172a !important;
-          background: #ffffff !important;
-          border-color: #cbd5e1 !important;
-        }
-        .meu-perfil-container input::placeholder,
-        .meu-perfil-container textarea::placeholder {
-          color: #94a3b8 !important;
-        }
-        .profile-grid {
-          display: grid;
-          grid-template-columns: 300px 1fr;
-          gap: 20px;
-        }
-        .info-fields-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-        }
-        .comp-fields-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-        }
-        .edit-fields-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 14px;
-        }
-        .meu-perfil-container .pw-field-box {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          background: #ffffff;
-          border: 1px solid #cbd5e1;
-          border-radius: 10px;
-          padding: 0 6px 0 12px;
-          min-height: 44px;
-          transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .meu-perfil-container .pw-field-box:focus-within {
-          border-color: #6366f1 !important;
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
-        }
-        .meu-perfil-container .pw-field-box.pw-field-error {
-          border-color: #ef4444 !important;
-        }
-        .meu-perfil-container .pw-field-icon {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #64748b;
-          flex-shrink: 0;
-          pointer-events: none;
-        }
-        .meu-perfil-container input.pw-field-input {
-          flex: 1;
-          min-width: 0;
-          width: 100%;
-          border: none !important;
-          outline: none !important;
-          box-shadow: none !important;
-          background: transparent !important;
-          padding: 10px 4px !important;
-          font-size: 14px !important;
-          line-height: 1.4 !important;
-          color: #0f172a !important;
-        }
-        .meu-perfil-container .pw-field-toggle {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 34px;
-          height: 34px;
-          border-radius: 8px;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          color: #64748b;
-          flex-shrink: 0;
-          transition: background 0.15s ease, color 0.15s ease;
-        }
-        .meu-perfil-container .pw-field-toggle:hover {
-          background: #f1f5f9;
-          color: #0f172a;
-        }
-        @media (max-width: 768px) {
-          .profile-grid {
-            grid-template-columns: 1fr !important;
-            gap: 16px !important;
-          }
-          .info-fields-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .comp-fields-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .edit-fields-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .meu-perfil-container input.pw-field-input {
-            font-size: 16px !important;
-            padding: 11px 4px !important;
-          }
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: MEU_PERFIL_STYLES }} />
 
       {/* Header */}
       <div className="page-header">
@@ -390,7 +535,7 @@ export default function MeuPerfilPage(props?: any) {
             <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
                 {extra.foto ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={extra.foto} alt={displayNome} style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(96,165,250,0.3)', opacity: isUploading ? 0.5 : 1 }} />
+                  <img src={extra.foto} alt={displayNome} decoding="async" style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(96,165,250,0.3)', opacity: isUploading ? 0.5 : 1 }} />
                 ) : (
                   <div style={{ width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: '#fff', margin: '0 auto', boxShadow: '0 0 0 4px rgba(99,102,241,0.15)', opacity: isUploading ? 0.5 : 1 }}>
                     {initials || '?'}
@@ -596,126 +741,7 @@ export default function MeuPerfilPage(props?: any) {
           </div>
 
           {/* Trocar senha */}
-          {canEdit && (
-            <div className="card" style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Segurança — Trocar Senha</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Altere sua senha de acesso quando desejar</div>
-                </div>
-              </div>
-
-            {pwSuccess && (
-              <div style={{ padding: '12px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, color: '#10b981', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <Check size={14} />Senha alterada com sucesso!
-              </div>
-            )}
-            {pwError && (
-              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, marginBottom: 14 }}>
-                ⚠️ {pwError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Senha atual */}
-              <div>
-                <label className="form-label" style={{ color: '#0f172a' }}>Senha atual</label>
-                <div className="pw-field-box">
-                  <span className="pw-field-icon">
-                    <Lock size={15} />
-                  </span>
-                  <input
-                    className="pw-field-input"
-                    type={showPw.atual ? 'text' : 'password'}
-                    value={pwForm.atual}
-                    onChange={e => setPwForm(p => ({ ...p, atual: e.target.value }))}
-                    placeholder="Digite a senha atual"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    className="pw-field-toggle"
-                    aria-label={showPw.atual ? 'Ocultar senha atual' : 'Mostrar senha atual'}
-                    onClick={() => setShowPw(p => ({ ...p, atual: !p.atual }))}
-                  >
-                    {showPw.atual ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Nova senha */}
-              <div>
-                <label className="form-label" style={{ color: '#0f172a' }}>Nova senha</label>
-                <div className="pw-field-box">
-                  <span className="pw-field-icon">
-                    <Lock size={15} />
-                  </span>
-                  <input
-                    className="pw-field-input"
-                    type={showPw.nova ? 'text' : 'password'}
-                    value={pwForm.nova}
-                    onChange={e => setPwForm(p => ({ ...p, nova: e.target.value }))}
-                    placeholder="Digite a nova senha"
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    className="pw-field-toggle"
-                    aria-label={showPw.nova ? 'Ocultar nova senha' : 'Mostrar nova senha'}
-                    onClick={() => setShowPw(p => ({ ...p, nova: !p.nova }))}
-                  >
-                    {showPw.nova ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirmar */}
-              <div>
-                <label className="form-label" style={{ color: '#0f172a' }}>Confirmar nova senha</label>
-                <div className={`pw-field-box ${pwForm.confirmar && pwForm.confirmar !== pwForm.nova ? 'pw-field-error' : ''}`}>
-                  <span className="pw-field-icon">
-                    <Lock size={15} />
-                  </span>
-                  <input
-                    className="pw-field-input"
-                    type={showPw.confirmar ? 'text' : 'password'}
-                    value={pwForm.confirmar}
-                    onChange={e => setPwForm(p => ({ ...p, confirmar: e.target.value }))}
-                    placeholder="Repita a nova senha"
-                    autoComplete="new-password"
-                  />
-                  <button
-                    type="button"
-                    className="pw-field-toggle"
-                    aria-label={showPw.confirmar ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'}
-                    onClick={() => setShowPw(p => ({ ...p, confirmar: !p.confirmar }))}
-                  >
-                    {showPw.confirmar ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {pwForm.confirmar && pwForm.nova !== pwForm.confirmar && (
-                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>⚠️ As senhas não coincidem</div>
-                )}
-                {pwForm.confirmar && pwForm.nova === pwForm.confirmar && pwForm.nova && (
-                  <div style={{ fontSize: 11, color: '#10b981', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Check size={10} />Senhas coincidem</div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={changePw}
-                  disabled={isChangingPw || !pwForm.atual || !pwForm.nova || !pwForm.confirmar}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                >
-                  {isChangingPw ? <Loader2 size={14} className="animate-spin" /> : <Key size={13} />}
-                  {isChangingPw ? 'Alterando Senha...' : 'Alterar Senha'}
-                </button>
-              </div>
-            </div>
-          </div>
-          )}
+          {canEdit && <PasswordChangeCard userId={effectiveUser.id} />}
 
           {/* Sessão */}
           <div className="card" style={{ padding: '20px 24px' }}>

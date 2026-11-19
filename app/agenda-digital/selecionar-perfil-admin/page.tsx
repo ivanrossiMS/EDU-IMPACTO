@@ -46,16 +46,172 @@ function formatShortName(name: string): string {
   return `${firstName} ${lastName}`;
 }
 
+const ADMIN_FOOTER_ACTION_STYLES = `
+  /* ── Modern Side-by-Side Action Buttons ── */
+  .ad-footer-actions {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 480px;
+    padding: 0 16px 40px 16px;
+    position: relative;
+    z-index: 10;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+  }
+
+  .ad-action-btn {
+    flex: 1;
+    height: 50px;
+    min-width: 0;
+    max-width: 230px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 16px;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, background-color 0.2s ease;
+    user-select: none;
+    outline: none;
+    box-sizing: border-box;
+    text-decoration: none;
+  }
+
+  .ad-btn-icon-wrap {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  }
+
+  /* Botão Trocar Módulo */
+  .ad-btn-switch {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1.5px solid rgba(99, 102, 241, 0.2);
+    color: #4f46e5;
+    box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.03);
+  }
+  .ad-btn-switch .ad-btn-icon-wrap {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.16);
+    color: #6366f1;
+  }
+  .ad-btn-switch:hover {
+    background: #ffffff;
+    border-color: rgba(99, 102, 241, 0.45);
+    transform: translateY(-2px);
+  }
+  .ad-btn-switch:hover .ad-btn-icon-wrap {
+    transform: translateX(-2px);
+    background: rgba(99, 102, 241, 0.15);
+  }
+  .ad-btn-switch:active {
+    transform: translateY(0) scale(0.97);
+  }
+
+  /* Botão Sair da Conta */
+  .ad-btn-logout {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1.5px solid rgba(244, 63, 94, 0.22);
+    color: #e11d48;
+    box-shadow: 0 4px 14px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.03);
+  }
+  .ad-btn-logout .ad-btn-icon-wrap {
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.16);
+    color: #f43f5e;
+  }
+  .ad-btn-logout:hover {
+    background: #fff5f6;
+    border-color: rgba(244, 63, 94, 0.45);
+    transform: translateY(-2px);
+  }
+  .ad-btn-logout:hover .ad-btn-icon-wrap {
+    transform: translateX(2px);
+    background: rgba(244, 63, 94, 0.15);
+  }
+  .ad-btn-logout:active {
+    transform: translateY(0) scale(0.97);
+  }
+
+  /* Dark mode */
+  .dark .ad-btn-switch {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(99, 102, 241, 0.32);
+    color: #a5b4fc;
+    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.35);
+  }
+  .dark .ad-btn-switch .ad-btn-icon-wrap {
+    background: rgba(99, 102, 241, 0.18);
+    border-color: rgba(99, 102, 241, 0.25);
+    color: #818cf8;
+  }
+  .dark .ad-btn-switch:hover {
+    background: rgba(30, 41, 59, 0.98);
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+
+  .dark .ad-btn-logout {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(244, 63, 94, 0.32);
+    color: #fb7185;
+    box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.35);
+  }
+  .dark .ad-btn-logout .ad-btn-icon-wrap {
+    background: rgba(244, 63, 94, 0.18);
+    border-color: rgba(244, 63, 94, 0.25);
+    color: #fb7185;
+  }
+  .dark .ad-btn-logout:hover {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.5);
+  }
+
+  @media (max-width: 480px) {
+    .ad-footer-actions {
+      gap: 10px;
+      padding: 0 12px 36px 12px;
+      margin-top: 20px;
+    }
+    .ad-action-btn {
+      height: 48px;
+      padding: 0 10px;
+      font-size: 13px;
+      gap: 8px;
+      border-radius: 14px;
+    }
+    .ad-btn-icon-wrap {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+    }
+  }
+`
+
 function SelecionarPerfilAdminContent() {
   const { currentUser, setCurrentUser, setLoadingPath } = useApp()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true)
-    fetch('/api/auth/me')
+    const controller = new AbortController()
+    fetch('/api/auth/me', { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
         if (data?.user?.foto && data.user.foto !== currentUser?.foto) {
@@ -63,6 +219,7 @@ function SelecionarPerfilAdminContent() {
         }
       })
       .catch(() => {})
+    return () => controller.abort()
   }, [currentUser?.id])
 
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Administrador';
@@ -94,23 +251,15 @@ function SelecionarPerfilAdminContent() {
 
         /* Animations */
         @keyframes revealUp {
-          0% { opacity: 0; transform: translateY(20px); }
+          0% { opacity: 0; transform: translateY(16px); }
           100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes orbRotate {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes avatarPulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-          50% { transform: scale(1.02); box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.15); }
         }
 
         .animate-reveal {
-          animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: revealUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
+        .delay-1 { animation-delay: 0.08s; }
+        .delay-2 { animation-delay: 0.16s; }
 
         @media (prefers-reduced-motion: reduce) {
           .animate-reveal {
@@ -118,33 +267,27 @@ function SelecionarPerfilAdminContent() {
             opacity: 1 !important;
             transform: none !important;
           }
-          .welcome-avatar-wrapper,
-          .welcome-sparkle {
-            animation: none !important;
-          }
         }
 
         /* Premium Welcome Header Card */
         .premium-welcome-card {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.4) 100%);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.5);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.88) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.75);
           border-radius: 32px;
           padding: 32px;
           display: flex;
           align-items: center;
           gap: 28px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.05);
           position: relative;
           overflow: hidden;
           margin-top: 24px;
         }
 
         .dark .premium-welcome-card {
-          background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.5) 100%);
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%);
           border-color: rgba(255, 255, 255, 0.08);
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25);
         }
 
         .welcome-avatar-wrapper {
@@ -152,7 +295,6 @@ function SelecionarPerfilAdminContent() {
           width: 96px;
           height: 96px;
           flex-shrink: 0;
-          animation: avatarPulse 4s ease-in-out infinite;
         }
 
         .welcome-avatar-glow {
@@ -231,7 +373,6 @@ function SelecionarPerfilAdminContent() {
           top: 16px;
           right: 16px;
           color: rgba(99, 102, 241, 0.35);
-          animation: orbRotate 6s linear infinite;
         }
 
         /* Portal Sections Grid Layout */
@@ -288,31 +429,29 @@ function SelecionarPerfilAdminContent() {
           gap: 16px;
         }
 
-        /* Glassmorphic Interactive Cards */
+        /* Modern Cards */
         .portal-modern-card {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.6);
+          background: rgba(255, 255, 255, 0.96);
+          border: 1px solid rgba(255, 255, 255, 0.75);
           border-radius: 24px;
           padding: 20px 24px;
           display: flex;
           align-items: center;
           gap: 20px;
           cursor: pointer;
-          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
           position: relative;
           overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
           text-decoration: none !important;
           width: 100%;
           box-sizing: border-box;
         }
 
         .dark .portal-modern-card {
-          background: rgba(30, 41, 59, 0.45);
-          border-color: rgba(255, 255, 255, 0.05);
-          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+          background: rgba(30, 41, 59, 0.88);
+          border-color: rgba(255, 255, 255, 0.06);
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
         }
 
         .portal-modern-card::before {
@@ -644,7 +783,7 @@ function SelecionarPerfilAdminContent() {
         <div className="welcome-avatar-wrapper">
           <div className="welcome-avatar-glow" />
           {currentUser?.foto ? (
-            <img src={currentUser.foto} alt="Avatar" className="welcome-avatar-img" />
+            <img src={currentUser.foto} alt="Avatar" decoding="async" className="welcome-avatar-img" />
           ) : (
             <div className="welcome-initials">
               {getInitials(currentUser?.nome || 'Admin')}
@@ -787,170 +926,7 @@ function SelecionarPerfilAdminContent() {
         </div>
       </main>
 
-      <style dangerouslySetInnerHTML={{__html: `
-        /* ── Modern Side-by-Side Action Buttons ── */
-        .ad-footer-actions {
-          margin-top: 24px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          width: 100%;
-          max-width: 480px;
-          padding: 0 16px 40px 16px;
-          position: relative;
-          z-index: 10;
-          margin-left: auto;
-          margin-right: auto;
-          box-sizing: border-box;
-        }
-
-        .ad-action-btn {
-          flex: 1;
-          height: 50px;
-          min-width: 0;
-          max-width: 230px;
-          padding: 0 14px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          border-radius: 16px;
-          font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 13.5px;
-          font-weight: 700;
-          letter-spacing: -0.01em;
-          white-space: nowrap;
-          cursor: pointer;
-          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
-          user-select: none;
-          outline: none;
-          box-sizing: border-box;
-          text-decoration: none;
-        }
-
-        .ad-btn-icon-wrap {
-          width: 30px;
-          height: 30px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        /* Botão Trocar Módulo */
-        .ad-btn-switch {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1.5px solid rgba(99, 102, 241, 0.2);
-          color: #4f46e5;
-          box-shadow: 0 4px 16px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        }
-        .ad-btn-switch .ad-btn-icon-wrap {
-          background: rgba(99, 102, 241, 0.08);
-          border: 1px solid rgba(99, 102, 241, 0.16);
-          color: #6366f1;
-        }
-        .ad-btn-switch:hover {
-          background: #ffffff;
-          border-color: rgba(99, 102, 241, 0.45);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
-        }
-        .ad-btn-switch:hover .ad-btn-icon-wrap {
-          transform: translateX(-2px);
-          background: rgba(99, 102, 241, 0.15);
-        }
-        .ad-btn-switch:active {
-          transform: translateY(0) scale(0.97);
-        }
-
-        /* Botão Sair da Conta */
-        .ad-btn-logout {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1.5px solid rgba(244, 63, 94, 0.22);
-          color: #e11d48;
-          box-shadow: 0 4px 16px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
-        }
-        .ad-btn-logout .ad-btn-icon-wrap {
-          background: rgba(244, 63, 94, 0.08);
-          border: 1px solid rgba(244, 63, 94, 0.16);
-          color: #f43f5e;
-        }
-        .ad-btn-logout:hover {
-          background: #fff5f6;
-          border-color: rgba(244, 63, 94, 0.45);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
-        }
-        .ad-btn-logout:hover .ad-btn-icon-wrap {
-          transform: translateX(2px);
-          background: rgba(244, 63, 94, 0.15);
-        }
-        .ad-btn-logout:active {
-          transform: translateY(0) scale(0.97);
-        }
-
-        /* Dark mode */
-        .dark .ad-btn-switch {
-          background: rgba(30, 41, 59, 0.85);
-          border-color: rgba(99, 102, 241, 0.32);
-          color: #a5b4fc;
-          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-        .dark .ad-btn-switch .ad-btn-icon-wrap {
-          background: rgba(99, 102, 241, 0.18);
-          border-color: rgba(99, 102, 241, 0.25);
-          color: #818cf8;
-        }
-        .dark .ad-btn-switch:hover {
-          background: rgba(30, 41, 59, 0.98);
-          border-color: rgba(99, 102, 241, 0.5);
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.3);
-        }
-
-        .dark .ad-btn-logout {
-          background: rgba(30, 41, 59, 0.85);
-          border-color: rgba(244, 63, 94, 0.32);
-          color: #fb7185;
-          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-        .dark .ad-btn-logout .ad-btn-icon-wrap {
-          background: rgba(244, 63, 94, 0.18);
-          border-color: rgba(244, 63, 94, 0.25);
-          color: #fb7185;
-        }
-        .dark .ad-btn-logout:hover {
-          background: rgba(244, 63, 94, 0.15);
-          border-color: rgba(244, 63, 94, 0.5);
-          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.3);
-        }
-
-        @media (max-width: 480px) {
-          .ad-footer-actions {
-            gap: 10px;
-            padding: 0 12px 36px 12px;
-            margin-top: 20px;
-          }
-          .ad-action-btn {
-            height: 48px;
-            padding: 0 10px;
-            font-size: 13px;
-            gap: 8px;
-            border-radius: 14px;
-          }
-          .ad-btn-icon-wrap {
-            width: 28px;
-            height: 28px;
-            border-radius: 9px;
-          }
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: ADMIN_FOOTER_ACTION_STYLES }} />
     </div>
     </>
   )

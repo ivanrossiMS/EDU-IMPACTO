@@ -1,7 +1,7 @@
 'use client'
 import { performLogout } from "@/lib/auth/logout";
 
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { compressImage } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { 
@@ -36,12 +36,25 @@ import {
   Radio,
   FileCheck2,
   UserCircle,
-  ArrowLeftRight
+  ArrowLeftRight,
+  ShieldCheck
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useApp, saveSetting } from '@/lib/context'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
+
+const SIDEBAR_LAYOUT_STYLES = `
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .ad-nav-mobile-wrapper { display: none; }
+  .ad-nav-desktop-wrapper { display: block; height: 100%; }
+  @media (max-width: 768px) {
+    .ad-nav-mobile-wrapper { display: block; }
+    .ad-nav-desktop-wrapper { display: none; }
+  }
+`
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useQuery } from '@tanstack/react-query'
@@ -56,6 +69,7 @@ const menuItems = [
   { id: 'espelhar', label: 'Espelhar Agenda', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
   { id: 'chat', label: 'Chat & Moderação', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
+  { id: 'autorizacoes', label: 'Autorizações', icon: ShieldCheck, href: '/agenda-digital/admin/autorizacoes' },
   { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -85,11 +99,12 @@ export function ADSidebar() {
   const espelharColabPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharRespId || espelharAluno || !!espelharColabId
 
-  const { currentUser, setCurrentUser, theme, setTheme, loadingPath, setLoadingPath } = useApp()
+  const { currentUser, setCurrentUser, setLoadingPath } = useApp()
   const { adConfig } = useAgendaDigital()
+  const isMobile = useIsMobile()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
-  const getMirrorParams = () => {
+  const mirrorParamsStr = useMemo(() => {
     if (!isMirroring) return ''
     const params = new URLSearchParams()
     if (espelharRespId) params.append('espelhar_responsavel', espelharRespId)
@@ -100,13 +115,12 @@ export function ADSidebar() {
     if (espelharColabFoto) params.append('espelhar_foto', espelharColabFoto)
     if (espelharColabPerfil) params.append('espelhar_perfil', espelharColabPerfil)
     return params.toString()
-  }
+  }, [isMirroring, espelharRespId, espelharAluno, espelharColabId, espelharColabNome, espelharColabCargo, espelharColabFoto, espelharColabPerfil])
 
-  const appendMirrorParams = (href: string) => {
-    const paramsStr = getMirrorParams()
-    if (!paramsStr) return href
-    return href.includes('?') ? `${href}&${paramsStr}` : `${href}?${paramsStr}`
-  }
+  const appendMirrorParams = useCallback((href: string) => {
+    if (!mirrorParamsStr) return href
+    return href.includes('?') ? `${href}&${mirrorParamsStr}` : `${href}?${mirrorParamsStr}`
+  }, [mirrorParamsStr])
 
   const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
   const respId = espelharRespId || baseRespId
@@ -215,17 +229,17 @@ export function ADSidebar() {
 
 
 
-  let mobileTabs: any[] = []
-    
+  const mobileTabs = useMemo(() => {
     // On student/family slug paths, always show only family tabs — never admin tabs
     if (!isFamily && !isSlugPath && alunoId !== "colaborador" && !alunoId) {
-      mobileTabs = [
+      return [
         { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'espelhar', label: 'Espelhar', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
         { id: 'chat', label: 'Chat', icon: MessageSquare, href: '/agenda-digital/admin/chat' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
+        { id: 'autorizacoes', label: 'Autorizações', icon: ShieldCheck, href: '/agenda-digital/admin/autorizacoes' },
         { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -234,8 +248,10 @@ export function ADSidebar() {
         { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' },
         { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ]
-    } else if (alunoId) {
-      mobileTabs = [
+    }
+    if (alunoId) {
+      const perms = adConfig?.permissoes
+      return [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
         { id: 'momentos', label: 'Galeria', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
@@ -250,43 +266,37 @@ export function ADSidebar() {
         if (alunoId === 'colaborador') {
           return ['comunicados', 'Galeria', 'Agenda', 'Frequência', 'Notas', 'Ocorrências', 'Perfil', 'Trocar Módulo'].includes(item.label)
         }
-        
-        // Ocultar sempre "Trocar Módulo" na visão de aluno/família (conforme solicitado pelo usuário)
-        if (item.label === 'Trocar Módulo') return false;
-
-        let isFin = false;
-        if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
-           isFin = true;
-        } else if (profileData?.vinculo) {
-           isFin = !!profileData.vinculo.resp_financeiro;
-        }
-
-        if (item.label === 'Financeiro') {
-           if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
-        }
-        if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
-        if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
-        if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
-        if (item.label === 'Provas Online' && adConfig?.permissoes?.visualizarProvasOnline === false) return false
+        // Ocultar sempre "Trocar Módulo" na visão de aluno/família
+        if (item.label === 'Trocar Módulo') return false
+        if (item.label === 'Financeiro' && perms?.visualizarFinanceiro === false) return false
+        if (item.label === 'Frequência' && perms?.visualizarFrequencia === false) return false
+        if (item.label === 'Ocorrências' && perms?.visualizarOcorrencias === false) return false
+        if (item.label === 'Notas' && perms?.visualizarNotas === false) return false
+        if (item.label === 'Provas Online' && perms?.visualizarProvasOnline === false) return false
         return true
       })
     }
+    return []
+  }, [isFamily, isSlugPath, alunoId, adConfig?.permissoes])
 
   useEffect(() => {
     const handleScroll = () => {
       if (scrollContainerRef.current) {
         const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current
-        setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5)
+        const nextCanScroll = scrollLeft < scrollWidth - clientWidth - 5
+        setCanScrollRight(prev => (prev === nextCanScroll ? prev : nextCanScroll))
       }
     }
     
     const el = scrollContainerRef.current
+    let initTimer: ReturnType<typeof setTimeout> | null = null
     if (el) {
       el.addEventListener('scroll', handleScroll, { passive: true })
-      setTimeout(handleScroll, 100) 
+      initTimer = setTimeout(handleScroll, 100)
     }
     return () => {
       if (el) el.removeEventListener('scroll', handleScroll)
+      if (initTimer) clearTimeout(initTimer)
     }
   }, [alunoId])
 
@@ -298,63 +308,34 @@ export function ADSidebar() {
           bottom: 0,
           left: 0,
           right: 0,
-          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 58, 138, 0.9) 100%)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.12)',
           borderRadius: '24px 24px 0 0',
           zIndex: 9999,
-          boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 -6px 22px rgba(0, 0, 0, 0.45)',
           display: 'block',
           overflow: 'hidden',
           paddingBottom: 'env(safe-area-inset-bottom)'
         }}>
-          {/* Subtle dot pattern overlay on the right */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            right: 0,
-            width: '120px',
-            background: 'radial-gradient(rgba(255,255,255,0.2) 1.5px, transparent 1.5px)',
-            backgroundSize: '10px 10px',
-            backgroundPosition: '0 0',
-            maskImage: 'linear-gradient(to right, transparent, black)',
-            WebkitMaskImage: 'linear-gradient(to right, transparent, black)',
-            pointerEvents: 'none',
-            zIndex: 0
-          }} />
-
-          {/* Indicador de Mais Ícones */}
-          <AnimatePresence>
-            {canScrollRight && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                style={{
-                  position: 'absolute',
-                  top: 0, bottom: 0, right: 0,
-                  width: '50px',
-                  background: 'linear-gradient(to right, transparent, rgba(15, 23, 42, 0.9))',
-                  pointerEvents: 'none',
-                  zIndex: 10,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  paddingRight: '6px'
-                }}
-              >
-                <motion.div
-                  animate={{ x: [0, 5, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                  style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))' }}
-                >
-                  <ChevronRight size={20} color="white" strokeWidth={3} />
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Indicador estático leve de rolagem */}
+          {canScrollRight && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0, bottom: 0, right: 0,
+                width: '44px',
+                background: 'linear-gradient(to right, transparent, rgba(15, 23, 42, 0.96))',
+                pointerEvents: 'none',
+                zIndex: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: '6px'
+              }}
+            >
+              <ChevronRight size={18} color="white" strokeWidth={2.5} />
+            </div>
+          )}
 
           <div ref={scrollContainerRef} className="no-scrollbar" style={{
             display: 'flex',
@@ -363,9 +344,9 @@ export function ADSidebar() {
             padding: '12px 16px 8px 16px',
             width: '100%',
             gap: 0,
-            scrollSnapType: 'x mandatory'
+            scrollSnapType: 'x mandatory',
+            WebkitOverflowScrolling: 'touch'
           }}>
-            <LayoutGroup id="ad-mobile-tabs">
             {mobileTabs.map((item, idx) => {
               const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
               
@@ -384,8 +365,7 @@ export function ADSidebar() {
                       }
                     }}
                     style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
-                    <motion.div 
-                      whileTap={{ scale: 0.9 }}
+                    <div
                       style={{
                         position: 'relative',
                         width: 36, height: 36,
@@ -394,34 +374,31 @@ export function ADSidebar() {
                       }}
                     >
                       {isActive && (
-                        <motion.div
-                          layoutId="active-glow"
+                        <div
                           style={{
                             position: 'absolute',
-                            width: 50, height: 50,
+                            width: 44, height: 44,
                             borderRadius: '50%',
-                            background: 'radial-gradient(circle, rgba(121,40,202,0.6) 0%, rgba(121,40,202,0.15) 40%, transparent 70%)',
+                            background: 'radial-gradient(circle, rgba(121,40,202,0.5) 0%, transparent 70%)',
                             zIndex: 0
                           }}
                         />
                       )}
-                      <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none', zIndex: 1 }} />
-                    </motion.div>
+                      <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ zIndex: 1 }} />
+                    </div>
                     <span style={{ fontSize: 9, fontWeight: isActive ? 800 : 500, color: 'white', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
                       {item.label}
                     </span>
                     
                     {isActive && (
-                      <motion.div
-                        layoutId="active-indicator"
+                      <div
                         style={{
                           position: 'absolute',
                           bottom: -6,
                           width: 14,
                           height: 3,
                           borderRadius: 2,
-                          background: '#7928ca',
-                          boxShadow: '0 0 10px rgba(121,40,202,0.8)'
+                          background: '#a855f7',
                         }}
                       />
                     )}
@@ -429,11 +406,11 @@ export function ADSidebar() {
                 </div>
               )
             })}
-            </LayoutGroup>
           </div>
         </div>
       </div>
       
+      {!isMobile && (
       <div className="ad-nav-desktop-wrapper" style={{ height: '100%' }}>
       <motion.aside
       initial={false}
@@ -993,16 +970,8 @@ export function ADSidebar() {
         </div>
       </motion.aside>
       </div>
-      <style dangerouslySetInnerHTML={{__html: `
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .ad-nav-mobile-wrapper { display: none; }
-        .ad-nav-desktop-wrapper { display: block; height: 100%; }
-        @media (max-width: 768px) {
-          .ad-nav-mobile-wrapper { display: block; }
-          .ad-nav-desktop-wrapper { display: none; }
-        }
-      `}} />
+      )}
+      <style dangerouslySetInnerHTML={{ __html: SIDEBAR_LAYOUT_STYLES }} />
       <TrocarModuloModal 
         isOpen={isTrocarModuloOpen} 
         onClose={() => setIsTrocarModuloOpen(false)} 

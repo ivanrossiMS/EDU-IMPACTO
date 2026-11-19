@@ -348,7 +348,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   // Módulos desativados/otimizados
   const [chatsList, setChatsList] = useState<ADChat[]>([])
-  const [chatGroups, setChatGroups, { loading: chatGroupsLoading }] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], { refreshIntervalMs: 0 })
+  const [chatGroups, setChatGroups, { loading: chatGroupsLoading }] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], { enabled: pathname.startsWith('/agenda-digital'), refreshIntervalMs: 0 })
   const [messagesArray, setMessagesArray] = useState<any[]>([])
   const chatsLoading = false;
   const messagesLoading = false;

@@ -68,14 +68,15 @@ export interface PickupCall {
 }
 
 // ─── Date & Multi-Day Validity Helpers (America/Campo_Grande) ─────────────────
+const CAMPO_GRANDE_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Campo_Grande',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
 export function getCampoGrandeDateStr(dateInput?: Date | string | number | null): string {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Campo_Grande',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  if (!dateInput) return formatter.format(new Date())
+  if (!dateInput) return CAMPO_GRANDE_DATE_FORMATTER.format(new Date())
   if (typeof dateInput === 'string') {
     const trimmed = dateInput.trim()
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
@@ -84,13 +85,13 @@ export function getCampoGrandeDateStr(dateInput?: Date | string | number | null)
         ? `${trimmed}-04:00`
         : trimmed
     const d = new Date(safeIso)
-    if (!isNaN(d.getTime())) return formatter.format(d)
+    if (!isNaN(d.getTime())) return CAMPO_GRANDE_DATE_FORMATTER.format(d)
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10)
-    return formatter.format(new Date())
+    return CAMPO_GRANDE_DATE_FORMATTER.format(new Date())
   }
   const d = dateInput instanceof Date ? dateInput : new Date(dateInput)
-  if (isNaN(d.getTime())) return formatter.format(new Date())
-  return formatter.format(d)
+  if (isNaN(d.getTime())) return CAMPO_GRANDE_DATE_FORMATTER.format(new Date())
+  return CAMPO_GRANDE_DATE_FORMATTER.format(d)
 }
 
 export function addCalendarDays(ymd: string, daysToAdd: number): string {
@@ -173,43 +174,52 @@ export function resolveSpecialAuthValidity(call: any, referenceTodayYmd?: string
   }
 }
 
+const NON_ASCII_RE = /[^\x00-\x7F]/
+
+function normalizeAsciiLower(val: unknown): string {
+  if (!val) return ''
+  const s = String(val).toLowerCase().trim()
+  if (!s) return ''
+  return NON_ASCII_RE.test(s) ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : s
+}
+
 export function isSaiuSozinhoCall(call: any): boolean {
   if (!call) return false
-  const raw = call.dados && typeof call.dados === 'object' ? { ...call.dados, ...call } : call
-  const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  const gName = stripAccents(String(raw.guardianName || '').toLowerCase().trim())
-  const gId = stripAccents(String(raw.guardianId || '').toLowerCase().trim())
-  const tipo = stripAccents(String(raw.tipo || '').toLowerCase().trim())
-  const origem = stripAccents(String(raw.origem || '').toLowerCase().trim())
-  const source = stripAccents(String(raw.source || '').toLowerCase().trim())
-  const dispNome = stripAccents(String(raw.dispositivoNome || '').toLowerCase().trim())
-
-  // 1. Marcados como saiu sozinho
+  const dados = call.dados && typeof call.dados === 'object' ? call.dados : null
+  const gId = normalizeAsciiLower(call.guardianId ?? dados?.guardianId)
   if (
     gId === 'sozinho' ||
     gId === 'solo' ||
     gId === 'saida-sozinho' ||
-    tipo === 'sozinho' ||
-    tipo === 'saida_sozinho' ||
-    tipo === 'solo' ||
-    gName === 'saiu sozinho' ||
-    gName.startsWith('saiu sozinho') ||
-    gName.includes('sozinho')
+    gId === 'catraca-saida' ||
+    gId === 'catraca'
   ) {
     return true
   }
 
-  // 2. Passaram pela catraca de saída
+  const tipo = normalizeAsciiLower(call.tipo ?? dados?.tipo)
+  if (tipo === 'sozinho' || tipo === 'saida_sozinho' || tipo === 'solo') {
+    return true
+  }
+
+  const origem = normalizeAsciiLower(call.origem ?? dados?.origem)
+  const source = normalizeAsciiLower(call.source ?? dados?.source)
+  if (origem === 'catraca_idface' || origem === 'catraca' || source === 'catraca') {
+    return true
+  }
+
+  const gName = normalizeAsciiLower(call.guardianName ?? dados?.guardianName)
   if (
-    gId === 'catraca-saida' ||
-    gId === 'catraca' ||
-    origem === 'catraca_idface' ||
-    origem === 'catraca' ||
-    source === 'catraca' ||
-    dispNome.includes('saida') ||
-    dispNome.includes('catraca') ||
+    gName === 'saiu sozinho' ||
+    gName.startsWith('saiu sozinho') ||
+    gName.includes('sozinho') ||
     gName.includes('catraca')
   ) {
+    return true
+  }
+
+  const dispNome = normalizeAsciiLower(call.dispositivoNome ?? dados?.dispositivoNome)
+  if (dispNome.includes('saida') || dispNome.includes('catraca')) {
     return true
   }
 
@@ -288,6 +298,10 @@ const DEFAULT_CONFIG: SaidaConfig = {
   specialAuthNotifyPush: true,
   specialAuthNotifySound: true,
 }
+
+const EMPTY_GUARDIANS: Guardian[] = []
+const EMPTY_RFID_MAP: GuardianRFID[] = []
+const EMPTY_STUDENT_GUARDIANS: StudentGuardian[] = []
 
 // ─── localStorage helpers ──────────────────────────────────────────────────────
 const LS = {
@@ -370,21 +384,22 @@ function addProcessedBroadcast(set: Set<string>, id: string) {
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
-export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
+export function SaidaProvider({ children, enabled = true, fetchCalls }: { children: React.ReactNode, enabled?: boolean, fetchCalls?: boolean }) {
   const existingCtx = useContext(Ctx)
   // Se já existe um SaidaProvider ancestral montado (ex: layout.tsx + page.tsx),
   // reutiliza o contexto pai evitando canais Realtime e fetches duplicados.
   if (existingCtx) {
     return <>{children}</>
   }
-  return <SaidaProviderInner enabled={enabled}>{children}</SaidaProviderInner>
+  return <SaidaProviderInner enabled={enabled} fetchCalls={fetchCalls}>{children}</SaidaProviderInner>
 }
 
-function SaidaProviderInner({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
+function SaidaProviderInner({ children, enabled = true, fetchCalls }: { children: React.ReactNode, enabled?: boolean, fetchCalls?: boolean }) {
   // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
   // is ALWAYS active so all clients (including Família/mobile) receive live updates.
   // Polling é 0 pois o canal Realtime Supabase entrega as alterações de forma instantânea.
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false, refreshIntervalMs: 0 })
+  const shouldFetchCalls = fetchCalls ?? enabled
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled: shouldFetchCalls, mergeLocal: false, refreshIntervalMs: 0 })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
@@ -405,6 +420,12 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
   useEffect(() => {
     setActiveCallsLocalRef.current = setActiveCallsLocal
   }, [setActiveCallsLocal])
+
+  const activeCallsRef = useRef<PickupCall[]>(activeCalls || [])
+  activeCallsRef.current = activeCalls || []
+
+  const configRef = useRef<SaidaConfig>(config)
+  configRef.current = config
 
   const emitRef = useRef(emit)
   useEffect(() => {
@@ -1148,10 +1169,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null,
     forceNewCall = false, targetTime?: string | null
   ): PickupCall | null => {
+    const currentCalls = activeCallsRef.current
     const sIdStr = studentId ? String(studentId) : ''
     
     // Check for existing active call (waiting or called) today
-    const existingActive = activeCalls.find(c =>
+    const existingActive = currentCalls.find(c =>
       c.studentId != null && String(c.studentId) === sIdStr &&
       (c.status === 'waiting' || c.status === 'called') &&
       isFromToday(c.calledAt)
@@ -1161,7 +1183,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // Check for existing confirmed call today
-    const existingConfirmed = activeCalls.find(c =>
+    const existingConfirmed = currentCalls.find(c =>
       c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed' &&
       isFromToday(c.confirmedAt || c.calledAt)
     )
@@ -1175,7 +1197,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
     const currentNow = now()
     const currentOperator = resolveOperatorName()
-    const matchingSpecialAuth = activeCalls.find(c =>
+    const matchingSpecialAuth = currentCalls.find(c =>
       c.status === 'special_auth' && c.studentId != null && String(c.studentId) === sIdStr && c.operatorId
     )
     const effectiveOperator = (guardianId === 'special-auth' && matchingSpecialAuth?.operatorId)
@@ -1218,7 +1240,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     return call
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday, resolveOperatorName])
 
   // ─── blockAttempt ──────────────────────────────────────────────────
   // Logs a BLOCKED access attempt (proibido or wrong day) without creating an
@@ -1260,9 +1282,10 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
+    const currentCalls = activeCallsRef.current
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
-    const callToUpdate = activeCalls.find(c => c.id === callId)
+    const callToUpdate = currentCalls.find(c => c.id === callId)
     if (!callToUpdate) return
 
     const studentIdToConfirm = callToUpdate.studentId ? String(callToUpdate.studentId) : null
@@ -1270,7 +1293,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
     // Compute updated call objects BEFORE scheduling state update so persistSingleCall is guaranteed to execute
     // IMPORTANTE: Ignora registros de autorizacao especial (status: 'special_auth') para que o card permaneça no quadro Lançados Hoje
-    const callsToConfirm = activeCalls.filter(c =>
+    const callsToConfirm = currentCalls.filter(c =>
       c.status !== 'special_auth' && c.status !== 'cancelled' &&
       isFromToday(c.confirmedAt || c.calledAt) &&
       (c.id === callId ||
@@ -1297,7 +1320,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       : [fixCall(callToUpdate)]
 
     // Also update confirmedDates[todayKey] on any matching special_auth entry
-    const specialAuthsToUpdate: PickupCall[] = activeCalls
+    const specialAuthsToUpdate: PickupCall[] = currentCalls
       .filter(c => {
         if (c.status !== 'special_auth') return false
         const cStudentId = c.studentId ? String(c.studentId) : null
@@ -1342,10 +1365,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     emit('CONFIRM_PICKUP', { callId, studentId: studentIdToConfirm, confirmedAt: currentNow, _remote: false })
     sendBroadcast('CONFIRM_PICKUP', { callId, studentId: studentIdToConfirm, confirmedAt: currentNow })
     addLog('CONFIRM', `Saída confirmada: ${callToUpdate.studentName ?? callId}`)
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday, resolveOperatorName])
 
   // ─── confirmAllWaiting ───────────────────────────────────────────────────
   const confirmAllWaiting = useCallback(async (customTargetCalls?: PickupCall[]): Promise<number> => {
+    const currentCalls = activeCallsRef.current
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
     const currentOperator = resolveOperatorName()
@@ -1353,7 +1377,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     // Identificar quais chamadas estão aguardando
     const candidates = customTargetCalls && customTargetCalls.length > 0
       ? customTargetCalls
-      : activeCalls.filter(c =>
+      : currentCalls.filter(c =>
           (c.status === 'waiting' || c.status === 'called') &&
           !isSaiuSozinhoCall(c) &&
           isFromToday(c.calledAt)
@@ -1384,7 +1408,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // Filtrar todas as chamadas correspondentes no dia de hoje
-    const callsToConfirm = activeCalls.filter(c =>
+    const callsToConfirm = currentCalls.filter(c =>
       c.status !== 'special_auth' && c.status !== 'cancelled' &&
       isFromToday(c.confirmedAt || c.calledAt) &&
       (targetCallIds.has(c.id) ||
@@ -1397,7 +1421,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       : candidates.map(fixCall)
 
     // Atualiza confirmedDates nos registros de special_auth
-    const specialAuthsToUpdate: PickupCall[] = activeCalls
+    const specialAuthsToUpdate: PickupCall[] = currentCalls
       .filter(c => {
         if (c.status !== 'special_auth') return false
         const cStudentId = c.studentId ? String(c.studentId) : null
@@ -1455,11 +1479,11 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
     addLog('CONFIRM', `Saída em lote confirmada para ${updatedCalls.length} chamada(s) aguardando.`)
     return updatedCalls.length
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistCallsBatch, isFromToday])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistCallsBatch, isFromToday, resolveOperatorName])
 
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
-    const callToUpdate = activeCalls.find(c => c.id === callId)
+    const callToUpdate = activeCallsRef.current.find(c => c.id === callId)
     if (!callToUpdate) return
     const updatedCall = { ...callToUpdate, status: 'cancelled' as const }
 
@@ -1472,12 +1496,12 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     emit('CANCEL_CALL', { callId, _remote: false })
     sendBroadcast('CANCEL_CALL', { callId })
     addLog('CANCEL', `Chamada cancelada: ${updatedCall.studentName ?? callId}`)
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── recallStudent ────────────────────────────────────────────────────────
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
     const currentNow = now()
-    const callToUpdate = activeCalls.find(c => c.id === callId)
+    const callToUpdate = activeCallsRef.current.find(c => c.id === callId)
     if (!callToUpdate) return
     const updatedCall = { ...callToUpdate, status: 'waiting' as const, calledAt: currentNow }
 
@@ -1489,18 +1513,20 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     persistSingleCall(updatedCall)
     emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
     sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
-    const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
-      ? updatedCall.studentClass.split(config.voiceTruncateChar)[0].trim() 
+    const cfg = configRef.current
+    const cName = cfg?.voiceTruncateTurma && cfg?.voiceTruncateChar 
+      ? updatedCall.studentClass.split(cfg.voiceTruncateChar)[0].trim() 
       : updatedCall.studentClass
     speakFn(`${updatedCall.studentName}, turma ${cName}`)
     addLog('RECALL', `Rechamada: ${updatedCall.studentName}`)
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, config, sendBroadcast, persistSingleCall])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── revertCall ───────────────────────────────────────────────────────────
   const revertCall = useCallback((callId: string) => {
+    const currentCalls = activeCallsRef.current
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
-    const callToUpdate = activeCalls.find(c => c.id === callId)
+    const callToUpdate = currentCalls.find(c => c.id === callId)
     if (!callToUpdate) return
     const sIdStr = callToUpdate.studentId ? String(callToUpdate.studentId) : null
     const sNameNorm = callToUpdate.studentName ? callToUpdate.studentName.trim().toLowerCase() : ''
@@ -1510,7 +1536,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     const revertedMain = { ...callToUpdate, status: 'waiting' as const, calledAt: currentNow, confirmedAt: undefined, isRevert: true }
 
     const specialAuthsToRevert: PickupCall[] = []
-    activeCalls.forEach(c => {
+    currentCalls.forEach(c => {
       if (c.status !== 'special_auth') return
       const cId = c.studentId ? String(c.studentId) : null
       const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
@@ -1553,7 +1579,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     emit('REVERT_CALL', { callId, studentId: sIdStr, calledAt: currentNow, _remote: false })
     sendBroadcast('REVERT_CALL', { callId, studentId: sIdStr, calledAt: currentNow })
     addLog('REVERT', `Chamada revertida: ${callToUpdate.studentName}`)
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
 
   // ─── deleteCall ───────────────────────────────────────────────────────────
   const deleteCall = useCallback(async (callId: string) => {
@@ -1618,26 +1644,27 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     sendBroadcast('CALL_STUDENT', call)
     
     // Dispara evento em tempo real para os colaboradores notificados
-    const targetUserIds = config?.specialAuthNotificationUserIds || []
+    const targetUserIds = configRef.current?.specialAuthNotificationUserIds || []
     emit('SPECIAL_AUTH_NOTIFY', { ...call, targetUserIds })
     sendBroadcast('SPECIAL_AUTH_NOTIFY', { ...call, targetUserIds })
 
     const daysLabel = validDays > 1 ? ` · Válido por ${validDays} dias (até ${formatShortDateBR(validUntil)})` : ''
     addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}${targetTime ? ` (${targetTime})` : ''}${daysLabel}`)
     return call
-  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, config])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── confirmSpecialExit ────────────────────────────────────────────────────
   const confirmSpecialExit = useCallback((
     studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null,
     _targetTime?: string | null
   ): PickupCall => {
+    const currentCalls = activeCallsRef.current
     const sIdStr = studentId ? String(studentId) : ''
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
     const currentOperator = resolveOperatorName()
-    const matchingSpecialAuth = activeCalls.find(c => {
+    const matchingSpecialAuth = currentCalls.find(c => {
       if (c.status !== 'special_auth') return false
       const cId = c.studentId ? String(c.studentId) : ''
       const cName = c.studentName ? c.studentName.trim().toLowerCase() : ''
@@ -1647,7 +1674,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
     // Encontrar ou atualizar a chamada de saída do aluno DE HOJE para 'confirmed'
     // (não cria novo registro special_auth ao apenas confirmar a saída)
-    const existingCall = activeCalls.find(c =>
+    const existingCall = currentCalls.find(c =>
       c.status !== 'special_auth' && c.status !== 'cancelled' &&
       isFromToday(c.confirmedAt || c.calledAt) &&
       ((c.studentId != null && String(c.studentId) === sIdStr) ||
@@ -1686,7 +1713,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // Atualiza confirmedDates[todayKey] nos registros special_auth ativos deste aluno
-    const specialAuthsToUpdate: PickupCall[] = activeCalls
+    const specialAuthsToUpdate: PickupCall[] = currentCalls
       .filter(c => {
         if (c.status !== 'special_auth') return false
         const cId = c.studentId ? String(c.studentId) : ''
@@ -1740,12 +1767,13 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     addLog('CONFIRM', `Saída confirmada (Autorização Especial): ${studentName}`)
 
     return confirmedCall
-  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall, isFromToday, resolveOperatorName])
 
             // ─── confirmSoloExit ───────────────────────────────────────────────────────
   const confirmSoloExit = useCallback((
     studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null
   ): PickupCall | null => {
+    const currentCalls = activeCallsRef.current
     const currentNow = now()
     const todayKey = getCampoGrandeDateStr(currentNow)
     const currentOperator = resolveOperatorName()
@@ -1753,7 +1781,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     const sNameNorm = studentName ? studentName.trim().toLowerCase() : ''
 
     // Atualiza confirmedDates[todayKey] nos registros special_auth ativos deste aluno
-    const specialAuthsToUpdate: PickupCall[] = activeCalls
+    const specialAuthsToUpdate: PickupCall[] = currentCalls
       .filter(c => {
         if (c.status !== 'special_auth') return false
         const cId = c.studentId ? String(c.studentId) : ''
@@ -1767,7 +1795,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
       }))
 
     // 1. Se o aluno já tem chamada aguardando/chamado hoje, atualiza e confirma a chamada existente
-    const existingWaiting = activeCalls.find(c =>
+    const existingWaiting = currentCalls.find(c =>
       ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
        (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
       (c.status === 'waiting' || c.status === 'called') &&
@@ -1775,7 +1803,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     )
 
     if (existingWaiting) {
-      const matchingCalls = activeCalls.filter(c =>
+      const matchingCalls = currentCalls.filter(c =>
         ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
          (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
         c.status !== 'cancelled' && c.status !== 'special_auth' && isFromToday(c.confirmedAt || c.calledAt)
@@ -1831,7 +1859,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
 
     // 2. Se o aluno já teve uma saída confirmada hoje, retorna a chamada confirmada
-    const existingConfirmed = activeCalls.find(c =>
+    const existingConfirmed = currentCalls.find(c =>
       ((sIdStr && c.studentId != null && String(c.studentId) === sIdStr) ||
        (sNameNorm && c.studentName && c.studentName.trim().toLowerCase() === sNameNorm)) &&
       c.status === 'confirmed' &&
@@ -1895,7 +1923,7 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     }
     addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
     return newCall
-  }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog, isFromToday])
+  }, [setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog, isFromToday, resolveOperatorName])
 
   // ─── Config ───────────────────────────────────────────────────────────────
   const updateConfig = useCallback((patch: Partial<SaidaConfig>) => {
@@ -2047,21 +2075,22 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
 
   const broadcastAnnouncement = useCallback((phrase: string, options?: { repeat?: number, chime?: boolean, title?: string, operatorName?: string, rate?: number, pitch?: number }) => {
     if (!phrase || !phrase.trim()) return
+    const cfg = configRef.current
     const payloadData = {
       phrase: phrase.trim(),
       repeatCount: options?.repeat ?? 0,
       chime: options?.chime ?? true,
       title: options?.title || '',
       operatorName: options?.operatorName || 'Portaria',
-      rate: options?.rate ?? config?.voiceRate ?? 0.9,
-      pitch: options?.pitch ?? config?.voicePitch ?? 1.0,
+      rate: options?.rate ?? cfg?.voiceRate ?? 0.9,
+      pitch: options?.pitch ?? cfg?.voicePitch ?? 1.0,
       sentAt: new Date().toISOString(),
     }
     // 1. Send to Supabase network shared room
     sendBroadcast('ANNOUNCEMENT_VOICE', payloadData)
     // 2. Send to local broadcast channel
     emit('ANNOUNCEMENT_VOICE', payloadData)
-  }, [sendBroadcast, emit, config])
+  }, [sendBroadcast, emit])
 
   const cancelAnnouncement = useCallback(() => {
     sendBroadcast('CANCEL_ANNOUNCEMENT', {})
@@ -2095,16 +2124,44 @@ function SaidaProviderInner({ children, enabled = true }: { children: React.Reac
     })
   }, [activeCalls, currentTodayStr])
 
+  const ctxValue = useMemo<SaidaCtx>(() => ({
+    guardians: EMPTY_GUARDIANS,
+    rfidMap: EMPTY_RFID_MAP,
+    studentGuardians: EMPTY_STUDENT_GUARDIANS,
+    activeCalls: filteredActiveCalls,
+    logs,
+    config,
+    isConfigLoading,
+    realtimeStatus,
+    isLoadingCalls,
+    callStudent,
+    blockAttempt,
+    confirmPickup,
+    confirmAllWaiting,
+    cancelCall,
+    recallStudent,
+    revertCall,
+    deleteCall,
+    addSpecialAuth,
+    confirmSpecialExit,
+    confirmSoloExit,
+    broadcastAnnouncement,
+    cancelAnnouncement,
+    updateConfig,
+    clearLog,
+    clearCalls,
+    refreshCalls,
+    ensureRealtimeConnected,
+  }), [
+    filteredActiveCalls, logs, config, isConfigLoading, realtimeStatus, isLoadingCalls,
+    callStudent, blockAttempt, confirmPickup, confirmAllWaiting, cancelCall, recallStudent,
+    revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
+    broadcastAnnouncement, cancelAnnouncement, updateConfig, clearLog, clearCalls,
+    refreshCalls, ensureRealtimeConnected,
+  ])
+
   return (
-    <Ctx.Provider value={{
-      guardians: [], rfidMap: [], studentGuardians: [], activeCalls: filteredActiveCalls, logs,
-      config,
-      isConfigLoading,
-      realtimeStatus, isLoadingCalls,
-      callStudent, blockAttempt, confirmPickup, confirmAllWaiting, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
-      broadcastAnnouncement, cancelAnnouncement,
-      updateConfig, clearLog, clearCalls, refreshCalls, ensureRealtimeConnected,
-    }}>
+    <Ctx.Provider value={ctxValue}>
       {children}
     </Ctx.Provider>
   )

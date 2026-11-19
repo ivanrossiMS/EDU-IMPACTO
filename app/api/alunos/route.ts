@@ -1587,11 +1587,20 @@ export async function PUT(request: Request) {
       if (!row.data_nascimento && existingStudent.data_nascimento) row.data_nascimento = existingStudent.data_nascimento
       if (!row.serie && existingStudent.serie) row.serie = existingStudent.serie
       if (!row.turno && existingStudent.turno) row.turno = existingStudent.turno
-      if (!row.obs && existingStudent.obs) row.obs = existingStudent.obs
+      const hasObsUpdate =
+        isStaff &&
+        !isFamilyOrStudent &&
+        ('obs' in body ||
+          'observacoes' in body ||
+          Boolean(body.dados && ('obs' in body.dados || 'observacoes' in body.dados)))
+      if (!hasObsUpdate && !row.obs && existingStudent.obs) row.obs = existingStudent.obs
       if ((!row.unidade || row.unidade === 'Unidade Centro') && existingStudent.unidade) row.unidade = existingStudent.unidade
       if (!('email' in body) && existingStudent.email) row.email = existingStudent.email
       if (!('telefone' in body || 'celular' in body) && existingStudent.telefone) row.telefone = existingStudent.telefone
       row.dados = { ...(existingStudent.dados || {}), ...(row.dados || {}) }
+      if (hasObsUpdate && row.dados) {
+        delete row.dados.obs
+      }
       delete row.dados.dados
       delete row.dados.removerFoto
       if (row.dados && row.dados.autorizadoSairSozinho !== undefined) {
@@ -2599,6 +2608,9 @@ function buildRow(a: any) {
     ...rawRest,
   }
   delete rest.dados
+  if ('obs' in a || 'observacoes' in a) {
+    delete rest.obs
+  }
 
   const explicitSair = parseBooleanSairSozinho(
     a.autorizadoSairSozinho !== undefined

@@ -130,9 +130,9 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
           background: pulse ? 'rgba(16,185,129,0.15)' : 'rgba(6,182,212,0.08)',
           border: `1px solid ${pulse ? 'rgba(16,185,129,0.4)' : 'rgba(6,182,212,0.2)'}`,
           fontSize: 11, fontWeight: 700, color: pulse ? '#10b981' : '#06b6d4',
-          transition: 'all 0.2s', zIndex: 100,
+          transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease', zIndex: 100,
         }}>
-          <Wifi size={12} style={{ animation: pulse ? 'none' : 'spin 3s linear infinite' }}/>
+          <Wifi size={12} style={{ transition: 'transform 0.2s ease', transform: pulse ? 'scale(1.18)' : 'scale(1)' }}/>
           {pulse ? 'RFID lido!' : 'RFID ativo'}
         </div>
       </div>

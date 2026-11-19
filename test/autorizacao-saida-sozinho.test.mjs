@@ -71,6 +71,19 @@ test('contrato de segurança e sincronização bidirecional entre Agenda Digital
   assert.match(sectionUi, /setIsComprovanteExpanded/)
   assert.match(sectionUi, /CPF do Responsável/)
 
+  const adminApi = fs.readFileSync(
+    path.join(process.cwd(), 'app/api/agenda/autorizacao-saida/admin/route.ts'),
+    'utf8'
+  )
+  assert.match(adminApi, /requireStaff/)
+  assert.match(adminApi, /autorizacao_sair_sozinho/)
+
+  const sidebar = fs.readFileSync(
+    path.join(process.cwd(), 'app/agenda-digital/components/Sidebar.tsx'),
+    'utf8'
+  )
+  assert.match(sidebar, /\/agenda-digital\/admin\/autorizacoes/)
+
   const alunosRoute = fs.readFileSync(
     path.join(process.cwd(), 'app/api/alunos/route.ts'),
     'utf8'

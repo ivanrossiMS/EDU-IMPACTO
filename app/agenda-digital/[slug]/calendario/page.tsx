@@ -1,5 +1,4 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
@@ -16,6 +15,7 @@ import {
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const CAL_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' })
 
 type TipoEvento = EventoAgenda['tipo']
 
@@ -28,8 +28,6 @@ const TIPO_LABELS: Record<TipoEvento, string> = {
   feriado: 'Feriado', excursao: 'Excursão', entrega: 'Entrega', atividade: 'Atividade'
 }
 
-function getDaysInMonth(year: number, month: number) { return new Date(year, month + 1, 0).getDate() }
-function getFirstDayOfMonth(year: number, month: number) { return new Date(year, month, 1).getDay() }
 function todayStr() {
   const h = new Date()
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
@@ -37,26 +35,11 @@ function todayStr() {
 
 import { useParams, useSearchParams } from 'next/navigation'
 
-// Caches removidos: utilizando API otimizada de aniversariantes
-
 export default function ADCalendarioPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   const eventosEndpoint = resolvedParams?.slug ? `agenda/eventos?aluno_id=${encodeURIComponent(resolvedParams.slug)}` : 'agenda/eventos'
-  const [eventosAgenda, , { loading, setLocal: setLocalEventos, refresh }] = useSupabaseArray<EventoAgenda>(eventosEndpoint)
+  const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>(eventosEndpoint)
   const [turmas] = useSupabaseArray<any>('turmas')
-
-  useEffect(() => {
-    if (!refresh) return;
-    const handleUpdate = () => refresh();
-    window.addEventListener('ad:eventos_agenda-insert', handleUpdate)
-    window.addEventListener('ad:eventos_agenda-update', handleUpdate)
-    window.addEventListener('ad:eventos_agenda-delete', handleUpdate)
-    return () => {
-      window.removeEventListener('ad:eventos_agenda-insert', handleUpdate)
-      window.removeEventListener('ad:eventos_agenda-update', handleUpdate)
-      window.removeEventListener('ad:eventos_agenda-delete', handleUpdate)
-    }
-  }, [refresh])
 
   useAgendaRealtime({
     table: 'eventos_agenda',
@@ -87,7 +70,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   });
   const { currentUser } = useApp()
   const { aluno, isLoadingProfile } = useSelectedStudent()
-  const { adConfig } = useAgendaDigital()
+  const { adConfig, chatGroups = [] } = useAgendaDigital()
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
@@ -98,15 +81,13 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const isMirroring = !!(espelharRespId || espelharAluno);
   const showBirthdays = adConfig?.permissoes?.visualizarAniversariantes !== false;
 
-  const { chatGroups = [] } = useAgendaDigital()
-
   // Todas as turmas e grupos aos quais o aluno pertence (IDs, códigos e nomes)
   const studentTurmasEGrupos = useMemo(() => {
     if (!aluno) return []
     return getAlunoTodasTurmasEGrupos(aluno, turmas, chatGroups)
   }, [aluno, turmas, chatGroups])
 
-  // Nomes legíveis das turmas/grupos ativos do aluno para exibição (ex: NÍVEL 5 - MATUTINO • Nível 5 Integra/Intermediario)
+  // Nomes legíveis das turmas/grupos ativos do aluno para exibição
   const studentNomesTurmas = useMemo(() => {
     if (!aluno) return ['Sem Turma']
     const names = getAlunoNomesTurmasEGrupos(aluno, turmas, chatGroups)
@@ -117,17 +98,16 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     return studentNomesTurmas.join(' • ')
   }, [studentNomesTurmas])
 
-  const hoje = new Date()
-  const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+  const today = useMemo(() => todayStr(), [])
+  const currentYearNow = Number(today.slice(0, 4))
+  const currentMonthNow = Number(today.slice(5, 7)) - 1
+  const [viewDate, setViewDate] = useState(() => new Date(currentYearNow, currentMonthNow, 1))
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [mostrarTodos, setMostrarTodos] = useState(false)
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
-  const daysInMonth = getDaysInMonth(year, month)
-  const firstDay = getFirstDayOfMonth(year, month)
-  const today = todayStr()
 
   const getDateStr = (d: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
@@ -204,18 +184,23 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         setSelectedDay(target.data);
         setHighlightedEventId(String(target.id));
 
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
         const tryScroll = (attempts = 0) => {
           const el = document.getElementById(`evento-${target.id}`);
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } else if (attempts < 6) {
-            setTimeout(() => tryScroll(attempts + 1), 150);
+            retryTimer = setTimeout(() => tryScroll(attempts + 1), 150);
           }
         };
-        setTimeout(() => tryScroll(0), 200);
+        const initTimer = setTimeout(() => tryScroll(0), 200);
 
         const timer = setTimeout(() => setHighlightedEventId(null), 6000);
-        return () => clearTimeout(timer);
+        return () => {
+          clearTimeout(initTimer);
+          if (retryTimer) clearTimeout(retryTimer);
+          clearTimeout(timer);
+        };
       }
     }
 
@@ -232,10 +217,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     }
   }, [queryItemId, queryData, eventosAgenda, today]);
 
-  const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
-
   // Events of the selected month filtered by search
   const meventosNoMes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
     return eventosFiltrados
       .filter(e => {
         if (!e.data) return false
@@ -243,8 +227,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         return parseInt(y) === year && parseInt(m) === month + 1
       })
       .filter(e => {
-        if (!searchQuery) return true
-        const q = searchQuery.toLowerCase()
+        if (!q) return true
         return (
           e.titulo?.toLowerCase().includes(q) ||
           e.local?.toLowerCase().includes(q) ||
@@ -263,85 +246,101 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     return meventosNoMes.filter(e => e.data >= today)
   }, [meventosNoMes, mostrarTodos, today])
 
-  // Grouped by date for list presentation
-  const meventosAgrupados = useMemo(() => {
+  // Agrupado por data com metadados pré-calculados fora do JSX
+  const meventosAgrupadosList = useMemo(() => {
     const groups: Record<string, typeof meventosNoMes> = {}
     eventosVisiveisNoMes.forEach(ev => {
       if (!groups[ev.data]) groups[ev.data] = []
       groups[ev.data].push(ev)
     })
-    return groups
-  }, [eventosVisiveisNoMes])
-
-  const proximosEventos = eventosFiltrados
-    .filter(e => e.data >= today)
-    .sort((a, b) => (a.data + (a.horaInicio || '')).localeCompare(b.data + (b.horaInicio || '')))
-    .slice(0, 5)
+    return Object.entries(groups).map(([dateStr, eventsList]) => {
+      const [y, m, d] = dateStr.split('-')
+      const dateObj = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10))
+      const weekDayShort = CAL_WEEKDAY_FORMATTER.format(dateObj).replace('.', '').toUpperCase()
+      const monthAbbr = (MESES[parseInt(m, 10) - 1] || '').slice(0, 3).toUpperCase()
+      return {
+        dateStr,
+        dayNum: d,
+        weekDayShort,
+        monthAbbr,
+        isToday: dateStr === today,
+        isPast: dateStr < today,
+        eventsList
+      }
+    })
+  }, [eventosVisiveisNoMes, today])
 
   const [aniversariantes, setAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
   const niversCacheRef = useRef<Record<number, any[]>>({})
 
-  // Helper para obter o NOME legível da turma do aniversariante (nunca exibindo código numérico como 3904)
-  const getAniversarianteTurmaNome = (p: any): string => {
+  const turmaGroupNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    if (Array.isArray(turmas)) {
+      for (const t of turmas) {
+        if (!t) continue
+        const labelRaw = t.nome || t.dados?.nome
+        const label = labelRaw ? String(labelRaw).trim() : ''
+        if (!label || /^\d+$/.test(label)) continue
+        if (t.id != null) map.set(String(t.id).trim(), label)
+        if (t.codigo != null) map.set(String(t.codigo).trim(), label)
+        if (t.dados?.codigo != null) map.set(String(t.dados.codigo).trim(), label)
+      }
+    }
+    if (Array.isArray(chatGroups)) {
+      for (const g of chatGroups) {
+        if (!g) continue
+        const label = g.nome ? String(g.nome).trim() : ''
+        if (!label || /^\d+$/.test(label)) continue
+        if (g.id != null && !map.has(String(g.id).trim())) map.set(String(g.id).trim(), label)
+        const syncId = g.syncId || g.dados?.syncId
+        if (syncId != null && !map.has(String(syncId).trim())) map.set(String(syncId).trim(), label)
+      }
+    }
+    return map
+  }, [turmas, chatGroups])
+
+  // Helper O(1) para obter o NOME legível da turma do aniversariante
+  const getAniversarianteTurmaNome = React.useCallback((p: any): string => {
     if (p.tipo !== 'Aluno') {
       return p.cargo || p.funcao || p.tipo || 'Colaborador'
     }
 
-    // 1. Verificar se turmaNome ou turma_nome já é um nome legível (não numérico nem UUID nem 'sync' nem 'Aluno')
     const candidate = String(p.turmaNome || p.turma_nome || '').trim()
     if (candidate && !/^\d+$/.test(candidate) && !/^[0-9a-fA-F-]{10,}$/.test(candidate) && candidate.toLowerCase() !== 'sync' && candidate.toLowerCase() !== 'aluno') {
       return candidate
     }
 
     const rawTurma = String(p.turma || '').trim()
+    const mapped = (rawTurma && turmaGroupNameMap.get(rawTurma)) || (candidate && turmaGroupNameMap.get(candidate))
+    if (mapped) return mapped
 
-    // 2. Tentar encontrar na lista de turmas carregadas no ERP
-    if (Array.isArray(turmas) && turmas.length > 0) {
-      const tObj = turmas.find((t: any) => t && (
-        String(t.id).trim() === rawTurma ||
-        String(t.codigo || '').trim() === rawTurma ||
-        String(t.dados?.codigo || '').trim() === rawTurma ||
-        String(t.id).trim() === candidate ||
-        String(t.codigo || '').trim() === candidate
-      ))
-      if (tObj?.nome && !/^\d+$/.test(String(tObj.nome).trim())) return String(tObj.nome).trim()
-      if (tObj?.dados?.nome && !/^\d+$/.test(String(tObj.dados.nome).trim())) return String(tObj.dados.nome).trim()
-    }
-
-    // 3. Tentar encontrar nos grupos da agenda
-    if (Array.isArray(chatGroups) && chatGroups.length > 0) {
-      const gObj = chatGroups.find((g: any) => g && (
-        String(g.id).trim() === rawTurma ||
-        String(g.syncId || g.dados?.syncId || '').trim() === rawTurma
-      ))
-      if (gObj?.nome && !/^\d+$/.test(String(gObj.nome).trim())) return String(gObj.nome).trim()
-    }
-
-    // 4. Se o aniversariante for colega da mesma turma do aluno logado
     if (aluno && rawTurma && String(aluno.turma || '').trim() === rawTurma) {
       if (studentNomesTurmas.length > 0 && studentNomesTurmas[0] !== 'Sem Turma') {
         return studentNomesTurmas[0]
       }
     }
 
-    // 5. Fallback para a primeira turma legível da visualização
     if (studentNomesTurmas.length > 0 && studentNomesTurmas[0] !== 'Sem Turma') {
       return studentNomesTurmas[0]
     }
 
     return 'Aluno'
-  }
+  }, [turmaGroupNameMap, aluno, studentNomesTurmas])
 
-  // Limpar cache de aniversariantes se o aluno ou suas turmas mudarem
+  // Limpar cache de aniversariantes apenas se o aluno mudar
   useEffect(() => {
     niversCacheRef.current = {}
-  }, [aluno?.id, studentTurmasEGrupos])
+  }, [aluno?.id])
 
   useEffect(() => {
+    if (!showBirthdays) {
+      setAniversariantes([])
+      setLoadingNivers(false)
+      return
+    }
     const mesView = month + 1
-    
-    // Se já temos os aniversariantes deste mês em cache para este aluno, exibimos instantaneamente (0ms)
+
     if (niversCacheRef.current[mesView]) {
       setAniversariantes(niversCacheRef.current[mesView])
       setLoadingNivers(false)
@@ -349,14 +348,14 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     }
 
     let isCancelled = false
+    const controller = new AbortController()
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
         const studentTurmaParam = studentTurmasEGrupos.slice(0, 10).map(encodeURIComponent).join(',')
         const alunoIdParam = aluno?.id ? `&aluno_id=${encodeURIComponent(String(aluno.id))}` : ''
-        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}${alunoIdParam}&turmas=${studentTurmaParam}&_t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}${alunoIdParam}&turmas=${studentTurmaParam}`, {
+          signal: controller.signal
         })
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
@@ -397,16 +396,16 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           let dia = -1
           if (data.includes('-')) dia = parseInt(data.split('-')[2])
           else if (data.includes('/')) dia = parseInt(data.split('/')[0])
-          
+
           let isProximo = false
-          if (mesView === (hoje.getMonth() + 1)) {
-            const diaHoje = hoje.getDate()
+          if (mesView === (currentMonthNow + 1)) {
+            const diaHoje = Number(today.slice(8, 10))
             isProximo = dia === diaHoje
           }
           const resolvedTurmaNome = getAniversarianteTurmaNome(p)
-          return { 
-            ...p, 
-            dia, 
+          return {
+            ...p,
+            dia,
             isProximo,
             turmaNome: resolvedTurmaNome,
             turma_nome: resolvedTurmaNome
@@ -417,16 +416,19 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           niversCacheRef.current[mesView] = niversMes
           setAniversariantes(niversMes)
         }
-      } catch (e) {
-        console.error(e)
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') console.error(e)
       } finally {
         if (!isCancelled) setLoadingNivers(false)
       }
     }
 
     fetchNivers()
-    return () => { isCancelled = true }
-  }, [month, studentTurmasEGrupos, turmas, chatGroups, aluno])
+    return () => {
+      isCancelled = true
+      controller.abort()
+    }
+  }, [showBirthdays, month, currentMonthNow, today, studentTurmasEGrupos, turmas, chatGroups, aluno, getAniversarianteTurmaNome])
 
   useEffect(() => {
     if (!aluno?.id || eventosFiltrados.length === 0) return;
@@ -747,9 +749,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             <ChevronRight size={16} />
           </button>
 
-          {(hoje.getFullYear() !== year || hoje.getMonth() !== month) && (
+          {(currentYearNow !== year || currentMonthNow !== month) && (
             <button
-              onClick={() => setViewDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))}
+              onClick={() => setViewDate(new Date(currentYearNow, currentMonthNow, 1))}
               style={{
                 marginLeft: 4,
                 padding: '4px 10px',
@@ -822,18 +824,17 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         {/* 📋 COLUNA ESQUERDA: AGENDA DE EVENTOS EM LISTA TIMELINE */}
         <div className="ad-calendar-events-col" style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           
-          {Object.keys(meventosAgrupados).length === 0 ? (
+          {meventosAgrupadosList.length === 0 ? (
             /* Modern Empty State */
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
+            <div
               style={{
                 background: '#fff',
                 borderRadius: 24,
                 padding: '60px 24px',
                 textAlign: 'center',
                 border: '1px solid #f1f5f9',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.02)'
+                boxShadow: '0 10px 24px rgba(0,0,0,0.02)',
+                animation: 'adFadeIn 0.2s ease'
               }}
             >
               <div style={{
@@ -896,17 +897,10 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                   Ver Todos os Eventos do Mês
                 </button>
               ) : null}
-            </motion.div>
+            </div>
           ) : (
             /* Timeline List Groups (Matching Reference Image) */
-            Object.entries(meventosAgrupados).map(([dateStr, eventsList]) => {
-              const [y, m, d] = dateStr.split('-')
-              const isToday = dateStr === today
-              const isPast = dateStr < today
-              const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-              const weekDayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
-              const monthAbbr = MESES[parseInt(m) - 1].slice(0, 3).toUpperCase()
-
+            meventosAgrupadosList.map(({ dateStr, dayNum: d, weekDayShort, monthAbbr, isToday, isPast, eventsList }) => {
               const resolveRealColor = (evItem: any) => {
                 const raw = evItem?.cor ?? TIPO_CORES[evItem?.tipo as TipoEvento] ?? '#6366f1'
                 return String(raw).toLowerCase() === '#6b7280' ? '#06b6d4' : raw
@@ -915,9 +909,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
               const dateAccentColor = isPast ? '#94a3b8' : (isToday ? '#6366f1' : primaryColor)
 
               return (
-                <motion.div
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
+                <div
                   key={dateStr}
                   className="ad-calendar-timeline-row"
                   style={{
@@ -928,9 +920,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                     maxWidth: '100%',
                     minWidth: 0,
                     boxSizing: 'border-box',
-                    opacity: isPast ? 0.72 : 1,
-                    filter: isPast ? 'grayscale(0.65)' : 'none',
-                    transition: 'all 0.25s ease'
+                    opacity: isPast ? 0.58 : 1,
+                    transition: 'opacity 0.2s ease'
                   }}
                 >
                   {/* 🗓️ LEFT DATE CARD */}
@@ -1194,7 +1185,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                       })}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )
             })
           )}
@@ -1204,22 +1195,21 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         {/* 🎈 COLUNA DIREITA: APENAS O CARD DE ANIVERSARIANTES DO MÊS */}
         <div className="ad-calendar-birthdays-col" style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {showBirthdays && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
+            <div
               className="ad-calendar-birthdays-card"
               style={{
                 background: '#fff',
                 borderRadius: 24,
                 padding: '22px',
-                boxShadow: '0 15px 35px rgba(236, 72, 153, 0.08)',
+                boxShadow: '0 12px 28px rgba(236, 72, 153, 0.08)',
                 border: '1px solid rgba(236, 72, 153, 0.15)',
                 position: 'relative',
                 overflow: 'hidden',
                 width: '100%',
                 maxWidth: '100%',
                 minWidth: 0,
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                animation: 'adFadeIn 0.2s ease'
               }}
             >
               {/* Header Decorative Background */}
@@ -1262,8 +1252,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                   </div>
                 ) : (
                   aniversariantes.map((p, idx) => (
-                    <motion.div
-                      whileHover={{ x: 4 }}
+                    <div
                       key={p.id || idx}
                       className="ad-calendar-birthday-item"
                       style={{
@@ -1288,7 +1277,8 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                           height: 44,
                           borderRadius: '50%',
                           flexShrink: 0,
-                          background: p.foto ? `url(${p.foto}) center/cover` : 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
+                          overflow: 'hidden',
+                          background: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
                           color: '#fff',
                           display: 'flex',
                           alignItems: 'center',
@@ -1299,7 +1289,11 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                           border: p.isProximo ? '2px solid #ec4899' : '2px solid #fff'
                         }}
                       >
-                        {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+                        {p.foto ? (
+                          <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          p.nome.split(' ').map((n: any) => n[0]).join('').slice(0, 2).toUpperCase()
+                        )}
                       </div>
 
                       {/* Info */}
@@ -1333,11 +1327,11 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                           {p.dia}
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   ))
                 )}
               </div>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>

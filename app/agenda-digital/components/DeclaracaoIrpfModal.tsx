@@ -147,10 +147,11 @@ export function DeclaracaoIrpfModal({
         if (!res.ok) return
         const json = await res.json()
         if (json?.alunos && Array.isArray(json.alunos) && !isCancelled) {
+          const financialStudents = json.alunos.filter((a: any) => a.isFinanceiro === true)
           setResponsibleStudents((prev) => {
             const map = new Map<string, StudentOption>()
             for (const s of prev) map.set(s.nome.trim().toLowerCase(), s)
-            for (const a of json.alunos) {
+            for (const a of financialStudents) {
               const key = a.nome.trim().toLowerCase()
               if (!map.has(key)) {
                 map.set(key, {

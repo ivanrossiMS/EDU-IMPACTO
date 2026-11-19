@@ -24,6 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const isMobile = useIsMobile()
+  const isBelowDesktopNav = useIsMobile(1280)
 
   // 5 estados de auth explícitos: 'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'
   const [authState, setAuthState] = useState<'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'>('restoring')
@@ -434,8 +435,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <DialogProvider>
         <WebVitalsReporter />
         <div className="app-wrapper" suppressHydrationWarning>
-          {!hideGlobalSidebar && <DesktopTopNav />}
-          {!hideGlobalSidebar && <Sidebar />}
+          {!hideGlobalSidebar && !isBelowDesktopNav && <DesktopTopNav />}
+          {!hideGlobalSidebar && isBelowDesktopNav && <Sidebar />}
           <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`} suppressHydrationWarning>
             {isMobile && !hideGlobalSidebar && (
               <div style={{

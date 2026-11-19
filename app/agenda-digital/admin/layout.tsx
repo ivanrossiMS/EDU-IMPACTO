@@ -17,6 +17,7 @@ const SECTION_LABELS: Record<string, { title: string; subtitle: string }> = {
   '/agenda-digital/admin/espelhar': { title: 'Espelhar Agenda', subtitle: 'Simulação em tempo real da visão do aluno ou colaborador' },
   '/agenda-digital/admin/chat': { title: 'Chat & Moderação', subtitle: 'Auditoria e acompanhamento de canais de comunicação' },
   '/agenda-digital/admin/comunicados': { title: 'Comunicados', subtitle: 'Envio, agendamento e métricas de leitura e ciência' },
+  '/agenda-digital/admin/autorizacoes': { title: 'Autorizações', subtitle: 'Autorizações e desautorizações de saída sozinho feitas pelos responsáveis' },
   '/agenda-digital/admin/momentos': { title: 'Galeria de Momentos', subtitle: 'Publicação e moderação de fotos e vídeos escolares' },
   '/agenda-digital/admin/calendario': { title: 'Calendário Escolar', subtitle: 'Gestão de eventos, avaliações, feriados e reuniões' },
   '/agenda-digital/admin/relatorios': { title: 'Relatórios & Formulários', subtitle: 'Templates dinâmicos, pareceres e coletas de dados' },

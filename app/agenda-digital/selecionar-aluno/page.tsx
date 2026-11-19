@@ -1,12 +1,10 @@
 'use client'
 import { performLogout } from "@/lib/auth/logout";
-import { useData } from '@/lib/dataContext'
-import { memo, useCallback } from 'react'
+import { memo, useCallback, useMemo, useEffect, useState, Suspense } from 'react'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
@@ -77,24 +75,20 @@ const SELECTOR_STYLES = `
 
         /* Animations */
         @keyframes revealUp {
-          0% { opacity: 0; transform: translateY(20px); }
+          0% { opacity: 0; transform: translateY(16px); }
           100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes orbRotate {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        @keyframes avatarPulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-          50% { transform: scale(1.02); box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.15); }
-        }
 
         .animate-reveal {
-          animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+          animation: revealUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
-        .delay-1 { animation-delay: 0.1s; }
-        .delay-2 { animation-delay: 0.2s; }
-        .delay-3 { animation-delay: 0.3s; }
+        .delay-1 { animation-delay: 0.08s; }
+        .delay-2 { animation-delay: 0.16s; }
+        .delay-3 { animation-delay: 0.24s; }
 
         @media (prefers-reduced-motion: reduce) {
           .animate-reveal {
@@ -102,33 +96,27 @@ const SELECTOR_STYLES = `
             opacity: 1 !important;
             transform: none !important;
           }
-          .welcome-avatar-wrapper,
-          .welcome-sparkle {
-            animation: none !important;
-          }
         }
 
         /* Premium Welcome Header Card */
         .premium-welcome-card {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.4) 100%);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.5);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.88) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.75);
           border-radius: 32px;
           padding: 32px;
           display: flex;
           align-items: center;
           gap: 28px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.05);
           position: relative;
           overflow: hidden;
           margin-top: 24px;
         }
 
         .dark .premium-welcome-card {
-          background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.5) 100%);
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.88) 100%);
           border-color: rgba(255, 255, 255, 0.08);
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          box-shadow: 0 14px 36px rgba(0, 0, 0, 0.25);
         }
 
         .welcome-avatar-wrapper {
@@ -136,7 +124,6 @@ const SELECTOR_STYLES = `
           width: 96px;
           height: 96px;
           flex-shrink: 0;
-          animation: avatarPulse 4s ease-in-out infinite;
         }
 
         .welcome-avatar-glow {
@@ -189,7 +176,7 @@ const SELECTOR_STYLES = `
 
         .welcome-greeting {
           font-size: 32px;
-          fontWeight: 900;
+          font-weight: 900;
           margin: 0 0 6px;
           letter-spacing: -0.03em;
           line-height: 1.1;
@@ -215,7 +202,6 @@ const SELECTOR_STYLES = `
           top: 16px;
           right: 16px;
           color: rgba(99, 102, 241, 0.35);
-          animation: orbRotate 6s linear infinite;
         }
 
         /* Portal Sections Grid Layout */
@@ -274,9 +260,7 @@ const SELECTOR_STYLES = `
 
         /* ── High-End Ultra Modern Cards ── */
         .portal-modern-card {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 245, 255, 0.88) 100%);
-          backdrop-filter: blur(18px);
-          -webkit-backdrop-filter: blur(18px);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 245, 255, 0.94) 100%);
           border: 1.5px solid rgba(139, 92, 246, 0.18);
           border-left: 4px solid #8b5cf6;
           border-radius: 20px;
@@ -285,32 +269,31 @@ const SELECTOR_STYLES = `
           align-items: center;
           gap: 16px;
           cursor: pointer;
-          transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
           position: relative;
           overflow: hidden;
-          box-shadow: 0 4px 18px -2px rgba(139, 92, 246, 0.07), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 1);
+          box-shadow: 0 4px 14px -2px rgba(139, 92, 246, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
           text-decoration: none !important;
           width: 100%;
           box-sizing: border-box;
+          contain: layout paint;
         }
 
         .dark .portal-modern-card {
-          background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.75) 100%);
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.94) 0%, rgba(15, 23, 42, 0.9) 100%);
           border-color: rgba(139, 92, 246, 0.25);
           border-left-color: #8b5cf6;
-          box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
         }
 
         .portal-modern-card:hover {
           transform: translateY(-2.5px);
           border-color: rgba(139, 92, 246, 0.45);
           border-left-color: #7c3aed;
-          box-shadow: 0 14px 32px -4px rgba(139, 92, 246, 0.16), 0 4px 10px rgba(0, 0, 0, 0.03), inset 0 1px 0 #ffffff;
         }
         .dark .portal-modern-card:hover {
           border-color: rgba(139, 92, 246, 0.55);
           border-left-color: #a78bfa;
-          box-shadow: 0 16px 36px rgba(139, 92, 246, 0.25);
         }
 
         .portal-modern-card:active {
@@ -870,12 +853,10 @@ const SELECTOR_STYLES = `
 
         /* Botão Trocar Módulo */
         .ad-btn-switch {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
+          background: rgba(255, 255, 255, 0.96);
           border: 1.5px solid rgba(99, 102, 241, 0.2);
           color: #4f46e5;
-          box-shadow: 0 4px 16px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+          box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02);
         }
         .ad-btn-switch .ad-btn-icon-wrap {
           background: rgba(99, 102, 241, 0.08);
@@ -886,7 +867,6 @@ const SELECTOR_STYLES = `
           background: #ffffff;
           border-color: rgba(99, 102, 241, 0.45);
           transform: translateY(-2px);
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
         }
         .ad-btn-switch:hover .ad-btn-icon-wrap {
           transform: translateX(-2px);
@@ -898,12 +878,10 @@ const SELECTOR_STYLES = `
 
         /* Botão Sair da Conta */
         .ad-btn-logout {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
+          background: rgba(255, 255, 255, 0.96);
           border: 1.5px solid rgba(244, 63, 94, 0.22);
           color: #e11d48;
-          box-shadow: 0 4px 16px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+          box-shadow: 0 4px 14px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02);
         }
         .ad-btn-logout .ad-btn-icon-wrap {
           background: rgba(244, 63, 94, 0.08);
@@ -1127,7 +1105,8 @@ const ModernCardSpinner = memo(({ variant = 'student' }: { variant?: 'student' |
 })
 ModernCardSpinner.displayName = 'ModernCardSpinner'
 
-const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardParams, setLoadingCardId }: any) => {
+const StudentCard = memo(({ student, unreadCount = 0, loadingCardId, redirectTarget, getForwardParams, setLoadingCardId }: any) => {
+  const effectiveUnread = typeof unreadCount === 'number' ? unreadCount : (student.unreadCount || 0)
   const pendingAlerts = student.pendenciasAtrasadas || 0;
   
   let rawName = student.turmaNome || student.turma || 'S/T'
@@ -1204,11 +1183,11 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
           </div>
         ) : (
           <>
-            {student.unreadCount > 0 && (
-              <div className="unread-indicator-badge" title={`${student.unreadCount} nova(s) notificação(ões) não lida(s)`}>
+            {effectiveUnread > 0 && (
+              <div className="unread-indicator-badge" title={`${effectiveUnread} nova(s) notificação(ões) não lida(s)`}>
                 <Bell size={16} strokeWidth={2.4} />
                 <span className="badge-count-bubble">
-                  {student.unreadCount > 99 ? '99+' : student.unreadCount}
+                  {effectiveUnread > 99 ? '99+' : effectiveUnread}
                 </span>
               </div>
             )}
@@ -1255,7 +1234,6 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
 })
 
 function SelecionarAlunoContent() {
-  const { turmas = [] } = useData();
   const { currentUser, setCurrentUser, hydrated, setLoadingPath } = useApp()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1288,10 +1266,12 @@ function SelecionarAlunoContent() {
   // 1. Sincronizar dados autoritativos do usuário (perfil, cargo, papéis, status e foto) via /api/auth/me
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
     fetch('/api/auth/me', {
       cache: 'no-store',
       credentials: 'include',
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+      signal: controller.signal,
     })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
@@ -1324,7 +1304,10 @@ function SelecionarAlunoContent() {
         }
       })
       .catch(() => {})
-    return () => { active = false }
+    return () => {
+      active = false
+      controller.abort()
+    }
   }, [currentUser?.id])
 
   // 2. Obter metadados do responsável autenticado
@@ -1456,13 +1439,15 @@ function SelecionarAlunoContent() {
           setMeusAlunos(data);
           if (data.length > 0) {
             try {
-              localStorage.setItem(userCacheKey, JSON.stringify(data));
-              localStorage.setItem(`${userCacheKey}-meta`, JSON.stringify({ data, ts: Date.now() }));
+              const serialized = JSON.stringify(data);
+              const metaSerialized = JSON.stringify({ data, ts: Date.now() });
+              localStorage.setItem(userCacheKey, serialized);
+              localStorage.setItem(`${userCacheKey}-meta`, metaSerialized);
               if (emailBusca) {
-                localStorage.setItem(`edu-meus-alunos-${emailBusca}`, JSON.stringify(data));
+                localStorage.setItem(`edu-meus-alunos-${emailBusca}`, serialized);
               }
               if (respId) {
-                localStorage.setItem(`edu-meus-alunos-${respId}`, JSON.stringify(data));
+                localStorage.setItem(`edu-meus-alunos-${respId}`, serialized);
               }
             } catch (_) {}
           }
@@ -1485,6 +1470,28 @@ function SelecionarAlunoContent() {
     };
   }, [hydrated, currentUser?.id, respId, emailBusca]);
 
+  const unreadCountByStudentId = useMemo(() => {
+    const map = new Map<string, number>();
+    const unreadNotifs = (recentNotifications || []).filter(n => !n.read);
+    for (let i = 0; i < meusAlunos.length; i++) {
+      const student = meusAlunos[i];
+      const sid = String(student.id);
+      const firstToken = student.nome ? student.nome.split(' ')[0].toLowerCase() : '';
+      let notifCount = 0;
+      for (let j = 0; j < unreadNotifs.length; j++) {
+        const n = unreadNotifs[j];
+        if (
+          n.link?.includes(`/agenda-digital/${sid}/`) ||
+          (firstToken && n.title?.toLowerCase().includes(firstToken))
+        ) {
+          notifCount++;
+        }
+      }
+      map.set(sid, (unreadMap[sid] || 0) + notifCount);
+    }
+    return map;
+  }, [meusAlunos, recentNotifications, unreadMap]);
+
   // Redirecionamento de alunos normais
   useEffect(() => {
     if (currentUser && currentUser.perfil === 'Aluno') {
@@ -1497,7 +1504,7 @@ function SelecionarAlunoContent() {
         router.replace(`/agenda-digital/aluno/${redirectTarget}`)
       }
     }
-  }, [isStillLoading, currentUser, redirectTarget, router])
+  }, [currentUser, redirectTarget, router])
 
   // Redirecionamento automático caso haja uma notificação pendente para um dependente específico
   useEffect(() => {
@@ -1701,6 +1708,7 @@ function SelecionarAlunoContent() {
             <img
               src={userPhoto}
               alt={currentUser?.nome || 'Avatar'}
+              decoding="async"
               className="welcome-avatar-img"
               onError={() => {
                 setBrokenAvatarUrl(userPhoto);
@@ -1821,24 +1829,17 @@ function SelecionarAlunoContent() {
                 </p>
               </div>
             ) : (
-              meusAlunos.map((student) => {
-                const notifCount = recentNotifications.filter(n => !n.read && (
-                  n.link?.includes(`/agenda-digital/${student.id}/`) ||
-                  (student.nome && n.title?.toLowerCase().includes(student.nome.split(' ')[0].toLowerCase()))
-                )).length;
-                const totalUnread = (unreadMap[student.id] || 0) + notifCount;
-
-                return (
-                  <StudentCard 
-                    key={student.id} 
-                    student={{ ...student, unreadCount: totalUnread }} 
-                    loadingCardId={loadingCardId} 
-                    redirectTarget={redirectTarget} 
-                    getForwardParams={getForwardParams} 
-                    setLoadingCardId={setLoadingCardId} 
-                  />
-                );
-              })
+              meusAlunos.map((student) => (
+                <StudentCard 
+                  key={student.id} 
+                  student={student}
+                  unreadCount={unreadCountByStudentId.get(String(student.id)) || 0}
+                  loadingCardId={loadingCardId} 
+                  redirectTarget={redirectTarget} 
+                  getForwardParams={getForwardParams} 
+                  setLoadingCardId={setLoadingCardId} 
+                />
+              ))
             )}
           </div>
         </section>

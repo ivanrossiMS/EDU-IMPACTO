@@ -1,12 +1,8 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
-import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { RFIDInput, RFIDInputHandle } from '@/components/saida/RFIDInput'
 import {
@@ -16,7 +12,6 @@ import {
 
 // ─── CSS vars standalone + animações ──────────────────────────────────────────
 const STANDALONE_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
   :root {
     --bg-base: 215 28% 9%;
     --bg-elevated: 215 26% 12%;
@@ -34,25 +29,33 @@ const STANDALONE_STYLES = `
     min-height: 100vh;
   }
   @keyframes scanPulse {
-    0%,100% { opacity:1; transform:scale(1); box-shadow:0 0 0 0 rgba(6,182,212,0.4), 0 0 0 0 rgba(6,182,212,0.2); }
-    50%      { opacity:0.85; transform:scale(1.04); box-shadow:0 0 0 24px rgba(6,182,212,0), 0 0 0 40px rgba(6,182,212,0); }
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.88; transform: scale(1.03); }
   }
   @keyframes laserSweep {
-    0%, 100% { top: 0%; opacity: 0; }
-    8%, 92% { opacity: 1; }
-    50% { top: 100%; opacity: 1; }
+    0%, 100% { transform: translateY(0); opacity: 0; }
+    10%, 90% { opacity: 0.9; }
+    50% { transform: translateY(248px); opacity: 0.9; }
   }
   @keyframes radarPulse {
-    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px rgba(6,182,212,0.6)); }
-    50% { transform: scale(1.08); filter: drop-shadow(0 0 20px rgba(6,182,212,0.95)); }
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.06); opacity: 1; }
   }
   @keyframes textPulse {
-    0%, 100% { opacity: 1; text-shadow: 0 0 16px rgba(6,182,212,0.5), 0 0 32px rgba(6,182,212,0.2); }
-    50% { opacity: 0.88; text-shadow: 0 0 28px rgba(6,182,212,0.85), 0 0 48px rgba(6,182,212,0.4); }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.86; }
   }
   @keyframes spinSlow {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes inactivePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.06); opacity: 0.78; }
   }
   @keyframes slideUp {
     from { opacity:0; transform:translateY(28px) scale(0.97); }
@@ -72,7 +75,8 @@ const STANDALONE_STYLES = `
   }
   .student-card-btn {
     position:relative; overflow:hidden; cursor:pointer;
-    transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease;
+    transition: transform 0.18s cubic-bezier(.34,1.56,.64,1);
+    contain: layout paint;
   }
   .student-card-btn:active { transform:scale(0.97) !important; }
   .student-card-btn::after {
@@ -81,6 +85,14 @@ const STANDALONE_STYLES = `
     opacity:0; transition:opacity 0.15s;
   }
   .student-card-btn:hover::after { opacity:1; }
+  .manual-guardian-btn {
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .manual-guardian-btn--active:hover:not(:disabled) {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+  }
   .skeleton-shimmer {
     position: relative;
     overflow: hidden;
@@ -97,8 +109,8 @@ const STANDALONE_STYLES = `
     100% { transform: translateX(100%); }
   }
   #test-rfid-input, .rfid-discrete-input {
-    background: rgba(15, 23, 42, 0.45) !important;
-    color: rgba(241, 245, 249, 0.3) !important;
+    background: rgba(15, 23, 42, 0.72) !important;
+    color: rgba(241, 245, 249, 0.35) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     border-radius: 6px !important;
     outline: none !important;
@@ -106,8 +118,7 @@ const STANDALONE_STYLES = `
     font-size: 10px !important;
     width: 65px !important;
     padding: 3px 6px !important;
-    backdrop-filter: blur(4px) !important;
-    transition: all 0.25s ease !important;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, width 0.2s ease !important;
     letter-spacing: 0.02em !important;
   }
   #test-rfid-input::placeholder, .rfid-discrete-input::placeholder {
@@ -116,12 +127,12 @@ const STANDALONE_STYLES = `
     letter-spacing: 0.04em !important;
   }
   #test-rfid-input:hover, .rfid-discrete-input:hover {
-    background: rgba(15, 23, 42, 0.75) !important;
+    background: rgba(15, 23, 42, 0.85) !important;
     border-color: rgba(6, 182, 212, 0.3) !important;
     color: rgba(241, 245, 249, 0.6) !important;
   }
   #test-rfid-input:focus, .rfid-discrete-input:focus {
-    background: rgba(15, 23, 42, 0.95) !important;
+    background: rgba(15, 23, 42, 0.96) !important;
     border-color: rgba(6, 182, 212, 0.55) !important;
     color: #f1f5f9 !important;
     width: 110px !important;
@@ -152,23 +163,18 @@ function isDiaPermitido(diasSemana: string[]): boolean {
 
 // ─── StudentCard: card grande clicável ────────────────────────────────────────
 const StudentCard = React.memo(function StudentCard({
-  aluno, aut, guardianName, rfidCode, onCall, onRecall, index,
+  aluno, aut, displayClass, callStatus, onCallStudent, onRecallStudent, index,
 }: {
-  aluno: any; aut: any; guardianName: string
-  rfidCode?: string; onCall: () => void; onRecall: () => void; index: number
+  aluno: any; aut: any; displayClass: string; callStatus?: 'waiting' | 'confirmed'
+  onCallStudent: (aluno: any) => void; onRecallStudent: (aluno: any) => void; index: number
 }) {
-  const { activeCalls } = useSaida()
   const btnRef = useRef<HTMLDivElement>(null)
 
   const isProibido  = aut?.proibido === true
   const isInativo   = aluno?.inativo === true || aut?.inativo === true || String(aluno?.status || aluno?.dados?.status || '').trim().toLowerCase() === 'inativo'
   const diaOk       = isDiaPermitido(aut?.diasSemana || [])
-  const alreadyCalled = activeCalls.some(c =>
-    c.studentId === aluno.id && (c.status === 'waiting' || c.status === 'called')
-  )
-  const alreadyConfirmed = activeCalls.some(c =>
-    c.studentId === aluno.id && c.status === 'confirmed'
-  )
+  const alreadyCalled = callStatus === 'waiting'
+  const alreadyConfirmed = callStatus === 'confirmed'
   const [recalling, setRecalling] = useState(false)
   // Card is blocked if prohibited, inactive, day restricted, or already withdrawn
   const blocked = isProibido || isInativo || !diaOk || alreadyConfirmed
@@ -183,7 +189,7 @@ const StudentCard = React.memo(function StudentCard({
   const handleRecall = (e: React.MouseEvent) => {
     e.stopPropagation()
     setRecalling(true)
-    onRecall()
+    onRecallStudent(aluno)
     setTimeout(() => setRecalling(false), 2600)
   }
 
@@ -204,7 +210,7 @@ const StudentCard = React.memo(function StudentCard({
       onClick={() => {
         if (blocked) return
         if (alreadyCalled) { handleRecall({ stopPropagation: () => {} } as any); return }
-        onCall()
+        onCallStudent(aluno)
       }}
       onPointerDown={handlePointerDown}
       style={{
@@ -214,7 +220,7 @@ const StudentCard = React.memo(function StudentCard({
         overflow: 'hidden',
         border: `2px solid ${(isProibido || isInativo) ? 'rgba(239,68,68,0.7)' : alreadyConfirmed ? 'rgba(16,185,129,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
         background: (isProibido || isInativo) ? 'rgba(239,68,68,0.06)' : '#0f1c2e',
-        boxShadow: blocked ? 'none' : `0 8px 48px ${accent}20, 0 2px 12px rgba(0,0,0,0.4)`,
+        boxShadow: blocked ? 'none' : `0 6px 24px ${accent}20, 0 2px 10px rgba(0,0,0,0.35)`,
         cursor: blocked ? 'not-allowed' : 'pointer',
         display: 'flex', flexDirection: 'column',
         userSelect: 'none',
@@ -229,10 +235,10 @@ const StudentCard = React.memo(function StudentCard({
       }}>
         {foto ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={foto} alt={aluno.nome} style={{
+          <img src={foto} alt={aluno.nome} decoding="async" style={{
             width: '100%', height: '100%', objectFit: 'cover',
-            filter: (blocked && !alreadyCalled) ? 'grayscale(70%) brightness(0.6)' : 'none',
-            transition: 'filter 0.3s',
+            opacity: (blocked && !alreadyCalled) ? 0.45 : 1,
+            transition: 'opacity 0.25s ease',
           }}/>
         ) : (
           <div style={{
@@ -248,7 +254,7 @@ const StudentCard = React.memo(function StudentCard({
               fontWeight: 900, fontSize: 82, color: '#fff',
               fontFamily: 'Outfit, sans-serif',
               letterSpacing: '-4px',
-              boxShadow: `0 16px 60px ${accent}30, inset 0 1px 0 rgba(255,255,255,0.12)`,
+              boxShadow: `0 12px 32px ${accent}28, inset 0 1px 0 rgba(255,255,255,0.12)`,
             }}>{initials}</div>
           </div>
         )}
@@ -265,17 +271,16 @@ const StudentCard = React.memo(function StudentCard({
           position: 'absolute', top: 12, right: 12,
           padding: '5px 12px', borderRadius: 100,
           fontSize: 10, fontWeight: 900, letterSpacing: '0.06em',
-          backdropFilter: 'blur(8px)',
           background: (isProibido || isInativo)
-            ? 'rgba(239,68,68,0.9)'
+            ? 'rgba(220,38,38,0.95)'
             : alreadyConfirmed
-              ? 'rgba(16,185,129,0.9)'
+              ? 'rgba(5,150,105,0.95)'
               : alreadyCalled
-                ? 'rgba(245,158,11,0.9)'
-                : 'rgba(6,182,212,0.9)',
+                ? 'rgba(217,119,6,0.95)'
+                : 'rgba(8,145,178,0.95)',
           color: '#fff',
           display: 'flex', alignItems: 'center', gap: 5,
-          boxShadow: `0 2px 12px ${accent}50`,
+          boxShadow: `0 2px 10px ${accent}45`,
         }}>
           {isInativo
             ? <><ShieldOff size={10}/> ALUNO INATIVO</>
@@ -293,13 +298,12 @@ const StudentCard = React.memo(function StudentCard({
           position: 'absolute', top: 12, left: 12,
           padding: '4px 10px', borderRadius: 8,
           fontSize: 11, fontWeight: 800, letterSpacing: '0.04em',
-          backdropFilter: 'blur(8px)',
-          background: 'rgba(0,0,0,0.6)',
-          color: 'rgba(255,255,255,0.9)',
+          background: 'rgba(10,18,30,0.88)',
+          color: 'rgba(255,255,255,0.92)',
           display: 'flex', alignItems: 'center', gap: 5,
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(255,255,255,0.14)',
         }}>
-          <GraduationCap size={10}/> {aluno.turmaNome || aluno.turma || '—'}
+          <GraduationCap size={10}/> {displayClass || aluno.turmaNome || aluno.turma || '—'}
         </div>
 
         {/* Name overlay at bottom of photo */}
@@ -436,24 +440,9 @@ function TabletCardSkeleton() {
   )
 }
 
-// ─── Modal Ultra Moderno para Múltiplos Alunos do Responsável ─────────────────
-function SiblingCallModal({
-  calledStudent,
-  remainingStudents,
-  guardianName,
-  onCallAnother,
-  onCallAllRemaining,
-  onFinish,
-}: {
-  calledStudent: any
-  remainingStudents: any[]
-  guardianName: string
-  onCallAnother: (aluno: any) => void
-  onCallAllRemaining: () => void
-  onFinish: () => void
-}) {
+// ─── Countdown Isolado para evitar re-render de todo o SiblingCallModal ────────
+function SiblingCountdownBar({ onFinish }: { onFinish: () => void }) {
   const [countdown, setCountdown] = useState(14)
-  const isMobile = useIsMobile()
   const onFinishRef = useRef(onFinish)
   useEffect(() => {
     onFinishRef.current = onFinish
@@ -474,52 +463,104 @@ function SiblingCallModal({
   }, [])
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <div style={{ width: '100%', height: 6, background: 'rgba(255, 255, 255, 0.08)', position: 'relative' }}>
+      <div
+        style={{
+          height: '100%',
+          width: `${(countdown / 14) * 100}%`,
+          background: 'linear-gradient(90deg, #06b6d4, #10b981)',
+          transition: 'width 1s linear',
+        }}
+      />
+    </div>
+  )
+}
+
+function SiblingCountdownCloseButton({ onFinish }: { onFinish: () => void }) {
+  const [countdown, setCountdown] = useState(14)
+  const isMobile = useIsMobile()
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <button
+      onClick={onFinish}
+      style={{
+        width: isMobile ? '100%' : 'auto',
+        flex: 1,
+        padding: '16px 22px',
+        borderRadius: 18,
+        background: 'rgba(255, 255, 255, 0.07)',
+        border: '1px solid rgba(255, 255, 255, 0.14)',
+        color: '#cbd5e1',
+        fontWeight: 800,
+        fontSize: 15,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+      }}
+    >
+      ENCERRAR ({countdown}s)
+    </button>
+  )
+}
+
+// ─── Modal Ultra Moderno para Múltiplos Alunos do Responsável ─────────────────
+function SiblingCallModal({
+  calledStudent,
+  remainingStudents,
+  guardianName,
+  onCallAnother,
+  onCallAllRemaining,
+  onFinish,
+}: {
+  calledStudent: any
+  remainingStudents: any[]
+  guardianName: string
+  onCallAnother: (aluno: any) => void
+  onCallAllRemaining: () => void
+  onFinish: () => void
+}) {
+  const isMobile = useIsMobile()
+
+  return (
+    <div
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(4, 10, 20, 0.92)',
-        backdropFilter: 'blur(24px)',
+        background: 'rgba(4, 10, 20, 0.96)',
         zIndex: 9995,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: isMobile ? 16 : 24,
+        animation: 'fadeIn 0.2s ease',
       }}
     >
-      <motion.div
-        initial={{ scale: 0.92, opacity: 0, y: 24 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.92, opacity: 0, y: 24 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+      <div
         style={{
           width: '100%',
           maxWidth: 720,
           background: 'linear-gradient(165deg, #0f1c2e 0%, #080f1a 100%)',
           borderRadius: 32,
           border: '1.5px solid rgba(6, 182, 212, 0.4)',
-          boxShadow: '0 30px 90px rgba(0, 0, 0, 0.7), 0 0 50px rgba(6, 182, 212, 0.2)',
+          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.65)',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
+          animation: 'slideUp 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
         }}
       >
         {/* Top Progress bar countdown */}
-        <div style={{ width: '100%', height: 6, background: 'rgba(255, 255, 255, 0.08)', position: 'relative' }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${(countdown / 14) * 100}%`,
-              background: 'linear-gradient(90deg, #06b6d4, #10b981)',
-              transition: 'width 1s linear',
-              boxShadow: '0 0 14px #06b6d4',
-            }}
-          />
-        </div>
+        <SiblingCountdownBar onFinish={onFinish} />
 
         {/* Modal Header */}
         <div style={{ padding: isMobile ? '24px 20px 16px' : '32px 36px 20px', textAlign: 'center', position: 'relative' }}>
@@ -535,7 +576,7 @@ function SiblingCallModal({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 35px rgba(16, 185, 129, 0.35)',
+              boxShadow: '0 0 24px rgba(16, 185, 129, 0.28)',
             }}
           >
             <CheckCircle2 size={isMobile ? 32 : 40} color="#10b981" />
@@ -571,7 +612,6 @@ function SiblingCallModal({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   gap: 16,
-                  transition: 'all 0.2s',
                 }}
               >
                 {/* Photo / Initials */}
@@ -591,12 +631,11 @@ function SiblingCallModal({
                       fontWeight: 900,
                       color: '#fff',
                       border: '2px solid rgba(6, 182, 212, 0.4)',
-                      boxShadow: '0 0 20px rgba(6, 182, 212, 0.25)',
                     }}
                   >
                     {aluno.foto ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={aluno.foto} alt={aluno.nome} decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       initials
                     )}
@@ -628,11 +667,9 @@ function SiblingCallModal({
                     alignItems: 'center',
                     gap: 8,
                     flexShrink: 0,
-                    boxShadow: '0 6px 24px rgba(6, 182, 212, 0.45)',
-                    transition: 'transform 0.15s, box-shadow 0.15s',
+                    boxShadow: '0 6px 20px rgba(6, 182, 212, 0.35)',
+                    transition: 'transform 0.15s ease',
                   }}
-                  onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
-                  onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
                 >
                   <Megaphone size={isMobile ? 16 : 18} /> CHAMAR
                 </button>
@@ -672,39 +709,145 @@ function SiblingCallModal({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
-                boxShadow: '0 6px 22px rgba(16, 185, 129, 0.35)',
+                boxShadow: '0 6px 18px rgba(16, 185, 129, 0.3)',
               }}
             >
               <Users size={18} /> CHAMAR TODOS OS RESTANTES ({remainingStudents.length})
             </button>
           )}
 
-          <button
-            onClick={onFinish}
-            style={{
-              width: isMobile ? '100%' : 'auto',
-              flex: remainingStudents.length > 1 ? 1 : 1,
-              padding: '16px 22px',
-              borderRadius: 18,
-              background: 'rgba(255, 255, 255, 0.07)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              color: '#cbd5e1',
-              fontWeight: 800,
-              fontSize: 15,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
-            ENCERRAR ({countdown}s)
-          </button>
+          <SiblingCountdownCloseButton onFinish={onFinish} />
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }
+
+// ─── Linha de aluno na busca manual (memoizada) ───────────────────────────────
+type ManualGuardianOption = {
+  name: string
+  role: string
+  rfid?: string
+  proibido: boolean
+  diasSemana: string[]
+  diaOk: boolean
+  isProibidoHoje: boolean
+}
+
+const ManualStudentRow = React.memo(function ManualStudentRow({
+  aluno,
+  callStatus,
+  onSelectGuardian,
+}: {
+  aluno: any
+  callStatus?: 'waiting' | 'confirmed'
+  onSelectGuardian: (aluno: any, guardian: ManualGuardianOption, index: number) => void
+}) {
+  const alreadyCalled = callStatus === 'waiting'
+  const alreadyConfirmed = callStatus === 'confirmed'
+  const blocked = alreadyCalled || alreadyConfirmed
+
+  const { autorizaSaida, initials, respList } = useMemo(() => {
+    const saude: any = aluno.saude || aluno.dados?.saude || {}
+    const autorizados: any[] = saude.autorizados || aluno.autorizados || aluno.dados?.autorizados || []
+    const rawAutSaida = aluno.autorizadoSairSozinho ?? aluno.dados?.autorizadoSairSozinho ?? saude.autorizaSaida
+    const canLeaveAlone: boolean = rawAutSaida === true || (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
+    const inits = (aluno.nome || '').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
+
+    const list: ManualGuardianOption[] = []
+    const seen = new Set<string>()
+    autorizados.forEach(aut => {
+      if (aut.nome?.trim() && !seen.has(aut.nome.toLowerCase())) {
+        seen.add(aut.nome.toLowerCase())
+        const diasSemana = aut.diasSemana || []
+        const diaOk = isDiaPermitido(diasSemana)
+        const proibido = aut.proibido === true
+        list.push({ name: aut.nome, role: aut.parentesco || 'Autorizado', rfid: aut.rfid, proibido, diasSemana, diaOk, isProibidoHoje: proibido || !diaOk })
+      }
+    })
+    if (list.length === 0 && aluno.responsavel?.trim()) {
+      list.push({ name: aluno.responsavel, role: 'Responsável', proibido: false, diasSemana: [], diaOk: true, isProibidoHoje: false })
+    }
+    return { autorizaSaida: canLeaveAlone, initials: inits, respList: list }
+  }, [aluno])
+
+  return (
+    <div style={{
+      background: '#0f1c2e',
+      border: alreadyConfirmed ? '1px solid rgba(16,185,129,0.4)' : alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 16, overflow: 'hidden',
+      contain: 'layout paint',
+    }}>
+      {/* Student row */}
+      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        {aluno.foto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={aluno.foto} alt={aluno.nome} decoding="async" style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
+        ) : (
+          <div style={{
+            width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+            background: 'linear-gradient(135deg, #06b6d430, #6366f118)',
+            border: '2px solid rgba(6,182,212,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 900, fontSize: 20, color: '#e2e8f0',
+          }}>{initials}</div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{aluno.nome}</div>
+          <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <GraduationCap size={10}/> {aluno.turma}
+            </span>
+            {aluno.turno && <span>· {aluno.turno}</span>}
+            {autorizaSaida && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Saída independente</span>}
+            {alreadyCalled && <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Em chamada</span>}
+            {alreadyConfirmed && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Já Retirado</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Guardian buttons */}
+      {respList.length > 0 && (
+        <div style={{ padding: '8px 18px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
+          {respList.map((g, i) => (
+            <button
+              key={i}
+              onClick={() => { if (!blocked) onSelectGuardian(aluno, g, i) }}
+              disabled={blocked}
+              className={!blocked && !g.isProibidoHoje ? 'manual-guardian-btn manual-guardian-btn--active' : 'manual-guardian-btn'}
+              style={{
+                padding: '7px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+                background: blocked
+                  ? 'rgba(255,255,255,0.03)'
+                  : g.isProibidoHoje
+                    ? 'rgba(239, 68, 68, 0.15)'
+                    : 'rgba(59, 130, 246, 0.15)',
+                border: blocked
+                  ? '1px solid rgba(255,255,255,0.06)'
+                  : g.isProibidoHoje
+                    ? '1px solid rgba(239, 68, 68, 0.45)'
+                    : '1px solid rgba(59, 130, 246, 0.45)',
+                color: blocked
+                  ? '#334155'
+                  : g.isProibidoHoje
+                    ? '#ef4444'
+                    : '#60a5fa',
+                cursor: blocked ? 'not-allowed' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {g.isProibidoHoje ? <ShieldOff size={11}/> : <Phone size={10}/>}
+              {g.name}
+              <span style={{ opacity: 0.5, fontSize: 10 }}>{g.role}</span>
+              {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+})
 
 function PainelTabletContent() {
   const isMobile = useIsMobile()
@@ -1105,26 +1248,83 @@ function PainelTabletContent() {
     handleReset()
   }, [handleReset])
 
+  const callStatusByStudentMap = useMemo(() => {
+    const map = new Map<string, 'waiting' | 'confirmed'>()
+    for (let i = 0; i < activeCalls.length; i++) {
+      const c = activeCalls[i]
+      if (!c.studentId) continue
+      const sid = String(c.studentId)
+      if (c.status === 'waiting' || c.status === 'called') {
+        map.set(sid, 'waiting')
+      } else if (c.status === 'confirmed' && map.get(sid) !== 'waiting') {
+        map.set(sid, 'confirmed')
+      }
+    }
+    return map
+  }, [activeCalls])
+
+  const todayFormatted = useMemo(
+    () => new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+    []
+  )
+
+  const handleRecallStudent = useCallback((a: any) => {
+    const call = (activeCallsRef.current || []).find(c =>
+      c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
+    )
+    if (call) recallStudent(call.id, () => {})
+    else handleCall(a)
+    rfidRef.current?.clear()
+    setTimeout(() => {
+      setMode('idle')
+      setRfidCode(undefined)
+      setRfidError(null)
+      setMatchedGuardianName('')
+      setMatchedGuardianRole('')
+      setRfidStudents([])
+    }, 1000)
+  }, [recallStudent, handleCall])
+
+  const handleManualSelectGuardian = useCallback((a: any, g: ManualGuardianOption, i: number) => {
+    const turmaNome = turmaNameMap.get(String(a.turma)) || a.turma
+    const gId = `manual-${a.id}-${i}`
+    const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
+    if (g.proibido) {
+      blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'proibido', 'Responsável proibido de retirar o aluno (Modo Manual)', aPhoto)
+      showToast(`❌ ${g.name} está PROIBIDO(A) de retirar o aluno!`, false)
+      return
+    }
+    if (!g.diaOk) {
+      blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'dia_restrito', 'Responsável fora do dia autorizado (Modo Manual)', aPhoto)
+      showToast(`⚠️ ${g.name} não tem autorização para retirar hoje!`, false)
+      return
+    }
+    const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual', undefined, aPhoto)
+    if (!call) showToast(`${a.nome} já em chamada!`, false)
+    else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
+  }, [turmaNameMap, blockAttempt, callStudent, showToast])
+
   return (
     <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontFamily: 'Outfit, sans-serif' }}>
       <style dangerouslySetInnerHTML={{ __html: STANDALONE_STYLES }} />
       {config.rfidEnabled && <RFIDInput ref={rfidRef} onRead={handleRFID} enabled={mode === 'idle' || mode === 'rfid'}
 />}
 
-      <AnimatePresence>
-        {/* ── SIBLING CALL MODAL ───────────────────────────────────── */}
-        {siblingModal && (
-          <SiblingCallModal
-            calledStudent={siblingModal.calledStudent}
-            remainingStudents={siblingModal.remainingStudents}
-            guardianName={siblingModal.guardianName}
-            onCallAnother={handleCallAnotherInModal}
-            onCallAllRemaining={handleCallAllRemainingInModal}
-            onFinish={handleFinishModal}
-          />
-        )}{/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
+      {/* ── SIBLING CALL MODAL ───────────────────────────────────── */}
+      {siblingModal && (
+        <SiblingCallModal
+          calledStudent={siblingModal.calledStudent}
+          remainingStudents={siblingModal.remainingStudents}
+          guardianName={siblingModal.guardianName}
+          onCallAnother={handleCallAnotherInModal}
+          onCallAllRemaining={handleCallAllRemainingInModal}
+          onFinish={handleFinishModal}
+        />
+      )}
+
+      {/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
       {blockInfo && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
+        <div style={{
           position: 'fixed', inset: 0,
           background: blockInfo.type === 'proibido'
             ? 'linear-gradient(160deg, #1a0000 0%, #2d0000 60%, #1a0000 100%)'
@@ -1133,19 +1333,19 @@ function PainelTabletContent() {
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           gap: 20, padding: 32, textAlign: 'center',
-          animation: 'slideUp 0.3s ease',
+          animation: 'fadeIn 0.2s ease',
         }}>
           {/* Icon */}
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{
+          <div style={{
             width: 120, height: 120, borderRadius: '50%',
             background: blockInfo.type === 'proibido' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.12)',
             border: `3px solid ${blockInfo.type === 'proibido' ? 'rgba(239,68,68,0.5)' : 'rgba(245,158,11,0.4)'}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 56,
-            animation: 'urgentRingCenter 1.5s ease infinite',
+            animation: 'slideUp 0.25s ease',
           }}>
             {blockInfo.type === 'proibido' ? '🚫' : '📅'}
-          </motion.div>
+          </div>
 
           {/* Title */}
           <div style={{
@@ -1195,25 +1395,22 @@ function PainelTabletContent() {
           }}>
             Cancelar agora
           </button>
-        
-</motion.div>
-)}</AnimatePresence>
+        </div>
+      )}
 
-      <AnimatePresence>
-{/* ── Toast ─────────────────────────────────────────────────────── */}
+      {/* ── Toast ─────────────────────────────────────────────────────── */}
       {toast && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
+        <div style={{
           position: 'fixed', top: 24, left: '50%',
           transform: 'translateX(-50%)',
           padding: '12px 28px', borderRadius: 100, fontSize: 14, fontWeight: 800,
           background: toast.ok ? 'rgba(16,185,129,0.96)' : 'rgba(239,68,68,0.96)',
           color: '#fff', zIndex: 9999, boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-          animation: 'slideDown 0.3s ease', whiteSpace: 'nowrap',
+          animation: 'slideDown 0.25s ease', whiteSpace: 'nowrap',
         }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
-        
-</motion.div>
-)}</AnimatePresence>
+        </div>
+      )}
 
       {/* ── MAIN CONTENT ──────────────────────────────────────────────── */}
       {/* Added bottom padding so the footer doesn't overlap content */}
@@ -1261,9 +1458,8 @@ function PainelTabletContent() {
 
                   {/* Sweeping laser line */}
                   <div style={{
-                    position: 'absolute', left: 0, right: 0, height: 3,
+                    position: 'absolute', top: 0, left: 0, right: 0, height: 3,
                     background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
-                    boxShadow: '0 0 14px #06b6d4, 0 0 28px #06b6d4',
                     animation: 'laserSweep 3s ease-in-out infinite',
                     zIndex: 2,
                   }} />
@@ -1277,7 +1473,6 @@ function PainelTabletContent() {
                   margin: '0 0 16px',
                   color: '#fff',
                   letterSpacing: '-0.04em',
-                  textShadow: '0 0 24px rgba(6,182,212,0.5)',
                   animation: 'textPulse 3s ease-in-out infinite',
                 }}>
                   Aguardando Leitura
@@ -1379,33 +1574,16 @@ function PainelTabletContent() {
               maxWidth: rfidStudents.length === 1 ? 380 : undefined,
             }}>
               {rfidStudents.map((a, i) => {
-                const t = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
-                const alunoWithTurma = { ...a, turmaNome: t ? t.nome : a.turma }
+                const tName = turmaNameMap.get(String(a.turma)) || a.turma
                 return (
                   <StudentCard
                     key={a.id}
-                    aluno={alunoWithTurma}
+                    aluno={a}
                     aut={a._aut}
-                    guardianName={matchedGuardianName}
-                    rfidCode={rfidCode}
-                    onCall={() => handleCall(a)}
-                    onRecall={() => {
-                      const call = activeCalls.find(c =>
-                        c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
-                      )
-                      if (call) recallStudent(call.id, () => {})
-                      else handleCall(a)
-                      // Limpa buffer e reset para idle após 1s
-                      rfidRef.current?.clear()
-                      setTimeout(() => {
-                        setMode('idle')
-                        setRfidCode(undefined)
-                        setRfidError(null)
-                        setMatchedGuardianName('')
-                        setMatchedGuardianRole('')
-                        setRfidStudents([])
-                      }, 1000)
-                    }}
+                    displayClass={tName}
+                    callStatus={callStatusByStudentMap.get(String(a.id))}
+                    onCallStudent={handleCall}
+                    onRecallStudent={handleRecallStudent}
                     index={i}
                   />
                 )
@@ -1452,176 +1630,36 @@ function PainelTabletContent() {
                   Nenhum aluno ativo encontrado para "{search}"
                 </div>
               ) : (
-                manualStudents.map((a: any) => {
-                  const saude: any = a.saude || a.dados?.saude || {}
-                  const autorizados: any[] = saude.autorizados || a.autorizados || a.dados?.autorizados || []
-                  const rawAutSaida = a.autorizadoSairSozinho ?? a.dados?.autorizadoSairSozinho ?? saude.autorizaSaida
-                  const autorizaSaida: boolean = rawAutSaida === true || (typeof rawAutSaida === 'string' && ['true', 'sim', 's', '1', 'autorizado'].includes(rawAutSaida.trim().toLowerCase()))
-                  const alreadyCalled = activeCalls.some(c =>
-                    c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
-                  )
-                  const alreadyConfirmed = activeCalls.some(c =>
-                    c.studentId === a.id && c.status === 'confirmed'
-                  )
-                  const initials = (a.nome || '').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
-
-                  // Build autorizados list with fallback to responsaveis
-                  const respList: { name: string; role: string; rfid?: string; proibido: boolean; diasSemana: string[] }[] = []
-                  const seen = new Set<string>()
-                  autorizados.forEach(aut => {
-                    if (aut.nome?.trim() && !seen.has(aut.nome.toLowerCase())) {
-                      seen.add(aut.nome.toLowerCase())
-                      respList.push({ name: aut.nome, role: aut.parentesco || 'Autorizado', rfid: aut.rfid, proibido: aut.proibido === true, diasSemana: aut.diasSemana || [] })
-                    }
-                  })
-                  if (respList.length === 0 && a.responsavel?.trim()) {
-                    respList.push({ name: a.responsavel, role: 'Responsável', proibido: false, diasSemana: [] })
-                  }
-
-                  return (
-                    <div key={a.id} style={{
-                      background: '#0f1c2e',
-                      border: alreadyConfirmed ? '1px solid rgba(16,185,129,0.4)' : alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                      borderRadius: 16, overflow: 'hidden',
-                    }}>
-                      {/* Student row */}
-                      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                        {/* Photo or initials */}
-                        {a.foto ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={a.foto} alt={a.nome} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
-                        ) : (
-                          <div style={{
-                            width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                            background: 'linear-gradient(135deg, #06b6d430, #6366f118)',
-                            border: '2px solid rgba(6,182,212,0.2)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontWeight: 900, fontSize: 20, color: '#e2e8f0',
-                          }}>{initials}</div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
-                          <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <GraduationCap size={10}/> {a.turma}
-                            </span>
-                            {a.turno && <span>· {a.turno}</span>}
-                            {autorizaSaida && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Saída independente</span>}
-                            {alreadyCalled && <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Em chamada</span>}
-                            {alreadyConfirmed && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Já Retirado</span>}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Guardian buttons */}
-                      {respList.length > 0 && (
-                        <div style={{ padding: '8px 18px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
-                          {respList.map((g, i) => {
-                            const diaOk = isDiaPermitido(g.diasSemana)
-                            const isProibidoHoje = g.proibido || !diaOk
-                            const blocked = alreadyCalled || alreadyConfirmed
-                            return (
-                              <button key={i}
-                                onClick={() => {
-                                  if (blocked) return
-                                  const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
-                                  const turmaNome = tObj?.nome || a.turma
-                                  const gId = `manual-${a.id}-${i}`
-                                  const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
-                                  if (g.proibido) {
-                                    blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'proibido', 'Responsável proibido de retirar o aluno (Modo Manual)', aPhoto)
-                                    showToast(`❌ ${g.name} está PROIBIDO(A) de retirar o aluno!`, false)
-                                    return
-                                  }
-                                  if (!diaOk) {
-                                    blockAttempt?.(a.id, a.nome, turmaNome, gId, g.name, undefined, 'dia_restrito', 'Responsável fora do dia autorizado (Modo Manual)', aPhoto)
-                                    showToast(`⚠️ ${g.name} não tem autorização para retirar hoje!`, false)
-                                    return
-                                  }
-                                  const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual', undefined, aPhoto)
-                                  if (!call) showToast(`${a.nome} já em chamada!`, false)
-                                  else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
-                                }}
-                                disabled={blocked}
-                                style={{
-                                  padding: '7px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-                                  background: blocked
-                                    ? 'rgba(255,255,255,0.03)'
-                                    : isProibidoHoje
-                                      ? 'rgba(239, 68, 68, 0.15)'
-                                      : 'rgba(59, 130, 246, 0.15)',
-                                  border: blocked
-                                    ? '1px solid rgba(255,255,255,0.06)'
-                                    : isProibidoHoje
-                                      ? '1px solid rgba(239, 68, 68, 0.45)'
-                                      : '1px solid rgba(59, 130, 246, 0.45)',
-                                  color: blocked
-                                    ? '#334155'
-                                    : isProibidoHoje
-                                      ? '#ef4444'
-                                      : '#60a5fa',
-                                  cursor: blocked ? 'not-allowed' : 'pointer',
-                                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => {
-                                  if (blocked || isProibidoHoje) return
-                                  const el = e.currentTarget as HTMLButtonElement
-                                  el.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
-                                  el.style.color = '#fff'
-                                  el.style.borderColor = 'transparent'
-                                }}
-                                onMouseLeave={e => {
-                                  if (blocked || isProibidoHoje) return
-                                  const el = e.currentTarget as HTMLButtonElement
-                                  el.style.background = 'rgba(59, 130, 246, 0.15)'
-                                  el.style.color = '#60a5fa'
-                                  el.style.borderColor = 'rgba(59, 130, 246, 0.45)'
-                                }}
-                              >
-                                {isProibidoHoje ? <ShieldOff size={11}/> : <Phone size={10}/>}
-                                {g.name}
-                                <span style={{ opacity: 0.5, fontSize: 10 }}>{g.role}</span>
-                                {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
+                manualStudents.map((a: any) => (
+                  <ManualStudentRow
+                    key={a.id}
+                    aluno={a}
+                    callStatus={callStatusByStudentMap.get(String(a.id))}
+                    onSelectGuardian={handleManualSelectGuardian}
+                  />
+                ))
               )}
             </div>
           </div>
         )}
 
-        <AnimatePresence>
-          {showInactiveAlert && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                background: 'rgba(220, 38, 38, 0.95)',
-                zIndex: 9999, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                color: '#fff',
-              }}
-            >
-              <motion.div
-                animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
-                transition={{ repeat: Infinity, duration: 0.5 }}
-                style={{ textAlign: 'center' }}
-              >
-                <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ALUNO INATIVO</h1>
-                <p style={{ fontSize: 32, fontWeight: 700 }}>O aluno {showInactiveAlert.name} está INATIVO no sistema.</p>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {showInactiveAlert && (
+          <div
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(220, 38, 38, 0.95)',
+              zIndex: 9999, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              color: '#fff',
+              animation: 'fadeIn 0.2s ease',
+            }}
+          >
+            <div style={{ textAlign: 'center', animation: 'inactivePulse 1s ease-in-out infinite' }}>
+              <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ALUNO INATIVO</h1>
+              <p style={{ fontSize: 32, fontWeight: 700 }}>O aluno {showInactiveAlert.name} está INATIVO no sistema.</p>
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -1649,7 +1687,7 @@ function PainelTabletContent() {
             </div>
             {!isMobile && (
               <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, marginTop: 1 }}>
-                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                {todayFormatted}
               </div>
             )}
           </div>

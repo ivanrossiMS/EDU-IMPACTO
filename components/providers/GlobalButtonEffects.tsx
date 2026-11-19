@@ -292,11 +292,18 @@ export function GlobalButtonEffects() {
       ripple.style.top = `${y}px`
 
       // Assegura que o container tenha contexto de posicionamento sem sobrescrever absolute ou fixed
-      const computedPos = window.getComputedStyle(btn).position
-      if (computedPos === 'static') {
-        btn.classList.add('btn-ripple-container')
-      } else {
-        btn.style.overflow = 'hidden'
+      if (!btn.classList.contains('btn-ripple-container')) {
+        const inlinePos = btn.style.position
+        if (!inlinePos || inlinePos === 'static') {
+          const computedPos = window.getComputedStyle(btn).position
+          if (computedPos === 'static') {
+            btn.classList.add('btn-ripple-container')
+          } else {
+            btn.style.overflow = 'hidden'
+          }
+        } else {
+          btn.style.overflow = 'hidden'
+        }
       }
 
       btn.appendChild(ripple)
@@ -313,16 +320,21 @@ export function GlobalButtonEffects() {
         btn.classList.contains('no-click-anim') ||
         btn.classList.contains('no-ripple') ||
         btn.hasAttribute('data-no-ripple') ||
-        window.getComputedStyle(btn).position === 'absolute'
+        btn.style.position === 'absolute' ||
+        btn.classList.contains('absolute')
       ) {
         return
       }
 
-      // 1. Aplica classe de animação com reinício de frame
-      btn.classList.remove('btn-click-animating')
-      // Força reflow para permitir múltiplos cliques consecutivos
-      void btn.offsetWidth
-      btn.classList.add('btn-click-animating')
+      // 1. Aplica classe de animação sem forçar reflow síncrono
+      if (btn.classList.contains('btn-click-animating')) {
+        btn.classList.remove('btn-click-animating')
+        requestAnimationFrame(() => {
+          btn.classList.add('btn-click-animating')
+        })
+      } else {
+        btn.classList.add('btn-click-animating')
+      }
 
       // 2. Ripple
       if (clientX !== undefined && clientY !== undefined) {
@@ -366,7 +378,8 @@ export function GlobalButtonEffects() {
         btn.classList.contains('no-click-anim') ||
         btn.classList.contains('no-ripple') ||
         btn.hasAttribute('data-no-ripple') ||
-        window.getComputedStyle(btn).position === 'absolute'
+        btn.style.position === 'absolute' ||
+        btn.classList.contains('absolute')
       ) {
         return
       }

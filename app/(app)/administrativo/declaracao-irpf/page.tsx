@@ -78,6 +78,7 @@ interface ResponsavelSummary {
     nome?: string
     matricula?: string
     turma?: string
+    isFinanceiro?: boolean
   }>
 }
 
@@ -273,15 +274,25 @@ export default function DeclaracaoIrpfAdminPage() {
         const [studentsRes, responsaveisRes] = await Promise.all(promises)
 
         const rawStudents: StudentSummary[] = studentsRes.data || []
-        const formattedStudents = rawStudents.map((s) => ({
-          ...s,
-          turmaNome: getTurmaNome(s.turma),
-          responsavelNome:
-            s.responsaveis?.[0]?.nome || (s as any).responsavel || (s as any).responsavelFinanceiro || undefined,
-        }))
+        const formattedStudents = rawStudents.map((s) => {
+          const respFin = s.responsaveis?.find(
+            (r: any) => r.isFinanceiro === true || r.respFinanceiro === true || r.resp_financeiro === true
+          )
+          return {
+            ...s,
+            turmaNome: getTurmaNome(s.turma),
+            responsavelNome: respFin?.nome || (s as any).responsavelFinanceiro || undefined,
+          }
+        })
         setStudentsResults(formattedStudents)
 
-        const rawResponsaveis: ResponsavelSummary[] = responsaveisRes.data || []
+        // Exibir apenas responsáveis declarados como financeiros em pelo menos um aluno
+        const rawResponsaveis: ResponsavelSummary[] = (responsaveisRes.data || [])
+          .map((r: ResponsavelSummary) => ({
+            ...r,
+            alunosVinculados: (r.alunosVinculados || []).filter((a) => a.isFinanceiro === true),
+          }))
+          .filter((r: ResponsavelSummary) => Boolean(r.alunosVinculados && r.alunosVinculados.length > 0))
         setResponsaveisResults(rawResponsaveis)
       } catch (err) {
         console.error('[IRPF Admin] Erro na busca:', err)
@@ -340,12 +351,10 @@ export default function DeclaracaoIrpfAdminPage() {
 
         setDocData(json)
 
-        // Se o backend retornou responsáveis disponíveis e ainda não selecionamos um
-        if (json.responsaveisDisponiveis && json.responsaveisDisponiveis.length > 0 && !respId) {
-          const matched = json.responsaveisDisponiveis.find((r: ResponsavelOption) => r.isFinanceiro) || json.responsaveisDisponiveis[0]
-          if (matched) {
-            setSelectedResponsavelId(matched.id)
-          }
+        // Se o backend retornou responsáveis financeiros disponíveis e ainda não selecionamos um
+        const financialResps = (json.responsaveisDisponiveis || []).filter((r: ResponsavelOption) => r.isFinanceiro)
+        if (financialResps.length > 0 && !respId) {
+          setSelectedResponsavelId(financialResps[0].id)
         }
       } catch (err: any) {
         console.error('[IRPF Admin] Erro ao gerar declaração:', err)
@@ -358,6 +367,11 @@ export default function DeclaracaoIrpfAdminPage() {
     []
   )
 
+  const financialResponsaveis = useMemo(
+    () => (docData?.responsaveisDisponiveis || []).filter((r) => r.isFinanceiro),
+    [docData?.responsaveisDisponiveis]
+  )
+
   // Disparar busca quando o Aluno, Responsável, Ano ou Responsável Titular mudar
   useEffect(() => {
     if (selectedStudent || selectedResponsavel) {
@@ -368,6 +382,7 @@ export default function DeclaracaoIrpfAdminPage() {
   // ── Selecionar um Aluno ────────────────────────────────────────────────────
   const handleSelectStudent = (student: StudentSummary) => {
     setSelectedStudent(student)
+    setSelectedResponsavel(null)
     setSelectedResponsavelId(null)
     setSearchTerm(student.nome)
     setSearchDropdownOpen(false)
@@ -375,25 +390,25 @@ export default function DeclaracaoIrpfAdminPage() {
 
   // ── Selecionar um Responsável ──────────────────────────────────────────────
   const handleSelectResponsavel = (resp: ResponsavelSummary) => {
+    const linked = (resp.alunosVinculados || []).filter((a) => a.isFinanceiro === true)
+    if (linked.length === 0) {
+      toast.error('Este responsável não está declarado como responsável financeiro de nenhum aluno.')
+      return
+    }
+
     setSelectedResponsavel(resp)
     setSelectedResponsavelId(resp.id)
     setSearchTerm(resp.nome)
     setSearchDropdownOpen(false)
 
-    // Se o responsável possui alunos vinculados, seleciona o primeiro
-    const linked = resp.alunosVinculados || []
-    if (linked.length > 0 && linked[0]) {
-      const firstAluno = linked[0]
-      setSelectedStudent({
-        id: String(firstAluno.id || firstAluno.aluno_id),
-        nome: firstAluno.nome || 'Aluno',
-        matricula: firstAluno.matricula,
-        turma: firstAluno.turma,
-        turmaNome: getTurmaNome(firstAluno.turma),
-      })
-    } else {
-      setSelectedStudent(null)
-    }
+    const firstAluno = linked[0]
+    setSelectedStudent({
+      id: String(firstAluno.id || firstAluno.aluno_id),
+      nome: firstAluno.nome || 'Aluno',
+      matricula: firstAluno.matricula,
+      turma: firstAluno.turma,
+      turmaNome: getTurmaNome(firstAluno.turma),
+    })
   }
 
   // ── Limpar Seleção Atual ───────────────────────────────────────────────────
@@ -1628,20 +1643,6 @@ export default function DeclaracaoIrpfAdminPage() {
                     >
                       <GraduationCap size={14} />
                       <span>{a.nome}</span>
-                      {a.turma && (
-                        <span
-                          style={{
-                            fontSize: 10.5,
-                            background: isCurrent ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
-                            color: isCurrent ? '#ffffff' : '#4f46e5',
-                            padding: '1px 6px',
-                            borderRadius: 6,
-                            fontWeight: 800,
-                          }}
-                        >
-                          {getTurmaNome(a.turma)}
-                        </span>
-                      )}
                     </button>
                   )
                 })}
@@ -1781,12 +1782,12 @@ export default function DeclaracaoIrpfAdminPage() {
                     <span>Responsável Financeiro Titular</span>
                   </div>
 
-                  {/* Seletor de Responsável se houver múltiplos vínculos */}
-                  {docData.responsaveisDisponiveis && docData.responsaveisDisponiveis.length > 1 && (
+                  {/* Seletor de Responsável apenas se houver múltiplos responsáveis financeiros declarados */}
+                  {financialResponsaveis.length > 1 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Titular:</span>
                       <select
-                        value={selectedResponsavelId || ''}
+                        value={selectedResponsavelId || financialResponsaveis[0]?.id || ''}
                         onChange={(e) => {
                           const newId = e.target.value
                           setSelectedResponsavelId(newId)
@@ -1803,9 +1804,9 @@ export default function DeclaracaoIrpfAdminPage() {
                           cursor: 'pointer',
                         }}
                       >
-                        {docData.responsaveisDisponiveis.map((r) => (
+                        {financialResponsaveis.map((r) => (
                           <option key={r.id} value={r.id}>
-                            {r.nome} ({r.parentesco || 'Resp.'}) {r.isFinanceiro ? '★' : ''}
+                            {r.nome} ({r.parentesco || 'Resp.'}) ★
                           </option>
                         ))}
                       </select>

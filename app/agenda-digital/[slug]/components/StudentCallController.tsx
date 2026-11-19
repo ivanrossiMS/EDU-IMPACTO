@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Megaphone, Users, CheckCircle2, Loader2, Send, AlertTriangle, 
   X, Check, LogOut, ShieldCheck, Calendar, ChevronRight, UserCheck,
@@ -57,6 +56,37 @@ const ALL_AIRPORT_TIMES: string[] = [
   })
 ]
 
+const AIRPORT_SPECIFIC_TIMES = ALL_AIRPORT_TIMES.filter(t => t !== 'Indefinido')
+
+const callTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Campo_Grande',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+function readLocalConfirmedTodayMap(studentIds: string[]): Map<string, { confirmedToday: boolean; by: string; time: string }> {
+  const map = new Map<string, { confirmedToday: boolean; by: string; time: string }>()
+  if (typeof window === 'undefined' || studentIds.length === 0) return map
+  const todayStr = new Date().toDateString()
+  for (let i = 0; i < studentIds.length; i++) {
+    const id = studentIds[i]
+    if (!id || map.has(id)) continue
+    try {
+      const stored = localStorage.getItem(`edu-confirmed-exit-${id}`)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const confirmedToday = Boolean(parsed?.time && new Date(parsed.time).toDateString() === todayStr)
+        map.set(id, {
+          confirmedToday,
+          by: parsed?.by || '',
+          time: parsed?.time || '',
+        })
+      }
+    } catch {}
+  }
+  return map
+}
+
 function formatTime(isoStr?: string): string {
   if (!isoStr) return ''
   try {
@@ -70,7 +100,7 @@ function formatTime(isoStr?: string): string {
     }
     const d = new Date(str)
     if (isNaN(d.getTime())) return ''
-    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+    return callTimeFormatter.format(d)
   } catch {
     return ''
   }
@@ -85,7 +115,7 @@ function formatFirstName(name?: string): string {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
 }
 
-export function StudentCallButton({
+export const StudentCallButton = React.memo(function StudentCallButton({
   aluno,
   currentUser,
   vinculo,
@@ -320,6 +350,17 @@ export function StudentCallButton({
     return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
   }, [activeCalls, gId, allFamilyStudentIds, aluno?.id, aluno?.matricula])
 
+  const localConfirmedById = useMemo(() => {
+    const ids: string[] = []
+    if (aluno?.id) ids.push(String(aluno.id))
+    if (Array.isArray(meusAlunos)) {
+      for (let i = 0; i < meusAlunos.length; i++) {
+        if (meusAlunos[i]?.id) ids.push(String(meusAlunos[i].id))
+      }
+    }
+    return readLocalConfirmedTodayMap(ids)
+  }, [aluno?.id, meusAlunos, activeCalls, localConfirmed])
+
   const isStudentConfirmedToday = useCallback((studentId: string, matricula?: any) => {
     if (!studentId) return false
     const sMat = matricula || meusAlunos?.find((a: any) => String(a.id) === String(studentId))?.matricula || (String(aluno?.id) === String(studentId) ? aluno?.matricula : undefined)
@@ -327,20 +368,8 @@ export function StudentCallButton({
       return isStudentMatch(ac.studentId, studentId, sMat) && ac.status === 'confirmed'
     })
     if (c) return true
-    
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`edu-confirmed-exit-${studentId}`)
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) {
-            return true
-          }
-        }
-      } catch (e) {}
-    }
-    return false
-  }, [activeCalls, meusAlunos, aluno])
+    return Boolean(localConfirmedById.get(String(studentId))?.confirmedToday)
+  }, [activeCalls, meusAlunos, aluno?.id, aluno?.matricula, localConfirmedById])
 
   const [pendingStudentIds, confirmedStudentIds, specialStudentIds] = useMemo(() => {
     const pending = new Set<string>()
@@ -365,23 +394,24 @@ export function StudentCallButton({
     return [pending, confirmed, special]
   }, [myCalls])
 
-  const pendingCalls = myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && (
+  const pendingCalls = useMemo(() => myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && (
     pendingStudentIds.has(String(c.studentId).trim()) || pendingStudentIds.has(String(c.studentId).replace(/^0+/, ''))
-  ))
-  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && (
+  )), [myCalls, pendingStudentIds])
+
+  const specialAuthCalls = useMemo(() => myCalls.filter(c => c.status === 'special_auth' && (
     specialStudentIds.has(String(c.studentId).trim()) || specialStudentIds.has(String(c.studentId).replace(/^0+/, ''))
-  ))
+  )), [myCalls, specialStudentIds])
 
   const pendingCount = pendingStudentIds.size
   const specialCount = specialStudentIds.size
   const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
 
   const currentStudentIdStr = aluno?.id ? String(aluno.id).trim() : ''
-  const myCall = myCalls.find(c => {
+  const myCall = useMemo(() => myCalls.find(c => {
     const cStudentId = c.studentId ? String(c.studentId).trim() : ''
     if (!cStudentId || !currentStudentIdStr) return false
     return isStudentMatch(cStudentId, currentStudentIdStr, aluno?.matricula)
-  }) || call
+  }) || call, [myCalls, currentStudentIdStr, aluno?.matricula, call])
   const isBlocked = myCall?.status === 'blocked'
 
   // O botão fica verde de confirmação se ESSE aluno específico foi confirmado hoje
@@ -431,7 +461,6 @@ export function StudentCallButton({
 
   const getStudentConfirmedInfo = useCallback((s: any) => {
     if (!s) return { by: '', time: '' }
-    const sId = String(s.id).trim()
 
     if (aluno?.id && isStudentMatch(aluno.id, s.id, s.matricula) && confirmedCall) {
       return {
@@ -450,21 +479,15 @@ export function StudentCallButton({
       }
     }
 
-    if (typeof window !== 'undefined' && s.id) {
-      try {
-        const stored = localStorage.getItem(`edu-confirmed-exit-${s.id}`)
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          return {
-            by: parsed.by || '',
-            time: parsed.time || ''
-          }
-        }
-      } catch (e) {}
+    if (s.id) {
+      const cached = localConfirmedById.get(String(s.id))
+      if (cached) {
+        return { by: cached.by, time: cached.time }
+      }
     }
 
     return { by: '', time: '' }
-  }, [activeCalls, aluno?.id, aluno?.matricula, confirmedCall])
+  }, [activeCalls, aluno?.id, aluno?.matricula, confirmedCall, localConfirmedById])
 
   const confirmedLabel = useMemo(() => {
     if (confirmedStudents.length === 0) return ''
@@ -1140,7 +1163,7 @@ export function StudentCallButton({
       </div>
     </button>
   )
-}
+})
 
 interface StudentCallControllerProps {
   aluno: any
@@ -1167,6 +1190,10 @@ export const StudentCallController = React.memo(function StudentCallController({
 }: StudentCallControllerProps) {
   const searchParams = useSearchParams()
   const { callStudent, addSpecialAuth, deleteCall, activeCalls } = useSaida()
+  const activeCallsRef = useRef(activeCalls)
+  useEffect(() => {
+    activeCallsRef.current = activeCalls
+  }, [activeCalls])
   
   const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
   const [selectedAlunos, setSelectedAlunos] = useState<string[]>([])
@@ -1179,6 +1206,36 @@ export const StudentCallController = React.memo(function StudentCallController({
   const [specialAuthSending, setSpecialAuthSending] = useState(false)
   const [specialAuthSent, setSpecialAuthSent] = useState(false)
   const specialAuthTextRef = useRef<HTMLInputElement>(null)
+  const closeModalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (closeModalTimerRef.current) clearTimeout(closeModalTimerRef.current)
+    }
+  }, [])
+
+  const turmaMap = useMemo(() => {
+    const map = new Map<string, any>()
+    for (let i = 0; i < (turmas || []).length; i++) {
+      const t = turmas[i]
+      if (!t) continue
+      if (t.id) map.set(String(t.id), t)
+      if (t.codigo) map.set(String(t.codigo), t)
+      if (t.nome) map.set(String(t.nome), t)
+    }
+    return map
+  }, [turmas])
+
+  const modalStudents = useMemo(
+    () => (meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])),
+    [meusAlunos, aluno]
+  )
+
+  const modalLocalConfirmedMap = useMemo(() => {
+    if (!isSpecialAuthModalOpen) return new Map<string, { confirmedToday: boolean; by: string; time: string }>()
+    const ids = modalStudents.map((a: any) => String(a?.id || '')).filter(Boolean)
+    return readLocalConfirmedTodayMap(ids)
+  }, [isSpecialAuthModalOpen, modalStudents, activeCalls])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
@@ -1186,11 +1243,12 @@ export const StudentCallController = React.memo(function StudentCallController({
         setIsSandwichOpen(false)
       }
     }
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null
     if (isSandwichOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       document.addEventListener('touchstart', handleClickOutside)
       // Auto-scroll para o horário selecionado
-      setTimeout(() => {
+      scrollTimer = setTimeout(() => {
         if (dropdownListRef.current) {
           const selEl = dropdownListRef.current.querySelector('[data-selected="true"]') as HTMLElement
           if (selEl) {
@@ -1200,6 +1258,7 @@ export const StudentCallController = React.memo(function StudentCallController({
       }, 50)
     }
     return () => {
+      if (scrollTimer) clearTimeout(scrollTimer)
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('touchstart', handleClickOutside)
     }
@@ -1247,16 +1306,11 @@ export const StudentCallController = React.memo(function StudentCallController({
     setSpecialAuthTimeInput('')
     setIsSandwichOpen(false)
     const all = meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])
+    const latestCalls = activeCallsRef.current || []
+    const localMap = readLocalConfirmedTodayMap(all.map((a: any) => String(a?.id || '')).filter(Boolean))
     const isConfirmed = (sId: string, matricula?: any) => {
-      if (activeCalls.some(c => isStudentMatch(c.studentId, sId, matricula) && c.status === 'confirmed')) return true
-      try {
-        const stored = localStorage.getItem(`edu-confirmed-exit-${sId}`)
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true
-        }
-      } catch(e) {}
-      return false
+      if (latestCalls.some(c => isStudentMatch(c.studentId, sId, matricula) && c.status === 'confirmed')) return true
+      return Boolean(localMap.get(String(sId))?.confirmedToday)
     }
     const unconfirmedIds = all.filter((a: any) => !isConfirmed(a.id, a.matricula)).map((a: any) => a.id)
     if (unconfirmedIds.length > 0) {
@@ -1266,7 +1320,7 @@ export const StudentCallController = React.memo(function StudentCallController({
     } else {
       setSelectedAlunos([])
     }
-  }, [meusAlunos, aluno, activeCalls])
+  }, [meusAlunos, aluno])
 
   const handleNormalCallConfirm = useCallback(() => {
     if (isMirrorModeActive) {
@@ -1358,7 +1412,8 @@ export const StudentCallController = React.memo(function StudentCallController({
       invalidateCache('saida/calls')
       triggerHaptic('success')
       setSpecialAuthSent(true)
-      setTimeout(() => {
+      if (closeModalTimerRef.current) clearTimeout(closeModalTimerRef.current)
+      closeModalTimerRef.current = setTimeout(() => {
         setIsSpecialAuthModalOpen(false)
         setSpecialAuthText('')
         setSpecialAuthTime('')
@@ -1435,68 +1490,58 @@ export const StudentCallController = React.memo(function StudentCallController({
 
       {/* Modal de Chamada / Autorização Especial */}
       <PortalWrapper>
-        <AnimatePresence>
-          {isSpecialAuthModalOpen && (
-            <motion.div
-              key="special-auth-modal-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+        {isSpecialAuthModalOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              maxWidth: '100vw',
+              height: '100dvh',
+              background: 'rgba(15, 23, 42, 0.86)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '12px 14px',
+              boxSizing: 'border-box',
+              overflowX: 'hidden',
+              overflowY: 'auto',
+              overscrollBehavior: 'none',
+              animation: 'adFadeIn 0.15s ease'
+            }}
+            onClick={() => {
+              if (!specialAuthSending) {
+                setIsSpecialAuthModalOpen(false)
+                setSpecialAuthText('')
+                setSpecialAuthTime('')
+                setSpecialAuthTimeInput('')
+                setIsSandwichOpen(false)
+              }
+            }}
+          >
+            <div
+              className="ad-modal-container"
               style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                width: '100vw',
-                maxWidth: '100vw',
-                height: '100dvh',
-                background: 'rgba(15, 23, 42, 0.65)',
-                zIndex: 99999,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                padding: '12px 14px',
+                background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
+                borderRadius: 24,
+                padding: '18px 18px 16px',
+                width: '100%',
+                maxWidth: 440,
+                maxHeight: 'min(94vh, 780px)',
+                boxShadow: '0 20px 48px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)',
+                position: 'relative',
+                overflow: 'visible',
                 boxSizing: 'border-box',
-                overflowX: 'hidden',
-                overflowY: 'auto',
-                overscrollBehavior: 'none'
+                touchAction: 'pan-y',
+                fontFamily: 'Outfit, sans-serif',
+                animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)'
               }}
-              onClick={() => {
-                if (!specialAuthSending) {
-                  setIsSpecialAuthModalOpen(false)
-                  setSpecialAuthText('')
-                  setSpecialAuthTime('')
-                  setSpecialAuthTimeInput('')
-                  setIsSandwichOpen(false)
-                }
-              }}
+              onClick={e => e.stopPropagation()}
             >
-              <motion.div
-                key="special-auth-modal-box"
-                initial={{ scale: 0.92, opacity: 0, y: 24 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.92, opacity: 0, y: 24 }}
-                transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-                className="ad-modal-container"
-                style={{
-                  background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
-                  borderRadius: 24,
-                  padding: '18px 18px 16px',
-                  width: '100%',
-                  maxWidth: 440,
-                  maxHeight: 'min(94vh, 780px)',
-                  boxShadow: '0 28px 70px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05)',
-                  position: 'relative',
-                  overflow: 'visible',
-                  boxSizing: 'border-box',
-                  touchAction: 'pan-y',
-                  fontFamily: 'Outfit, sans-serif'
-                }}
-                onClick={e => e.stopPropagation()}
-              >
                 {/* Decorative gradient blob */}
                 <div style={{
                   position: 'absolute',
@@ -1597,8 +1642,8 @@ export const StudentCallController = React.memo(function StudentCallController({
                   zIndex: 1,
                   boxSizing: 'border-box'
                 }}>
-                  {(meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
-                    const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
+                  {modalStudents.map((a: any) => {
+                    const tObj = turmaMap.get(String(a.turma || ''))
                     let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
                     if (aTurma && aTurma !== 'S/T') {
                       if (aTurma.includes('-')) {
@@ -1613,17 +1658,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                     const aMatricula = a.matricula || null
                     const isSelected = selectedAlunos.includes(a.id)
 
-                    const isConfirmedExit = (() => {
-                      if (activeCalls.some(c => isStudentMatch(c.studentId, a.id, a.matricula) && c.status === 'confirmed')) return true
-                      try {
-                        const stored = localStorage.getItem(`edu-confirmed-exit-${a.id}`)
-                        if (stored) {
-                          const parsed = JSON.parse(stored)
-                          if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true
-                        }
-                      } catch(e) {}
-                      return false
-                    })()
+                    const isConfirmedExit =
+                      activeCalls.some(c => isStudentMatch(c.studentId, a.id, a.matricula) && c.status === 'confirmed') ||
+                      Boolean(modalLocalConfirmedMap.get(String(a.id))?.confirmedToday)
 
                     const isPendingCall = activeCalls.some(c => isStudentMatch(c.studentId, a.id, a.matricula) && (c.status === 'waiting' || c.status === 'called'))
 
@@ -1650,10 +1687,10 @@ export const StudentCallController = React.memo(function StudentCallController({
                           gap: 12,
                           cursor: isConfirmedExit ? 'not-allowed' : 'pointer',
                           opacity: isConfirmedExit ? 0.62 : 1,
-                          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                          transition: 'border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease',
                           boxSizing: 'border-box',
                           width: '100%',
-                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 14px rgba(99,102,241,0.14)' : '0 1px 3px rgba(0,0,0,0.02)',
+                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 12px rgba(99,102,241,0.12)' : '0 1px 3px rgba(0,0,0,0.02)',
                         }}
                       >
                         <div style={{
@@ -1669,11 +1706,11 @@ export const StudentCallController = React.memo(function StudentCallController({
                           fontSize: 16,
                           fontWeight: 900,
                           color: '#fff',
-                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 14px rgba(168,85,247,0.25)' : 'none',
-                          filter: isConfirmedExit ? 'grayscale(0.6)' : 'none',
+                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 12px rgba(168,85,247,0.22)' : 'none',
+                          opacity: isConfirmedExit ? 0.55 : 1,
                         }}>
                           {a.foto || a.imagem1
-                            ? <img src={a.foto || a.imagem1} alt={a.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ? <img src={a.foto || a.imagem1} alt={a.nome || ''} decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             : getInitials(a.nome || '')
                           }
                         </div>
@@ -2163,7 +2200,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '3px 4px' }} />
 
                                 {/* Lista de horários */}
-                                {ALL_AIRPORT_TIMES.filter(t => t !== 'Indefinido').map(t => {
+                                {AIRPORT_SPECIFIC_TIMES.map(t => {
                                   const isSel = specialAuthTime === t
                                   return (
                                     <button
@@ -2304,10 +2341,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                     )
                   })()}
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </div>
+            </div>
+        )}
       </PortalWrapper>
     </>
   )

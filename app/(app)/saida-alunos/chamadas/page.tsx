@@ -1,6 +1,4 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion';
-import Image from 'next/image';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { supabase } from '@/lib/supabase';
 
@@ -102,6 +100,12 @@ function elapsedSec(since: string, nowTime?: number) {
   return Math.max(0, Math.floor((current - t) / 1000))
 }
 
+const CAMPO_GRANDE_TIME_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Campo_Grande',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 function fmtTime(iso?: string) {
   if (!iso) return ''
   try {
@@ -115,7 +119,7 @@ function fmtTime(iso?: string) {
     }
     const d = new Date(str)
     if (isNaN(d.getTime())) return str
-    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+    return CAMPO_GRANDE_TIME_FORMATTER.format(d)
   } catch {
     return String(iso)
   }
@@ -124,26 +128,30 @@ function fmtTime(iso?: string) {
 import { fetchSingleStudentPhoto, getCachedStudentPhoto, setCachedStudentPhoto } from '@/lib/studentPhotoCache'
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
-const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos, nowTime }: {
+const CallCard = React.memo(function CallCard({ call, displayClass, urgentLimit, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos }: {
   call:         PickupCall
+  displayClass?: string
+  urgentLimit:  number
   onConfirm:    (id: string) => void
   onCancel:     (id: string) => void
   onRecall:     (id: string) => void
   onRevert:     (id: string) => void
   onOpenIrmaos: (call: PickupCall) => void
-  nowTime?:     number
 }) {
-  const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
-  const [localNowTime, setLocalNowTime] = useState(Date.now())
+  const isActive   = call.status === 'waiting' || call.status === 'called'
+  const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
+  const isBlocked  = call.status === 'blocked'
+  const [localNowTime, setLocalNowTime] = useState(() => isActive ? Date.now() : 0)
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
   const [photoError, setPhotoError] = useState(false)
   
   useEffect(() => {
-    if (nowTime !== undefined) return
+    if (!isActive) return
+    setLocalNowTime(Date.now())
     const iv = setInterval(() => setLocalNowTime(Date.now()), 10000)
     return () => clearInterval(iv)
-  }, [nowTime])
+  }, [isActive])
 
   // Auto-resolve photo if call was created without photo but student has photo in database
   useEffect(() => {
@@ -166,16 +174,10 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
     return () => { isMounted = false }
   }, [call.studentPhoto, call.studentId])
   
-  const effectiveNowTime = nowTime !== undefined ? nowTime : localNowTime
-  const secs = elapsedSec(call.calledAt, effectiveNowTime)
-
-  const isActive   = call.status === 'waiting' || call.status === 'called'
-  const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
-  const isBlocked  = call.status === 'blocked'
+  const secs = isActive ? elapsedSec(call.calledAt, localNowTime || Date.now()) : 0
   const isSolo     = isSaiuSozinhoCall(call)
   const isCatraca  = isSolo && (call.guardianId === 'catraca-saida' || (call as any).origem === 'catraca_idface' || (call.guardianName || '').toLowerCase().includes('catraca'))
   
-  const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
   const urgent = isActive && secs > urgentLimit
   const meta = statusMeta(call)
   const color = urgent ? '#ef4444' : meta.color // Override with red if urgent
@@ -197,18 +199,16 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
     : call.calledAt
 
   return (
-    <div style={{
+    <div className="chamada-card-perf" style={{
       position: 'relative',
       borderRadius: 16,
       overflow: 'hidden',
       background: 'hsl(var(--bg-elevated))',
       border: `1px solid ${color}${isFinished ? '20' : '40'}`,
-      boxShadow: `0 6px 20px rgba(0,0,0,0.06), 0 0 12px ${color}${urgent ? '30' : '05'}`,
+      boxShadow: urgent ? '0 4px 14px rgba(239,68,68,0.22)' : '0 2px 10px rgba(0,0,0,0.08)',
       display: 'flex',
       flexDirection: 'column',
       opacity: isFinished ? 0.85 : 1,
-      transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
-      animation: urgent ? 'cardFloatUrgent 4s ease-in-out infinite' : 'none',
       minHeight: 235,
       aspectRatio: '1 / 1.32',
     }}>
@@ -264,8 +264,8 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           <div style={{
             position: 'absolute', top: 8, right: 8,
             padding: '3px 8px', borderRadius: 50,
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(15,23,42,0.78)',
+            border: '1px solid rgba(255,255,255,0.14)',
             fontSize: 9, fontWeight: 900, color: '#fff',
             display: 'flex', alignItems: 'center', gap: 4, zIndex: 10,
           }}>
@@ -292,7 +292,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           letterSpacing: '0.02em', marginBottom: 10,
         }}>
           <GraduationCap size={11} />
-          {call.studentClass}
+          {displayClass || call.studentClass}
         </div>
 
         {/* Block Reason Banner */}
@@ -434,7 +434,10 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
          prev.call.calledAt === next.call.calledAt &&
          prev.call.confirmedAt === next.call.confirmedAt &&
          prev.call.guardianName === next.call.guardianName &&
-         prev.call.blockType === next.call.blockType
+         prev.call.blockType === next.call.blockType &&
+         prev.call.studentPhoto === next.call.studentPhoto &&
+         prev.displayClass === next.displayClass &&
+         prev.urgentLimit === next.urgentLimit
 })
 
 // ── Client-side Ultra Fast Cache & Prefetching ─────────────────────────────────
@@ -626,17 +629,13 @@ function ModalChamarIrmaos({
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <div
+      className="chamada-modal-backdrop"
       onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(10, 15, 30, 0.82)',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
+        background: 'rgba(10, 15, 30, 0.84)',
         zIndex: 99999,
         display: 'flex',
         alignItems: 'center',
@@ -644,11 +643,8 @@ function ModalChamarIrmaos({
         padding: '16px',
       }}
     >
-      <motion.div
-        initial={{ scale: 0.92, opacity: 0, y: 20 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.92, opacity: 0, y: 20 }}
-        transition={{ type: 'spring', damping: 26, stiffness: 360 }}
+      <div
+        className="chamada-modal-panel"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
@@ -1211,8 +1207,8 @@ function ModalChamarIrmaos({
             Fechar
           </button>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }
 
@@ -1643,111 +1639,99 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
       </div>
 
       {/* Warning Alert Screens & Modals */}
-      <AnimatePresence>
-        {showProibidoAlert && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {showProibidoAlert && (
+        <div
+          className="chamada-modal-backdrop"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(220, 38, 38, 0.95)',
+            zIndex: 9999, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            color: '#fff',
+          }}
+        >
+          <div style={{ textAlign: 'center', animation: 'blink 0.5s ease-in-out infinite' }}>
+            <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
+            <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
+          </div>
+        </div>
+      )}
+
+      {showConfirmModal && (
+        <div
+          className="chamada-modal-backdrop"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(15, 23, 42, 0.78)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            className="chamada-modal-panel"
             style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(220, 38, 38, 0.95)',
-              zIndex: 9999, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              color: '#fff',
+              background: 'hsl(var(--bg-elevated))',
+              border: '1.5px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: 24, padding: 24, width: '90%', maxWidth: 420,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.15)',
+              display: 'flex', flexDirection: 'column', gap: 18,
             }}
           >
-            <motion.div
-              animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
-              transition={{ repeat: Infinity, duration: 0.5 }}
-              style={{ textAlign: 'center' }}
-            >
-              <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
-              <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {showConfirmModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(8px)',
-              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 16,
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 15 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 15 }}
-              style={{
-                background: 'hsl(var(--bg-elevated))',
-                border: '1.5px solid rgba(245, 158, 11, 0.4)',
-                borderRadius: 24, padding: 24, width: '90%', maxWidth: 420,
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.15)',
-                display: 'flex', flexDirection: 'column', gap: 18,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: 16,
-                  background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  fontSize: 24,
-                }}>
-                  ⚠️
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#000000', fontFamily: 'Outfit, sans-serif' }}>
-                    Confirmar Saída Sozinho?
-                  </h3>
-                  <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
-                    O(a) aluno(a) <strong style={{ color: '#000000' }}>{student.nome}</strong> <span style={{ color: '#ef4444', fontWeight: 800 }}>NÃO tem autorização cadastrada</span> para sair sozinho(a).
-                    <br/><br/>
-                    Deseja confirmar a saída sozinho(a) mesmo assim?
-                  </p>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 16,
+                background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                fontSize: 24,
+              }}>
+                ⚠️
               </div>
-
-              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmModal(false)}
-                  style={{
-                    flex: 1, height: 42, borderRadius: 12,
-                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                    color: '#000000', fontWeight: 700, fontSize: 12,
-                    cursor: 'pointer', transition: 'all 0.2s',
-                  }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowConfirmModal(false)
-                    executeSoloExit()
-                  }}
-                  style={{
-                    flex: 1.4, height: 42, borderRadius: 12,
-                    background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
-                    color: '#fff', fontWeight: 800, fontSize: 12,
-                    cursor: 'pointer', transition: 'all 0.2s',
-                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}
-                >
-                  <CheckCircle2 size={14} /> Confirmar Saída
-                </button>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#000000', fontFamily: 'Outfit, sans-serif' }}>
+                  Confirmar Saída Sozinho?
+                </h3>
+                <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
+                  O(a) aluno(a) <strong style={{ color: '#000000' }}>{student.nome}</strong> <span style={{ color: '#ef4444', fontWeight: 800 }}>NÃO tem autorização cadastrada</span> para sair sozinho(a).
+                  <br/><br/>
+                  Deseja confirmar a saída sozinho(a) mesmo assim?
+                </p>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                style={{
+                  flex: 1, height: 42, borderRadius: 12,
+                  background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                  color: '#000000', fontWeight: 700, fontSize: 12,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmModal(false)
+                  executeSoloExit()
+                }}
+                style={{
+                  flex: 1.4, height: 42, borderRadius: 12,
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
+                  color: '#fff', fontWeight: 800, fontSize: 12,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <CheckCircle2 size={14} /> Confirmar Saída
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }, (prev, next) => {
@@ -1916,8 +1900,36 @@ function playSpecialAuthChime(): void {
   }
 }
 
-function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
+function hasSpecialAuthChanged(a: PickupCall, b: PickupCall): boolean {
+  if (a === b) return false
+  if (
+    a.status !== b.status ||
+    a.guardianName !== b.guardianName ||
+    a.studentName !== b.studentName ||
+    a.studentClass !== b.studentClass ||
+    a.studentPhoto !== b.studentPhoto ||
+    a.targetTime !== b.targetTime ||
+    a.validDays !== b.validDays ||
+    a.validFrom !== b.validFrom ||
+    a.validUntil !== b.validUntil ||
+    a.confirmedOut !== b.confirmedOut ||
+    a.confirmedAt !== b.confirmedAt ||
+    a.confirmedBy !== b.confirmedBy
+  ) {
+    return true
+  }
+  const aKeys = a.confirmedDates ? Object.keys(a.confirmedDates) : []
+  const bKeys = b.confirmedDates ? Object.keys(b.confirmedDates) : []
+  if (aKeys.length !== bKeys.length) return true
+  for (let i = 0; i < aKeys.length; i++) {
+    const k = aKeys[i]
+    if (a.confirmedDates![k] !== b.confirmedDates?.[k]) return true
+  }
+  return false
+}
+
+const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
+  const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [], realtimeStatus } = useSaida()
   const { on: onRealtime } = useBroadcastRealtime()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
@@ -2108,11 +2120,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     return () => { unsub() }
   }, [onRealtime, triggerSpecialAuthSound])
 
-  // Sincronização contínua com /api/saida/calls?onlySpecialAuth=true para manter autorizações de hoje sincronizadas
-  // (apenas sincroniza dados — NUNCA dispara som aqui)
+  // Sincronização fallback com /api/saida/calls?onlySpecialAuth=true apenas quando o Realtime estiver fora do ar
+  // (em operação normal online, SaidaProvider já carrega e mantém activeCalls sincronizado em tempo real)
   useEffect(() => {
+    if (realtimeStatus === 'online') return
     let isSubscribed = true
     const fetchSpecialAuths = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       try {
         const res = await fetch(`/api/saida/calls?onlySpecialAuth=true&_t=${Date.now()}`, {
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
@@ -2152,7 +2166,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 targetTime: incomingTargetTime || undefined
               })
               changed = true
-            } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+            } else if (existing.targetTime !== incomingTargetTime || hasSpecialAuthChanged(existing, c)) {
               seenSpecialAuthsRef.current.set(c.id, {
                 ...existing,
                 ...c,
@@ -2167,24 +2181,15 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         console.warn('[SpecialExitSticker] Falha ao sincronizar autorizações especiais:', err)
       }
     }
-    fetchSpecialAuths()
-    const handleVisibility = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchSpecialAuths()
-      }
+    if (realtimeStatus === 'offline') {
+      fetchSpecialAuths()
     }
-    document.addEventListener('visibilitychange', handleVisibility)
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchSpecialAuths()
-      }
-    }, 60000)
+    const timer = setInterval(fetchSpecialAuths, 60000)
     return () => {
       isSubscribed = false
-      document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(timer)
     }
-  }, [])
+  }, [realtimeStatus])
 
   // Whenever activeCalls changes, absorb any special_auth entries into the accumulator,
   // e remove aquelas canceladas ou expiradas (apenas sincroniza estado — NUNCA dispara som aqui)
@@ -2218,7 +2223,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             targetTime: incomingTargetTime || undefined
           })
           changed = true
-        } else if (existing.targetTime !== incomingTargetTime || JSON.stringify(existing) !== JSON.stringify(c)) {
+        } else if (existing.targetTime !== incomingTargetTime || hasSpecialAuthChanged(existing, c)) {
           seenSpecialAuthsRef.current.set(c.id, {
             ...existing,
             ...c,
@@ -2412,8 +2417,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       borderRadius: 24,
       padding: '14px 18px',
       boxShadow: 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.03)',
-      transform: 'rotate(-0.3deg)',
-      transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-start',
@@ -2421,14 +2424,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       minWidth: 0,
       maxWidth: '100%',
       boxSizing: 'border-box',
-    }}
-    onMouseEnter={e => {
-      e.currentTarget.style.transform = 'none'
-      e.currentTarget.style.boxShadow = 'var(--shadow-xl), inset 0 0 20px rgba(245,158,11,0.05)'
-    }}
-    onMouseLeave={e => {
-      e.currentTarget.style.transform = 'rotate(-0.3deg)'
-      e.currentTarget.style.boxShadow = 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.02)'
     }}
     >
       {/* 📌 Floating Pushpin */}
@@ -2825,6 +2820,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           {launches.map(l => (
             <div
               key={l.id}
+              className="chamada-mini-card"
               style={{
                 background: l.confirmedOut
                   ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.08) 100%)'
@@ -2834,9 +2830,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   : '1px solid rgba(245, 158, 11, 0.22)',
                 borderRadius: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
                 boxShadow: l.confirmedOut
-                  ? '0 4px 12px rgba(16, 185, 129, 0.14)'
+                  ? '0 2px 8px rgba(16, 185, 129, 0.12)'
                   : 'var(--shadow-sm)',
-                transition: 'all 0.3s',
                 minWidth: 0,
               }}
             >
@@ -3135,94 +3130,88 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       </div>
 
       {/* ── MODAL DE CONFIRMAÇÃO (REMOVER AUTORIZAÇÃO) ───────────────────────── */}
-      <AnimatePresence>
-        {confirmDeleteId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {confirmDeleteId && (
+        <div
+          className="chamada-modal-backdrop"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(15, 23, 42, 0.74)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            className="chamada-modal-panel"
             style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
-              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex', flexDirection: 'column', gap: 20,
             }}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              style={{
-                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                display: 'flex', flexDirection: 'column', gap: 20,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: 16,
-                  background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <Trash2 size={24} />
-                </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#000000' }}>Remover autorização?</h3>
-                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
-                    Tem certeza que deseja remover esta autorização especial? Esta ação não pode ser desfeita.
-                  </p>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 16,
+                background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Trash2 size={24} />
               </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#000000' }}>Remover autorização?</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
+                  Tem certeza que deseja remover esta autorização especial? Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                <button
-                  onClick={() => setConfirmDeleteId(null)}
-                  style={{
-                    flex: 1, height: 44, borderRadius: 12,
-                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                    color: '#000000', fontWeight: 700, fontSize: 13,
-                    cursor: 'pointer', transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'hsl(var(--bg-surface))'}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    deleteCall(confirmDeleteId)
-                    removeFromAccumulator(confirmDeleteId)
-                    setConfirmDeleteId(null)
-                  }}
-                  style={{
-                    flex: 1, height: 44, borderRadius: 12,
-                    background: '#ef4444', border: 'none',
-                    color: '#fff', fontWeight: 700, fontSize: 13,
-                    cursor: 'pointer', transition: 'all 0.2s',
-                    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = '#dc2626'
-                    e.currentTarget.style.transform = 'translateY(-1px)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = '#ef4444'
-                    e.currentTarget.style.transform = 'none'
-                  }}
-                >
-                  Remover
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                style={{
+                  flex: 1, height: 44, borderRadius: 12,
+                  background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                  color: '#000000', fontWeight: 700, fontSize: 13,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}
+                onMouseLeave={e => e.currentTarget.style.background = 'hsl(var(--bg-surface))'}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  deleteCall(confirmDeleteId)
+                  removeFromAccumulator(confirmDeleteId)
+                  setConfirmDeleteId(null)
+                }}
+                style={{
+                  flex: 1, height: 44, borderRadius: 12,
+                  background: '#ef4444', border: 'none',
+                  color: '#fff', fontWeight: 700, fontSize: 13,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#dc2626'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = '#ef4444'
+                  e.currentTarget.style.transform = 'none'
+                }}
+              >
+                Remover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-}
+})
 
 // ── Proibidos Retirada Component ──────────────────────────────────────────
-function ProibidosRetiradaCard() {
+const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
   const [restritos, setRestritos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const isMobile = useIsMobile()
@@ -3339,17 +3328,21 @@ function ProibidosRetiradaCard() {
       </div>
     </div>
   )
-}
+})
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+const CALLS_BATCH_SIZE = 36
+
 function ChamadasContent() {
 
-  const { activeCalls = [], confirmPickup, confirmAllWaiting, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
+  const { activeCalls = [], config, confirmPickup, confirmAllWaiting, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
   const { currentUser, currentUserPerfil } = useApp()
   const [turmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+
+  const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
 
   const turmaNameMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -3360,12 +3353,6 @@ function ChamadasContent() {
     }
     return map
   }, [turmas])
-
-  const [sharedNowTime, setSharedNowTime] = useState(() => Date.now())
-  useEffect(() => {
-    const iv = setInterval(() => setSharedNowTime(Date.now()), 10000)
-    return () => clearInterval(iv)
-  }, [])
 
   const isAdmin = useMemo(() => {
     const perfil = (currentUserPerfil || currentUser?.perfil || '').toLowerCase().trim()
@@ -3498,7 +3485,7 @@ function ChamadasContent() {
     }
   }, [studentSearch, turmaNameMap])
 
-  const handleCall = (
+  const handleCall = useCallback((
     studentId: string, studentName: string, studentClass: string,
     guardianId: string, guardianName: string,
     studentPhoto?: string | null,
@@ -3521,133 +3508,139 @@ function ChamadasContent() {
     }
     showToast(`${studentName} chamado(a)!`)
     setStudentSearch('')
-  }
+  }, [activeCalls, callStudent, showToast])
 
-  const confirmedStudentIds = useMemo(() => {
-    return new Set(
-      activeCalls
-        .filter(c => c.status === 'confirmed' && c.studentId != null)
-        .map(c => String(c.studentId))
-    )
-  }, [activeCalls])
+  // Single-pass aggregation & pre-sorting of all buckets to avoid 7+ passes and per-render object cloning
+  const callsSummary = useMemo(() => {
+    const confirmedStudentIds = new Set<string>()
+    const soloCallIds = new Set<string>()
+    const parsedItems: Array<{ call: PickupCall; _parsedTime: number; _searchStr: string; _isSolo: boolean }> = []
 
-  const confirmed = useMemo(() => {
-    const list = activeCalls.filter(c => c.status === 'confirmed')
-    const seen = new Set<string>()
-    const dedup: any[] = []
-    for (const c of list) {
-      const key = c.studentId ? String(c.studentId) : c.id
-      if (!seen.has(key)) {
-        seen.add(key)
-        dedup.push(c)
+    for (let i = 0; i < activeCalls.length; i++) {
+      const c = activeCalls[i]
+      if (c.status === 'confirmed' && c.studentId != null) {
+        confirmedStudentIds.add(String(c.studentId))
+      }
+      const isSolo = isSaiuSozinhoCall(c)
+      if (isSolo) soloCallIds.add(c.id)
+      const t = c.calledAt ? new Date(c.calledAt).getTime() : 0
+      parsedItems.push({
+        call: c,
+        _parsedTime: Number.isNaN(t) ? 0 : t,
+        _searchStr: `${c.studentName || ''} ${c.studentClass || ''} ${c.guardianName || ''}`.toLowerCase(),
+        _isSolo: isSolo,
+      })
+    }
+
+    parsedItems.sort((a, b) => b._parsedTime - a._parsedTime)
+
+    const allCalls: typeof parsedItems = []
+    const waiting: typeof parsedItems = []
+    const confirmed: typeof parsedItems = []
+    const saiuSozinho: typeof parsedItems = []
+    const cancelled: typeof parsedItems = []
+
+    const seenAllConfirmed = new Set<string>()
+    const seenConfirmed = new Set<string>()
+    const seenSolo = new Set<string>()
+
+    for (let i = 0; i < parsedItems.length; i++) {
+      const item = parsedItems[i]
+      const c = item.call
+      const sIdTrim = c.studentId != null ? String(c.studentId).trim() : ''
+      const studentKey = sIdTrim || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
+
+      if (c.status === 'cancelled') {
+        cancelled.push(item)
+        allCalls.push(item)
+        continue
+      }
+
+      if (c.status === 'special_auth') {
+        continue
+      }
+
+      const isWaitingStatus = c.status === 'waiting' || c.status === 'called'
+      const isConfirmedElsewhere = isWaitingStatus && c.studentId != null && confirmedStudentIds.has(String(c.studentId))
+
+      if (c.status === 'confirmed') {
+        if (!seenConfirmed.has(studentKey)) {
+          seenConfirmed.add(studentKey)
+          confirmed.push(item)
+        }
+        if (!seenAllConfirmed.has(studentKey)) {
+          seenAllConfirmed.add(studentKey)
+          allCalls.push(item)
+        }
+      } else if (!isConfirmedElsewhere) {
+        allCalls.push(item)
+        if (isWaitingStatus && !item._isSolo && c.studentId != null) {
+          waiting.push(item)
+        }
+      }
+
+      if (item._isSolo && !seenSolo.has(studentKey)) {
+        seenSolo.add(studentKey)
+        saiuSozinho.push(item)
       }
     }
-    return dedup
+
+    return {
+      allCalls,
+      waiting,
+      confirmed,
+      saiuSozinho,
+      cancelled,
+      waitingCalls: waiting.map(item => item.call),
+    }
   }, [activeCalls])
 
-  const allCalls = useMemo(() => {
-    const list = activeCalls.filter(c => {
-      if (c.status === 'special_auth') return false
-      if ((c.status === 'waiting' || c.status === 'called') && c.studentId != null && confirmedStudentIds.has(String(c.studentId))) return false
-      return true
-    })
-    const seen = new Set<string>()
-    const dedup: any[] = []
-    for (const c of list) {
-      const key = c.status === 'confirmed' && c.studentId ? `confirmed-${c.studentId}` : c.id
-      if (!seen.has(key)) {
-        seen.add(key)
-        dedup.push(c)
-      }
-    }
-    return dedup
-  }, [activeCalls, confirmedStudentIds])
-
-  const waiting = useMemo(() => 
-    activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && !isSaiuSozinhoCall(c) && c.studentId != null && !confirmedStudentIds.has(String(c.studentId))),
-    [activeCalls, confirmedStudentIds]
-  )
-  const saiuSozinho = useMemo(() => {
-    const list = activeCalls.filter(c => isSaiuSozinhoCall(c) && c.status !== 'cancelled' && c.status !== 'special_auth')
-    const seen = new Set<string>()
-    const dedup: PickupCall[] = []
-    for (const c of list) {
-      const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
-      if (!seen.has(key)) {
-        seen.add(key)
-        dedup.push(c)
-      }
-    }
-    return dedup
-  }, [activeCalls])
-
-  const cancelled = useMemo(() => 
-    activeCalls.filter(c => c.status === 'cancelled'),
-    [activeCalls]
-  )
+  const waiting = callsSummary.waitingCalls
 
   const filtered = useMemo(() => {
-    // PRECALCULATE TIMESTAMPS AND SEARCH STRINGS FOR FAST SORTING/FILTERING
-    let list = activeCalls.map(c => ({
-      ...c,
-      _parsedTime: new Date(c.calledAt).getTime(),
-      _searchStr: (c.studentName + ' ' + c.studentClass + ' ' + (c.guardianName||'')).toLowerCase()
-    }))
+    let sourceList = callsSummary.allCalls
+    if (filter === 'waiting') sourceList = callsSummary.waiting
+    else if (filter === 'confirmed') sourceList = callsSummary.confirmed
+    else if (filter === 'saiu_sozinho') sourceList = callsSummary.saiuSozinho
+    else if (filter === 'cancelled') sourceList = callsSummary.cancelled
 
-    list.sort((a, b) => b._parsedTime - a._parsedTime)
+    const q = callSearch.trim().toLowerCase()
+    if (!q) return sourceList.map(item => item.call)
+    return sourceList.filter(item => item._searchStr.includes(q)).map(item => item.call)
+  }, [callsSummary, filter, callSearch])
 
-    if (filter === 'all') {
-      list = list.filter(c => {
-        if (c.status === 'special_auth') return false
-        if ((c.status === 'waiting' || c.status === 'called') && c.studentId != null && confirmedStudentIds.has(String(c.studentId))) return false
-        return true
-      })
-      const seen = new Set<string>()
-      list = list.filter(c => {
-        if (c.status === 'confirmed') {
-          const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
-          if (seen.has(key)) return false
-          seen.add(key)
+  const [visibleLimit, setVisibleLimit] = useState(CALLS_BATCH_SIZE)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setVisibleLimit(CALLS_BATCH_SIZE)
+  }, [filter, callSearch])
+
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el || visibleLimit >= filtered.length) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleLimit(prev => Math.min(filtered.length, prev + CALLS_BATCH_SIZE))
         }
-        return true
-      })
-    }
-    else if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && !isSaiuSozinhoCall(c) && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
-    else if (filter === 'confirmed') {
-      list = list.filter(c => c.status === 'confirmed')
-      const seen = new Set<string>()
-      list = list.filter(c => {
-        const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-    }
-    else if (filter === 'saiu_sozinho') {
-      list = list.filter(c => isSaiuSozinhoCall(c) && c.status !== 'cancelled' && c.status !== 'special_auth')
-      const seen = new Set<string>()
-      list = list.filter(c => {
-        const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-    }
-    else if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
-    
-    if (callSearch.trim()) {
-      const q = callSearch.toLowerCase()
-      list = list.filter(c => c._searchStr.includes(q))
-    }
-    return list
-  }, [activeCalls, filter, callSearch, confirmedStudentIds])
+      },
+      { rootMargin: '320px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [visibleLimit, filtered.length])
+
+  const visibleCalls = useMemo(() => filtered.slice(0, visibleLimit), [filtered, visibleLimit])
+  const remainingCallsCount = Math.max(0, filtered.length - visibleCalls.length)
 
   const FILTERS = [
-    { key: 'all'          as FilterType, label: 'Todos',        color: '#6366f1', gradient: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', glow: '0 4px 14px rgba(79, 70, 229, 0.35)', count: mounted ? allCalls.length    : 0 },
-    { key: 'waiting'      as FilterType, label: 'Aguardando',   color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: '0 4px 14px rgba(245, 158, 11, 0.35)', count: mounted ? waiting.length     : 0 },
-    { key: 'confirmed'    as FilterType, label: 'Confirmados',  color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', glow: '0 4px 14px rgba(16, 185, 129, 0.35)', count: mounted ? confirmed.length   : 0 },
-    { key: 'saiu_sozinho' as FilterType, label: 'Saiu Sozinho', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', glow: '0 4px 14px rgba(6, 182, 212, 0.35)', count: mounted ? saiuSozinho.length : 0 },
-    { key: 'cancelled'    as FilterType, label: 'Cancelados',   color: '#64748b', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)', glow: '0 4px 14px rgba(100, 116, 139, 0.35)', count: mounted ? cancelled.length   : 0 },
+    { key: 'all'          as FilterType, label: 'Todos',        color: '#6366f1', gradient: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', glow: '0 4px 14px rgba(79, 70, 229, 0.35)', count: mounted ? callsSummary.allCalls.length    : 0 },
+    { key: 'waiting'      as FilterType, label: 'Aguardando',   color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: '0 4px 14px rgba(245, 158, 11, 0.35)', count: mounted ? callsSummary.waiting.length     : 0 },
+    { key: 'confirmed'    as FilterType, label: 'Confirmados',  color: '#10b981', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', glow: '0 4px 14px rgba(16, 185, 129, 0.35)', count: mounted ? callsSummary.confirmed.length   : 0 },
+    { key: 'saiu_sozinho' as FilterType, label: 'Saiu Sozinho', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', glow: '0 4px 14px rgba(6, 182, 212, 0.35)', count: mounted ? callsSummary.saiuSozinho.length : 0 },
+    { key: 'cancelled'    as FilterType, label: 'Cancelados',   color: '#64748b', gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)', glow: '0 4px 14px rgba(100, 116, 139, 0.35)', count: mounted ? callsSummary.cancelled.length   : 0 },
   ]
 
   if (isLoadingCalls) {
@@ -3661,10 +3654,9 @@ function ChamadasContent() {
 
   return (
     <div>
-      <AnimatePresence>
-{/* Toast */}
+      {/* Toast */}
       {toast && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
+        <div className="chamada-toast" style={{
           position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
           padding: '10px 22px', borderRadius: 12, fontSize: 13, fontWeight: 700, zIndex: 9999,
           background: toast.ok ? 'rgba(16,185,129,0.95)' : 'rgba(239,68,68,0.95)',
@@ -3672,9 +3664,8 @@ function ChamadasContent() {
           animation: 'slideDown 0.3s ease',
         }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
-        
-</motion.div>
-)}</AnimatePresence>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -4184,71 +4175,113 @@ function ChamadasContent() {
           <div>Nenhuma chamada {filter !== 'all' ? 'com este filtro' : 'registrada'}</div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(195px, 1fr))', gap: isMobile ? 10 : 14 }}>
-          {filtered.map(rawCall => {
-            const turmaNome = turmaNameMap.get(String(rawCall.studentClass)) || rawCall.studentClass
-            const mappedCall = rawCall.studentClass === turmaNome ? rawCall : { ...rawCall, studentClass: turmaNome }
-            return (
-              <CallCard
-                key={mappedCall.id}
-                call={mappedCall}
-                nowTime={sharedNowTime}
-                onConfirm={confirmPickup}
-                onCancel={cancelCall}
-                onRecall={handleRecall}
-                onRevert={revertCall}
-                onOpenIrmaos={setSelectedCallForIrmaos}
-              />
-            )
-          })}
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(195px, 1fr))', gap: isMobile ? 10 : 14 }}>
+            {visibleCalls.map(rawCall => {
+              const turmaNome = turmaNameMap.get(String(rawCall.studentClass)) || rawCall.studentClass
+              return (
+                <CallCard
+                  key={rawCall.id}
+                  call={rawCall}
+                  displayClass={turmaNome}
+                  urgentLimit={urgentLimit}
+                  onConfirm={confirmPickup}
+                  onCancel={cancelCall}
+                  onRecall={handleRecall}
+                  onRevert={revertCall}
+                  onOpenIrmaos={setSelectedCallForIrmaos}
+                />
+              )
+            })}
+          </div>
+
+          {remainingCallsCount > 0 && (
+            <div
+              ref={loadMoreRef}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                padding: '20px 0 8px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setVisibleLimit(prev => Math.min(filtered.length, prev + CALLS_BATCH_SIZE))}
+                style={{
+                  height: 36,
+                  padding: '0 16px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  background: 'hsl(var(--bg-surface))',
+                  color: 'hsl(var(--text-primary))',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Carregar mais ({Math.min(CALLS_BATCH_SIZE, remainingCallsCount)} de {remainingCallsCount} restantes)
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibleLimit(filtered.length)}
+                style={{
+                  height: 36,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid hsl(var(--border-subtle))',
+                  background: 'transparent',
+                  color: 'hsl(var(--text-muted))',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Mostrar todas ({filtered.length})
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── MODAL ULTRA MODERNO DE CHAMAR IRMÃOS ────────────────────────── */}
-      <AnimatePresence>
-        {selectedCallForIrmaos && (
-          <ModalChamarIrmaos
-            call={selectedCallForIrmaos}
-            onClose={() => setSelectedCallForIrmaos(null)}
-            activeCalls={activeCalls}
-            onCallStudent={(sId, sName, sClass, gId, gName, sFoto) => {
-              handleCall(sId, sName, sClass, gId, gName, sFoto)
-            }}
-            onRecallStudent={handleRecall}
-            showToast={showToast}
-          />
-        )}
-      </AnimatePresence>
+      {selectedCallForIrmaos && (
+        <ModalChamarIrmaos
+          call={selectedCallForIrmaos}
+          onClose={() => setSelectedCallForIrmaos(null)}
+          activeCalls={activeCalls}
+          onCallStudent={handleCall}
+          onRecallStudent={handleRecall}
+          showToast={showToast}
+        />
+      )}
 
       {/* ── MODAL DE CONFIRMAÇÃO (CONFIRMAR TODOS OS AGUARDANDO) ───────── */}
-      <AnimatePresence>
-        {confirmModalAllWaiting && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {confirmModalAllWaiting && (
+        <div
+          className="chamada-modal-backdrop"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(15, 23, 42, 0.74)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => {
+            if (!isConfirmingAll) setConfirmModalAllWaiting(false)
+          }}
+        >
+          <div
+            className="chamada-modal-panel"
+            onClick={e => e.stopPropagation()}
             style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
-              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 16,
-            }}
-            onClick={() => {
-              if (!isConfirmingAll) setConfirmModalAllWaiting(false)
+              background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 24, padding: 24, width: '100%', maxWidth: 440,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex', flexDirection: 'column', gap: 18,
             }}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 24, padding: 24, width: '100%', maxWidth: 440,
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                display: 'flex', flexDirection: 'column', gap: 18,
-              }}
-            >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 16,
@@ -4401,35 +4434,29 @@ function ChamadasContent() {
                   )}
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL DE CONFIRMAÇÃO (ZERAR CHAMADAS) ───────────────────────── */}
-      <AnimatePresence>
-        {confirmClearAll && isAdmin && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+      {confirmClearAll && isAdmin && (
+        <div
+          className="chamada-modal-backdrop"
+          style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+            background: 'rgba(15, 23, 42, 0.74)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            className="chamada-modal-panel"
             style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
-              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex', flexDirection: 'column', gap: 20,
             }}
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              style={{
-                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                display: 'flex', flexDirection: 'column', gap: 20,
-              }}
-            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 16,
@@ -4485,14 +4512,30 @@ function ChamadasContent() {
                   Sim, zerar tudo
                 </button>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
         @keyframes slideDown { from{opacity:0;transform:translate(-50%,-12px)} to{opacity:1;transform:translate(-50%,0)} }
+        @keyframes chamadaModalFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes chamadaModalScale { from { opacity: 0; transform: translateY(10px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        .chamada-modal-backdrop {
+          animation: chamadaModalFade 0.16s ease-out;
+        }
+        .chamada-modal-panel {
+          animation: chamadaModalScale 0.18s cubic-bezier(0.2, 1, 0.2, 1);
+        }
+        .chamada-card-perf {
+          content-visibility: auto;
+          contain-intrinsic-size: 210px 277px;
+          contain: layout style paint;
+        }
+        .chamada-mini-card {
+          contain: layout style;
+        }
         
         .skeleton-shimmer {
           position: relative;

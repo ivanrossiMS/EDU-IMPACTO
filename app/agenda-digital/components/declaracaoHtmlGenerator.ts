@@ -457,8 +457,6 @@ export function generateDeclaracaoHtml(data: DeclaracaoIrpfData): string {
       <div class="student-card">
         <div><strong style="color: #4f46e5;">ALUNO(A):</strong> <span style="font-weight: 800; color: #0f172a;">${aluno.nome}</span></div>
         <div><strong style="color: #475569;">MATRÍCULA:</strong> <span style="font-family: monospace; font-weight: 700;">${aluno.matricula}</span></div>
-        <div><strong style="color: #475569;">TURMA / SÉRIE:</strong> <span style="font-weight: 800; color: #0f172a;">${aluno.turma}</span></div>
-        <div><strong style="color: #475569;">SEGMENTO:</strong> <span style="font-weight: 700;">${escola.segmento}</span></div>
       </div>
 
       <!-- 4. TEXTO DECLARATÓRIO -->
@@ -551,7 +549,7 @@ export function generateDeclaracaoHtml(data: DeclaracaoIrpfData): string {
 
     <!-- 9. RODAPÉ -->
     <div class="footer-bar">
-      <div style="font-weight: 700; color: #334155;">${escola.nomeFantasia} — ${escola.segmento}</div>
+      <div style="font-weight: 700; color: #334155;">${escola.nomeFantasia}</div>
       <div>Rua Alagoas, 1081 - Jardim dos Estados, Campo Grande/MS • Tel: (67) 3025-5585 • impacto@colegioimpacto.net • www.colegioimpacto.net</div>
     </div>
   </div>

@@ -1,6 +1,5 @@
 'use client'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2, GraduationCap, Info, LogOut, Lock, X } from 'lucide-react'
@@ -8,27 +7,41 @@ import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, parseISO, isFuture } from 'date-fns'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isFuture } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 import { useParams, useSearchParams } from 'next/navigation'
 
+const SAIDA_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Campo_Grande',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+})
+
+const SAIDA_TIME_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Campo_Grande',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const WEEK_DAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+function parseCallDateSafe(rawDate: string): Date | null {
+  if (!rawDate) return null
+  const normalized =
+    rawDate.includes('T') && !rawDate.endsWith('Z') && !rawDate.includes('-') && !rawDate.includes('+')
+      ? `${rawDate}-04:00`
+      : rawDate
+  const d = new Date(normalized)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 export default function ADFrequenciaPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
-  
-  if (adConfig?.permissoes?.visualizarFrequencia === false) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <EmptyStateCard 
-          title="Acesso Restrito"
-          description="A visualização de histórico de frequência está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
-          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
-        />
-      </div>
-    )
-  }
+  const isRestricted = adConfig?.permissoes?.visualizarFrequencia === false
 
   const { aluno } = useSelectedStudent()
   const { currentUser } = useApp()
@@ -36,10 +49,10 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   const queryClient = useQueryClient()
 
   const invalidateAllFrequenciaQueries = React.useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
-    queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno'] })
-    queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
-  }, [queryClient])
+    queryClient.invalidateQueries({ queryKey: ['frequencias-aluno', resolvedParams.slug] })
+    queryClient.invalidateQueries({ queryKey: ['portaria-eventos-aluno', resolvedParams.slug] })
+    queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno', resolvedParams.slug] })
+  }, [queryClient, resolvedParams.slug])
 
   useAgendaRealtime({
     table: 'frequencias',
@@ -63,7 +76,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   })
 
   // State for interactive calendar
-  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [currentMonth, setCurrentMonth] = useState(() => new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -89,12 +102,29 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     setSelectedDate(null)
   }, [resolvedParams.slug])
 
+  const { monthStart, calendarDays, calendarRange, currentMonthLabel, currentYearLabel } = useMemo(() => {
+    const mStart = startOfMonth(currentMonth)
+    const mEnd = endOfMonth(mStart)
+    const gridStart = startOfWeek(mStart, { weekStartsOn: 0 })
+    const gridEnd = endOfWeek(mEnd, { weekStartsOn: 0 })
+    return {
+      monthStart: mStart,
+      calendarDays: eachDayOfInterval({ start: gridStart, end: gridEnd }),
+      calendarRange: {
+        from: format(gridStart, 'yyyy-MM-dd'),
+        to: format(gridEnd, 'yyyy-MM-dd')
+      },
+      currentMonthLabel: format(mStart, 'MMMM', { locale: ptBR }),
+      currentYearLabel: format(mStart, 'yyyy')
+    }
+  }, [currentMonth])
+
   // Fetch real student attendance logs from database based on turma and alunoId
   const { data: frequenciasDb = [], isLoading: isLoadingFrequencias } = useApiQuery<any[]>(
     ['frequencias-aluno', resolvedParams.slug, aluno?.turma || ''],
     '/api/academico/frequencias',
     { aluno_id: resolvedParams.slug, turma_id: aluno?.turma || '' },
-    { enabled: !!resolvedParams.slug }
+    { enabled: !!resolvedParams.slug && !isRestricted }
   )
 
   // Fallback para eventos de portaria
@@ -102,7 +132,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     ['portaria-eventos-aluno', resolvedParams.slug, aluno?.id, aluno?.matricula],
     '/api/portaria/eventos',
     { aluno_id: aluno?.id || resolvedParams.slug, matricula: aluno?.matricula || resolvedParams.slug },
-    { enabled: !!resolvedParams.slug }
+    { enabled: !!resolvedParams.slug && !isRestricted }
   )
 
   const eventosPortaria = useMemo(() => {
@@ -112,12 +142,12 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     return []
   }, [eventosPortariaRaw])
 
-  // Histórico de saídas confirmadas (painel chamadas)
+  // Histórico de saídas confirmadas (escopado à janela do calendário visível)
   const { data: saidaCalls = [] } = useApiQuery<any[]>(
-    ['saida-calls-aluno', resolvedParams.slug],
+    ['saida-calls-aluno', resolvedParams.slug, calendarRange.from, calendarRange.to],
     '/api/saida/calls',
-    { studentId: resolvedParams.slug, from: '2020-01-01', to: '2030-12-31' },
-    { enabled: !!resolvedParams.slug }
+    { studentId: resolvedParams.slug, from: calendarRange.from, to: calendarRange.to },
+    { enabled: !!resolvedParams.slug && !isRestricted }
   )
 
   // Find unread items and mark as read
@@ -263,67 +293,108 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     return list.sort((a, b) => b.data.localeCompare(a.data))
   }, [frequenciasDb, entradaCatracaMap])
 
-  // Aggregate stats
-  const totalAulas = historicoReal.length
-  const totalPresencas = historicoReal.filter(h => h.status === 'P').length
-  const totalFaltasInjustificadas = historicoReal.filter(h => h.status === 'F' || h.status === 'A').length
-  const totalAusenciasJustificadas = historicoReal.filter(h => h.status === 'J').length
-  
-  const presencaPorcentagem = totalAulas > 0 
-    ? Math.round((totalPresencas / totalAulas) * 100) 
+  // Indexa registros e saídas confirmadas por YYYY-MM-DD para lookup O(1) nas células do calendário
+  const historicoByDate = useMemo(() => {
+    const map = new Map<string, typeof historicoReal>()
+    for (const h of historicoReal) {
+      const arr = map.get(h.data)
+      if (arr) arr.push(h)
+      else map.set(h.data, [h])
+    }
+    return map
+  }, [historicoReal])
+
+  const saidaCallsByDate = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const c of saidaCalls) {
+      if (c?.status?.toLowerCase() !== 'confirmed') continue
+      const rawDate = c.confirmedAt || c.calledAt
+      if (!rawDate) continue
+      const parsed = parseCallDateSafe(rawDate)
+      if (!parsed) continue
+      const dayKey = SAIDA_DAY_FORMATTER.format(parsed)
+      const confirmedParsed = c.confirmedAt ? parseCallDateSafe(c.confirmedAt) : null
+      const formattedTime = confirmedParsed ? SAIDA_TIME_FORMATTER.format(confirmedParsed) : ''
+      const enriched = { ...c, _confirmedTimeFormatted: formattedTime }
+      const arr = map.get(dayKey)
+      if (arr) arr.push(enriched)
+      else map.set(dayKey, [enriched])
+    }
+    map.forEach((list) => {
+      list.sort((a, b) => (a.confirmedAt || a.calledAt || '').localeCompare(b.confirmedAt || b.calledAt || ''))
+    })
+    return map
+  }, [saidaCalls])
+
+  // Aggregate stats em passagem única O(N)
+  const { totalAulas, totalPresencas, totalFaltasInjustificadas, totalAusenciasJustificadas } = useMemo(() => {
+    let presencas = 0
+    let faltas = 0
+    let justificadas = 0
+    for (const h of historicoReal) {
+      if (h.status === 'P') presencas++
+      else if (h.status === 'J') justificadas++
+      else if (h.status === 'F' || h.status === 'A') faltas++
+    }
+    return {
+      totalAulas: historicoReal.length,
+      totalPresencas: presencas,
+      totalFaltasInjustificadas: faltas,
+      totalAusenciasJustificadas: justificadas
+    }
+  }, [historicoReal])
+
+  const presencaPorcentagem = totalAulas > 0
+    ? Math.round((totalPresencas / totalAulas) * 100)
     : (aluno?.frequencia || 100)
 
   // Date handlers
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
-  const onDateClick = (day: Date) => setSelectedDate(day)
+  const prevMonth = React.useCallback(() => setCurrentMonth(m => subMonths(m, 1)), [])
+  const nextMonth = React.useCallback(() => setCurrentMonth(m => addMonths(m, 1)), [])
+  const onDateClick = React.useCallback((day: Date) => setSelectedDate(day), [])
 
-  // Generate calendar grid
-  const monthStart = startOfMonth(currentMonth)
-  const monthEnd = endOfMonth(monthStart)
-  const startDate = startOfWeek(monthStart, { weekStartsOn: 0 })
-  const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 })
-  const dateFormat = "d"
-  const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
-  
-  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
-  }
-
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
-  }
-
-  // Find records for selected date
-  const selectedRecords = useMemo(() => {
-    if (!selectedDate) return []
-    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
-    return historicoReal.filter(h => h.data === selectedDateStr)
-  }, [selectedDate, historicoReal])
-
-  const selectedSaidaCalls = useMemo(() => {
-    if (!selectedDate) return []
-    const calls = saidaCalls.filter(c => {
-      if (c.status?.toLowerCase() !== 'confirmed') return false
-      // Usa confirmedAt se existir, se não usa calledAt
-      const dateStr = c.confirmedAt || c.calledAt
-      if (!dateStr) return false
-      try {
-        return isSameDay(new Date(dateStr), selectedDate)
-      } catch (e) {
-        return false
+  // Pre-build grid metadata once per calendarDays/data change
+  const calendarCells = useMemo(() => {
+    return calendarDays.map((day) => {
+      const dateStr = format(day, 'yyyy-MM-dd')
+      return {
+        day,
+        dateStr,
+        dayNumber: format(day, 'd'),
+        isCurrMonth: isSameMonth(day, monthStart),
+        dayRecords: historicoByDate.get(dateStr) || [],
+        daySaidas: saidaCallsByDate.get(dateStr) || []
       }
     })
-    return calls.sort((a, b) => {
-      const ta = a.confirmedAt || a.calledAt || ''
-      const tb = b.confirmedAt || b.calledAt || ''
-      return ta.localeCompare(tb)
-    })
-  }, [selectedDate, saidaCalls])
+  }, [calendarDays, monthStart, historicoByDate, saidaCallsByDate])
+
+  // Find records for selected date in O(1)
+  const selectedDateStr = useMemo(
+    () => (selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''),
+    [selectedDate]
+  )
+
+  const selectedRecords = useMemo(() => {
+    if (!selectedDateStr) return []
+    return historicoByDate.get(selectedDateStr) || []
+  }, [selectedDateStr, historicoByDate])
+
+  const selectedSaidaCalls = useMemo(() => {
+    if (!selectedDateStr) return []
+    return saidaCallsByDate.get(selectedDateStr) || []
+  }, [selectedDateStr, saidaCallsByDate])
+
+  if (isRestricted) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+        <EmptyStateCard
+          title="Acesso Restrito"
+          description="A visualização de histórico de frequência está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
+          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
+        />
+      </div>
+    )
+  }
 
   if (isLoadingFrequencias) {
     return (
@@ -399,10 +470,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
       `}} />
 
       {/* ─── CARD AVISO ULTRA MODERNO ANTES DO CALENDÁRIO ─── */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      <div
         className="ad-freq-info-card"
         style={{
           position: 'relative',
@@ -411,13 +479,14 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           padding: '22px 26px',
           marginBottom: 24,
           background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 45%, #312e81 80%, #1d4ed8 100%)',
-          boxShadow: '0 18px 40px -10px rgba(30, 27, 75, 0.32), 0 4px 14px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
+          boxShadow: '0 14px 28px -10px rgba(30, 27, 75, 0.28), 0 4px 12px rgba(15, 23, 42, 0.12)',
           border: '1px solid rgba(99, 102, 241, 0.35)',
           display: 'flex',
           alignItems: 'center',
           gap: 20,
           boxSizing: 'border-box',
-          width: '100%'
+          width: '100%',
+          animation: 'adFadeIn 0.25s ease'
         }}
       >
         {/* Barra superior luminosa neon */}
@@ -543,24 +612,20 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             A frequência exibida neste aplicativo <strong style={{ color: '#fde68a', fontWeight: 800 }}>é informativa e pode apresentar divergências</strong>, pois, eventualmente, os equipamentos podem não identificar a entrada do aluno. A chamada é realizada <strong style={{ color: '#ffffff', fontWeight: 800 }}>manualmente em sala de aula</strong> e registrada diretamente em nosso <strong style={{ color: '#7dd3fc', fontWeight: 800 }}>sistema pedagógico</strong>, onde é feito o controle oficial de frequência.
           </p>
         </div>
-      </motion.div>
+      </div>
 
       {/* Calendário Dinâmico Interativo */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        transition={{ delay: 0.2 }} 
+      <div
         className="ad-freq-calendar-card"
-        style={{ 
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%)', 
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderRadius: 22, 
+        style={{
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%)',
+          borderRadius: 22,
           border: '1.5px solid rgba(226, 232, 240, 0.85)',
-          boxShadow: '0 10px 30px -6px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 1px #ffffff', 
-          overflow: 'hidden', 
+          boxShadow: '0 10px 24px -6px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(0, 0, 0, 0.02)',
+          overflow: 'hidden',
           marginBottom: 24,
-          position: 'relative'
+          position: 'relative',
+          animation: 'adFadeIn 0.25s ease'
         }}
       >
         
@@ -582,7 +647,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                 textOverflow: 'ellipsis'
               }}
             >
-              {format(currentMonth, 'MMMM', { locale: ptBR })} <span style={{ color: '#4f46e5', fontWeight: 800 }}>{format(currentMonth, 'yyyy')}</span>
+              {currentMonthLabel} <span style={{ color: '#4f46e5', fontWeight: 800 }}>{currentYearLabel}</span>
             </h3>
           </div>
 
@@ -661,7 +726,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
         {/* Calendar Header (Days of week) */}
         <div className="ad-freq-cal-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 16 }}>
-          {weekDays.map(day => (
+          {WEEK_DAYS_SHORT.map(day => (
             <div key={day} style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
               {day}
             </div>
@@ -670,22 +735,12 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
         {/* Calendar Grid */}
         <div className="ad-freq-cal-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12 }}>
-          {calendarDays.map((day, idx) => {
-            const isCurrMonth = isSameMonth(day, monthStart)
-            const dateStr = format(day, 'yyyy-MM-dd')
-            const dayRecords = historicoReal.filter(h => h.data === dateStr)
-            const daySaidas = saidaCalls.filter(c => {
-              if (c.status?.toLowerCase() !== 'confirmed') return false
-              const d = c.confirmedAt || c.calledAt
-              if (!d) return false
-              try { return isSameDay(new Date(d), day) } catch (e) { return false }
-            })
-
+          {calendarCells.map(({ day, dateStr, dayNumber, isCurrMonth, dayRecords, daySaidas }) => {
             const hasPresenca = dayRecords.some(r => r.status === 'P')
             const hasJustificada = dayRecords.some(r => r.status === 'J')
             const hasFalta = dayRecords.some(r => r.status === 'F' || r.status === 'A')
             const hasSaida = daySaidas.length > 0
-            
+
             let bgLight = '#fff'
             let bgDot = 'transparent'
             let textColor = isCurrMonth ? '#0f172a' : '#cbd5e1'
@@ -693,25 +748,21 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
             if (isCurrMonth && (dayRecords.length > 0 || hasSaida)) {
               if (hasFalta && !hasPresenca) {
-                // Vermelho para Faltas
                 bgLight = '#fef2f2'
                 bgDot = '#ef4444'
                 textColor = '#991b1b'
                 border = '1px solid #fecaca'
               } else if (hasJustificada && !hasPresenca) {
-                // Amarelo/Laranja para Justificadas
                 bgLight = '#fef3c7'
                 bgDot = '#f59e0b'
                 textColor = '#b45309'
                 border = '1px solid #fde68a'
               } else if (hasPresenca) {
-                // Verde para Presenças
                 bgLight = '#f0fdf4'
                 bgDot = '#16a34a'
                 textColor = '#166534'
                 border = '1px solid #dcfce7'
               } else if (hasSaida) {
-                // Roxo para Saídas
                 bgLight = '#fdf4ff'
                 bgDot = '#c026d3'
                 textColor = '#86198f'
@@ -719,7 +770,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
               }
             }
 
-            const isSelected = selectedDate && isSameDay(day, selectedDate)
+            const isSelected = selectedDateStr === dateStr
 
             if (isSelected) {
               bgLight = '#4f46e5'
@@ -729,27 +780,26 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             }
 
             return (
-              <motion.div 
-                key={day.toString()}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+              <div
+                key={dateStr}
                 onClick={() => onDateClick(day)}
                 className="ad-freq-cal-cell"
                 style={{
                   height: 70, borderRadius: 20, border, background: bgLight, cursor: 'pointer',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  opacity: 1, position: 'relative', transition: 'all 0.2s',
-                  boxShadow: isSelected ? '0 12px 24px -6px rgba(79,70,229,0.4)' : 'none'
+                  opacity: 1, position: 'relative',
+                  transition: 'transform 0.15s ease, background-color 0.15s ease',
+                  boxShadow: isSelected ? '0 8px 18px -6px rgba(79,70,229,0.35)' : 'none'
                 }}
               >
                 <span style={{ fontSize: 18, fontWeight: 800, color: textColor }}>
-                  {format(day, dateFormat)}
+                  {dayNumber}
                 </span>
-                
+
                 {bgDot !== 'transparent' && (
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: bgDot, marginTop: 6 }} />
                 )}
-              </motion.div>
+              </div>
             )
           })}
         </div>
@@ -772,46 +822,37 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Dia selecionado</span>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* ── MODAL ULTRA MODERNO CENTRALIZADO VIA PORTAL NO DOCUMENT.BODY ───────────────────────── */}
       {mounted && selectedDate && createPortal(
-        <AnimatePresence>
-          {selectedDate && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedDate(null)}
-              style={{ 
-                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                width: '100vw', height: '100vh',
-                background: 'rgba(15, 23, 42, 0.65)', 
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-                zIndex: 999999, 
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: 20,
-                boxSizing: 'border-box'
-              }}
-            >
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                onClick={e => e.stopPropagation()}
-                style={{ 
-                  background: '#fff', 
-                  borderRadius: 28, 
-                  boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 30px rgba(79, 70, 229, 0.1)', 
-                  width: '100%', maxWidth: 520,
-                  maxHeight: '85vh',
-                  display: 'flex', flexDirection: 'column',
-                  overflow: 'hidden',
-                  border: '1px solid rgba(226, 232, 240, 0.8)'
-                }}
-              >
+        <div
+          onClick={() => setSelectedDate(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            width: '100vw', height: '100vh',
+            background: 'rgba(15, 23, 42, 0.78)',
+            zIndex: 999999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+            boxSizing: 'border-box',
+            animation: 'adFadeIn 0.15s ease'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff',
+              borderRadius: 28,
+              boxShadow: '0 20px 44px -15px rgba(0, 0, 0, 0.3)',
+              width: '100%', maxWidth: 520,
+              maxHeight: '85vh',
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+              border: '1px solid rgba(226, 232, 240, 0.8)',
+              animation: 'adModalSlideUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)'
+            }}
+          >
                 {/* Header */}
                 <div style={{
                   padding: '24px 28px',
@@ -950,9 +991,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
                       {/* Saída Confirmada Cards */}
                       {selectedSaidaCalls.map((call, i) => {
-                        const confirmedTime = call.confirmedAt 
-                          ? new Date(call.confirmedAt.includes('T') && !call.confirmedAt.endsWith('Z') && !call.confirmedAt.includes('-') && !call.confirmedAt.includes('+') ? `${call.confirmedAt}-04:00` : call.confirmedAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }) 
-                          : ''
+                        const confirmedTime = call._confirmedTimeFormatted || ''
 
                         return (
                           <div 
@@ -1032,7 +1071,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                       padding: '10px 24px', borderRadius: 12,
                       background: '#0f172a', border: 'none',
                       color: '#fff', fontWeight: 800, fontSize: 13,
-                      cursor: 'pointer', transition: 'all 0.2s',
+                      cursor: 'pointer', transition: 'background-color 0.2s',
                       boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)'
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = '#1e293b' }}
@@ -1041,10 +1080,8 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                     Fechar
                   </button>
                 </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
+              </div>
+            </div>,
         document.body
       )}
 
