@@ -23,6 +23,7 @@ import {
   AutorizacaoFinanceiraModal,
   TargetResponsavel
 } from '@/app/agenda-digital/components/AutorizacaoFinanceiraModal'
+import { AutorizacaoSaidaSozinhoSection } from '@/app/agenda-digital/components/AutorizacaoSaidaSozinhoSection'
 
 export default function ADPerfilPage() {
   const queryClient = useQueryClient()
@@ -225,6 +226,13 @@ export default function ADPerfilPage() {
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
   const isMirroring = !!(espelharRespId || espelharAluno);
+  const isStudentViewer = Boolean(
+    espelharAluno ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.perfil === 'Aluno' ||
+    (currentUser as any)?.userType === 'aluno' ||
+    ((currentUser as any)?.aluno_id && currentUser?.cargo !== 'Responsável' && !(currentUser as any)?.responsavel_id)
+  );
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1118,6 +1126,17 @@ export default function ADPerfilPage() {
                 </div>
               </div>
 
+              {/* Autorização de Saída Sozinho + Comprovante com Data e Assinatura */}
+              <AutorizacaoSaidaSozinhoSection
+                aluno={aluno}
+                isStudentView={isStudentViewer}
+                isMirroring={isMirroring}
+                currentLoggedUserName={currentLoggedUserName}
+                onStatusUpdated={() => {
+                  refetch()
+                }}
+              />
+
             </motion.div>
           )}
 
@@ -1503,20 +1522,16 @@ export default function ADPerfilPage() {
                 </div>
               </div>
 
-              {/* Saída Info */}
-              <div style={{ padding: '18px 20px', borderRadius: 22, background: saude.autorizaSaida ? '#f0fdf4' : '#fef2f2', border: `1px solid ${saude.autorizaSaida ? '#bbf7d0' : '#fecaca'}`, display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 15, background: saude.autorizaSaida ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: saude.autorizaSaida ? '#166534' : '#991b1b', flexShrink: 0 }}>
-                  {saude.autorizaSaida ? <ShieldCheck size={23} /> : <AlertTriangle size={23} />}
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: saude.autorizaSaida ? '#166534' : '#991b1b', marginBottom: 3 }}>
-                    {saude.autorizaSaida ? 'Saída Independente Autorizada' : 'Saída Restrita'}
-                  </h4>
-                  <p style={{ margin: 0, fontSize: 13, color: saude.autorizaSaida ? '#15803d' : '#b91c1c', fontWeight: 500, lineHeight: 1.4 }}>
-                    {saude.autorizaSaida ? 'O aluno tem permissão para sair sozinho das dependências da escola.' : 'O aluno NÃO pode sair sozinho. Requer acompanhante autorizado para a retirada.'}
-                  </p>
-                </div>
-              </div>
+              {/* Saída Sozinho (Interativo com Comprovante de Data e Assinatura) */}
+              <AutorizacaoSaidaSozinhoSection
+                aluno={aluno}
+                isStudentView={isStudentViewer}
+                isMirroring={isMirroring}
+                currentLoggedUserName={currentLoggedUserName}
+                onStatusUpdated={() => {
+                  refetch()
+                }}
+              />
 
             </motion.div>
           )}

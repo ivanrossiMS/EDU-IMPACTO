@@ -5,6 +5,7 @@ import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { getCachedTurmasAndGrupos } from '@/lib/server/turmasGruposCache'
 import { getPerfilAcessoCache, setPerfilAcessoCache, CACHE_TTL } from '@/lib/server/perfilAcessoCache'
 import { isStudentAccessBlocked } from '@/lib/server/studentStatusHelper'
+import { resolveStudentAutorizadoSairSozinho } from '@/lib/portariaUtils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -240,7 +241,11 @@ export async function GET(request: Request) {
     }
 
     const result = {
-      aluno: { ...aluno, responsaveis: responsaveisDb },
+      aluno: {
+        ...aluno,
+        autorizadoSairSozinho: resolveStudentAutorizadoSairSozinho(aluno, aluno.dados),
+        responsaveis: responsaveisDb,
+      },
       vinculo: vinculo,
       meusAlunos: meusAlunos
     };

@@ -21,6 +21,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import { formatPhone, isValidStudentPhoto } from '@/lib/utils'
 import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { supabase } from '@/lib/supabase'
+import { AutorizacaoSaidaComprovante } from '@/lib/autorizacoes/saidaSozinhoUtils'
 
 function cleanName(str: any): string {
   if (!str) return ''
@@ -1046,6 +1048,65 @@ export default function AlunosPage() {
     integralAtivos: number
   }>(['alunos-stats'], '/api/alunos/stats', {}, { staleTime: 30000, enabled: !isResolvingPerms && !allAlunosKpisHidden })
 
+  const [editingSaidaComprovante, setEditingSaidaComprovante] = useState<AutorizacaoSaidaComprovante | null>(null)
+
+  // Sincronização em tempo real com alterações feitas pelos responsáveis na Agenda Digital
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let lastVisibilityRefresh = 0
+
+    const refreshAlunosLive = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['alunos'] })
+      }, 350)
+    }
+
+    const channel = supabase
+      .channel('gestao_alunos_realtime_sync')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'alunos' },
+        (payload: any) => {
+          refreshAlunosLive()
+          const updatedRow = payload?.new
+          if (updatedRow && editingAlunoId && String(updatedRow.id) === String(editingAlunoId)) {
+            const d = updatedRow.dados || {}
+            if (typeof d.autorizadoSairSozinho === 'boolean') {
+              setFormData(prev => ({
+                ...prev,
+                aluno: {
+                  ...prev.aluno,
+                  autorizadoSairSozinho: Boolean(d.autorizadoSairSozinho),
+                },
+              }))
+            }
+            if (d.autorizacaoSairSozinhoComprovante) {
+              setEditingSaidaComprovante(d.autorizacaoSairSozinhoComprovante)
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now()
+        if (now - lastVisibilityRefresh > 5000) {
+          lastVisibilityRefresh = now
+          queryClient.invalidateQueries({ queryKey: ['alunos'] })
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      supabase.removeChannel(channel)
+    }
+  }, [queryClient, editingAlunoId])
+
   useEffect(() => {
     const fetchTodasTurmas = async () => {
       try {
@@ -1648,6 +1709,7 @@ export default function AlunosPage() {
 
   const handleNovoAluno = () => {
     setRemoverFotoExplicit(false)
+    setEditingSaidaComprovante(null)
     const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
     const anoAtual = (() => {
       const calAtivo = cfgCalendarioLetivo?.find((c: any) => c.status === 'ativo' || c.ativo);
@@ -1895,6 +1957,7 @@ export default function AlunosPage() {
 
   const handleEdit = (aluno: any) => {
     setRemoverFotoExplicit(false)
+    setEditingSaidaComprovante(aluno.dados?.autorizacaoSairSozinhoComprovante || aluno.autorizacaoSairSozinhoComprovante || null)
     const turmaDoAluno = todasTurmas.find((t: any) => 
       String(t.id) === String(aluno.turma) || 
       t.nome === aluno.turma
@@ -2206,6 +2269,9 @@ export default function AlunosPage() {
 
               const fullD = full.dados || {};
               const fullResps = Array.isArray(full.responsaveis) && full.responsaveis.length > 0 ? full.responsaveis : prev.responsaveis;
+              if (fullD.autorizacaoSairSozinhoComprovante || full.autorizacaoSairSozinhoComprovante) {
+                setEditingSaidaComprovante(fullD.autorizacaoSairSozinhoComprovante || full.autorizacaoSairSozinhoComprovante);
+              }
 
               return {
                 ...prev,
@@ -3363,17 +3429,34 @@ export default function AlunosPage() {
                         })()}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <span style={{ 
-                          padding: '4px 10px', 
-                          borderRadius: '20px', 
-                          fontSize: 10, 
-                          fontWeight: 700, 
-                          textTransform: 'uppercase',
-                          background: aluno.autorizadoSairSozinho ? '#dcfce7' : '#fee2e2',
-                          color: aluno.autorizadoSairSozinho ? '#166534' : '#991b1b'
-                        }}>
-                          {aluno.autorizadoSairSozinho ? 'Sim' : 'Não'}
-                        </span>
+                        {(() => {
+                          const comp = aluno.dados?.autorizacaoSairSozinhoComprovante || aluno.autorizacaoSairSozinhoComprovante
+                          const compMatches = comp && Boolean(comp.autorizado) === Boolean(aluno.autorizadoSairSozinho)
+                          return (
+                            <span
+                              title={
+                                compMatches
+                                  ? `${aluno.autorizadoSairSozinho ? 'Autorizado' : 'Desautorizado'} por ${comp.assinanteNome} em ${comp.dataHoraFormatada} (${comp.protocolo})`
+                                  : undefined
+                              }
+                              style={{ 
+                                padding: '4px 10px', 
+                                borderRadius: '20px', 
+                                fontSize: 10, 
+                                fontWeight: 700, 
+                                textTransform: 'uppercase',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: aluno.autorizadoSairSozinho ? '#dcfce7' : '#fee2e2',
+                                color: aluno.autorizadoSairSozinho ? '#166534' : '#991b1b'
+                              }}
+                            >
+                              {compMatches && <ShieldCheck size={11} />}
+                              {aluno.autorizadoSairSozinho ? 'Sim' : 'Não'}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <span style={{ 
@@ -4045,27 +4128,50 @@ export default function AlunosPage() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <label className="switch" style={{ transform: 'scale(0.8)', transformOrigin: 'left center', flexShrink: 0 }}>
-                          <input type="checkbox" checked={formData.aluno.autorizadoSairSozinho} onChange={e => handleInputChange('aluno', 'autorizadoSairSozinho', e.target.checked)} />
-                          <span className="slider"></span>
-                        </label>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
-                            <span style={{ 
-                              fontSize: 9, 
-                              fontWeight: 800, 
-                              padding: '1px 5px', 
-                              borderRadius: 4, 
-                              background: formData.aluno.autorizadoSairSozinho ? '#dbeafe' : '#f1f5f9', 
-                              color: formData.aluno.autorizadoSairSozinho ? '#1e40af' : '#64748b' 
-                            }}>
-                              {formData.aluno.autorizadoSairSozinho ? 'AUTORIZADO' : 'NÃO'}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <label className="switch" style={{ transform: 'scale(0.8)', transformOrigin: 'left center', flexShrink: 0 }}>
+                            <input type="checkbox" checked={formData.aluno.autorizadoSairSozinho} onChange={e => handleInputChange('aluno', 'autorizadoSairSozinho', e.target.checked)} />
+                            <span className="slider"></span>
+                          </label>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <p style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', margin: 0 }}>Autorizado a Sair Sozinho</p>
+                              <span style={{ 
+                                fontSize: 9, 
+                                fontWeight: 800, 
+                                padding: '1px 5px', 
+                                borderRadius: 4, 
+                                background: formData.aluno.autorizadoSairSozinho ? '#dbeafe' : '#f1f5f9', 
+                                color: formData.aluno.autorizadoSairSozinho ? '#1e40af' : '#64748b' 
+                              }}>
+                                {formData.aluno.autorizadoSairSozinho ? 'AUTORIZADO' : 'NÃO'}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>Pode deixar a unidade desacompanhado de responsável</p>
+                          </div>
+                        </div>
+                        {editingSaidaComprovante && Boolean(editingSaidaComprovante.autorizado) === Boolean(formData.aluno.autorizadoSairSozinho) && (
+                          <div style={{
+                            marginLeft: 42,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: editingSaidaComprovante.autorizado ? '#047857' : '#9f1239',
+                            background: editingSaidaComprovante.autorizado ? '#ecfdf5' : '#fff1f2',
+                            border: `1px solid ${editingSaidaComprovante.autorizado ? '#a7f3d0' : '#fecdd3'}`,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            width: 'fit-content'
+                          }}>
+                            <ShieldCheck size={11} />
+                            <span>
+                              Assinado por <strong>{editingSaidaComprovante.assinanteNome}</strong> em {editingSaidaComprovante.dataHoraFormatada} • {editingSaidaComprovante.protocolo}
                             </span>
                           </div>
-                          <p style={{ fontSize: 10.5, color: '#64748b', margin: '1px 0 0 0' }}>Pode deixar a unidade desacompanhado de responsável</p>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -1,7 +1,10 @@
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 import { syncStudentToDevices } from '@/lib/portariaSync'
 import { parseBooleanSairSozinho, resolveStudentAutorizadoSairSozinho } from '@/lib/portariaUtils'
+import { clearPerfilAcessoCache } from '@/lib/server/perfilAcessoCache'
+import { AutorizacaoSaidaComprovante, SCHOOL_TIMEZONE, formatDateTimeSchoolBR } from '@/lib/autorizacoes/saidaSozinhoUtils'
 import {
   cleanupOneSignalForInactiveStudent,
   isStudentInactiveStatus,
@@ -1478,7 +1481,7 @@ export async function POST(request: Request) {
 
 // ─── PUT: Atualizar aluno ───────────────────────────────────────────────────
 export async function PUT(request: Request) {
-  const { user, isStaff, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
+  const { user, dbUser, isStaff, isFamilyOrStudent, errorResponse } = await resolveUserRole(request)
   if (errorResponse) return errorResponse
 
   try {
@@ -1560,6 +1563,7 @@ export async function PUT(request: Request) {
         delete row.dados.desconto
         delete row.dados.parcelas
         delete row.dados.autorizadoSairSozinho
+        delete row.dados.autorizacaoSairSozinhoComprovante
         delete row.dados.inadimplente
         delete row.dados.risco_evasao
         delete row.dados.media
@@ -1739,17 +1743,71 @@ export async function PUT(request: Request) {
     if (!row.dados) row.dados = {}
     row.dados.historicoTurmas = currentHist
 
+    let staffSaidaComprovante: AutorizacaoSaidaComprovante | null = null
+    if (isStaff && !isFamilyOrStudent && existingStudent) {
+      const prevSair = resolveStudentAutorizadoSairSozinho(existingStudent, existingStudent.dados)
+      const nextSair = resolveStudentAutorizadoSairSozinho(row.dados, row.dados)
+      if (prevSair !== nextSair) {
+        const staffNow = new Date()
+        const staffNowIso = staffNow.toISOString()
+        const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: SCHOOL_TIMEZONE })
+          .format(staffNow)
+          .replace(/-/g, '')
+        const acao: AutorizacaoSaidaComprovante['acao'] = nextSair
+          ? 'AUTORIZAR_SAIDA_SOZINHO'
+          : 'DESAUTORIZAR_SAIDA_SOZINHO'
+        const signerNome = String(dbUser?.nome || user?.user_metadata?.nome || user?.email || 'Administração Escolar').trim()
+        const signerCargo = String(dbUser?.cargo || dbUser?.perfil || 'Secretaria / Gestão').trim()
+        const hashInput = `${id}|${user?.id || 'staff'}|${acao}|${staffNowIso}|gestao_alunos`
+        const hashVerificacao = crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 16).toUpperCase()
+        staffSaidaComprovante = {
+          protocolo: `IMP-SAIDA-${ymd}-${hashVerificacao.slice(0, 6)}`,
+          hashVerificacao,
+          acao,
+          autorizado: nextSair,
+          dataHoraIso: staffNowIso,
+          dataHoraFormatada: formatDateTimeSchoolBR(staffNowIso),
+          alunoId: String(id),
+          alunoNome: String(row.nome || existingStudent.nome || ''),
+          alunoMatricula: String(row.matricula || existingStudent.matricula || existingStudent.dados?.codigo || ''),
+          assinanteId: String(dbUser?.id || user?.id || ''),
+          assinanteNome: signerNome,
+          assinanteParentesco: signerCargo,
+          assinanteEmail: String(dbUser?.email || user?.email || ''),
+          tipoAssinatura: 'institucional',
+          assinaturaTexto: signerNome,
+          observacoes: 'Alterado pela Secretaria / Gestão de Alunos',
+          origem: 'gestao_alunos',
+          previousAutorizado: prevSair,
+        }
+        row.dados.autorizacaoSairSozinhoComprovante = staffSaidaComprovante
+      }
+    }
+
     // 1. Atualizar o aluno
     const { data: studentData, error: studentError } = await supabase
       .from('alunos')
       .update(row)
       .eq('id', id)
       .select()
-
+      
     if (studentError) throw new Error(studentError.message)
     
     const savedStudent = studentData?.[0]
     if (!savedStudent) throw new Error('Aluno não encontrado ou não atualizado')
+
+    if (staffSaidaComprovante) {
+      clearPerfilAcessoCache(String(savedStudent.id))
+      if (savedStudent.matricula) clearPerfilAcessoCache(String(savedStudent.matricula))
+      await supabase.from('logs_auditoria').insert({
+        tabela_nome: 'autorizacao_sair_sozinho',
+        registro_id: String(savedStudent.id),
+        acao: staffSaidaComprovante.acao,
+        dados_novos: staffSaidaComprovante,
+        usuario_id: user?.id || null,
+        data_hora: staffSaidaComprovante.dataHoraIso,
+      })
+    }
 
     const oldStudentEmail =
       existingStudent?.email ||

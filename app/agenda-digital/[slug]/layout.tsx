@@ -266,9 +266,31 @@ export default function ADInnerLayout({
       clientProfileCache.delete(profileKey)
       loadProfile()
     }
+    const handleSaidaUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent)?.detail
+      if (!detail || String(detail.alunoId) !== String(resolvedParams?.slug)) return
+      clientProfileCache.delete(profileKey)
+      setProfileData((prev: any) => {
+        if (!prev?.aluno) return prev
+        return {
+          ...prev,
+          aluno: {
+            ...prev.aluno,
+            autorizadoSairSozinho: Boolean(detail.autorizado),
+            dados: {
+              ...(prev.aluno.dados || {}),
+              autorizadoSairSozinho: Boolean(detail.autorizado),
+              ...(detail.comprovante ? { autorizacaoSairSozinhoComprovante: detail.comprovante } : {}),
+            },
+          },
+        }
+      })
+    }
     window.addEventListener('ad:pull-to-refresh', handlePullRefresh)
+    window.addEventListener('ad:aluno-saida-updated', handleSaidaUpdated)
     return () => {
       window.removeEventListener('ad:pull-to-refresh', handlePullRefresh)
+      window.removeEventListener('ad:aluno-saida-updated', handleSaidaUpdated)
     }
   }, [hydrated, currentUser?.id, resolvedParams?.slug, respId, isAlunoLogado, isMirrorMode, isMirrorModeActive, router])
 

@@ -1,8 +1,9 @@
 'use client'
 
 import React from 'react'
-import { GraduationCap, Calendar, Users, DollarSign, BookOpen, LogOut } from 'lucide-react'
+import { GraduationCap, Calendar, Users, LogOut, ShieldCheck, Lock } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
+import { resolveStudentAutorizadoSairSozinho } from '@/lib/portariaUtils'
 
 export function abbreviateName(name: string): string {
   if (!name) return ''
@@ -56,57 +57,100 @@ export const StudentHeaderCard = React.memo(function StudentHeaderCard({
     : null
   const rawName = mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável'
   const respFullName = abbreviateName(rawName)
+  const podeSairSozinho = aluno ? resolveStudentAutorizadoSairSozinho(aluno, aluno?.dados) : null
 
   return (
     <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'stretch', gap: 14, width: '100%' }}>
-      {/* 1. Avatar do Aluno com Moldura Perfeita e Live Status */}
-      <div 
-        className="ad-premium-card-avatar" 
-        style={{ 
-          width: 106, 
-          height: 106, 
-          borderRadius: 22, 
-          background: 'linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%)', 
-          boxShadow: '0 8px 24px rgba(99,102,241,0.16)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          color: '#4f46e5', 
-          fontWeight: 900, 
-          fontSize: 30, 
-          fontFamily: 'Outfit, sans-serif',
-          flexShrink: 0,
-          position: 'relative',
-          overflow: 'hidden',
-          border: '1.5px solid rgba(199, 210, 254, 0.7)'
-        }}
-      >
-        {aluno?.foto ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img 
-            src={aluno.foto} 
-            alt={aluno?.nome || ''} 
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }} 
-          />
-        ) : (
-          getInitials(aluno?.nome || '')
-        )}
-        
-        {/* Anel de Status de Presença */}
-        <span 
-          style={{
-            position: 'absolute',
-            bottom: 4,
-            right: 4,
-            width: 13,
-            height: 13,
-            borderRadius: '50%',
-            backgroundColor: '#10b981',
-            border: '2px solid #ffffff',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+      {/* 1. Coluna da Foto + Selo Discreto de Saída */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+        {/* Avatar do Aluno com Moldura Perfeita e Live Status */}
+        <div 
+          className="ad-premium-card-avatar" 
+          style={{ 
+            width: 106, 
+            height: 106, 
+            borderRadius: 22, 
+            background: 'linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 100%)', 
+            boxShadow: '0 8px 24px rgba(99,102,241,0.16)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            color: '#4f46e5', 
+            fontWeight: 900, 
+            fontSize: 30, 
+            fontFamily: 'Outfit, sans-serif',
+            flexShrink: 0,
+            position: 'relative',
+            overflow: 'hidden',
+            border: '1.5px solid rgba(199, 210, 254, 0.7)'
           }}
-          title="Presente na Escola"
-        />
+        >
+          {aluno?.foto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img 
+              src={aluno.foto} 
+              alt={aluno?.nome || ''} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }} 
+            />
+          ) : (
+            getInitials(aluno?.nome || '')
+          )}
+          
+          {/* Anel de Status de Presença */}
+          <span 
+            style={{
+              position: 'absolute',
+              bottom: 4,
+              right: 4,
+              width: 13,
+              height: 13,
+              borderRadius: '50%',
+              backgroundColor: '#10b981',
+              border: '2px solid #ffffff',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+            }}
+            title="Presente na Escola"
+          />
+        </div>
+
+        {/* Selo discreto abaixo da foto */}
+        {podeSairSozinho !== null && (
+          <div
+            title={
+              podeSairSozinho
+                ? 'Autorizado(a) a sair sozinho(a) da escola'
+                : 'Não autorizado(a) a sair sozinho(a) — requer responsável'
+            }
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              padding: '3px 8px',
+              borderRadius: 999,
+              background: podeSairSozinho
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(244, 63, 94, 0.08)',
+              border: podeSairSozinho
+                ? '1px solid rgba(16, 185, 129, 0.28)'
+                : '1px solid rgba(244, 63, 94, 0.22)',
+              color: podeSairSozinho ? '#047857' : '#be123c',
+              fontSize: '9.5px',
+              fontWeight: 800,
+              letterSpacing: '0.01em',
+              lineHeight: 1.15,
+              whiteSpace: 'nowrap',
+              maxWidth: '100%',
+            }}
+          >
+            {podeSairSozinho ? (
+              <ShieldCheck size={10} strokeWidth={2.5} aria-hidden="true" style={{ flexShrink: 0 }} />
+            ) : (
+              <Lock size={9.5} strokeWidth={2.5} aria-hidden="true" style={{ flexShrink: 0 }} />
+            )}
+            <span>{podeSairSozinho ? 'Sai sozinho' : 'Não sai só'}</span>
+          </div>
+        )}
       </div>
       
       {/* 2. Coluna da Direita: Nome, Chips e Card do Responsável ao lado da foto */}
