@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
-import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
+import { resolveStudentAutorizadoSairSozinho, isExitBlockingDevice } from '@/lib/portariaUtils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   }
 
   async function getExitGroupIdForMaster(dev: any, client: ControliDClient): Promise<number | null> {
-    if (!isMaster150Device(dev)) return null
+    if (!isExitBlockingDevice(dev)) return null
     if (exitGroupCache.has(dev.ip)) return exitGroupCache.get(dev.ip) ?? null
     try {
       const res = await client.ensureExitBlockingRuleConfigured()

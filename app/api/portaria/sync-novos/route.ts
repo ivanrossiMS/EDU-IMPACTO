@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { resolveStudentAutorizadoSairSozinho, isBidirectional155Device } from '@/lib/portariaUtils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -311,6 +312,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Transmite em tempo real para os leitores que estiverem online
+    const { data: configRow } = await supabase
+      .from('configuracoes')
+      .select('valor')
+      .eq('chave', 'portaria_config')
+      .maybeSingle()
+    const bloquearSaidaAtivo = configRow?.valor?.bloquear_saida_nao_autorizados !== false
+    const exitGroup155Cache = new Map<string, number | null>()
+
     let transmittedDirectly = 0
     for (const op of directOperations) {
       if (op.client) {
@@ -321,6 +330,25 @@ export async function POST(req: NextRequest) {
             op.aluno.nome?.slice(0, 30) || `Aluno ${op.numericId}`,
             op.aluno.matricula || String(op.numericId)
           )
+
+          if (isBidirectional155Device(op.dev)) {
+            await op.client.ensureUserDefaultGroup(op.numericId, 1)
+            let exitGid = exitGroup155Cache.get(op.dev.id)
+            if (exitGid === undefined) {
+              try {
+                const exitCfg = await op.client.ensureExitBlockingRuleConfigured()
+                exitGid = exitCfg.configured && exitCfg.groupId ? exitCfg.groupId : null
+              } catch {
+                exitGid = null
+              }
+              exitGroup155Cache.set(op.dev.id, exitGid)
+            }
+            if (exitGid) {
+              const autorizado = resolveStudentAutorizadoSairSozinho(op.aluno, op.aluno.dados)
+              const deveBloquear = bloquearSaidaAtivo && !autorizado
+              await op.client.syncStudentExitBlockGroup(op.numericId, deveBloquear, exitGid).catch(() => {})
+            }
+          }
 
           // Transmite foto facial se disponível
           if (op.aluno.foto && typeof op.aluno.foto === 'string' && op.aluno.foto.length > 50) {

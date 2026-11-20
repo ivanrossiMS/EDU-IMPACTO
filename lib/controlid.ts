@@ -353,6 +353,7 @@ export class ControliDClient {
       const logsRes = await this.loadObjects('access_logs', { limit: 150, order: ['id', 'descending'] })
       const logs: any[] = logsRes?.access_logs || []
       for (const l of logs) {
+        if (Number(l.user_id || 0) <= 0) continue
         const cid = Number(l.component_id || 0)
         const pid = Number(l.portal_id || l.portal || 0)
         if (pid <= 0 || !portalIds.has(pid)) continue

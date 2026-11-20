@@ -176,10 +176,13 @@ def main():
                 ev = l.get("event", "?")
                 ev_tag = " [NEGADO]" if str(ev) == "6" else ""
 
+                is_155 = IP_MESTRE == "192.168.1.155"
                 if pid in (1, 101) or cid == 810373890 or l.get("door_id") == 1:
-                    sentido = f"🚪 SAÍDA (Rua das Garças / .154){ev_tag}"
+                    alvo_saida = "Portaria FUND1 / .155" if is_155 else "Rua das Garças / .154"
+                    sentido = f"🚪 SAÍDA ({alvo_saida}){ev_tag}"
                 elif pid in (2, 102) or cid == 810373889 or l.get("door_id") == 2 or pid == 0:
-                    sentido = f"🟢 ENTRADA (Portaria Principal / .150){ev_tag}"
+                    alvo_ent = "Portaria FUND1 / .155" if is_155 else "Portaria Principal / .150"
+                    sentido = f"🟢 ENTRADA ({alvo_ent}){ev_tag}"
                 else:
                     sentido = f"ℹ️ Portal {pid}{ev_tag}"
 

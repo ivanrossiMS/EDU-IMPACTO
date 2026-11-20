@@ -448,6 +448,13 @@ export async function POST(req: Request) {
       devNomeLower.includes('médio') ||
       devNomeLower.includes('medio')
 
+    const isBidirectional155 =
+      devSerialOrIp === '0M0200/02639C' ||
+      devSerialOrIp.includes('02639C') ||
+      devSerialOrIp === '192.168.1.155' ||
+      dispositivoId === '0M0200/02639C' ||
+      (devNomeLower.includes('fund1') && devNomeLower.includes('principal'))
+
     const explicitTipo = searchParams.get('tipo') || searchParams.get('sentido') || payload?.tipo || payload?.sentido || payload?.event_type
 
     const ruleIdRaw =
@@ -460,7 +467,10 @@ export async function POST(req: Request) {
     // ── MESTRE .150 (CONTROL ID ID NEXT): Duas rotas físicas distintas ──
     // Portal 2 (Rota Principal Local .150 / Comp 810373889): ENTRADA (Portaria Principal / Médio)
     // Portal 1 (Outra Rota / Terminal Remoto .154 / Comp 810373890): SAÍDA (Rua das Garças)
-    // As catracas .155 (FUND1) e .105 (INF) são 100% ENTRADA SEMPRE!
+    // ── CATRACA .155 (FUND1 - PRINCIPAL): Lados invertidos idênticos à .150 ──
+    // Portal 2 (Comp 810373889): ENTRADA (Portaria FUND1- PRINCIPAL)
+    // Portal 1 (Comp 810373890): SAÍDA (Portaria FUND1 - Saída)
+    // A catraca .105 (INF) continua 100% ENTRADA SEMPRE!
     const isExplicitExitRoute150 = pId === 1 || pId === 101 || compId === 810373890 || doorId === 1
     const isExplicitEntryRoute150 = pId === 2 || pId === 102 || compId === 810373889 || doorId === 2
 
@@ -484,8 +494,21 @@ export async function POST(req: Request) {
         dispositivoNome = 'Portaria Médio - PRINCIPAL'
         dispositivoId = '0M0200/02638E'
       }
+    } else if (isBidirectional155) {
+      const isExplicitExitRoute155 = pId === 1 || pId === 101 || compId === 810373890 || doorId === 1
+      const isExplicitEntryRoute155 = pId === 2 || pId === 102 || compId === 810373889 || doorId === 2
+
+      if (isExplicitExitRoute155 || (!isExplicitEntryRoute155 && explicitTipo === 'saida')) {
+        dispositivoSentido = 'saida'
+        dispositivoId = '0M0200/02639C'
+        dispositivoNome = 'Portaria FUND1 - Saída'
+      } else {
+        dispositivoSentido = 'entrada'
+        dispositivoId = '0M0200/02639C'
+        dispositivoNome = 'Portaria FUND1- PRINCIPAL'
+      }
     } else {
-      // Todas as demais (.155 FUND1 e .105 INF) são ESTRITAMENTE ENTRADA SEMPRE
+      // Todas as demais (.105 INF) são ESTRITAMENTE ENTRADA SEMPRE
       dispositivoSentido = 'entrada'
       // Limpa qualquer sufixo "(Saída)" no nome caso existisse
       dispositivoNome = dispositivoNome.replace(/\s*\([Ss]a[ií]da\)/g, '').trim()

@@ -301,11 +301,12 @@ export async function POST(req: NextRequest) {
           const devIdStr = String(log.device_id || '').trim()
           const isDev154 = devIdStr === '0M0200/0263A6' || devIdStr === '192.168.1.154'
           const isDev150 = devIdStr === '0M0200/02638E' || devIdStr === '192.168.1.150'
+          const isDev155 = devIdStr === '0M0200/02639C' || devIdStr === '192.168.1.155'
           
           let direction = 'entrada'
           if (isDev154) {
             direction = 'saida'
-          } else if (isDev150 && (pId === 1 || pId === 101 || compId === 810373890 || doorId === 1)) {
+          } else if ((isDev150 || isDev155) && (pId === 1 || pId === 101 || compId === 810373890 || doorId === 1)) {
             direction = 'saida'
           } else {
             direction = 'entrada'

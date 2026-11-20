@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
-import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
+import { resolveStudentAutorizadoSairSozinho, isExitBlockingDevice } from '@/lib/portariaUtils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     })
 
     let exitBlockGroupId: number | null = null
-    if (isMaster150Device(device)) {
+    if (isExitBlockingDevice(device)) {
       try {
         const exitCfg = await client.ensureExitBlockingRuleConfigured()
         if (exitCfg.configured && exitCfg.groupId) {

@@ -332,8 +332,8 @@ export default function PortariaConfigPage() {
       if (!res.ok) throw new Error('Erro ao salvar configuração no servidor')
       setToast({
         msg: enable
-          ? '🛡️ Bloqueio de saída ativado: o sincronizador aplicará o bloqueio na saída .150/.154 automaticamente.'
-          : '🔓 Bloqueio de saída pausado: o sincronizador liberará a saída na .150/.154 na próxima auditoria (até 5 min).',
+          ? '🛡️ Bloqueio de saída ativado: o sincronizador aplicará o bloqueio na saída .150/.154 e .155 automaticamente.'
+          : '🔓 Bloqueio de saída pausado: o sincronizador liberará a saída na .150/.154 e .155 na próxima auditoria (até 5 min).',
         type: 'success'
       })
     } catch (err: any) {
@@ -713,7 +713,7 @@ export default function PortariaConfigPage() {
                   value={config.bloquear_saida_nao_autorizados !== false}
                   onChange={handleToggleBloquearSaida}
                   label="Bloquear saída de alunos não autorizados a sair sozinhos"
-                  desc="Na catraca 192.168.1.150 (Saída .154), bloqueia o giro de saída mantendo a entrada funcionando normalmente"
+                  desc="Nas catracas 192.168.1.150 (Saída .154) e 192.168.1.155 (FUND1), bloqueia o giro de saída mantendo a entrada funcionando normalmente"
                   icon={<ShieldAlert size={18} />}
                 />
 

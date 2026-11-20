@@ -63,3 +63,25 @@ export function isMaster150Device(dev: { id?: string | null; ip?: string | null;
     nome.includes('medio')
   )
 }
+
+export function isBidirectional155Device(dev: { id?: string | null; ip?: string | null; nome?: string | null }): boolean {
+  const id = String(dev?.id || '').trim()
+  const ip = String(dev?.ip || '').trim()
+  const nome = String(dev?.nome || '').toLowerCase()
+  return (
+    ip === '192.168.1.155' ||
+    id === '0M0200/02639C' ||
+    id.includes('02639C') ||
+    (nome.includes('fund1') && nome.includes('principal'))
+  )
+}
+
+export function isExitBlockingDevice(dev: { id?: string | null; ip?: string | null; nome?: string | null; configuracao?: any }): boolean {
+  const sentido = String(dev?.configuracao?.sentido || '').toLowerCase()
+  return (
+    isMaster150Device(dev) ||
+    isBidirectional155Device(dev) ||
+    sentido === 'mestre' ||
+    sentido === 'ambos'
+  )
+}

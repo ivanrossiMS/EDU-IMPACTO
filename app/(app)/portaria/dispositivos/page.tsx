@@ -351,7 +351,7 @@ export default function DispositivosPage() {
                     </span>
                     {(() => {
                       const rawSentido = d.configuracao?.sentido
-                      const sentido = (rawSentido === 'mestre' || rawSentido === 'ambos' || d.ip === '192.168.1.150')
+                      const sentido = (rawSentido === 'mestre' || rawSentido === 'ambos' || d.ip === '192.168.1.150' || d.ip === '192.168.1.155')
                         ? 'ambos'
                         : (rawSentido === 'saida' || /sa[ií]da/i.test(d.nome || '') || d.ip === '192.168.1.154' ? 'saida' : 'entrada')
                       const isAmbos = sentido === 'ambos'
@@ -644,7 +644,7 @@ export default function DispositivosPage() {
                   className="form-input"
                   value={(() => {
                     const s = editDevice.configuracao?.sentido
-                    if (s === 'mestre' || s === 'ambos' || editDevice.ip === '192.168.1.150') return 'ambos'
+                    if (s === 'mestre' || s === 'ambos' || editDevice.ip === '192.168.1.150' || editDevice.ip === '192.168.1.155') return 'ambos'
                     if (s === 'saida' || /sa[ií]da/i.test(editDevice.nome || '') || editDevice.ip === '192.168.1.154') return 'saida'
                     return 'entrada'
                   })()}

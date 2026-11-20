@@ -152,8 +152,9 @@ CATRACA_LOGIN = "admin"
 CATRACAS = [
     # Mestre iD Next (Centraliza todos os cadastros, biometrias e logs de Entrada [Portal 2 / Comp 810373889] e Saída Rua das Garças [Portal 1 / Comp 810373890])
     {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80, "tipo": "mestre", "senha": "Pass1081$"},
-    # Catracas Autônomas de Entrada
-    {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "entrada"},
+    # Catraca Bidirecional FUND1 (Entrada [Portal 2 / Comp 810373889] e Saída [Portal 1 / Comp 810373890] - lados invertidos idênticos à .150)
+    {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80, "tipo": "mestre", "senha": "Pass1081$"},
+    # Catraca Autônoma de Entrada
     {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80, "tipo": "entrada"},
 ]
 
@@ -208,11 +209,21 @@ ULTIMA_ENTRADA_ALUNO   = {}
 CONFIG_MULTIPLAS_ENTRADAS = False
 CACHE_LOCK             = threading.Lock()
 
-# Bloqueio de Saida na Catraca Mestre .150 (Portal 1 / Saida .154)
+# Bloqueio de Saida nas Catracas Bidirecionais (.150 -> Portal 1 / Saida .154, e .155 -> Portal 1 / Saida FUND1)
 BLOQUEIO_SAIDA_GROUP_NAME = "EDU_BLOQUEIO_SAIDA_SOZINHO"
 BLOQUEIO_SAIDA_RULE_NAME  = "EDU_REGRA_BLOQUEIO_SAIDA"
 BLOQUEIO_SAIDA_TZ_NAME    = "EDU_24H_BLOQUEIO"
 BLOQUEIO_SAIDA_STATE      = {
+    "ready": False,
+    "group_id": None,
+    "rule_id": None,
+    "portal_id": None,
+    "tz_id": None,
+    "error_logged": False,
+    "audit_logged": False,
+    "lock": threading.Lock(),
+}
+BLOQUEIO_SAIDA_155_STATE  = {
     "ready": False,
     "group_id": None,
     "rule_id": None,
@@ -657,24 +668,28 @@ def enviar_para_webhook(log_entry, cat, tipo_override=None):
     rule_id   = log_entry.get("identification_rule_id") or 0
 
     # ── REGRA DE OURO DA ESCOLA (CONTROL ID ID NEXT) ──
-    # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-    # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA (Portaria Principal / Médio - .150)
-    # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA (Rua das Garças / Terminal Remoto .154)
-    # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
+    # As catracas .150 e .155 registram entrada e saída dependendo da rota física (ambas com lados invertidos):
+    # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA
+    # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA
+    # A catraca .105 (INF) continua SEMPRE ENTRADA!
     is_saida_150 = (
         (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
+        (portal_id in (1, 101) or comp_id == 810373890 or door_id == 1)
+    )
+    is_saida_155 = (
+        (cat_ip == "192.168.1.155" or cat_id == "0M0200/02639C") and
         (portal_id in (1, 101) or comp_id == 810373890 or door_id == 1)
     )
     is_catraca_154 = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
     if tipo_override:
         tipo = tipo_override
-    elif is_saida_150 or is_catraca_154:
+    elif is_saida_150 or is_saida_155 or is_catraca_154:
         tipo = "saida"
     else:
         tipo = "entrada"
 
-    # Se for saída na rota do Terminal Remoto .154, atribuir ao dispositivo da saída
+    # Se for saída na rota do Terminal Remoto .154, atribuir ao dispositivo da saída; na .155 mantém o ID da .155
     disp_id = "0M0200/0263A6" if tipo == "saida" and (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else (cat.get("id") or cat["ip"])
     access_event = log_entry.get("event")
 
@@ -722,6 +737,22 @@ def eh_catraca_mestre_150(cat):
     return ip == "192.168.1.150" or cid == "0M0200/02638E"
 
 
+def eh_catraca_bidirecional_155(cat):
+    ip = str(cat.get("ip") or "").strip()
+    cid = str(cat.get("id") or "").strip()
+    return ip == "192.168.1.155" or cid == "0M0200/02639C"
+
+
+def eh_catraca_com_bloqueio_saida(cat):
+    return eh_catraca_mestre_150(cat) or eh_catraca_bidirecional_155(cat)
+
+
+def _obter_estado_bloqueio(cat):
+    if eh_catraca_bidirecional_155(cat):
+        return BLOQUEIO_SAIDA_155_STATE
+    return BLOQUEIO_SAIDA_STATE
+
+
 def carregar_todos_objetos_catraca(cat, obj_name, where=None, fields=None, timeout=5):
     """Carrega todos os registros de uma tabela Control iD paginando por limit/offset com proteção contra loop."""
     resultados = []
@@ -755,24 +786,24 @@ def carregar_todos_objetos_catraca(cat, obj_name, where=None, fields=None, timeo
     return resultados
 
 
-def detectar_portal_saida_150(cat):
+def detectar_portal_saida_catraca(cat):
     """
-    Identifica com segurança o portal de SAÍDA vs ENTRADA na catraca Mestre .150.
-    Prioridade 1: component_id real nos access_logs (810373890 = Saida .154, 810373889 = Entrada .150),
+    Identifica com segurança o portal de SAÍDA vs ENTRADA em catracas bidirecionais (.150 e .155).
+    Prioridade 1: component_id real nos access_logs (810373890 = Saida, 810373889 = Entrada),
     pois os nomes de fabrica dos portais na controladora podem estar invertidos fisicamente.
-    Prioridade 2: Portal 1 = Saida / Portal 2 = Entrada (padrao fisico desta catraca).
+    Prioridade 2: Portal 1 = Saida / Portal 2 = Entrada (padrao fisico destas catracas).
     Prioridade 3: Nomes dos portais (fallback apenas se nao houver IDs 1 e 2).
     """
     r_portals = call_catraca_fcgi(cat, "load_objects.fcgi", {"object": "portals"}, timeout=4)
     portals = (r_portals or {}).get("portals", [])
     if len(portals) < 2:
-        return None, None, f"Catraca .150 retornou {len(portals)} portal(is); sao necessarios 2 portais distintos (Entrada e Saida)."
+        return None, None, f"Catraca {cat.get('ip')} retornou {len(portals)} portal(is); sao necessarios 2 portais distintos (Entrada e Saida)."
 
     portal_ids = {int(p.get("id") or 0) for p in portals}
     exit_portal_id = None
     entry_portal_id = None
 
-    # 1. Prioridade maxima: component_id real gravado nos access_logs da catraca
+    # 1. Prioridade maxima: component_id real gravado nos access_logs de usuarios reconhecidos
     try:
         r_logs = call_catraca_fcgi(cat, "load_objects.fcgi", {
             "object": "access_logs",
@@ -780,6 +811,8 @@ def detectar_portal_saida_150(cat):
             "order": ["id", "descending"]
         }, timeout=4)
         for l in (r_logs or {}).get("access_logs", []):
+            if int(l.get("user_id") or 0) <= 0:
+                continue
             pid = int(l.get("portal_id") or l.get("portal") or 0)
             cid = int(l.get("component_id") or 0)
             if pid <= 0 or pid not in portal_ids:
@@ -793,7 +826,7 @@ def detectar_portal_saida_150(cat):
     except Exception:
         pass
 
-    # 2. Fallback deterministico pelo mapeamento fisico da catraca .150 (Portal 1 = Saida, Portal 2 = Entrada)
+    # 2. Fallback deterministico pelo mapeamento fisico invertido (Portal 1 = Saida, Portal 2 = Entrada)
     if exit_portal_id is None and 1 in portal_ids and 2 in portal_ids:
         if entry_portal_id != 1:
             exit_portal_id = 1
@@ -819,27 +852,34 @@ def detectar_portal_saida_150(cat):
     return exit_portal_id, entry_portal_id, None
 
 
-def garantir_estrutura_bloqueio_saida_150(cat):
+def detectar_portal_saida_150(cat):
+    return detectar_portal_saida_catraca(cat)
+
+
+def garantir_estrutura_bloqueio_saida(cat):
     """
-    Cria/valida de forma idempotente na catraca .150:
+    Cria/valida de forma idempotente na catraca bidirecional (.150 ou .155):
     1) Grupo EDU_BLOQUEIO_SAIDA_SOZINHO
     2) TimeZone 24h EDU_24H_BLOQUEIO
     3) AccessRule type=0 (bloqueio) EDU_REGRA_BLOQUEIO_SAIDA
     4) Vinculo exclusivo ao Portal de Saida (nunca Entrada)
     """
-    if not eh_catraca_mestre_150(cat):
+    if not eh_catraca_com_bloqueio_saida(cat):
         return False
 
-    with BLOQUEIO_SAIDA_STATE["lock"]:
-        if BLOQUEIO_SAIDA_STATE["ready"] and BLOQUEIO_SAIDA_STATE["group_id"]:
+    state = _obter_estado_bloqueio(cat)
+    ip_tag = f".{str(cat.get('ip') or '').split('.')[-1]}" if cat.get("ip") else str(cat.get("id") or "")
+
+    with state["lock"]:
+        if state["ready"] and state["group_id"]:
             return True
 
         try:
-            exit_pid, entry_pid, err_msg = detectar_portal_saida_150(cat)
+            exit_pid, entry_pid, err_msg = detectar_portal_saida_catraca(cat)
             if not exit_pid:
-                if not BLOQUEIO_SAIDA_STATE["error_logged"]:
+                if not state["error_logged"]:
                     print(f"  [BLOQUEIO-SAIDA] [AVISO] {err_msg}")
-                    BLOQUEIO_SAIDA_STATE["error_logged"] = True
+                    state["error_logged"] = True
                 return False
 
             # 1. Grupo de bloqueio
@@ -963,30 +1003,36 @@ def garantir_estrutura_bloqueio_saida_150(cat):
                     "values": [{"portal_id": exit_pid, "access_rule_id": rule_id}]
                 }, timeout=4)
 
-            BLOQUEIO_SAIDA_STATE["ready"] = True
-            BLOQUEIO_SAIDA_STATE["group_id"] = group_id
-            BLOQUEIO_SAIDA_STATE["rule_id"] = rule_id
-            BLOQUEIO_SAIDA_STATE["portal_id"] = exit_pid
-            BLOQUEIO_SAIDA_STATE["tz_id"] = tz_id
-            BLOQUEIO_SAIDA_STATE["error_logged"] = False
-            print(f"  [BLOQUEIO-SAIDA] Estrutura ativa na .150: Grupo={group_id} | Regra={rule_id} (type=0) | Portal Saida={exit_pid} (Entrada={entry_pid} preservada)")
+            state["ready"] = True
+            state["group_id"] = group_id
+            state["rule_id"] = rule_id
+            state["portal_id"] = exit_pid
+            state["tz_id"] = tz_id
+            state["error_logged"] = False
+            print(f"  [BLOQUEIO-SAIDA] Estrutura ativa na {ip_tag}: Grupo={group_id} | Regra={rule_id} (type=0) | Portal Saida={exit_pid} (Entrada={entry_pid} preservada)")
             return True
         except Exception as e:
-            if not BLOQUEIO_SAIDA_STATE["error_logged"]:
-                print(f"  [BLOQUEIO-SAIDA] [AVISO] Nao foi possivel configurar regra na .150: {e}")
-                BLOQUEIO_SAIDA_STATE["error_logged"] = True
+            if not state["error_logged"]:
+                print(f"  [BLOQUEIO-SAIDA] [AVISO] Nao foi possivel configurar regra na {ip_tag}: {e}")
+                state["error_logged"] = True
             return False
 
 
-def aplicar_bloqueio_saida_usuario_150(cat, numeric_id, deve_bloquear):
-    """Atualiza imediatamente o vinculo de bloqueio de saida de um aluno na catraca .150."""
-    if not eh_catraca_mestre_150(cat):
+def garantir_estrutura_bloqueio_saida_150(cat):
+    return garantir_estrutura_bloqueio_saida(cat)
+
+
+def aplicar_bloqueio_saida_usuario(cat, numeric_id, deve_bloquear):
+    """Atualiza imediatamente o vinculo de bloqueio de saida de um aluno nas catracas .150 ou .155."""
+    if not eh_catraca_com_bloqueio_saida(cat):
         return
-    if not garantir_estrutura_bloqueio_saida_150(cat):
+    if not garantir_estrutura_bloqueio_saida(cat):
         return
-    block_gid = BLOQUEIO_SAIDA_STATE.get("group_id")
+    state = _obter_estado_bloqueio(cat)
+    block_gid = state.get("group_id")
     if not block_gid:
         return
+    ip_label = ".150/.154" if eh_catraca_mestre_150(cat) else f".{str(cat.get('ip') or '').split('.')[-1]}"
     try:
         r_ug = call_catraca_fcgi(cat, "load_objects.fcgi", {
             "object": "user_groups",
@@ -998,26 +1044,30 @@ def aplicar_bloqueio_saida_usuario_150(cat, numeric_id, deve_bloquear):
                 "object": "user_groups",
                 "values": [{"user_id": int(numeric_id), "group_id": int(block_gid)}]
             }, timeout=3)
-            print(f"     [BLOQUEIO-SAIDA] ID {numeric_id}: saida BLOQUEADA na .150/.154 (entrada mantida).")
+            print(f"     [BLOQUEIO-SAIDA] ID {numeric_id}: saida BLOQUEADA na {ip_label} (entrada mantida).")
         elif not deve_bloquear and ja_vinculado:
             call_catraca_fcgi(cat, "destroy_objects.fcgi", {
                 "object": "user_groups",
                 "where": {"user_groups": {"user_id": int(numeric_id), "group_id": int(block_gid)}}
             }, timeout=3)
-            print(f"     [BLOQUEIO-SAIDA] ID {numeric_id}: saida LIBERADA na .150/.154.")
+            print(f"     [BLOQUEIO-SAIDA] ID {numeric_id}: saida LIBERADA na {ip_label}.")
     except Exception as e:
-        print(f"     [BLOQUEIO-SAIDA] [AVISO] Falha ao atualizar ID {numeric_id}: {e}")
+        print(f"     [BLOQUEIO-SAIDA] [AVISO] Falha ao atualizar ID {numeric_id} na {ip_label}: {e}")
 
 
-def sincronizar_bloqueio_saida_em_lote_150(catracas):
+def aplicar_bloqueio_saida_usuario_150(cat, numeric_id, deve_bloquear):
+    aplicar_bloqueio_saida_usuario(cat, numeric_id, deve_bloquear)
+
+
+def sincronizar_bloqueio_saida_em_lote(catracas):
     """
     Auditoria automatica e auto-cura:
     Busca no ERP todos os alunos ativos que NAO podem sair sozinhos e garante que
-    exatamente esses alunos estejam no grupo de bloqueio de saida da catraca .150.
+    exatamente esses alunos estejam no grupo de bloqueio de saida das catracas .150 e .155.
     Executa no startup e a cada 5 minutos em background, sem travar passagens.
     """
-    cat_150 = next((c for c in catracas if eh_catraca_mestre_150(c)), None)
-    if not cat_150:
+    alvos_bloqueio = [c for c in catracas if eh_catraca_com_bloqueio_saida(c)]
+    if not alvos_bloqueio:
         return
 
     url_rules = f"{NETLIFY_URL}/api/portaria/sync-queue?limit=1&include_exit_rules=1"
@@ -1033,73 +1083,80 @@ def sincronizar_bloqueio_saida_em_lote_150(catracas):
     if not data.get("exit_rules_synced"):
         return
 
-    if not garantir_estrutura_bloqueio_saida_150(cat_150):
-        return
-
-    block_gid = BLOQUEIO_SAIDA_STATE.get("group_id")
-    if not block_gid:
-        return
-
     bloquear_ativo = bool(data.get("bloquear_saida_nao_autorizados", True))
     bloqueados_erp = set(int(x) for x in data.get("bloqueados_saida_ids", []) if int(x) > 0) if bloquear_ativo else set()
 
-    try:
-        # 1. Buscar todos os usuarios que realmente existem na memoria da .150 (evita erro de FK no SQLite)
-        users_150 = carregar_todos_objetos_catraca(cat_150, "users", fields=["id"], timeout=5)
-        valid_device_ids = {int(u["id"]) for u in users_150 if u.get("id")}
+    for cat in alvos_bloqueio:
+        ip_tag = f".{str(cat.get('ip') or '').split('.')[-1]}" if cat.get("ip") else str(cat.get("id") or "")
+        if not garantir_estrutura_bloqueio_saida(cat):
+            continue
 
-        # 2. Buscar quem esta atualmente no grupo de bloqueio na .150
-        ugs_atual = carregar_todos_objetos_catraca(
-            cat_150,
-            "user_groups",
-            where={"user_groups": {"group_id": int(block_gid)}},
-            timeout=5
-        )
-        atuais_bloqueados = {int(ug["user_id"]) for ug in ugs_atual if ug.get("user_id")}
+        state = _obter_estado_bloqueio(cat)
+        block_gid = state.get("group_id")
+        if not block_gid:
+            continue
 
-        alvo_bloqueados = bloqueados_erp & valid_device_ids
-        para_adicionar = sorted(alvo_bloqueados - atuais_bloqueados)
-        para_remover = sorted(atuais_bloqueados - alvo_bloqueados)
+        try:
+            # 1. Buscar todos os usuarios que realmente existem na memoria desta catraca (evita erro de FK no SQLite)
+            users_cat = carregar_todos_objetos_catraca(cat, "users", fields=["id"], timeout=5)
+            valid_device_ids = {int(u["id"]) for u in users_cat if u.get("id")}
 
-        # 3. Adicionar faltantes em lotes de 50 (com fallback individual se necessario)
-        adicionados_ok = 0
-        for i in range(0, len(para_adicionar), 50):
-            chunk = para_adicionar[i:i + 50]
-            try:
-                call_catraca_fcgi(cat_150, "create_objects.fcgi", {
-                    "object": "user_groups",
-                    "values": [{"user_id": uid, "group_id": int(block_gid)} for uid in chunk]
-                }, timeout=6)
-                adicionados_ok += len(chunk)
-            except Exception:
-                for uid in chunk:
-                    try:
-                        call_catraca_fcgi(cat_150, "create_objects.fcgi", {
-                            "object": "user_groups",
-                            "values": [{"user_id": uid, "group_id": int(block_gid)}]
-                        }, timeout=3)
-                        adicionados_ok += 1
-                    except Exception:
-                        pass
+            # 2. Buscar quem esta atualmente no grupo de bloqueio nesta catraca
+            ugs_atual = carregar_todos_objetos_catraca(
+                cat,
+                "user_groups",
+                where={"user_groups": {"group_id": int(block_gid)}},
+                timeout=5
+            )
+            atuais_bloqueados = {int(ug["user_id"]) for ug in ugs_atual if ug.get("user_id")}
 
-        # 4. Remover quem foi autorizado ou inativado
-        removidos_ok = 0
-        for uid in para_remover:
-            try:
-                call_catraca_fcgi(cat_150, "destroy_objects.fcgi", {
-                    "object": "user_groups",
-                    "where": {"user_groups": {"user_id": uid, "group_id": int(block_gid)}}
-                }, timeout=3)
-                removidos_ok += 1
-            except Exception:
-                pass
+            alvo_bloqueados = bloqueados_erp & valid_device_ids
+            para_adicionar = sorted(alvo_bloqueados - atuais_bloqueados)
+            para_remover = sorted(atuais_bloqueados - alvo_bloqueados)
 
-        if adicionados_ok > 0 or removidos_ok > 0 or not BLOQUEIO_SAIDA_STATE["audit_logged"]:
-            modo_txt = "ATIVO" if bloquear_ativo else "PAUSADO NO ERP"
-            print(f"  [BLOQUEIO-SAIDA] [{modo_txt}] Catraca .150: {len(alvo_bloqueados)} aluno(s) com saida bloqueada (+{adicionados_ok} bloqueado(s), -{removidos_ok} liberado(s)).")
-            BLOQUEIO_SAIDA_STATE["audit_logged"] = True
-    except Exception as e:
-        print(f"  [BLOQUEIO-SAIDA] [AVISO] Falha na auditoria em lote da .150: {e}")
+            # 3. Adicionar faltantes em lotes de 50 (com fallback individual se necessario)
+            adicionados_ok = 0
+            for i in range(0, len(para_adicionar), 50):
+                chunk = para_adicionar[i:i + 50]
+                try:
+                    call_catraca_fcgi(cat, "create_objects.fcgi", {
+                        "object": "user_groups",
+                        "values": [{"user_id": uid, "group_id": int(block_gid)} for uid in chunk]
+                    }, timeout=6)
+                    adicionados_ok += len(chunk)
+                except Exception:
+                    for uid in chunk:
+                        try:
+                            call_catraca_fcgi(cat, "create_objects.fcgi", {
+                                "object": "user_groups",
+                                "values": [{"user_id": uid, "group_id": int(block_gid)}]
+                            }, timeout=3)
+                            adicionados_ok += 1
+                        except Exception:
+                            pass
+
+            # 4. Remover quem foi autorizado ou inativado
+            removidos_ok = 0
+            for uid in para_remover:
+                try:
+                    call_catraca_fcgi(cat, "destroy_objects.fcgi", {
+                        "object": "user_groups",
+                        "where": {"user_groups": {"user_id": uid, "group_id": int(block_gid)}}
+                    }, timeout=3)
+                    removidos_ok += 1
+                except Exception:
+                    pass
+
+            if adicionados_ok > 0 or removidos_ok > 0 or not state["audit_logged"]:
+                modo_txt = "ATIVO" if bloquear_ativo else "PAUSADO NO ERP"
+                print(f"  [BLOQUEIO-SAIDA] [{modo_txt}] Catraca {ip_tag}: {len(alvo_bloqueados)} aluno(s) com saida bloqueada (+{adicionados_ok} bloqueado(s), -{removidos_ok} liberado(s)).")
+                state["audit_logged"] = True
+        except Exception as e:
+            print(f"  [BLOQUEIO-SAIDA] [AVISO] Falha na auditoria em lote da {ip_tag}: {e}")
+
+
+def sincronizar_bloqueio_saida_em_lote_150(catracas):
+    sincronizar_bloqueio_saida_em_lote(catracas)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1217,10 +1274,10 @@ def processar_fila_pendencias_erp():
                         except Exception:
                             pass
 
-                        # Atualiza bloqueio de saida na catraca Mestre .150 conforme flag autorizado_sair_sozinho
-                        if eh_catraca_mestre_150(cat) and autorizado_sair_sozinho is not None:
+                        # Atualiza bloqueio de saida nas catracas bidirecionais (.150 e .155) conforme flag autorizado_sair_sozinho
+                        if eh_catraca_com_bloqueio_saida(cat) and autorizado_sair_sozinho is not None:
                             deve_bloquear = bloquear_saida_ativo and (not bool(autorizado_sair_sozinho))
-                            aplicar_bloqueio_saida_usuario_150(cat, numeric_id, deve_bloquear)
+                            aplicar_bloqueio_saida_usuario(cat, numeric_id, deve_bloquear)
 
                         print(f"     [ALUNO] [{cat_nome}] Aluno '{nome}' sincronizado.")
 
@@ -1310,9 +1367,9 @@ def thread_background_erp():
             reg_ent, reg_sai, _ = carregar_registrados_do_erp()
             if reg_ent is not None:
                 sincronizar_cache_entrada_com_erp(reg_ent)
-            # 3. No startup (ciclo 1) e a cada 5 minutos (15 ciclos de 20s), auditar bloqueio de saida na .150
+            # 3. No startup (ciclo 1) e a cada 5 minutos (15 ciclos de 20s), auditar bloqueio de saida na .150 e na .155
             if ciclo_bg == 1 or ciclo_bg % 15 == 0:
-                sincronizar_bloqueio_saida_em_lote_150(CATRACAS)
+                sincronizar_bloqueio_saida_em_lote(CATRACAS)
             # 4. A cada 60 segundos (3 ciclos de 20s), auditar e recuperar qualquer log de hoje que tenha ficado para trás
             if ciclo_bg % 3 == 0:
                 reconciliar_logs_hoje_catracas(CATRACAS)
@@ -1489,18 +1546,22 @@ def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True
 
             rule_id = l.get("identification_rule_id") or 0
 
-            # ── IDENTIFICAÇÃO DE ROTA NA CATRACA .150 (CONTROL ID ID NEXT) ──
-            # A catraca .150 registra tanto entrada quanto saída dependendo da rota física:
-            # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA (Portaria Principal / Médio - .150)
-            # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA (Rua das Garças / Terminal Remoto .154)
-            # As catracas .155 (FUND1) e .105 (INF) são SEMPRE ENTRADA!
+            # ── IDENTIFICAÇÃO DE ROTA NAS CATRACAS .150 E .155 (CONTROL ID ID NEXT) ──
+            # As catracas .150 e .155 registram entrada e saída dependendo da rota física (lados invertidos):
+            # • Rota Principal (Portal 2 / Comp 810373889): ENTRADA
+            # • Outra Rota (Portal 1 / Comp 810373890): SAÍDA
+            # A catraca .105 (INF) continua SEMPRE ENTRADA!
             is_saida_150 = (
                 (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") and
                 (p_id in (1, 101) or c_id == 810373890 or door_id == 1)
             )
+            is_saida_155 = (
+                (cat_ip == "192.168.1.155" or cat_id == "0M0200/02639C") and
+                (p_id in (1, 101) or c_id == 810373890 or door_id == 1)
+            )
             is_catraca_154_direto = (cat_ip == "192.168.1.154" or cat_id == "0M0200/0263A6" or cat.get("tipo") == "saida")
 
-            if is_saida_150 or is_catraca_154_direto:
+            if is_saida_150 or is_saida_155 or is_catraca_154_direto:
                 logs_saida.append(l)
             else:
                 logs_entrada.append(l)
@@ -1527,7 +1588,12 @@ def processar_eventos_detectados(eventos_por_catraca, estado, salvar_cursor=True
 
             t_inicio = time.time()
             hora = formatar_hora(log_ts)
-            nome_disp = "Saida - Rua das Garças" if (cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E") else cat['nome']
+            if cat_ip == "192.168.1.150" or cat_id == "0M0200/02638E":
+                nome_disp = "Saida - Rua das Garças"
+            elif cat_ip == "192.168.1.155" or cat_id == "0M0200/02639C":
+                nome_disp = "Portaria FUND1 - Saída"
+            else:
+                nome_disp = cat['nome']
             try:
                 res = enviar_para_webhook(log, cat, tipo_override="saida")
                 latencia = time.time() - t_inicio

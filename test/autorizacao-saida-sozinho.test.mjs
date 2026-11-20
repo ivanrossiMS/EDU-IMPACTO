@@ -10,7 +10,12 @@ import {
   sanitizeSignatureDataUrl,
   sanitizeSvgSignaturePath,
 } from '../lib/autorizacoes/saidaSozinhoUtils.ts'
-import { resolveStudentAutorizadoSairSozinho } from '../lib/portariaUtils.ts'
+import {
+  resolveStudentAutorizadoSairSozinho,
+  isMaster150Device,
+  isBidirectional155Device,
+  isExitBlockingDevice,
+} from '../lib/portariaUtils.ts'
 
 test('saidaSozinhoUtils: SCHOOL_TIMEZONE é America/Campo_Grande e formata data/hora', () => {
   assert.equal(SCHOOL_TIMEZONE, 'America/Campo_Grande')
@@ -46,6 +51,21 @@ test('portariaUtils: resolveStudentAutorizadoSairSozinho reflete alteração em 
   assert.equal(resolveStudentAutorizadoSairSozinho({ dados: { autorizadoSairSozinho: false } }), false)
   assert.equal(resolveStudentAutorizadoSairSozinho({ autorizadoSairSozinho: true, dados: {} }), true)
   assert.equal(resolveStudentAutorizadoSairSozinho({ dados: {} }), false)
+})
+
+test('portariaUtils: identifica .150 e .155 como catracas bidirecionais com bloqueio de saída, mantendo .105 apenas entrada', () => {
+  const dev150 = { id: '0M0200/02638E', ip: '192.168.1.150', nome: 'Portaria Médio - PRINCIPAL', configuracao: { sentido: 'mestre' } }
+  const dev155 = { id: '0M0200/02639C', ip: '192.168.1.155', nome: 'Portaria FUND1- PRINCIPAL', configuracao: { sentido: 'mestre' } }
+  const dev105 = { id: '0M0200/0262CE', ip: '192.168.1.105', nome: 'Portaria PRINCIPAL -INF', configuracao: { sentido: 'entrada' } }
+
+  assert.equal(isMaster150Device(dev150), true)
+  assert.equal(isMaster150Device(dev155), false)
+  assert.equal(isBidirectional155Device(dev155), true)
+  assert.equal(isBidirectional155Device(dev150), false)
+
+  assert.equal(isExitBlockingDevice(dev150), true)
+  assert.equal(isExitBlockingDevice(dev155), true)
+  assert.equal(isExitBlockingDevice(dev105), false)
 })
 
 test('contrato de segurança e sincronização bidirecional entre Agenda Digital e Gestão de Alunos', () => {

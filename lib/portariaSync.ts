@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
 import { isValidStudentPhoto } from '@/lib/utils'
-import { resolveStudentAutorizadoSairSozinho, isMaster150Device } from '@/lib/portariaUtils'
+import { resolveStudentAutorizadoSairSozinho, isExitBlockingDevice } from '@/lib/portariaUtils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -156,7 +156,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
         await client.createUser(numericId, student.nome, codigo)
         await client.ensureUserDefaultGroup(numericId, 1)
 
-        if (isMaster150Device(dev)) {
+        if (isExitBlockingDevice(dev)) {
           try {
             const exitCfg = await client.ensureExitBlockingRuleConfigured()
             if (exitCfg.configured && exitCfg.groupId) {
