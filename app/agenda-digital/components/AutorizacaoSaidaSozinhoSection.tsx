@@ -729,7 +729,9 @@ export function AutorizacaoSaidaSozinhoSection({
               padding: 0;
               border: none;
               border-radius: 26px;
-              width: min(560px, calc(100vw - 24px));
+              width: min(560px, calc(100% - 24px));
+              max-width: calc(100% - 24px);
+              max-height: 90vh;
               max-height: 90dvh;
               background: #ffffff;
               box-shadow: 0 28px 65px -16px rgba(15, 23, 42, 0.36), 0 0 0 1px rgba(15, 23, 42, 0.08);
@@ -739,6 +741,20 @@ export function AutorizacaoSaidaSozinhoSection({
             dialog.ad-saida-dialog[open] {
               display: flex;
               flex-direction: column;
+            }
+            .ad-saida-dialog-form {
+              display: block;
+              flex: 1 1 auto;
+              min-height: 0;
+              overflow-y: auto;
+              overscroll-behavior: contain;
+              -webkit-overflow-scrolling: touch;
+            }
+            .ad-saida-dialog-body {
+              padding: 18px 22px;
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
             }
             dialog.ad-saida-dialog:modal {
               overscroll-behavior: contain;
@@ -852,6 +868,10 @@ export function AutorizacaoSaidaSozinhoSection({
               .ad-copy-tip, .ad-copy-btn { transition: opacity 0.05s linear; }
             }
             @media (max-width: 640px) {
+              .ad-saida-dialog-body {
+                padding: 16px 16px 18px;
+                gap: 14px;
+              }
               .ad-saida-receipt-grid {
                 grid-template-columns: 1fr;
               }
@@ -1544,9 +1564,10 @@ export function AutorizacaoSaidaSozinhoSection({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
+            flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <div
               style={{
                 width: 40,
@@ -1566,7 +1587,7 @@ export function AutorizacaoSaidaSozinhoSection({
                 <ShieldOff size={20} aria-hidden="true" />
               )}
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <h4
                 id={dialogTitleId}
                 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a' }}
@@ -1608,15 +1629,9 @@ export function AutorizacaoSaidaSozinhoSection({
         {/* Formulário com Assinatura */}
         <form
           onSubmit={handleSubmitAuthorization}
-          style={{
-            padding: '18px 22px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            flex: 1,
-          }}
+          className="ad-saida-dialog-form"
         >
+          <div className="ad-saida-dialog-body">
           {/* Resumo da Ação */}
           <div
             style={{
@@ -2069,6 +2084,7 @@ export function AutorizacaoSaidaSozinhoSection({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'flex-end',
+              flexWrap: 'wrap',
               gap: 10,
               paddingTop: 8,
               borderTop: '1px solid #f1f5f9',
@@ -2136,6 +2152,7 @@ export function AutorizacaoSaidaSozinhoSection({
                 </>
               )}
             </button>
+          </div>
           </div>
         </form>
       </dialog>

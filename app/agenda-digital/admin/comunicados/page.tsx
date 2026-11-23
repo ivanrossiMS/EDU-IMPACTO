@@ -21,6 +21,7 @@ import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { ComunicadoReportModal } from '@/components/agenda/ComunicadoReportModal'
+import { ComunicadoDestinatariosModal } from '@/components/agenda/ComunicadoDestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { ReportFillerModal } from '@/components/agenda/ReportFillerModal'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
@@ -3003,112 +3004,26 @@ export default function ADAdminComunicados() {
 
       
 
-      {/* Drawer para ver destinatários */}
-      <AnimatePresence>
-        {viewingDestCom && (
-          <ClientPortal>
-          <div 
-            style={{
-              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'none',
-              zIndex: 10005, display: 'flex', justifyContent: 'flex-end'
-            }} 
-            onClick={() => setViewingDestCom(null)}
-          >
-            <motion.div 
-              initial={{ x: '100%', opacity: 0.5 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0.5 }}
-              transition={{ type: "spring", stiffness: 380, damping: 35 }}
-              style={{ 
-                width: 450, 
-                maxWidth: '100%', 
-                height: '100%', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                background: '#fff', 
-                boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
-                borderLeft: '1px solid hsl(var(--border-subtle))' 
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>👥 Destinatários</h3>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Lista de turmas e alunos vinculados.</div>
-                </div>
-                <button className="btn btn-ghost btn-sm" onClick={() => setViewingDestCom(null)} style={{ width: 32, height: 32, borderRadius: '50%', padding: 0 }}><X size={18} /></button>
-              </div>
-              <div style={{ padding: 32, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24, flex: 1 }}>
-                <div>
-                  <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Assunto</strong>
-                  <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6, color: '#1e293b' }}>{viewingDestCom.titulo}</div>
-                </div>
-                <div>
-                  <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Turmas ({viewingDestCom.turmas?.length || 0})</strong>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                    {viewingDestCom.turmas && viewingDestCom.turmas.length > 0 ? (
-                      viewingDestCom.turmas.map((t, idx) => (
-                        <span key={idx} className="badge" style={{ background: 'rgba(99,102,241,0.06)', color: '#4f46e5', border: '1px solid rgba(99,102,241,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
-                          {t}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Nenhuma turma selecionada.</span>
-                    )}
-                  </div>
-                </div>
-                {(() => {
-                  const destStuIds = computeComunicadoMetrics(viewingDestCom).explicitStudentIds;
-                  if (destStuIds.length === 0) return null;
-                  return (
-                    <div>
-                      <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Alunos Destinatários ({destStuIds.length})</strong>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                        {destStuIds.map((aId, idx) => {
-                          const alunoObj = (alunos || []).find(al => cleanStuId(al.id) === cleanStuId(aId));
-                          return (
-                            <span key={idx} className="badge" style={{ background: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
-                              {alunoObj ? alunoObj.nome : `ID: ${aId}`}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-                {viewingDestCom.funcionariosIds && viewingDestCom.funcionariosIds.length > 0 && (
-                  <div>
-                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Colaboradores ({viewingDestCom.funcionariosIds.length})</strong>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                      {viewingDestCom.funcionariosIds.map((fId, idx) => {
-                        const colabObj = (colaboradores || []).find(c => String(c.nome) === String(fId) || String((c as any).id) === String(fId) || String((c as any).id).replace(/^_+/, '') === String(fId).replace(/^_+/, ''));
-                        return (
-                          <span key={idx} className="badge" style={{ background: 'rgba(245,158,11,0.06)', color: '#d97706', border: '1px solid rgba(245,158,11,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
-                            {colabObj ? colabObj.nome : `ID: ${fId}`}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-                {viewingDestCom.grupos && viewingDestCom.grupos.length > 0 && (
-                  <div>
-                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grupos ({viewingDestCom.grupos.length})</strong>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-                      {viewingDestCom.grupos.map((g, idx) => (
-                        <span key={idx} className="badge" style={{ background: 'rgba(236,72,153,0.06)', color: '#db2777', border: '1px solid rgba(236,72,153,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
-                          {g}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </div>
-          </ClientPortal>
-        )}
-      </AnimatePresence>
+      {/* Modal avançado de destinatários, entrega e leitura */}
+      <ComunicadoDestinatariosModal
+        isOpen={!!viewingDestCom}
+        comunicado={viewingDestCom}
+        onClose={() => setViewingDestCom(null)}
+        alunos={alunos}
+        canEditReportOverride={true}
+        onOpenStudentReport={(payload) => setViewingReportPayload(payload)}
+        onOpenReminderModal={
+          viewingDestCom && viewingDestCom.status !== 'rascunho' && viewingDestCom.status !== 'agendado'
+            ? () => {
+                const target = viewingDestCom;
+                setViewingDestCom(null);
+                setViewingComFocusComments(false);
+                setViewingComOpenReminder(true);
+                setViewingCom(target);
+              }
+            : undefined
+        }
+      />
 
       {/* Modal Avançado do Relatório Mensal de Frequência */}
       <RelatorioFrequenciaMensalModal

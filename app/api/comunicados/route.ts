@@ -12,6 +12,7 @@ import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { getCachedTurmasAndGrupos, getCachedEquipes, getCachedSystemUsers } from '@/lib/server/turmasGruposCache'
 import { sanitizeAutorizacaoForViewer } from '@/lib/autorizacoes/autorizacaoUtils'
 import { sanitizeEnqueteForViewer } from '@/lib/enquetes/enqueteUtils'
+import { recordFeedDeliveries } from '@/lib/server/comunicadoDeliveryService'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 60
@@ -1457,6 +1458,53 @@ export async function GET(request: Request) {
         });
       }
     } catch (_) {}
+  }
+
+  // Registra em segundo plano o recebimento efetivo no feed (não bloqueante, ignora espelhamentos)
+  const isEspelhamento = Boolean(searchParams.get('espelhar_colaborador') || searchParams.get('espelhar_aluno'));
+  if (!isEspelhamento && !isAdminScopeRequest && filtered.length > 0) {
+    const deliveredItems = filtered
+      .filter((c: any) => !c.status || c.status === 'enviado')
+      .slice(0, 30);
+
+    if (deliveredItems.length > 0) {
+      if (isFamilyOrStudent && alunoId) {
+        const readerUid = responsavelParamId || alunoMetaId || currentUserId;
+        const viewerPerfil: 'familiar' | 'aluno' =
+          user.user_metadata?.perfil === 'Aluno' || user.user_metadata?.cargo === 'Aluno'
+            ? 'aluno'
+            : 'familiar';
+        const cleanStu = String(alunoId).replace(/^(a_|_ALU)/i, '').trim();
+        after(async () => {
+          await recordFeedDeliveries(
+            deliveredItems.map((c: any) => ({
+              usuario_id: readerUid,
+              perfil: viewerPerfil,
+              content_type: 'comunicado',
+              content_id: String(c.id),
+              aluno_id: cleanStu || null,
+              channel: 'feed',
+            }))
+          );
+        });
+      } else if (!isFamilyOrStudent && !isMasterAdminViewer) {
+        const staffUid = colabMetaId || currentUserId;
+        if (staffUid) {
+          after(async () => {
+            await recordFeedDeliveries(
+              deliveredItems.map((c: any) => ({
+                usuario_id: staffUid,
+                perfil: 'colaborador',
+                content_type: 'comunicado',
+                content_id: String(c.id),
+                aluno_id: null,
+                channel: 'feed',
+              }))
+            );
+          });
+        }
+      }
+    }
   }
 
   return NextResponse.json(filtered, {

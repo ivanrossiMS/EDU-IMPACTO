@@ -14,6 +14,7 @@ import { EnqueteWidget } from '@/components/agenda/enquetes/EnqueteWidget'
 import { AutorizacaoWidget } from '@/components/agenda/autorizacoes/AutorizacaoWidget'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
+import { ComunicadoDestinatariosModal } from '@/components/agenda/ComunicadoDestinatariosModal'
 import { apiFetch } from '@/lib/api/apiClient'
 
 // Helpers
@@ -2015,39 +2016,77 @@ export function ComunicadoViewModal({
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             border-top: 1px solid rgba(226, 232, 240, 0.7);
-            padding: 12px 14px;
-            padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+            padding: 10px 12px;
+            padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
             position: sticky;
             bottom: 0;
             z-index: 20;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
+            gap: 6px;
             box-shadow: 0 -10px 40px -10px rgba(0,0,0,0.06);
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
           }
           .cvm-actions-main {
             display: flex;
             align-items: center;
-            gap: 8px;
-            flex: 1 1 240px;
+            gap: 6px;
+            flex: 1 1 auto;
             min-width: 0;
           }
           .cvm-actions-icons {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             flex-shrink: 0;
             margin-left: auto;
           }
-          @media (max-width: 520px) {
-            .cvm-actions-main {
-              flex: 1 1 100%;
+          .cvm-action-btn {
+            height: 40px;
+            padding: 0 10px;
+            border-radius: 12px;
+            font-size: 12.5px;
+            font-weight: 700;
+            gap: 5px;
+            min-width: 0;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          }
+          .cvm-icon-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+          }
+          @media (min-width: 521px) {
+            .cvm-actions-footer {
+              padding: 12px 16px;
+              padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+              gap: 8px;
             }
+            .cvm-actions-main,
             .cvm-actions-icons {
-              width: 100%;
-              justify-content: flex-end;
+              gap: 8px;
+            }
+            .cvm-action-btn {
+              height: 44px;
+              padding: 0 16px;
+              border-radius: 14px;
+              font-size: 14px;
+              gap: 8px;
+            }
+            .cvm-icon-btn {
+              width: 44px;
+              height: 44px;
+              border-radius: 14px;
             }
           }
         `}} />
@@ -3690,37 +3729,27 @@ export function ComunicadoViewModal({
                 <div className="cvm-actions-main">
                   {onForward && (
                     <motion.button 
+                      className="cvm-action-btn"
                       whileHover={{ scale: 1.02, y: -1 }}
                       whileTap={{ scale: 0.96 }}
                       onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
                       style={{ 
-                        flex: 1, 
-                        height: 44,
-                        minWidth: 0,
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        gap: 8, 
-                        padding: '0 16px', 
-                        borderRadius: 14, 
+                        flex: '1 1 0', 
                         border: '1px solid rgba(99, 102, 241, 0.2)', 
                         background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
                         color: '#ffffff', 
-                        fontSize: 14, 
-                        fontWeight: 700, 
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
                         boxShadow: '0 8px 20px -6px rgba(79, 70, 229, 0.5)',
                         textShadow: '0 1px 2px rgba(0,0,0,0.1)'
                       }}
                     >
-                      <Send size={17} style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
-                      <span>Encaminhar</span>
+                      <Send size={15} style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Encaminhar</span>
                     </motion.button>
                   )}
                   {canShowReminderButton && (
                     <motion.button
                       type="button"
+                      className="cvm-action-btn"
                       whileHover={{ scale: 1.02, y: -1 }}
                       whileTap={{ scale: 0.96 }}
                       onClick={(e: any) => {
@@ -3729,30 +3758,18 @@ export function ComunicadoViewModal({
                         setShowReminderModal(true);
                       }}
                       title="Enviar nova notificação push de lembrete para os destinatários"
-                      aria-label="Enviar lembrete"
+                      aria-label="Lembrete"
                       style={{
-                        flex: onForward ? '0 1 auto' : 1,
-                        height: 44,
-                        minWidth: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
-                        padding: '0 16px',
-                        borderRadius: 14,
+                        flex: onForward ? '0 1 auto' : '1 1 0',
                         border: '1px solid rgba(245, 158, 11, 0.35)',
                         background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                         color: '#ffffff',
-                        fontSize: 14,
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
                         boxShadow: '0 8px 20px -6px rgba(217, 119, 6, 0.45)',
                         textShadow: '0 1px 2px rgba(0,0,0,0.12)'
                       }}
                     >
-                      <BellRing size={17} style={{ flexShrink: 0 }} />
-                      <span>Enviar lembrete</span>
+                      <BellRing size={15} style={{ flexShrink: 0 }} />
+                      <span>Lembrete</span>
                     </motion.button>
                   )}
                 </div>
@@ -3761,77 +3778,56 @@ export function ComunicadoViewModal({
                 <div className="cvm-actions-icons">
                   {destinatariosStr && (
                     <motion.button 
+                      className="cvm-icon-btn"
                       whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
                       whileTap={{ scale: 0.94 }}
                       onClick={(e: any) => { e.stopPropagation(); setShowDestinatariosModal(true); }} 
-                      title="Ver Destinatários"
-                      aria-label="Ver Destinatários"
+                      title="Ver Destinatários e Leituras"
+                      aria-label="Ver Destinatários e Leituras"
                       style={{ 
-                        width: 44,
-                        height: 44,
-                        flexShrink: 0,
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        borderRadius: 14, 
                         border: '1px solid #e2e8f0', 
                         background: '#ffffff', 
                         color: '#475569', 
-                        cursor: 'pointer',
                         boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
                       }}
                     >
-                      <Users size={18} />
+                      <Users size={17} />
                     </motion.button>
                   )}
                   {onEdit && (
                     <motion.button 
+                      className="cvm-icon-btn"
                       whileHover={{ scale: 1.05, y: -1, background: '#f8fafc' }}
                       whileTap={{ scale: 0.94 }}
                       onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
                       title="Editar"
                       aria-label="Editar"
                       style={{ 
-                        width: 44,
-                        height: 44,
-                        flexShrink: 0,
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        borderRadius: 14, 
                         border: '1px solid #e2e8f0', 
                         background: '#ffffff', 
                         color: '#475569', 
-                        cursor: 'pointer',
                         boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
                       }}
                     >
-                      <Edit2 size={18} />
+                      <Edit2 size={17} />
                     </motion.button>
                   )}
                   {onDelete && (
                     <motion.button 
+                      className="cvm-icon-btn"
                       whileHover={{ scale: 1.05, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
                       whileTap={{ scale: 0.94 }}
                       onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
                       title="Excluir"
                       aria-label="Excluir"
                       style={{ 
-                        width: 44,
-                        height: 44,
-                        flexShrink: 0,
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'center', 
-                        borderRadius: 14, 
                         border: '1px solid rgba(239, 68, 68, 0.25)', 
                         background: 'rgba(239, 68, 68, 0.08)', 
                         color: '#ef4444', 
-                        cursor: 'pointer',
                         boxShadow: '0 4px 12px -4px rgba(239, 68, 68, 0.15)'
                       }}
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={17} />
                     </motion.button>
                   )}
                 </div>
@@ -3842,111 +3838,33 @@ export function ComunicadoViewModal({
       </motion.div>
 
 
-      <AnimatePresence>
-        {showDestinatariosModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: 'fixed',
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(4px)',
-              zIndex: 100000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 20
-            }}
-            onClick={() => setShowDestinatariosModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                background: '#ffffff',
-                borderRadius: 24,
-                width: '100%',
-                maxWidth: 500,
-                maxHeight: '80vh',
-                display: 'flex',
-                flexDirection: 'column',
-                boxShadow: '0 24px 48px rgba(0,0,0,0.2)'
-              }}
-            >
-              <div style={{ padding: '24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#6366f1' }}>
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                  </svg>
-                  Destinatários
-                </h3>
-                <button 
-                  onClick={() => setShowDestinatariosModal(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4, display: 'flex' }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div style={{ padding: '24px', overflowY: 'auto', flex: 1, fontSize: 14, color: '#475569', lineHeight: 1.6 }}>
-                {destinatariosStr?.split(' | ').map((group: string, i: number) => {
-                  const parts = group.split(': ');
-                  // Se não tiver label: value, renderiza tudo na mesma tag
-                  if (parts.length < 2) {
-                    return (
-                      <div key={i} style={{ marginBottom: i === destinatariosStr.split(' | ').length - 1 ? 0 : 20 }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          <span style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: 16, fontSize: 13 }}>
-                            {group}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  const label = parts[0];
-                  const rest = parts.slice(1).join(': ');
-                  const items = rest.split(', ');
-                  return (
-                    <div key={i} style={{ marginBottom: i === destinatariosStr.split(' | ').length - 1 ? 0 : 20 }}>
-                      <strong style={{ display: 'block', color: '#0f172a', marginBottom: 8, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</strong>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {items.length > 0 && items[0] !== '' ? items.map((item, j) => (
-                          <span key={j} style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: 16, fontSize: 13 }}>
-                            {item}
-                          </span>
-                        )) : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhum</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', background: '#f8fafc', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
-                <button
-                  onClick={() => setShowDestinatariosModal(false)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 12,
-                    background: '#e2e8f0',
-                    color: '#475569',
-                    border: 'none',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Fechar
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ComunicadoDestinatariosModal
+        isOpen={showDestinatariosModal}
+        comunicado={comunicado}
+        onClose={() => setShowDestinatariosModal(false)}
+        alunos={alunos}
+        canEditReportOverride={Boolean(onEditReportPayload)}
+        onOpenStudentReport={
+          setOpenedReportPayload || onEditReportPayload
+            ? (payload) => {
+                if (payload.editMode && onEditReportPayload) {
+                  onEditReportPayload(payload.string)
+                } else if (setOpenedReportPayload) {
+                  setOpenedReportPayload(payload.string)
+                }
+              }
+            : undefined
+        }
+        onOpenReminderModal={
+          canShowReminderButton
+            ? () => {
+                setReminderMode('unread')
+                setReminderFeedback(null)
+                setShowReminderModal(true)
+              }
+            : undefined
+        }
+      />
 
       {/* Modal de Confirmação e Envio de Lembrete Push */}
       <AnimatePresence>

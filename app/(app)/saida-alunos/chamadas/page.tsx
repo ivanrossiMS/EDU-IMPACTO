@@ -2948,7 +2948,9 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
                   <span title={l.loggedBy}>por: <span style={{ color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
                 </div>
                 {l.confirmedOut && (
-                  <div style={{
+                  <div
+                    title={`Saída confirmada hoje${l.confirmedAt ? ` às ${l.confirmedAt}` : ''}`}
+                    style={{
                     fontSize: 9,
                     color: '#047857',
                     background: 'rgba(16, 185, 129, 0.2)',
@@ -2964,7 +2966,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
                     wordBreak: 'break-word',
                   }}>
                     <CheckCircle2 size={10.5} style={{ flexShrink: 0, color: '#059669' }} />
-                    <span>Saída confirmada hoje{l.confirmedAt ? ` às ${l.confirmedAt}` : ''}</span>
+                    <span>hoje{l.confirmedAt ? ` às ${l.confirmedAt}` : ''}</span>
                   </div>
                 )}
               </div>
@@ -3292,7 +3294,7 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
                     {abbreviateStudentName(aluno.nome, 22)}
                   </div>
                   {aluno.restritos.map((r: any, idx: number) => (
-                    <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
                       <span style={{ 
                         fontSize: 8, 
                         fontWeight: 700, 
@@ -3301,11 +3303,24 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
                         textTransform: 'uppercase',
                         backgroundColor: 'rgba(156, 163, 175, 0.15)',
                         color: '#6b7280',
-                        border: '1px solid rgba(156, 163, 175, 0.3)'
+                        border: '1px solid rgba(156, 163, 175, 0.3)',
+                        flexShrink: 0,
                       }}>
                         {r.parentesco ? r.parentesco : 'Resp.'}
                       </span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>{r.nome}</span>
+                      <span
+                        title={r.nome}
+                        style={{
+                          fontWeight: 700,
+                          color: '#ef4444',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          minWidth: 0,
+                        }}
+                      >
+                        {abbreviateStudentName(r.nome, 18)}
+                      </span>
                       <span style={{ 
                         fontSize: 8, 
                         fontWeight: 800, 
@@ -3314,7 +3329,8 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
                         textTransform: 'uppercase',
                         backgroundColor: r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(249, 115, 22, 0.1)',
                         color: r.motivo === 'Proibido' ? '#ef4444' : '#f97316',
-                        border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`
+                        border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`,
+                        flexShrink: 0,
                       }}>
                         {r.motivo}
                       </span>
