@@ -801,21 +801,15 @@ export default function ADMomentosPage() {
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
         } else if (isVideo) {
-          // Vídeos <= 48.5MB são mantidos 100% nativos (máxima qualidade de câmera e som original, respeitando o teto de 50MB do servidor).
-          // Apenas vídeos > 48.5MB (até 100MB) são otimizados de forma fluida, sem travamentos e com áudio preservado.
-          if (file.size > 48.5 * 1024 * 1024) {
-            const compressed = await compressVideo(file, (percent) => {
-              const scaled = Math.round(20 + (percent * 0.30))
-              setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
-            })
-            const isMp4 = (compressed.type || '').includes('mp4')
-            const ext = isMp4 ? '.mp4' : '.webm'
-            const mime = isMp4 ? 'video/mp4' : 'video/webm'
-            fileToUpload = compressed instanceof File
-              ? compressed
-              : new File([compressed], file.name.replace(/\.[^/.]+$/, '') + `_opt${ext}`, { type: compressed.type || mime })
-          }
-          setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
+          // Otimiza e padroniza todo vídeo para MP4 (H.264 + AAC, 720p30, FastStart),
+          // garantindo reprodução fluida e sincronizada (vídeos pequenos já no padrão são mantidos/remuxados rapidamente).
+          setUploadProgress(prev => ({ ...prev, [file.name]: 5 }))
+          const compressed = await compressVideo(file, (percent) => {
+            const scaled = Math.round(5 + (percent * 0.50))
+            setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
+          })
+          fileToUpload = compressed
+          setUploadProgress(prev => ({ ...prev, [file.name]: 55 }))
         }
 
         if (fileToUpload.size > 50 * 1024 * 1024) {
@@ -859,7 +853,7 @@ export default function ADMomentosPage() {
         let thumbUrl: string | null = null
         if (isVideo) {
           try {
-            const rawThumb = mediaThumbnails[file.name] || (await extractVideoThumbnail(file)).thumbnailUrl
+            const rawThumb = mediaThumbnails[file.name] || (await extractVideoThumbnail(fileToUpload)).thumbnailUrl
             if (rawThumb) {
               const thumbFile = await thumbnailDataUrlToFile(rawThumb, `thumb_${file.name.replace(/\.[^/.]+$/, '')}`)
               if (thumbFile) {
@@ -2340,7 +2334,7 @@ export default function ADMomentosPage() {
                           border: isComplete ? '1px solid #bbf7d0' : (isInProgress ? '1px solid #ddd6fe' : '1px solid #e2e8f0'),
                           transition: 'all 0.2s ease'
                         }}>
-                          {f.type.includes('video') ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
+                          {f.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(f.name) ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
                           <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                           {isComplete ? (
                             <Check size={16} color="#10b981" />
@@ -2481,7 +2475,7 @@ export default function ADMomentosPage() {
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 10 }}>
                       {newPost.mediaFiles.map((file, i) => {
-                        const isVid = file.type.includes('video') || file.name.toLowerCase().endsWith('.mov');
+                        const isVid = file.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(file.name);
                         const thumb = mediaThumbnails[file.name] || (file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
                         const origSize = mediaOriginalSizes[file.name];
                         const showDiff = origSize && origSize > file.size;

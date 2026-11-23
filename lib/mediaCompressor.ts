@@ -44,71 +44,97 @@ export async function extractVideoThumbnail(
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
-      video.crossOrigin = 'anonymous';
-
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
       const isFile = typeof source !== 'string' && source instanceof File;
+      if (!isFile) {
+        video.crossOrigin = 'anonymous';
+      }
+
       const url = isFile ? URL.createObjectURL(source) : source;
       video.src = url;
 
       let resolved = false;
-      const cleanup = () => {
-        if (!resolved) {
-          resolved = true;
-          if (isFile) {
-            try { URL.revokeObjectURL(url); } catch {}
-          }
-          try { video.remove(); } catch {}
+      let seekTriggered = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = (result: { thumbnailUrl: string; duration: number }) => {
+        if (resolved) return;
+        resolved = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
         }
+        video.onloadedmetadata = null;
+        video.onloadeddata = null;
+        video.onseeked = null;
+        video.onerror = null;
+        if (isFile) {
+          try { URL.revokeObjectURL(url); } catch {}
+        }
+        try {
+          video.removeAttribute('src');
+          video.load();
+          video.remove();
+        } catch {}
+        resolve(result);
       };
 
       const triggerSeek = () => {
+        if (resolved || seekTriggered) return;
+        if (!video.videoWidth || !video.videoHeight) return;
+        seekTriggered = true;
         try {
-          const seekTime = Math.max(0.1, Math.min(targetSecond, (video.duration || 1) / 2));
+          const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+          const seekTime = Math.max(0.05, Math.min(targetSecond, dur / 2));
           if (Math.abs(video.currentTime - seekTime) > 0.05) {
             video.currentTime = seekTime;
+          } else {
+            captureFrame();
           }
-        } catch {}
+        } catch {
+          captureFrame();
+        }
       };
 
-      video.onloadedmetadata = triggerSeek;
-      video.onloadeddata = triggerSeek;
-
-      video.onseeked = () => {
+      const captureFrame = () => {
         try {
+          if (!video.videoWidth || !video.videoHeight) {
+            finish({ thumbnailUrl: '', duration: Number.isFinite(video.duration) ? video.duration : 0 });
+            return;
+          }
           const canvas = document.createElement('canvas');
-          const width = Math.min(video.videoWidth || 640, 640);
-          const ratio = (video.videoHeight || 360) / (video.videoWidth || 640);
-          const height = Math.round(width * ratio) || 360;
+          const width = Math.min(video.videoWidth, 640);
+          const ratio = video.videoHeight / video.videoWidth;
+          const height = Math.max(2, Math.round(width * ratio));
           canvas.width = width;
           canvas.height = height;
 
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext('2d', { alpha: false });
           if (ctx) {
             ctx.drawImage(video, 0, 0, width, height);
             const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
-            const duration = video.duration || 0;
-            cleanup();
-            resolve({ thumbnailUrl, duration });
+            const duration = Number.isFinite(video.duration) ? video.duration : 0;
+            finish({ thumbnailUrl, duration });
             return;
           }
         } catch (err) {
           console.warn('[Video Thumbnail] Erro no render canvas:', err);
         }
-        const duration = video.duration || 0;
-        cleanup();
-        resolve({ thumbnailUrl: '', duration });
+        finish({ thumbnailUrl: '', duration: Number.isFinite(video.duration) ? video.duration : 0 });
       };
 
+      video.onloadedmetadata = triggerSeek;
+      video.onloadeddata = triggerSeek;
+      video.onseeked = captureFrame;
       video.onerror = () => {
-        cleanup();
-        resolve({ thumbnailUrl: '', duration: 0 });
+        finish({ thumbnailUrl: '', duration: 0 });
       };
 
-      setTimeout(() => {
-        cleanup();
-        resolve({ thumbnailUrl: '', duration: video.duration || 0 });
-      }, 4000);
-    } catch (e) {
+      timeoutId = setTimeout(() => {
+        finish({ thumbnailUrl: '', duration: Number.isFinite(video.duration) ? video.duration : 0 });
+      }, isFile ? 5000 : 8000);
+    } catch {
       resolve({ thumbnailUrl: '', duration: 0 });
     }
   });
@@ -635,28 +661,296 @@ export async function compressPDF(
   }
 }
 
-/**
- * Comprime e otimiza arquivos de vídeo no cliente antes do upload.
- * - Mantém vídeos <= 48.5MB 100% nativos (máxima qualidade de câmera e áudio original, respeitando o teto de 50MB do Supabase Storage).
- * - Otimiza vídeos > 48.5MB (até 100MB) para caber de forma segura abaixo de 45MB em Full HD (1080p).
- * - Preserva 100% do áudio original através de decodificação direta via Web Audio API (sem problemas de política de Autoplay ou silenciamento).
- * - Utiliza captura de stream direta com aceleração de hardware nativa (sem sobrecarga de Canvas quando a resolução é compatível)
- *   ou Canvas sincronizado com requestVideoFrameCallback para evitar quedas de FPS, travamentos ou vídeos acelerados/lentos.
- */
-export async function compressVideo(
+let aacEncoderRegistered = false;
+
+async function ensureMediabunnyAacEncoder(canEncodeAudio: (codec: 'aac') => Promise<boolean>): Promise<void> {
+  if (aacEncoderRegistered) return;
+  try {
+    if (!(await canEncodeAudio('aac'))) {
+      const { registerAacEncoder } = await import('@mediabunny/aac-encoder');
+      registerAacEncoder();
+    }
+    aacEncoderRegistered = true;
+  } catch (err) {
+    console.warn('[Video Compressor] Falha ao registrar @mediabunny/aac-encoder:', err);
+  }
+}
+
+function buildOptimizedMp4File(buffer: ArrayBuffer, originalName: string): File {
+  const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+  const cleanName = `${baseName.replace(/_opt$/i, '')}_opt.mp4`;
+  return new File([buffer], cleanName, {
+    type: 'video/mp4',
+    lastModified: Date.now()
+  });
+}
+
+async function compressVideoWithMediabunny(
   file: File,
   onProgress?: (percent: number) => void,
   options: VideoCompressOptions = {}
-): Promise<File | Blob> {
-  // Vídeos <= 48.5MB em formato padrão são mantidos nativos para envio imediato, sem perda de nitidez ou som
-  const COMPRESS_THRESHOLD_BYTES = 48.5 * 1024 * 1024;
-  const isVideoFormat = /\.(mp4|webm|mov|m4v|3gp|mkv|avi)$/i.test(file.name) || file.type.startsWith('video/') || file.type.includes('video');
-  if (file.size <= COMPRESS_THRESHOLD_BYTES && isVideoFormat) {
-    if (onProgress) onProgress(100);
-    return file;
+): Promise<File | null> {
+  if (typeof window === 'undefined' || !('VideoEncoder' in window) || !('VideoDecoder' in window)) {
+    return null;
   }
 
-  // Se o ambiente não suportar MediaRecorder ou Canvas, mantém o original
+  let input: any = null;
+  try {
+    const mb = await import('mediabunny');
+    const {
+      Input,
+      ALL_FORMATS,
+      BlobSource,
+      Output,
+      BufferTarget,
+      Mp4OutputFormat,
+      Conversion,
+      canEncodeAudio,
+      canEncodeVideo
+    } = mb;
+
+    input = new Input({
+      source: new BlobSource(file),
+      formats: ALL_FORMATS
+    });
+
+    const [format, videoTrack, audioTrack, rawDuration] = await Promise.all([
+      input.getFormat().catch(() => null),
+      input.getPrimaryVideoTrack().catch(() => null),
+      input.getPrimaryAudioTrack().catch(() => null),
+      input.computeDuration().catch(() => 0)
+    ]);
+
+    if (!videoTrack) {
+      return null;
+    }
+
+    const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 30;
+    const [videoCodec, audioCodec, displayWidth, displayHeight, frameRateMetrics, packetStats] = await Promise.all([
+      videoTrack.getCodec().catch(() => null),
+      audioTrack ? audioTrack.getCodec().catch(() => null) : Promise.resolve(null),
+      videoTrack.getDisplayWidth().catch(() => videoTrack.displayWidth || 1280),
+      videoTrack.getDisplayHeight().catch(() => videoTrack.displayHeight || 720),
+      videoTrack.computeFrameRateMetrics({ targetPacketCount: 120 }).catch(() => ({
+        bestGuessFrameRate: 30,
+        frameRateIsConstant: false
+      })),
+      videoTrack.computePacketStats(120).catch(() => ({
+        averageBitrate: 0,
+        averagePacketRate: 30
+      }))
+    ]);
+
+    const maxSide = Math.max(displayWidth || 0, displayHeight || 0);
+    const estFps = frameRateMetrics?.bestGuessFrameRate || packetStats?.averagePacketRate || 30;
+    const isCfr = Boolean(frameRateMetrics?.frameRateIsConstant);
+    const isMp4Container =
+      (format?.mimeType || '').includes('mp4') ||
+      /\.(mp4|m4v)$/i.test(file.name) ||
+      file.type === 'video/mp4';
+
+    const isAlreadyWebReady =
+      isMp4Container &&
+      videoCodec === 'avc' &&
+      (!audioTrack || audioCodec === 'aac') &&
+      maxSide > 0 &&
+      maxSide <= 1280 &&
+      estFps <= 31 &&
+      isCfr &&
+      file.size <= 15 * 1024 * 1024 &&
+      (packetStats?.averageBitrate || (file.size * 8) / duration) <= 2_200_000;
+
+    // Se já é MP4 H.264/AAC <= 720p CFR e pequeno:
+    // - <= 4MB: mantém intacto instantaneamente
+    // - 4MB..15MB: tenta remux sem perda com fastStart ('moov' no início) para streaming imediato
+    if (isAlreadyWebReady) {
+      if (file.size <= 4 * 1024 * 1024) {
+        if (onProgress) onProgress(100);
+        return file;
+      }
+
+      try {
+        const remuxTarget = new BufferTarget();
+        const remuxOutput = new Output({
+          format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+          target: remuxTarget
+        });
+        const remuxConv = await Conversion.init({
+          input,
+          output: remuxOutput,
+          tracks: 'primary',
+          showWarnings: false,
+          copy: { mode: 'forced' }
+        });
+        const audioDropped = Boolean(
+          audioTrack &&
+            remuxConv.discardedTracks.some(
+              (d: any) => d.track?.type === 'audio' && d.reason !== 'discarded_by_user'
+            )
+        );
+        if (remuxConv.isValid && !audioDropped) {
+          remuxConv.onProgress = (p: number) => {
+            if (onProgress) onProgress(Math.min(99, Math.round(p * 100)));
+          };
+          await remuxConv.execute();
+          if (remuxTarget.buffer && remuxTarget.buffer.byteLength > 50 * 1024) {
+            const remuxed = buildOptimizedMp4File(remuxTarget.buffer, file.name);
+            if (remuxed.size <= 48.5 * 1024 * 1024) {
+              console.info(
+                `[Video Compressor] FastStart remux sem perdas: ${formatFileSize(file.size)} -> ${formatFileSize(remuxed.size)}`
+              );
+              if (onProgress) onProgress(100);
+              return remuxed;
+            }
+          }
+        }
+      } catch (remuxErr) {
+        console.warn('[Video Compressor] FastStart remux falhou, seguindo para transcodificação:', remuxErr);
+      }
+    }
+
+    // Configuração ideal para feed móvel/web sem travamentos e sem dessincronia:
+    // MP4 (H.264 AVC + AAC), 720p (1280px max), 30fps CFR, keyframe a cada 2s, moov no início (fastStart)
+    const AUDIO_BITRATE = 128_000;
+    const SOFT_TARGET_BYTES = 25 * 1024 * 1024;
+    const HARD_MAX_BYTES = 38 * 1024 * 1024;
+    const targetCapBytes = duration <= 110 ? SOFT_TARGET_BYTES : HARD_MAX_BYTES;
+    const maxVideoBpsForCap = Math.floor((targetCapBytes * 8) / Math.max(1, duration) - (audioTrack ? AUDIO_BITRATE : 0));
+
+    const idealVideoBps = options.maxBitrate || 1_800_000;
+    const videoBitrate = Math.max(550_000, Math.min(idealVideoBps, maxVideoBpsForCap));
+
+    let maxDim = options.targetWidth || 1280;
+    if (!options.targetWidth) {
+      if (videoBitrate < 750_000) maxDim = 854;
+      else if (videoBitrate < 1_100_000) maxDim = 960;
+    }
+
+    const shouldResize = maxSide > maxDim;
+    const isLandscape = (displayWidth || 1280) >= (displayHeight || 720);
+
+    // Dimensões estimadas para checar suporte do hardware encoder H.264
+    const estOutW = shouldResize
+      ? isLandscape
+        ? maxDim
+        : Math.max(2, Math.round((displayWidth * maxDim) / Math.max(1, displayHeight)) & ~1)
+      : Math.max(2, (displayWidth || 1280) & ~1);
+    const estOutH = shouldResize
+      ? isLandscape
+        ? Math.max(2, Math.round((displayHeight * maxDim) / Math.max(1, displayWidth)) & ~1)
+        : maxDim
+      : Math.max(2, (displayHeight || 720) & ~1);
+
+    const avcSupported = await canEncodeVideo('avc', {
+      width: estOutW,
+      height: estOutH,
+      bitrate: videoBitrate
+    }).catch(() => false);
+
+    if (!avcSupported) {
+      console.warn('[Video Compressor] WebCodecs H.264 indisponível para estas dimensões; usando fallback.');
+      return null;
+    }
+
+    if (audioTrack) {
+      await ensureMediabunnyAacEncoder(canEncodeAudio);
+    }
+
+    const needsCfrNormalize = !isCfr || estFps > 31;
+    const videoOptions: any = {
+      codec: 'avc',
+      bitrate: videoBitrate,
+      keyFrameInterval: 2,
+      allowTransformationMetadata: false,
+      forceTranscode: true,
+      ...(needsCfrNormalize ? { frameRate: 30 } : {}),
+      ...(shouldResize ? (isLandscape ? { width: maxDim } : { height: maxDim }) : {})
+    };
+
+    const srcChannels = audioTrack ? await audioTrack.getNumberOfChannels().catch(() => 2) : 0;
+    const audioOptions: any = audioTrack
+      ? {
+          codec: 'aac',
+          bitrate: AUDIO_BITRATE,
+          numberOfChannels: Math.max(1, Math.min(2, srcChannels || 2)),
+          forceTranscode: true
+        }
+      : { discard: true };
+
+    const target = new BufferTarget();
+    const output = new Output({
+      format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+      target
+    });
+
+    const conversion = await Conversion.init({
+      input,
+      output,
+      tracks: 'primary',
+      showWarnings: false,
+      video: videoOptions,
+      audio: audioOptions
+    });
+
+    const audioUnexpectedlyDropped = Boolean(
+      audioTrack &&
+        conversion.discardedTracks.some(
+          (d: any) => d.track?.type === 'audio' && d.reason !== 'discarded_by_user'
+        )
+    );
+
+    if (!conversion.isValid || audioUnexpectedlyDropped) {
+      console.warn(
+        '[Video Compressor] Mediabunny Conversion inválida ou áudio descartado:',
+        conversion.discardedTracks
+      );
+      return null;
+    }
+
+    conversion.onProgress = (progress: number) => {
+      if (onProgress) {
+        onProgress(Math.min(99, Math.max(1, Math.round(progress * 100))));
+      }
+    };
+
+    await conversion.execute();
+
+    if (!target.buffer || target.buffer.byteLength <= 50 * 1024) {
+      return null;
+    }
+
+    const optimizedFile = buildOptimizedMp4File(target.buffer, file.name);
+    if (optimizedFile.size > 48.5 * 1024 * 1024) {
+      console.warn('[Video Compressor] Saída ainda acima de 48.5MB; mantendo validação final.');
+    }
+
+    console.info(
+      `[Video Compressor / Mediabunny] ${formatFileSize(file.size)} -> ${formatFileSize(optimizedFile.size)} (${estOutW}x${estOutH}, ${Math.round(videoBitrate / 1000)} kbps, FastStart H.264/AAC)`
+    );
+    if (onProgress) onProgress(100);
+    return optimizedFile;
+  } catch (err) {
+    console.warn('[Video Compressor / Mediabunny] Erro na transcodificação, tentando fallback:', err);
+    return null;
+  } finally {
+    if (input) {
+      try {
+        input.dispose();
+      } catch {}
+    }
+  }
+}
+
+/**
+ * Fallback com Canvas + MediaRecorder para navegadores legados sem WebCodecs.
+ * Sincroniza áudio via MediaElementAudioSourceNode (mesmo relógio do elemento <video>)
+ * e utiliza perfil 720p @ 1.8 Mbps para evitar travamentos e dessincronia.
+ */
+async function compressVideoWithMediaRecorderFallback(
+  file: File,
+  onProgress?: (percent: number) => void,
+  options: VideoCompressOptions = {}
+): Promise<File> {
   if (typeof window === 'undefined' || typeof document === 'undefined' || typeof MediaRecorder === 'undefined') {
     if (onProgress) onProgress(100);
     return file;
@@ -668,23 +962,16 @@ export async function compressVideo(
     let recorder: MediaRecorder | null = null;
     let audioCtx: any = null;
     let audioSourceNode: AudioBufferSourceNode | null = null;
+    let mediaElementSource: MediaElementAudioSourceNode | null = null;
     let isRecording = false;
     let hasStartedEncoding = false;
     let loopRunning = false;
     let animId: number | null = null;
     let vfcId: number | null = null;
-    let progressTimer: NodeJS.Timeout | null = null;
-    let safetyTimeout: NodeJS.Timeout | null = null;
-    let watchdogTimer: NodeJS.Timeout | null = null;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    let safetyTimeout: ReturnType<typeof setTimeout> | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     let resolved = false;
-
-    const safeResolve = (result: File | Blob) => {
-      if (resolved) return;
-      resolved = true;
-      cleanup();
-      if (onProgress) onProgress(100);
-      resolve(result);
-    };
 
     const cleanup = () => {
       isRecording = false;
@@ -714,6 +1001,10 @@ export async function compressVideo(
         try { audioSourceNode.disconnect(); } catch {}
         audioSourceNode = null;
       }
+      if (mediaElementSource) {
+        try { mediaElementSource.disconnect(); } catch {}
+        mediaElementSource = null;
+      }
       if (audioCtx) {
         try {
           if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
@@ -739,6 +1030,14 @@ export async function compressVideo(
       }
     };
 
+    const safeResolve = (result: File) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      if (onProgress) onProgress(100);
+      resolve(result);
+    };
+
     try {
       const videoElement = document.createElement('video');
       video = videoElement;
@@ -746,18 +1045,14 @@ export async function compressVideo(
       videoElement.setAttribute('playsinline', '');
       videoElement.setAttribute('webkit-playsinline', '');
       videoElement.preload = 'auto';
-      // Mudo ativado no elemento evita que o navegador bloqueie o play() por políticas de autoplay
-      videoElement.muted = true;
-      videoElement.setAttribute('muted', '');
+      videoElement.muted = false;
 
-      // Mantém o elemento ativo para o decodificador com 100% de opacidade para não desbotar cores nem sofrer throttling,
-      // posicionado discretamente no viewport do navegador
       videoElement.style.position = 'fixed';
       videoElement.style.top = '0px';
       videoElement.style.left = '0px';
       videoElement.style.width = '320px';
       videoElement.style.height = '240px';
-      videoElement.style.opacity = '1';
+      videoElement.style.opacity = '0.01';
       videoElement.style.pointerEvents = 'none';
       videoElement.style.zIndex = '-10';
 
@@ -766,9 +1061,8 @@ export async function compressVideo(
       const objectUrl = URL.createObjectURL(file);
       videoElement.src = objectUrl;
 
-      // Watchdog de segurança no carregamento inicial do arquivo
       watchdogTimer = setTimeout(() => {
-        console.warn('[Video Compressor] Timeout no carregamento inicial do vídeo (15s). Usando original.');
+        console.warn('[Video Compressor Fallback] Timeout no carregamento inicial (15s). Usando original.');
         safeResolve(file);
       }, 15000);
 
@@ -786,26 +1080,17 @@ export async function compressVideo(
           duration = 30;
         }
 
-        // Se o vídeo for excessivamente longo (> 10 minutos), evita travar o aparelho
         if (duration > 600) {
-          console.info('[Video Compressor] Vídeo muito longo (>600s), mantendo arquivo original.');
           safeResolve(file);
           return;
         }
 
-        // Resolução alvo: 1080p Full HD (1920px no maior lado) para nitidez excepcional sem perda de detalhes
-        const origW = videoElement.videoWidth || 1920;
-        const origH = videoElement.videoHeight || 1080;
-        const maxDim = options.targetWidth || 1920;
+        const origW = videoElement.videoWidth || 1280;
+        const origH = videoElement.videoHeight || 720;
+        const maxDim = options.targetWidth || 1280;
 
-        let videoTrack: MediaStreamTrack | null = null;
-        let canvasStream: MediaStream | null = null;
-        let ctx: CanvasRenderingContext2D | null = null;
-
-        canvas = document.createElement('canvas');
         let w = origW;
         let h = origH;
-
         if (w > maxDim || h > maxDim) {
           if (w >= h) {
             h = Math.round((h * maxDim) / w);
@@ -815,19 +1100,14 @@ export async function compressVideo(
             h = maxDim;
           }
         }
-
-        // Dimensões estritamente pares para compatibilidade total com codecs de vídeo
         w = Math.max(2, w - (w % 2));
         h = Math.max(2, h - (h % 2));
+
+        canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
 
-        // alpha: false garante cores 100% sólidas (RGB 24-bit), pretos profundos e contraste total,
-        // eliminando o efeito de imagem desbotada ("sem cor") de canvas translúcidos
-        ctx = canvas.getContext('2d', {
-          alpha: false,
-          desynchronized: true
-        });
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
         if (!ctx) {
           safeResolve(file);
           return;
@@ -835,31 +1115,28 @@ export async function compressVideo(
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
 
-        // Renderiza o primeiro quadro sólido imediatamente
         if (videoElement.readyState >= 2) {
           ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         }
 
+        let videoTrack: MediaStreamTrack | null = null;
         try {
-          canvasStream = (canvas as any).captureStream(30);
+          const canvasStream: MediaStream = (canvas as any).captureStream(30);
           videoTrack = canvasStream?.getVideoTracks?.()[0] || null;
-        } catch (err) {
-          console.warn('[Video Compressor] Canvas captureStream falhou:', err);
+        } catch {
           safeResolve(file);
           return;
         }
-
         if (!videoTrack) {
           safeResolve(file);
           return;
         }
 
         const outputStream = new MediaStream([videoTrack]);
-
-        // Captura fiel de áudio via Web Audio API com decodificação direta de dados:
-        // Isso garante 100% de preservação do som, mesmo se o elemento de vídeo estiver mudo
-        // para contornar o bloqueio de Autoplay Policy dos navegadores.
         let audioCaptured = false;
+        let useDecodedBufferFallback = false;
+
+        // Prioridade 1: Roteia áudio do <video> via Web Audio API sem saída para alto-falante (sincronia 1:1 com frames)
         try {
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           if (AudioContextClass) {
@@ -867,52 +1144,27 @@ export async function compressVideo(
             if (audioCtx.state === 'suspended') {
               await audioCtx.resume().catch(() => {});
             }
-
-            const arrayBuffer = await file.arrayBuffer();
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-            if (audioBuffer && audioBuffer.numberOfChannels > 0) {
-              const dest = audioCtx.createMediaStreamDestination();
-              const sourceNode = audioCtx.createBufferSource();
-              sourceNode.buffer = audioBuffer;
-              sourceNode.connect(dest);
-              audioSourceNode = sourceNode;
-
-              const audioTracks = dest.stream.getAudioTracks();
-              if (audioTracks && audioTracks.length > 0) {
-                outputStream.addTrack(audioTracks[0]);
-                audioCaptured = true;
-              }
+            const dest = audioCtx.createMediaStreamDestination();
+            const srcNode = audioCtx.createMediaElementSource(videoElement);
+            mediaElementSource = srcNode;
+            srcNode.connect(dest);
+            const tracks = dest.stream.getAudioTracks();
+            if (tracks.length > 0) {
+              outputStream.addTrack(tracks[0]);
+              audioCaptured = true;
             }
           }
-        } catch (audioErr) {
-          console.warn('[Video Compressor] decodeAudioData indisponível para este arquivo, tentando fallback:', audioErr);
+        } catch {
+          useDecodedBufferFallback = true;
         }
 
-        if (!audioCaptured) {
-          try {
-            if (typeof (videoElement as any).captureStream === 'function') {
-              const elemStream: MediaStream = (videoElement as any).captureStream();
-              const elemAudioTracks = elemStream?.getAudioTracks?.() || [];
-              if (elemAudioTracks.length > 0) {
-                outputStream.addTrack(elemAudioTracks[0]);
-                audioCaptured = true;
-              }
-            }
-          } catch {}
-        }
-
-        // Seleção de codec compatível:
-        // No Chrome/Firefox/Edge: 'video/webm;codecs=vp9,opus' respeita estritamente o bitrate configurado,
-        // garantindo que o vídeo não fique excessivamente comprimido nem perca cores.
-        // No Safari/WebKit: 'video/mp4;codecs=avc1' utiliza o VideoToolbox nativo da Apple.
+        // Prioriza MP4 H.264/AAC (compatível com iOS/Android/Web) e VP8 leve (evita VP9 pesado na CPU no fallback)
         const mimeCandidates = [
-          'video/webm;codecs=vp9,opus',
-          'video/webm;codecs=vp8,opus',
-          'video/webm',
           'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
           'video/mp4;codecs=avc1',
-          'video/mp4'
+          'video/mp4',
+          'video/webm;codecs=vp8,opus',
+          'video/webm'
         ];
         let mimeType = '';
         for (const candidate of mimeCandidates) {
@@ -922,46 +1174,30 @@ export async function compressVideo(
           }
         }
 
-        // Cálculo inteligente de bitrate:
-        // - Mantém altíssima fidelidade Full HD (até 8.0 Mbps) sem ultrapassar o teto seguro de ~44MB do Supabase Storage
-        // - Garante que o arquivo NÃO seja comprimido em excesso (ex: de 79MB para 9MB), preservando os detalhes
-        const maxTargetBytes = 44 * 1024 * 1024; // 44MB
-        const audioBitsPerSecond = audioCaptured ? 160000 : 0;
-        const maxTotalBpsForBucket = Math.floor((maxTargetBytes * 8) / Math.max(1, duration));
-        const idealVideoBps = options.maxBitrate || 8000000;
-        const minVideoBps = 2000000;
-        const videoBitsPerSecond = Math.max(minVideoBps, Math.min(idealVideoBps, maxTotalBpsForBucket - audioBitsPerSecond));
-
-        const recorderOpts: MediaRecorderOptions = {
-          ...(mimeType ? { mimeType } : {}),
-          videoBitsPerSecond,
-          ...(audioCaptured ? { audioBitsPerSecond } : {})
-        };
+        const maxTargetBytes = 25 * 1024 * 1024;
+        const audioBitsPerSecond = audioCaptured ? 128000 : 0;
+        const maxTotalBps = Math.floor((maxTargetBytes * 8) / Math.max(1, duration));
+        const idealVideoBps = options.maxBitrate || 1800000;
+        const videoBitsPerSecond = Math.max(550000, Math.min(idealVideoBps, maxTotalBps - audioBitsPerSecond));
 
         try {
-          recorder = new MediaRecorder(outputStream, recorderOpts);
-        } catch (e) {
+          recorder = new MediaRecorder(outputStream, {
+            ...(mimeType ? { mimeType } : {}),
+            videoBitsPerSecond,
+            ...(audioCaptured ? { audioBitsPerSecond } : {})
+          });
+        } catch {
           try {
-            recorder = new MediaRecorder(outputStream, {
-              videoBitsPerSecond,
-              ...(audioCaptured ? { audioBitsPerSecond } : {})
-            });
-          } catch (e2) {
-            try {
-              recorder = new MediaRecorder(outputStream);
-            } catch (e3) {
-              console.warn('[Video Compressor] MediaRecorder indisponível:', e3);
-              safeResolve(file);
-              return;
-            }
+            recorder = new MediaRecorder(outputStream);
+          } catch {
+            safeResolve(file);
+            return;
           }
         }
 
         const chunks: Blob[] = [];
         recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            chunks.push(e.data);
-          }
+          if (e.data && e.data.size > 0) chunks.push(e.data);
         };
 
         const onPlaybackEnd = () => {
@@ -993,22 +1229,16 @@ export async function compressVideo(
           const isMp4 = rawMime.includes('mp4');
           const cleanMimeType = isMp4 ? 'video/mp4' : 'video/webm';
           const ext = isMp4 ? '.mp4' : '.webm';
-
           const blob = new Blob(chunks, { type: cleanMimeType });
           const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-          const newName = `${baseName}_opt${ext}`;
-
-          const compressedFile = new File([blob], newName, {
+          const compressedFile = new File([blob], `${baseName}_opt${ext}`, {
             type: cleanMimeType,
             lastModified: Date.now()
           });
 
-          // Validação de sanidade (> 200KB e menor que o original)
-          if (compressedFile.size > 200 * 1024 && compressedFile.size < file.size) {
-            console.info(`[Video Compressor] Otimizado com sucesso: ${formatFileSize(file.size)} -> ${formatFileSize(compressedFile.size)} (${Math.round(videoBitsPerSecond / 1000)} kbps, áudio: ${audioCaptured ? 'OK' : 'Nenhum'})`);
+          if (compressedFile.size > 100 * 1024 && (compressedFile.size < file.size || isMp4)) {
             safeResolve(compressedFile);
           } else {
-            console.warn('[Video Compressor] Compressão não gerou tamanho menor ou arquivo inválido. Mantendo original.');
             safeResolve(file);
           }
         };
@@ -1017,17 +1247,14 @@ export async function compressVideo(
         const startRenderLoop = () => {
           if (loopRunning || !isRecording) return;
           loopRunning = true;
-
           const tick = () => {
             if (!isRecording || !ctx || !canvas || !videoElement) {
               loopRunning = false;
               return;
             }
-
             if (videoElement.readyState >= 2) {
               ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
             }
-
             if (!videoElement.ended && !videoElement.paused) {
               if ('requestVideoFrameCallback' in videoElement) {
                 vfcId = (videoElement as any).requestVideoFrameCallback(tick);
@@ -1038,16 +1265,14 @@ export async function compressVideo(
               loopRunning = false;
             }
           };
-
           tick();
         };
 
         videoElement.addEventListener('play', startRenderLoop);
         videoElement.addEventListener('playing', startRenderLoop);
         videoElement.addEventListener('ended', onPlaybackEnd);
-
-        // Inicia reprodução e gravação sincronizada
         videoElement.playbackRate = 1.0;
+
         const beginRecorder = () => {
           if (!recorder || recorder.state !== 'inactive') return;
           try {
@@ -1055,25 +1280,44 @@ export async function compressVideo(
           } catch {
             try { recorder.start(); } catch {}
           }
-          if (audioSourceNode) {
-            try { audioSourceNode.start(0); } catch {}
+          if (audioSourceNode && useDecodedBufferFallback) {
+            try { audioSourceNode.start(0, videoElement.currentTime || 0); } catch {}
           }
           startRenderLoop();
         };
 
-        const playPromise = videoElement.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => beginRecorder())
-            .catch((err) => {
-              console.warn('[Video Compressor] Play falhou:', err);
-              safeResolve(file);
-            });
-        } else {
+        try {
+          await videoElement.play();
           beginRecorder();
+        } catch {
+          // Se o navegador bloqueou autoplay sem mudo, muta elemento e usa decodeAudioData sincronizado no evento 'playing'
+          videoElement.muted = true;
+          videoElement.setAttribute('muted', '');
+          try {
+            if (audioCtx && file.size <= 60 * 1024 * 1024) {
+              if (mediaElementSource) {
+                try { mediaElementSource.disconnect(); } catch {}
+                mediaElementSource = null;
+              }
+              const arrayBuffer = await file.arrayBuffer();
+              const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+              if (audioBuffer && audioBuffer.numberOfChannels > 0) {
+                const dest = audioCtx.createMediaStreamDestination();
+                const srcNode = audioCtx.createBufferSource();
+                srcNode.buffer = audioBuffer;
+                srcNode.connect(dest);
+                audioSourceNode = srcNode;
+                useDecodedBufferFallback = true;
+                for (const t of outputStream.getAudioTracks()) outputStream.removeTrack(t);
+                const tracks = dest.stream.getAudioTracks();
+                if (tracks.length > 0) outputStream.addTrack(tracks[0]);
+              }
+            }
+          } catch {}
+
+          videoElement.play().then(() => beginRecorder()).catch(() => safeResolve(file));
         }
 
-        // Monitoramento de progresso
         progressTimer = setInterval(() => {
           if (!isRecording) return;
           const curr = videoElement.currentTime;
@@ -1085,10 +1329,8 @@ export async function compressVideo(
           }
         }, 150);
 
-        // Timeout de segurança proporcional à duração real
         const maxWaitMs = Math.min(620000, Math.max(15000, Math.round((duration + 15) * 1000)));
         safetyTimeout = setTimeout(() => {
-          console.warn('[Video Compressor] Timeout de segurança atingido.');
           onPlaybackEnd();
         }, maxWaitMs);
       };
@@ -1103,15 +1345,46 @@ export async function compressVideo(
           }
         }, 600);
       };
-
-      videoElement.onerror = (e) => {
-        console.warn('[Video Compressor] Erro no carregamento do vídeo:', e);
+      videoElement.onerror = () => {
         safeResolve(file);
       };
-    } catch (e) {
-      console.warn('[Video Compressor] Exceção geral:', e);
+    } catch {
       safeResolve(file);
     }
   });
+}
+
+/**
+ * Comprime e normaliza arquivos de vídeo no cliente antes do upload.
+ * - Padrão universal para reprodução fluida sem travamentos ou dessincronia:
+ *   MP4 (H.264 / AVC + AAC 128kbps), até 720p (1280px), 30fps constantes (CFR), fastStart (moov no início).
+ * - Usa transcodificação acelerada via WebCodecs (Mediabunny) sem bloqueio de thread nem perda de sincronia A/V,
+ *   com fallback automático para MediaRecorder se o dispositivo não suportar WebCodecs.
+ * - Pula ou apenas faz remux rápido sem perdas quando o vídeo já é MP4 H.264/AAC <= 720p CFR e leve.
+ */
+export async function compressVideo(
+  file: File,
+  onProgress?: (percent: number) => void,
+  options: VideoCompressOptions = {}
+): Promise<File> {
+  if (typeof window === 'undefined') {
+    if (onProgress) onProgress(100);
+    return file;
+  }
+
+  // Tentativa primária: Mediabunny (WebCodecs acelerado por hardware, MP4 H.264+AAC FastStart, sincronia perfeita)
+  const mediabunnyResult = await compressVideoWithMediabunny(file, onProgress, options);
+  if (mediabunnyResult) {
+    return mediabunnyResult;
+  }
+
+  // Fallback para navegadores antigos sem WebCodecs: apenas comprime se > 20MB ou formato não-MP4
+  const isMp4 = /\.mp4$/i.test(file.name) || file.type === 'video/mp4';
+  if (isMp4 && file.size <= 20 * 1024 * 1024) {
+    if (onProgress) onProgress(100);
+    return file;
+  }
+
+  return compressVideoWithMediaRecorderFallback(file, onProgress, options);
 }
 

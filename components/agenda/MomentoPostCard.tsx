@@ -856,32 +856,34 @@ export function MomentoPostCard({ post, index, onDelete, alunos: propAlunos, tur
             </div>
           )}
 
-          {/* Hover overlay hint */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(15, 23, 42, 0.18)',
-              opacity: 0,
-              transition: 'opacity 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
-          >
+          {/* Hover overlay hint (apenas para imagens; vídeos já possuem controles e botão de expandir próprios) */}
+          {currentMedia && !(currentMedia.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((currentMedia.url || '').split('?')[0])) && (
             <div
               style={{
-                background: 'rgba(15, 23, 42, 0.65)',
-                borderRadius: '50%',
-                padding: 10,
-                backdropFilter: 'blur(4px)',
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.18)',
+                opacity: 0,
+                transition: 'opacity 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
             >
-              <Maximize2 size={20} color="#fff" />
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.65)',
+                  borderRadius: '50%',
+                  padding: 10,
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                <Maximize2 size={20} color="#fff" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Counter */}
           {medias.length > 1 && (

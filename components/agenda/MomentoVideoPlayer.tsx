@@ -1,11 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
-import { Play, Maximize2, Video as VideoIcon, Loader2 } from 'lucide-react'
+import React, { useState, useEffect, useRef, useId } from 'react'
+import { Play, Maximize2, Video as VideoIcon, Loader2, RotateCcw } from 'lucide-react'
 import { extractVideoThumbnail } from '@/lib/mediaCompressor'
 
 // Cache em memória durante a sessão para evitar re-extrair thumbnails da mesma URL repetidamente
 const videoPosterCache = new Map<string, string>()
+
+const VIDEO_PLAY_EVENT = 'ad:momento-video-play'
 
 interface MomentoVideoPlayerProps {
   src: string
@@ -36,26 +38,82 @@ export function MomentoVideoPlayer({
   controls = true,
   showExpandButton = true,
 }: MomentoVideoPlayerProps) {
+  const playerId = useId()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   const [effectivePoster, setEffectivePoster] = useState<string | null>(() => {
     if (poster && typeof poster === 'string' && poster.trim()) return poster.trim()
     if (src && videoPosterCache.has(src)) return videoPosterCache.get(src)!
     return null
   })
 
+  const [isNearViewport, setIsNearViewport] = useState(autoPlay)
   const [isPlaying, setIsPlaying] = useState(autoPlay)
-  const [hasStarted, setHasStarted] = useState(false)
+  const [hasStarted, setHasStarted] = useState(autoPlay)
   const [isExtracting, setIsExtracting] = useState(false)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isBuffering, setIsBuffering] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
-  // Extrair thumbnail dinâmico do vídeo se não houver poster pré-existente
+  // Reinicia estados quando a URL do vídeo muda
   useEffect(() => {
+    setHasStarted(autoPlay)
+    setIsPlaying(autoPlay)
+    setIsBuffering(false)
+    setHasError(false)
+    if (poster && typeof poster === 'string' && poster.trim()) {
+      setEffectivePoster(poster.trim())
+    } else if (src && videoPosterCache.has(src)) {
+      setEffectivePoster(videoPosterCache.get(src)!)
+    } else {
+      setEffectivePoster(null)
+    }
+  }, [src, poster, autoPlay])
+
+  // Observa proximidade do viewport para adiar extração de capa e pré-carregamento até o vídeo ficar visível
+  useEffect(() => {
+    if (isNearViewport) return
+    const el = containerRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setIsNearViewport(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIsNearViewport(true)
+            observer.disconnect()
+            break
+          }
+        }
+      },
+      { rootMargin: '200px 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [isNearViewport])
+
+  // Pausa automaticamente este vídeo se outro player ou o Lightbox começar a reproduzir
+  useEffect(() => {
+    const handleOtherVideoPlay = (e: Event) => {
+      const detail = (e as CustomEvent<{ id?: string }>).detail
+      if (detail?.id !== playerId && videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause()
+      }
+    }
+    window.addEventListener(VIDEO_PLAY_EVENT, handleOtherVideoPlay)
+    return () => window.removeEventListener(VIDEO_PLAY_EVENT, handleOtherVideoPlay)
+  }, [playerId])
+
+  // Extrair thumbnail dinâmico apenas quando o card entrar na tela e não houver poster pré-existente
+  useEffect(() => {
+    if (!isNearViewport) return
     if (poster && typeof poster === 'string' && poster.trim()) {
       setEffectivePoster(poster.trim())
       return
     }
-
     if (!src) return
-
     if (videoPosterCache.has(src)) {
       setEffectivePoster(videoPosterCache.get(src)!)
       return
@@ -82,35 +140,65 @@ export function MomentoVideoPlayer({
     return () => {
       isMounted = false
     }
-  }, [src, poster])
+  }, [src, poster, isNearViewport])
 
-  // Normalizar src com fragmento #t=0.001 para que o decodificador nativo (Safari/Chrome/iOS) não fique preto
+  // Usa #t=0.001 apenas se não houver poster para ajudar Safari/iOS a exibir o primeiro frame sem prejudicar seek
   const videoSrc = (() => {
     if (!src) return ''
-    if (src.includes('#')) return src
+    if (effectivePoster || hasStarted || src.includes('#')) return src
     return `${src}#t=0.001`
   })()
 
+  const startPlayback = () => {
+    const vid = videoRef.current
+    if (!vid) return
+    setHasError(false)
+    setIsNearViewport(true)
+    setHasStarted(true)
+    setIsBuffering(true)
+    window.dispatchEvent(new CustomEvent(VIDEO_PLAY_EVENT, { detail: { id: playerId } }))
+    vid.play().then(() => {
+      setIsPlaying(true)
+      setIsBuffering(false)
+    }).catch((err) => {
+      setIsBuffering(false)
+      console.warn('[MomentoVideoPlayer] Autoplay bloqueado pelo navegador:', err)
+    })
+  }
+
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (videoRef.current) {
-      videoRef.current.play().then(() => {
-        setIsPlaying(true)
-      }).catch((err) => {
-        console.warn('[MomentoVideoPlayer] Autoplay bloqueado pelo navegador:', err)
-      })
-    }
+    startPlayback()
+  }
+
+  const handleRetryClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const vid = videoRef.current
+    if (!vid) return
+    setHasError(false)
+    setIsBuffering(true)
+    vid.load()
+    startPlayback()
   }
 
   const handleExpandClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause()
+    }
     if (onExpand) {
       onExpand()
     }
   }
 
+  // Sem poster prévio, carrega apenas metadados quando visível; com poster, adia rede até clicar em Play
+  const preloadMode: 'none' | 'metadata' | 'auto' = hasStarted
+    ? 'auto'
+    : (isNearViewport && !effectivePoster ? 'metadata' : 'none')
+
   return (
     <div
+      ref={containerRef}
       className={className}
       style={{
         position: 'relative',
@@ -127,11 +215,14 @@ export function MomentoVideoPlayer({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-      {/* Elemento de Vídeo com poster e preload inteligente */}
+      {/* Elemento de Vídeo com lazy-loading nativo, dimensões explícitas e controle de banda */}
       <video
         ref={videoRef}
         src={videoSrc}
-        poster={effectivePoster || undefined}
+        poster={isNearViewport && effectivePoster ? effectivePoster : undefined}
+        width={1280}
+        height={720}
+        {...({ loading: autoPlay ? undefined : 'lazy' } as any)}
         style={{
           width: '100%',
           height: '100%',
@@ -139,32 +230,113 @@ export function MomentoVideoPlayer({
           display: 'block',
           backgroundColor: '#000000',
         }}
-        controls={isPlaying || controls}
+        controls={hasStarted && controls}
         controlsList={isProtected ? 'nodownload' : undefined}
         playsInline
-        preload="metadata"
+        autoPlay={autoPlay}
+        preload={preloadMode}
         onPlay={() => {
+          window.dispatchEvent(new CustomEvent(VIDEO_PLAY_EVENT, { detail: { id: playerId } }))
           setIsPlaying(true)
           setHasStarted(true)
+          setHasError(false)
         }}
-        onPause={() => setIsPlaying(false)}
+        onPlaying={() => {
+          setIsPlaying(true)
+          setHasStarted(true)
+          setIsBuffering(false)
+        }}
+        onWaiting={() => {
+          if (hasStarted) setIsBuffering(true)
+        }}
+        onCanPlay={() => {
+          setIsBuffering(false)
+        }}
+        onPause={() => {
+          setIsPlaying(false)
+          setIsBuffering(false)
+        }}
         onEnded={() => {
           setIsPlaying(false)
           setHasStarted(false)
+          setIsBuffering(false)
+        }}
+        onError={() => {
+          setIsBuffering(false)
+          setIsPlaying(false)
+          setHasError(true)
         }}
         onClick={(e) => {
           e.stopPropagation()
-          if (!isPlaying && videoRef.current) {
-            videoRef.current.play().then(() => {
-              setIsPlaying(true)
-              setHasStarted(true)
-            }).catch(() => {})
+          if (!hasStarted) {
+            startPlayback()
           }
         }}
       />
 
-      {/* Camada de Capa / Poster com Botão de Play Central quando não estiver reproduzindo */}
-      {!isPlaying && (
+      {/* Indicador discreto de buffering durante carregamento da mídia */}
+      {hasStarted && isBuffering && !hasError && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            zIndex: 5,
+            background: 'rgba(0,0,0,0.2)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 14px',
+              borderRadius: 999,
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            <Loader2 size={16} className="animate-spin" color="#a5b4fc" />
+            <span>Carregando vídeo...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Recuperação amigável se houver falha de rede durante reprodução */}
+      {hasError && (
+        <div
+          onClick={handleRetryClick}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            background: 'rgba(15, 23, 42, 0.9)',
+            color: '#f8fafc',
+            zIndex: 7,
+            cursor: 'pointer',
+            padding: 16,
+            textAlign: 'center',
+          }}
+        >
+          <RotateCcw size={24} color="#a5b4fc" />
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+            Não foi possível carregar o vídeo. Toque para tentar novamente.
+          </span>
+        </div>
+      )}
+
+      {/* Camada de Capa / Poster com Botão de Play Central (exibida apenas antes de iniciar ou após finalizar) */}
+      {!hasStarted && !hasError && (
         <div
           onClick={handlePlayClick}
           style={{
@@ -173,17 +345,18 @@ export function MomentoVideoPlayer({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: effectivePoster && !hasStarted ? 'transparent' : 'rgba(0,0,0,0.3)',
+            background: effectivePoster ? 'transparent' : 'rgba(0,0,0,0.3)',
             cursor: 'pointer',
             zIndex: 4,
             transition: 'background 0.2s',
           }}
         >
-          {/* Se tiver poster carregado e o vídeo ainda não começou, renderiza imagem de fundo */}
-          {effectivePoster && !hasStarted && (
+          {effectivePoster && (
             <img
               src={effectivePoster}
               alt="Capa do Vídeo"
+              loading="lazy"
+              decoding="async"
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -196,7 +369,6 @@ export function MomentoVideoPlayer({
             />
           )}
 
-          {/* Botão de Play Flutuante Ultra Moderno com Glassmorphism */}
           <div
             style={{
               position: 'relative',
@@ -228,7 +400,6 @@ export function MomentoVideoPlayer({
             <Play size={28} color="#ffffff" fill="#ffffff" style={{ marginLeft: 3 }} />
           </div>
 
-          {/* Badge Indicador de Vídeo no canto inferior esquerdo */}
           <div
             style={{
               position: 'absolute',

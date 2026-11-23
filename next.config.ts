@@ -18,7 +18,7 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self' capacitor: http://localhost:* https://localhost:*",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' capacitor: http://localhost:* https://localhost:* https://cdn.onesignal.com https://api.onesignal.com https://onesignal.com",
+      "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' 'unsafe-inline' capacitor: http://localhost:* https://localhost:* https://cdn.onesignal.com https://api.onesignal.com https://onesignal.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://onesignal.com https://cdn.onesignal.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https: capacitor:",

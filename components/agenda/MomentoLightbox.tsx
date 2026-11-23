@@ -791,17 +791,25 @@ export function MomentoLightbox({
 
           {isVideo ? (
             <video
-              src={currentItem.url.includes('#') ? currentItem.url : `${currentItem.url}#t=0.001`}
+              key={currentItem.url}
+              src={currentItem.url}
               poster={(currentItem as any).poster || (currentItem as any).thumbnail_url || (currentItem as any).thumbnail || undefined}
+              width={1280}
+              height={720}
               controls
               controlsList={isContentProtected ? "nodownload" : undefined}
               autoPlay
               playsInline
-              preload="metadata"
+              preload="auto"
+              onPlay={() => {
+                window.dispatchEvent(new CustomEvent('ad:momento-video-play', { detail: { id: 'lightbox' } }))
+              }}
               onContextMenu={isContentProtected ? handleContextMenu : undefined}
               style={{
                 maxWidth: '92vw',
                 maxHeight: '85vh',
+                width: 'auto',
+                height: 'auto',
                 borderRadius: 16,
                 boxShadow: '0 25px 60px rgba(0,0,0,0.8)',
                 outline: 'none',
