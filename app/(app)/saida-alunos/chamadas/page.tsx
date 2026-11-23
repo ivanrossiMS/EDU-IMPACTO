@@ -2421,6 +2421,8 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
       flexDirection: 'column',
       justifyContent: 'flex-start',
       height: '100%',
+      minHeight: 0,
+      maxHeight: isMobile ? undefined : 410,
       minWidth: 0,
       maxWidth: '100%',
       boxSizing: 'border-box',
@@ -2445,7 +2447,8 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         gap: 6,
         fontFamily: 'Outfit, sans-serif',
         textTransform: 'uppercase',
-        letterSpacing: '0.05em'
+        letterSpacing: '0.05em',
+        flexShrink: 0,
       }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           📝 Autorização Especial do Dia
@@ -2498,6 +2501,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         gap: 6,
         marginBottom: 10,
         flexWrap: isMobile ? 'wrap' : 'nowrap',
+        flexShrink: 0,
       }}>
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
         <div style={{ flex: isMobile ? '1 1 100%' : '1.1 1 0%', minWidth: 0, position: 'relative' }}>
@@ -2765,8 +2769,8 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
           disabled={!selectedStudent || !authorizedPerson.trim()}
           style={{
-            flex: isMobile ? '1 1 100%' : '0 0 auto',
-            height: 36, padding: '0 11px', borderRadius: 10, flexShrink: 0,
+            flex: isMobile ? '1 0 100%' : '0 0 auto',
+            height: 36, padding: '0 11px', borderRadius: 10,
             background: (!selectedStudent || !authorizedPerson.trim())
               ? 'hsl(var(--bg-elevated))'
               : 'linear-gradient(135deg, #f59e0b, #d97706)',
@@ -2794,7 +2798,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
 
       {/* TIMELINE LOG OF TODAY'S RELEASES */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ borderTop: '1px solid rgba(245,158,11,0.22)', paddingTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ borderTop: '1px solid rgba(245,158,11,0.22)', paddingTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
           <span style={{ fontSize: 10, fontWeight: 900, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             ⚡ Autorizações Ativas Hoje ({formatShortDateBR(currentTodayStr)})
           </span>
@@ -2809,13 +2813,16 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         </div>
 
         <div style={{
-          flex: 1, overflowY: 'auto',
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
           alignContent: 'start',
           alignItems: 'start',
           gap: 8,
-          maxHeight: 260, paddingRight: 4,
+          paddingRight: 4,
         }}>
           {launches.map(l => (
             <div
@@ -2828,297 +2835,322 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
                 border: l.confirmedOut
                   ? '1.5px solid rgba(16, 185, 129, 0.55)'
                   : '1px solid rgba(245, 158, 11, 0.22)',
-                borderRadius: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
+                borderRadius: 12,
+                padding: '6px 9px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
                 boxShadow: l.confirmedOut
                   ? '0 2px 8px rgba(16, 185, 129, 0.12)'
                   : 'var(--shadow-sm)',
                 minWidth: 0,
               }}
             >
-              <div style={{
-                width: 28, height: 28, borderRadius: 6, overflow: 'hidden',
-                background: l.confirmedOut ? 'rgba(16,185,129,0.22)' : 'rgba(245,158,11,0.12)', 
-                border: l.confirmedOut ? '1.5px solid #10b981' : 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 900, color: l.confirmedOut ? '#059669' : '#f59e0b', flexShrink: 0,
-              }}>
-                {l.studentPhoto ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={l.studentPhoto} alt={l.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                ) : (
-                  l.studentName.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              {/* TOP ROW: AVATAR + INFO + ACTION BUTTONS */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                 <div style={{
-                  fontWeight: 800,
-                  fontSize: 11,
-                  color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-primary))',
-                  lineHeight: 1.2,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-                title={l.studentName}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {abbreviateStudentName(l.studentName, 22)}
-                  </span>
+                  width: 28, height: 28, borderRadius: 7, overflow: 'hidden',
+                  background: l.confirmedOut ? 'rgba(16,185,129,0.22)' : 'rgba(245,158,11,0.12)', 
+                  border: l.confirmedOut ? '1.5px solid #10b981' : 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 900, color: l.confirmedOut ? '#059669' : '#f59e0b', flexShrink: 0,
+                }}>
+                  {l.studentPhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={l.studentPhoto} alt={l.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  ) : (
+                    l.studentName.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                  )}
                 </div>
-                <div style={{ fontSize: 9, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                  retirado por: <span style={{ color: l.confirmedOut ? '#059669' : '#d97706', fontWeight: 800 }}>{l.authorizedPerson}</span>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: 800,
+                    fontSize: 11,
+                    color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-primary))',
+                    lineHeight: 1.15,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                  title={l.studentName}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {abbreviateStudentName(l.studentName, 22)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 9, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.25, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                    retirado por: <span style={{ color: l.confirmedOut ? '#059669' : '#d97706', fontWeight: 800 }}>{l.authorizedPerson}</span>
+                  </div>
+                  <div style={{ fontSize: 8.5, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 2, lineHeight: 1.15, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
+                    <span>{l.time}</span>
+                    <span>·</span>
+                    <span title={l.loggedBy}>por: <span style={{ color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
+                  </div>
                 </div>
-                {/* ── Horário Inserido & Validade de Dias na Autorização ── */}
-                <div style={{ marginTop: 2.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                
+                {/* MICRO ACTION BUTTONS (STACKED: TOP LINE = CHAMAR + CONFIRMAR, BOTTOM LINE = EXCLUIR) */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2.5, flexShrink: 0 }}>
+                  {/* LINE 1: CHAMAR & CONFIRMAR */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {/* 1. BUTTON: CALL / RECALL STUDENT */}
+                    {(() => {
+                      const lStudentId = l.studentId ? String(l.studentId) : ''
+                      const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
+                      const btnColor = isCalling ? '#f59e0b' : '#818cf8'
+                      const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
+                      const btnHoverColor = '#fff'
+                      const btnHoverBg = isCalling ? '#f59e0b' : '#6366f1'
+                      const btnShadow = isCalling ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)'
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
+                            if (existingCall) {
+                              recallStudent(existingCall.id, () => {})
+                              showToast(`Aluno ${l.studentName} chamado novamente!`, true)
+                            } else {
+                              callStudent(
+                                l.studentId,
+                                l.studentName,
+                                l.studentClass,
+                                'special-auth',
+                                l.authorizedPerson,
+                                'manual',
+                                undefined,
+                                l.studentPhoto,
+                                false,
+                                l.targetTime || undefined
+                              )
+                              showToast(`Aluno ${l.studentName} chamado na TV!`, true)
+                            }
+                          }}
+                          title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
+                          style={{
+                            background: btnBg, border: 'none', cursor: 'pointer',
+                            borderRadius: 6, width: 24, height: 21, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: btnColor, transition: 'all 0.2s', flexShrink: 0,
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.background = btnHoverBg
+                            e.currentTarget.style.color = btnHoverColor
+                            e.currentTarget.style.boxShadow = `0 0 6px ${btnShadow}`
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = btnBg
+                            e.currentTarget.style.color = btnColor
+                            e.currentTarget.style.boxShadow = 'none'
+                          }}
+                        >
+                          <Megaphone size={12} />
+                        </button>
+                      )
+                    })()}
+
+                    {/* 2. BUTTON: CONFIRM PICKUP / EXIT */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (l.confirmedOut) {
+                          showToast(`Saída de ${l.studentName} já foi confirmada hoje!`, false)
+                          return
+                        }
+                        const nowIso = new Date().toISOString()
+                        const existingEntry = seenSpecialAuthsRef.current.get(l.id)
+                        if (existingEntry) {
+                          const nextDates = { ...(existingEntry.confirmedDates || {}), [currentTodayStr]: nowIso }
+                          seenSpecialAuthsRef.current.set(l.id, {
+                            ...existingEntry,
+                            confirmedDates: nextDates,
+                            confirmedOut: true,
+                            confirmedAt: nowIso,
+                          })
+                          setSeenSpecialAuthsVersion(v => v + 1)
+                        }
+                        confirmSpecialExit(
+                          l.studentId,
+                          l.studentName,
+                          l.studentClass,
+                          l.authorizedPerson,
+                          l.studentPhoto,
+                          l.targetTime || undefined
+                        )
+                        showToast(`Saída de ${l.studentName} confirmada hoje!`, true)
+                      }}
+                      disabled={l.confirmedOut}
+                      title={l.confirmedOut ? `Saída confirmada hoje às ${l.confirmedAt}` : "Confirmar Saída do Aluno Hoje"}
+                      style={{
+                        background: l.confirmedOut ? '#10b981' : 'rgba(16,185,129,0.12)',
+                        border: 'none',
+                        cursor: l.confirmedOut ? 'default' : 'pointer',
+                        borderRadius: 6, width: 24, height: 21,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: l.confirmedOut ? '#fff' : '#10b981', transition: 'all 0.2s', flexShrink: 0,
+                        boxShadow: l.confirmedOut ? '0 2px 6px rgba(16,185,129,0.35)' : 'none',
+                      }}
+                      onMouseEnter={e => {
+                        if (l.confirmedOut) return
+                        e.currentTarget.style.background = '#10b981'
+                        e.currentTarget.style.color = '#fff'
+                        e.currentTarget.style.boxShadow = '0 0 6px rgba(16,185,129,0.4)'
+                      }}
+                      onMouseLeave={e => {
+                        if (l.confirmedOut) return
+                        e.currentTarget.style.background = 'rgba(16,185,129,0.12)'
+                        e.currentTarget.style.color = '#10b981'
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}
+                    >
+                      <CheckCircle2 size={12} />
+                    </button>
+                  </div>
+
+                  {/* LINE 2: EXCLUIR */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      setConfirmDeleteId(l.id)
+                    }}
+                    title="Excluir Autorização Especial"
+                    style={{
+                      background: 'rgba(239,68,68,0.08)', border: 'none', cursor: 'pointer',
+                      borderRadius: 6, width: '100%', height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#ef4444'
+                      e.currentTarget.style.color = '#fff'
+                      e.currentTarget.style.boxShadow = '0 0 6px rgba(239,68,68,0.4)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.08)'
+                      e.currentTarget.style.color = '#ef4444'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    <Trash2 size={11.5}/>
+                  </button>
+                </div>
+              </div>
+
+              {/* BOTTOM FOOTER BAR: HORÁRIO PREVISTO + VALIDADE (ESQUERDA) E CONFIRMAÇÃO (DIREITA) */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 4,
+                flexWrap: 'wrap',
+                paddingTop: 4,
+                borderTop: l.confirmedOut
+                  ? '1px solid rgba(16, 185, 129, 0.22)'
+                  : '1px solid rgba(245, 158, 11, 0.16)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', minWidth: 0 }}>
                   {l.targetTime && l.targetTime !== 'Indefinido' ? (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3.5,
-                      fontSize: 9,
-                      fontWeight: 900,
-                      padding: '1.5px 7px',
-                      borderRadius: 6,
-                      background: l.confirmedOut
-                        ? 'rgba(16, 185, 129, 0.18)'
-                        : 'linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.14))',
-                      color: l.confirmedOut ? '#047857' : '#b45309',
-                      border: l.confirmedOut
-                        ? '1px solid rgba(16, 185, 129, 0.35)'
-                        : '1px solid rgba(245, 158, 11, 0.4)',
-                      letterSpacing: '0.02em',
-                    }}>
-                      <Clock size={9.5} strokeWidth={2.5} color={l.confirmedOut ? '#059669' : '#d97706'} />
-                      <span>Horário: <strong>{l.targetTime}</strong></span>
+                    <span
+                      title={`Horário previsto para retirada: ${l.targetTime}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        fontSize: 8.5,
+                        fontWeight: 800,
+                        padding: '1px 6px',
+                        borderRadius: 5,
+                        background: l.confirmedOut
+                          ? 'rgba(16, 185, 129, 0.16)'
+                          : 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.12))',
+                        color: l.confirmedOut ? '#047857' : '#b45309',
+                        border: l.confirmedOut
+                          ? '1px solid rgba(16, 185, 129, 0.3)'
+                          : '1px solid rgba(245, 158, 11, 0.35)',
+                        letterSpacing: '0.01em',
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      <Clock size={8.5} strokeWidth={2.5} color={l.confirmedOut ? '#059669' : '#d97706'} />
+                      <span>Prev. <strong>{l.targetTime}</strong></span>
                     </span>
                   ) : (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 3.5,
-                      fontSize: 8.5,
-                      fontWeight: 800,
-                      padding: '1.5px 6.5px',
-                      borderRadius: 6,
-                      background: l.confirmedOut ? 'rgba(16, 185, 129, 0.14)' : 'rgba(100, 116, 139, 0.12)',
-                      color: l.confirmedOut ? '#047857' : '#475569',
-                      border: l.confirmedOut ? '1px solid rgba(16, 185, 129, 0.28)' : '1px solid rgba(100, 116, 139, 0.22)',
-                      letterSpacing: '0.01em',
-                    }}>
-                      <Clock size={9.5} strokeWidth={2.4} color={l.confirmedOut ? '#059669' : '#64748b'} />
-                      <span>Horário: <strong>Indefinido</strong></span>
+                    <span
+                      title="Horário previsto para retirada: Indefinido"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        fontSize: 8.5,
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: 5,
+                        background: l.confirmedOut ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.1)',
+                        color: l.confirmedOut ? '#047857' : '#475569',
+                        border: l.confirmedOut ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(100, 116, 139, 0.2)',
+                        letterSpacing: '0.01em',
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      <Clock size={8.5} strokeWidth={2.4} color={l.confirmedOut ? '#059669' : '#64748b'} />
+                      <span>Indefinido</span>
                     </span>
                   )}
 
-                  {/* Badge de Validade em Dias */}
-                  {l.validDays > 1 ? (
+                  {l.validDays > 1 && (
                     <span
                       title={`Autorização válida por ${l.validDays} dias: de ${formatShortDateBR(l.validFrom)} até ${formatShortDateBR(l.validUntil)} (Hoje: Dia ${l.dayIndex} de ${l.validDays})`}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 3.5,
+                        gap: 3,
                         fontSize: 8.5,
-                        fontWeight: 900,
-                        padding: '1.5px 6.5px',
-                        borderRadius: 6,
-                        background: l.confirmedOut
-                          ? 'rgba(16, 185, 129, 0.18)'
-                          : 'rgba(59, 130, 246, 0.12)',
+                        fontWeight: 800,
+                        padding: '1px 6px',
+                        borderRadius: 5,
+                        background: l.confirmedOut ? 'rgba(16, 185, 129, 0.16)' : 'rgba(59, 130, 246, 0.1)',
                         color: l.confirmedOut ? '#047857' : '#1d4ed8',
-                        border: l.confirmedOut
-                          ? '1px solid rgba(16, 185, 129, 0.35)'
-                          : '1px solid rgba(59, 130, 246, 0.3)',
+                        border: l.confirmedOut ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(59, 130, 246, 0.26)',
                         letterSpacing: '0.01em',
+                        lineHeight: 1.3,
                       }}
                     >
-                      <Calendar size={9} strokeWidth={2.5} color={l.confirmedOut ? '#059669' : '#2563eb'} />
-                      <span>
-                        {l.validDays} dias · Dia {l.dayIndex}/{l.validDays} (até {formatShortDateBR(l.validUntil)})
-                      </span>
+                      <Calendar size={8.5} strokeWidth={2.4} color={l.confirmedOut ? '#059669' : '#2563eb'} />
+                      <span>{l.dayIndex}/{l.validDays} · até {formatShortDateBR(l.validUntil)}</span>
                     </span>
-                  ) : null}
+                  )}
                 </div>
-                <div style={{ fontSize: 8.5, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
-                  <span>{l.time}</span>
-                  <span>·</span>
-                  <span title={l.loggedBy}>por: <span style={{ color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-secondary))', fontWeight: 700 }}>{formatFirstAndSecondName(l.loggedBy)}</span></span>
-                </div>
+
                 {l.confirmedOut && (
                   <div
                     title={`Saída confirmada hoje${l.confirmedAt ? ` às ${l.confirmedAt}` : ''}`}
                     style={{
-                    fontSize: 9,
-                    color: '#047857',
-                    background: 'rgba(16, 185, 129, 0.2)',
-                    border: '1px solid rgba(16, 185, 129, 0.38)',
-                    borderRadius: 6,
-                    padding: '2px 6px',
-                    fontWeight: 900,
-                    marginTop: 4,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    flexWrap: 'wrap',
-                    wordBreak: 'break-word',
-                  }}>
-                    <CheckCircle2 size={10.5} style={{ flexShrink: 0, color: '#059669' }} />
-                    <span>hoje{l.confirmedAt ? ` às ${l.confirmedAt}` : ''}</span>
-                  </div>
-                )}
-              </div>
-              
-              {/* MICRO ACTION BUTTONS (STACKED: TOP LINE = CHAMAR + CONFIRMAR, BOTTOM LINE = EXCLUIR) */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-                {/* LINE 1: CHAMAR & CONFIRMAR */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  {/* 1. BUTTON: CALL / RECALL STUDENT */}
-                  {(() => {
-                    const lStudentId = l.studentId ? String(l.studentId) : ''
-                    const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
-                    const btnColor = isCalling ? '#f59e0b' : '#818cf8'
-                    const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
-                    const btnHoverColor = '#fff'
-                    const btnHoverBg = isCalling ? '#f59e0b' : '#6366f1'
-                    const btnShadow = isCalling ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)'
-
-                    return (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
-                          if (existingCall) {
-                            recallStudent(existingCall.id, () => {})
-                            showToast(`Aluno ${l.studentName} chamado novamente!`, true)
-                          } else {
-                            callStudent(
-                              l.studentId,
-                              l.studentName,
-                              l.studentClass,
-                              'special-auth',
-                              l.authorizedPerson,
-                              'manual',
-                              undefined,
-                              l.studentPhoto,
-                              false,
-                              l.targetTime || undefined
-                            )
-                            showToast(`Aluno ${l.studentName} chamado na TV!`, true)
-                          }
-                        }}
-                        title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
-                        style={{
-                          background: btnBg, border: 'none', cursor: 'pointer',
-                          borderRadius: 6, width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: btnColor, transition: 'all 0.2s', flexShrink: 0,
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.background = btnHoverBg
-                          e.currentTarget.style.color = btnHoverColor
-                          e.currentTarget.style.boxShadow = `0 0 6px ${btnShadow}`
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.background = btnBg
-                          e.currentTarget.style.color = btnColor
-                          e.currentTarget.style.boxShadow = 'none'
-                        }}
-                      >
-                        <Megaphone size={13} />
-                      </button>
-                    )
-                  })()}
-
-                  {/* 2. BUTTON: CONFIRM PICKUP / EXIT */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (l.confirmedOut) {
-                        showToast(`Saída de ${l.studentName} já foi confirmada hoje!`, false)
-                        return
-                      }
-                      const nowIso = new Date().toISOString()
-                      const existingEntry = seenSpecialAuthsRef.current.get(l.id)
-                      if (existingEntry) {
-                        const nextDates = { ...(existingEntry.confirmedDates || {}), [currentTodayStr]: nowIso }
-                        seenSpecialAuthsRef.current.set(l.id, {
-                          ...existingEntry,
-                          confirmedDates: nextDates,
-                          confirmedOut: true,
-                          confirmedAt: nowIso,
-                        })
-                        setSeenSpecialAuthsVersion(v => v + 1)
-                      }
-                      confirmSpecialExit(
-                        l.studentId,
-                        l.studentName,
-                        l.studentClass,
-                        l.authorizedPerson,
-                        l.studentPhoto,
-                        l.targetTime || undefined
-                      )
-                      showToast(`Saída de ${l.studentName} confirmada hoje!`, true)
-                    }}
-                    disabled={l.confirmedOut}
-                    title={l.confirmedOut ? `Saída confirmada hoje às ${l.confirmedAt}` : "Confirmar Saída do Aluno Hoje"}
-                    style={{
-                      background: l.confirmedOut ? '#10b981' : 'rgba(16,185,129,0.12)',
-                      border: 'none',
-                      cursor: l.confirmedOut ? 'default' : 'pointer',
-                      borderRadius: 6, width: 26, height: 24,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: l.confirmedOut ? '#fff' : '#10b981', transition: 'all 0.2s', flexShrink: 0,
-                      boxShadow: l.confirmedOut ? '0 2px 6px rgba(16,185,129,0.35)' : 'none',
-                    }}
-                    onMouseEnter={e => {
-                      if (l.confirmedOut) return
-                      e.currentTarget.style.background = '#10b981'
-                      e.currentTarget.style.color = '#fff'
-                      e.currentTarget.style.boxShadow = '0 0 6px rgba(16,185,129,0.4)'
-                    }}
-                    onMouseLeave={e => {
-                      if (l.confirmedOut) return
-                      e.currentTarget.style.background = 'rgba(16,185,129,0.12)'
-                      e.currentTarget.style.color = '#10b981'
-                      e.currentTarget.style.boxShadow = 'none'
+                      fontSize: 8.5,
+                      color: '#047857',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid rgba(16, 185, 129, 0.38)',
+                      borderRadius: 5,
+                      padding: '1px 6px',
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      lineHeight: 1.3,
+                      marginLeft: 'auto',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    <CheckCircle2 size={13} />
-                  </button>
-                </div>
-
-                {/* LINE 2: EXCLUIR */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    setConfirmDeleteId(l.id)
-                  }}
-                  title="Excluir Autorização Especial"
-                  style={{
-                    background: 'rgba(239,68,68,0.08)', border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: '100%', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = '#ef4444'
-                    e.currentTarget.style.color = '#fff'
-                    e.currentTarget.style.boxShadow = '0 0 6px rgba(239,68,68,0.4)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.08)'
-                    e.currentTarget.style.color = '#ef4444'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  <Trash2 size={13}/>
-                </button>
+                    <CheckCircle2 size={9} strokeWidth={2.5} style={{ flexShrink: 0, color: '#059669' }} />
+                    <span>{l.confirmedAt ? `Saída ${l.confirmedAt}` : 'Confirmado'}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -3244,8 +3276,13 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
       borderRadius: 20, padding: '16px 20px',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
       height: '100%',
+      minHeight: 0,
+      maxHeight: isMobile ? 360 : 410,
+      minWidth: 0,
+      maxWidth: '100%',
+      boxSizing: 'border-box',
     }}>
-      <div style={{ fontWeight: 900, fontSize: 13, color: '#ef4444', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ fontWeight: 900, fontSize: 13, color: '#ef4444', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 16 }}>🚫</span> Proibidos Retirada Hoje
         </div>
@@ -3256,7 +3293,7 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
         )}
       </div>
       
-      <div style={{ flex: 1, overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 12, padding: '20px 0', opacity: 0.7 }}>Buscando restrições...</div>
         ) : restritos.length === 0 ? (
@@ -3266,7 +3303,7 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
             gap: 8,
           }}>
             {restritos.map(aluno => (
@@ -3880,14 +3917,14 @@ function ChamadasContent() {
         backgroundColor: 'hsl(var(--bg-elevated))',
         backgroundImage: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(59, 130, 246, 0.05) 45%, rgba(168, 85, 247, 0.08) 100%)',
         border: '1px solid rgba(99, 102, 241, 0.25)',
-        borderRadius: 20,
-        padding: '12px 18px',
+        borderRadius: 18,
+        padding: isMobile ? '10px 12px' : '9px 14px',
         marginBottom: 20,
         boxShadow: '0 8px 32px -4px rgba(99, 102, 241, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.03)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
+        gap: isMobile ? 10 : 8,
         flexWrap: 'wrap',
         overflow: 'hidden',
       }}>
@@ -3906,24 +3943,26 @@ function ChamadasContent() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-          flex: isMobile ? '1 1 100%' : '0 1 auto',
+          gap: 5,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          flex: isMobile ? '1 1 100%' : '0 0 auto',
+          minWidth: 0,
         }}>
           {/* Brand/Section Badge with Gradient Icon */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            paddingRight: 12,
+            gap: 6,
+            paddingRight: 8,
             borderRight: '1px solid rgba(99, 102, 241, 0.2)',
-            marginRight: 4,
+            marginRight: 2,
             userSelect: 'none',
+            flexShrink: 0,
           }}>
             <div style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
+              width: 28,
+              height: 28,
+              borderRadius: 8,
               background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
               display: 'flex',
               alignItems: 'center',
@@ -3932,13 +3971,13 @@ function ChamadasContent() {
               boxShadow: '0 3px 10px rgba(99, 102, 241, 0.35)',
               flexShrink: 0,
             }}>
-              <History size={15} strokeWidth={2.4} />
+              <History size={13.5} strokeWidth={2.4} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: 900,
-                letterSpacing: '0.08em',
+                letterSpacing: '0.07em',
                 background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
@@ -3948,7 +3987,7 @@ function ChamadasContent() {
                 Histórico
               </span>
               <span style={{
-                fontSize: 9,
+                fontSize: 8.5,
                 fontWeight: 700,
                 color: 'hsl(var(--text-muted))',
                 letterSpacing: '0.04em',
@@ -3971,10 +4010,10 @@ function ChamadasContent() {
                   setFilter(f.key)
                 }}
                 style={{
-                  height: 36,
-                  padding: '0 13px',
+                  height: 32,
+                  padding: isMobile ? '0 10px' : '0 9px',
                   borderRadius: 100,
-                  fontSize: isMobile ? 11 : 12,
+                  fontSize: 11,
                   fontWeight: isActive ? 700 : 600,
                   border: isActive ? '1px solid transparent' : '1px solid hsl(var(--border-subtle))',
                   background: isActive ? f.gradient : 'hsl(var(--bg-surface))',
@@ -3983,9 +4022,10 @@ function ChamadasContent() {
                   transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  gap: 4.5,
                   boxShadow: isActive ? f.glow : 'none',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
                 onMouseEnter={e => {
                   if (!isActive) {
@@ -4011,10 +4051,10 @@ function ChamadasContent() {
                   background: isActive ? 'rgba(255, 255, 255, 0.28)' : 'hsl(var(--bg-overlay))',
                   color: isActive ? '#ffffff' : 'hsl(var(--text-muted))',
                   borderRadius: 100,
-                  fontSize: 10,
-                  padding: '1px 7px',
+                  fontSize: 9.5,
+                  padding: '1px 5.5px',
                   fontWeight: 800,
-                  minWidth: 16,
+                  minWidth: 14,
                   textAlign: 'center',
                   boxShadow: isActive ? 'inset 0 1px 1px rgba(255, 255, 255, 0.3)' : 'none',
                   transition: 'all 0.18s ease',
@@ -4030,8 +4070,9 @@ function ChamadasContent() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          flex: isMobile ? '1 1 100%' : '0 0 auto',
+          gap: 6,
+          flex: isMobile ? '1 1 100%' : '1 1 260px',
+          minWidth: 0,
           marginLeft: isMobile ? 0 : 'auto',
           justifyContent: isMobile ? 'space-between' : 'flex-end',
           flexWrap: isMobile ? 'wrap' : 'nowrap',
@@ -4039,14 +4080,15 @@ function ChamadasContent() {
           {/* Search Input with Gradient Accent */}
           <div style={{
             position: 'relative',
-            width: isMobile ? '100%' : 240,
-            flex: isMobile ? 1 : 'none',
+            flex: isMobile ? '1 1 100%' : '1 1 130px',
+            minWidth: isMobile ? 0 : 115,
+            maxWidth: isMobile ? '100%' : 190,
           }}>
             <Search
-              size={14}
+              size={13}
               style={{
                 position: 'absolute',
-                left: 11,
+                left: 9,
                 top: '50%',
                 transform: 'translateY(-50%)',
                 color: '#6366f1',
@@ -4059,10 +4101,10 @@ function ChamadasContent() {
               placeholder="Filtrar histórico..."
               style={{
                 width: '100%',
-                height: 36,
-                padding: '0 28px 0 32px',
-                borderRadius: 12,
-                fontSize: 12,
+                height: 32,
+                padding: '0 24px 0 28px',
+                borderRadius: 10,
+                fontSize: 11,
                 border: '1px solid rgba(99, 102, 241, 0.25)',
                 background: 'hsl(var(--bg-surface))',
                 color: 'hsl(var(--text-primary))',
@@ -4085,7 +4127,7 @@ function ChamadasContent() {
                 onClick={() => setCallSearch('')}
                 style={{
                   position: 'absolute',
-                  right: 8,
+                  right: 6,
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'none',
@@ -4098,7 +4140,7 @@ function ChamadasContent() {
                   borderRadius: 4,
                 }}
               >
-                <X size={13} />
+                <X size={12} />
               </button>
             )}
           </div>
@@ -4117,7 +4159,7 @@ function ChamadasContent() {
             }}
             title={waiting.length > 0 ? `Confirmar saída de todos os ${waiting.length} alunos aguardando` : 'Nenhum aluno aguardando no momento'}
           >
-            <CheckCheck size={14} strokeWidth={2.4} />
+            <CheckCheck size={13} strokeWidth={2.4} />
             <span>Confirmar Todos</span>
             {waiting.length > 0 && (
               <span className="badge-count">
@@ -4136,10 +4178,10 @@ function ChamadasContent() {
                 setConfirmClearAll(true)
               }}
               style={{
-                height: 36,
-                padding: '0 16px',
-                borderRadius: 12,
-                fontSize: 12,
+                height: 32,
+                padding: '0 10px',
+                borderRadius: 10,
+                fontSize: 11,
                 fontWeight: 700,
                 border: '1px solid rgba(239, 68, 68, 0.3)',
                 background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%)',
@@ -4148,7 +4190,7 @@ function ChamadasContent() {
                 transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4.5,
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
                 boxShadow: '0 2px 6px rgba(239, 68, 68, 0.08)',
@@ -4168,7 +4210,7 @@ function ChamadasContent() {
                 el.style.boxShadow = '0 2px 6px rgba(239, 68, 68, 0.08)'
               }}
             >
-              <Trash2 size={13} />
+              <Trash2 size={12} />
               <span>Zerar Chamadas</span>
             </button>
           )}
@@ -4608,10 +4650,10 @@ function ChamadasContent() {
         }
 
         .btn-confirmar-todos {
-          height: 36px;
-          padding: 0 14px;
-          border-radius: 12px;
-          font-size: 12px;
+          height: 32px;
+          padding: 0 9px;
+          border-radius: 10px;
+          font-size: 11px;
           font-weight: 700;
           border: 1px solid rgba(16, 185, 129, 0.35);
           background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.08) 100%);
@@ -4620,7 +4662,7 @@ function ChamadasContent() {
           transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
           display: flex;
           align-items: center;
-          gap: 7px;
+          gap: 4.5px;
           white-space: nowrap;
           flex-shrink: 0;
           box-shadow: 0 2px 6px rgba(16, 185, 129, 0.08);
@@ -4645,10 +4687,10 @@ function ChamadasContent() {
           background: rgba(16, 185, 129, 0.18);
           color: inherit;
           border-radius: 100px;
-          font-size: 10px;
-          padding: 1px 7px;
+          font-size: 9.5px;
+          padding: 1px 5.5px;
           font-weight: 800;
-          min-width: 16px;
+          min-width: 14px;
           text-align: center;
           transition: all 0.18s ease;
         }
