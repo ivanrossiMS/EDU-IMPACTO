@@ -1362,7 +1362,6 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     executeSoloExit()
   }, [alreadyConfirmed, autorizaSaida, executeSoloExit, showToast, student.nome])
 
-  const isMobile = useIsMobile()
   const blocked = alreadyCalled || alreadyConfirmed || isCalling
 
   const handleCallRespClick = useCallback(() => {
@@ -1388,57 +1387,75 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     }
   }, [blocked, respList, student, studentPhoto, onCall, showToast])
 
+  const hasAside = alreadyConfirmed || alreadyCalled || autorizaSaida
+
   return (
-    <div style={{
-      background: '#ffffff',
-      border: alreadyCalled ? '1px solid rgba(245,158,11,0.45)' : '1px solid #e2e8f0',
-      borderRadius: 16,
-      padding: '16px 20px',
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.5fr 1fr',
-      gap: 20,
-      alignItems: 'center',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-      position: 'relative',
-    }}>
-      {/* 1. LEFT COLUMN: Student Profile */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <article
+      className="search-student-card"
+      style={{
+        borderColor: alreadyConfirmed
+          ? 'rgba(16, 185, 129, 0.4)'
+          : alreadyCalled
+            ? 'rgba(245, 158, 11, 0.5)'
+            : undefined,
+      }}
+    >
+      {/* 1. PROFILE: Photo + Name + Class + Autonomy/Status */}
+      <div className="search-student-profile" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         <div style={{
-          width: 68, height: 68, borderRadius: 16, flexShrink: 0,
+          width: 50, height: 50, borderRadius: 14, flexShrink: 0,
           background: (studentPhoto && !imgError) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 900, fontSize: 24, color: '#fff', fontFamily: 'Outfit, sans-serif',
+          fontWeight: 900, fontSize: 18, color: '#fff', fontFamily: 'Outfit, sans-serif',
           position: 'relative', overflow: 'hidden',
-          border: (studentPhoto && !imgError) ? '1px solid #e2e8f0' : 'none',
+          border: (studentPhoto && !imgError) ? '1px solid hsl(var(--border-subtle))' : 'none',
         }}>
           {(studentPhoto && !imgError) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img 
-              src={studentPhoto} 
-              alt={student.nome} 
+            <img
+              src={studentPhoto}
+              alt={student.nome}
               onError={() => setImgError(true)}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
             initials
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontWeight: 800,
+            fontSize: 15,
+            lineHeight: 1.25,
+            color: 'hsl(var(--text-primary))',
+            overflowWrap: 'break-word',
+            textWrap: 'balance',
+          }}>
             {student.nome}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-            <span style={{ color: '#06b6d4', fontWeight: 800 }}>
-              {student.turmaNome || student.turma} {student.turno ? `· ${student.turno.toUpperCase()}` : ''}
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 6px', fontSize: 11.5 }}>
+            <span style={{ color: '#0891b2', fontWeight: 800 }}>
+              {student.turmaNome || student.turma}{student.turno ? ` · ${student.turno.toUpperCase()}` : ''}
             </span>
           </div>
-          <div style={{ marginTop: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
             {autorizaSaida ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 10, padding: '2px 9px', borderRadius: 100,
+                background: 'rgba(16, 185, 129, 0.12)', color: '#059669',
+                fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.28)',
+              }}>
                 Pode sair sozinho
               </span>
             ) : (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 10px', borderRadius: 100, background: 'rgba(239,68,68,0.06)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239,68,68,0.2)' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 10, padding: '2px 9px', borderRadius: 100,
+                background: 'rgba(239, 68, 68, 0.08)', color: '#dc2626',
+                fontWeight: 800, border: '1px solid rgba(239, 68, 68, 0.22)',
+              }}>
                 Não pode sair sozinho
               </span>
             )}
@@ -1446,28 +1463,42 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
         </div>
       </div>
 
-      {/* 2. MIDDLE COLUMN: Authorized Guardians */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>
-          RESPONSÁVEIS AUTORIZADOS
-        </span>
+      {/* 2. GUARDIANS: Responsive 1-2 col grid */}
+      <div className="search-student-guardians" style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Responsáveis autorizados
+          </span>
+          {respList.length > 0 && !blocked && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
+              Toque para chamar
+            </span>
+          )}
+        </div>
+
         {respList.length === 0 ? (
-          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+          <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontStyle: 'italic', padding: '6px 0' }}>
             Nenhum responsável configurado.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="search-student-guardians-grid">
             {respList.map((g: any) => {
               const isProibido = g.proibido === true
               const dias: string[] = g.diasSemana || []
-              const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
+              const remap2 = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']
               const todayK = remap2[new Date().getDay()]
               const diaRestrito = dias.length > 0 && !dias.includes(todayK)
               const isProibidoHoje = isProibido || diaRestrito
+              const pickedUpByThis = alreadyConfirmed && (
+                (confirmedCall?.guardianId && String(confirmedCall.guardianId) === String(g.id)) ||
+                (confirmedCall?.guardianName && normalizeStr(confirmedCall.guardianName) === normalizeStr(g.name))
+              )
 
               return (
                 <button
                   key={g.id}
+                  type="button"
+                  className={`search-guardian-btn${blocked ? ' is-blocked' : ''}${isProibidoHoje ? ' is-restricted' : ''}${pickedUpByThis ? ' is-picked' : ''}`}
                   onClick={() => {
                     if (isProibido) {
                       setShowProibidoAlert({ name: g.name, message: 'está PROIBIDO(A) de retirar o aluno!' })
@@ -1486,67 +1517,81 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                     }
                   }}
                   disabled={blocked}
-                  title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : alreadyConfirmed ? '✅ Aluno já retirado' : undefined}
+                  title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : pickedUpByThis ? '✅ Retirou o aluno hoje' : alreadyConfirmed ? 'Aluno já retirado hoje' : `Chamar ${student.nome} via ${g.name}`}
                   style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 14px', borderRadius: 10, width: '100%',
-                    background: alreadyConfirmed
-                      ? 'rgba(253, 224, 71, 0.12)'
-                      : blocked
-                        ? '#f8fafc'
+                    background: pickedUpByThis
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : alreadyConfirmed || blocked
+                        ? 'hsl(var(--bg-elevated))'
                         : isProibidoHoje
                           ? 'rgba(239, 68, 68, 0.08)'
-                          : 'rgba(59, 130, 246, 0.08)',
-                    border: alreadyConfirmed
-                      ? '1px solid rgba(253, 224, 71, 0.35)'
-                      : blocked
-                        ? '1px solid #e2e8f0'
+                          : 'rgba(59, 130, 246, 0.07)',
+                    border: pickedUpByThis
+                      ? '1px solid rgba(16, 185, 129, 0.4)'
+                      : alreadyConfirmed || blocked
+                        ? '1px solid hsl(var(--border-subtle))'
                         : isProibidoHoje
-                          ? '1px solid rgba(239, 68, 68, 0.25)'
-                          : '1px solid rgba(59, 130, 246, 0.25)',
-                    color: alreadyConfirmed
-                      ? '#a16207'
+                          ? '1px solid rgba(239, 68, 68, 0.28)'
+                          : '1px solid rgba(59, 130, 246, 0.24)',
+                    color: pickedUpByThis
+                      ? '#059669'
                       : blocked
-                        ? '#94a3b8'
+                        ? 'hsl(var(--text-muted))'
                         : isProibidoHoje
                           ? '#dc2626'
                           : '#1d4ed8',
-                    fontWeight: 700, fontSize: 12.5,
                     cursor: blocked ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
-                    outline: 'none',
-                  }}
-                  onMouseEnter={e => {
-                    if (blocked || isProibidoHoje) return
-                    const el = e.currentTarget as HTMLButtonElement
-                    el.style.background = 'rgba(59, 130, 246, 0.15)'
-                    el.style.borderColor = 'rgba(59, 130, 246, 0.4)'
-                  }}
-                  onMouseLeave={e => {
-                    if (blocked || isProibidoHoje) return
-                    const el = e.currentTarget as HTMLButtonElement
-                    el.style.background = 'rgba(59, 130, 246, 0.08)'
-                    el.style.borderColor = 'rgba(59, 130, 246, 0.25)'
+                    opacity: (blocked && !pickedUpByThis) ? 0.65 : 1,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, flexShrink: 0, opacity: 0.8 }}>👤</span>
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: alreadyConfirmed ? '#a16207' : '#1e293b', fontWeight: 700 }}>
+                  <span aria-hidden="true" style={{ fontSize: 13, flexShrink: 0, opacity: 0.85 }}>
+                    {pickedUpByThis ? '✅' : isProibidoHoje ? '🚫' : '👤'}
+                  </span>
+
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{
+                      color: pickedUpByThis ? '#065f46' : isProibidoHoje ? '#b91c1c' : 'hsl(var(--text-primary))',
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      lineHeight: 1.25,
+                      overflowWrap: 'break-word',
+                    }}>
                       {g.name}
                     </span>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.05)', color: alreadyConfirmed ? '#a16207' : '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {g.role}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
+                        background: 'rgba(148, 163, 184, 0.16)',
+                        color: pickedUpByThis ? '#047857' : 'hsl(var(--text-secondary))',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {g.role}
+                      </span>
+                      {g.rfid && (
+                        <span style={{ fontSize: 9.5, color: '#2563eb', fontWeight: 700 }}>
+                          📡 RFID
+                        </span>
+                      )}
+                      {isProibido && (
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.14)', color: '#dc2626' }}>
+                          PROIBIDO
+                        </span>
+                      )}
+                      {!isProibido && diaRestrito && (
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: 'rgba(249, 115, 22, 0.14)', color: '#ea580c' }}>
+                          DIA RESTRITO
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                    {g.rfid && <span style={{ fontSize: 9, color: '#3b82f6' }}>📡</span>}
-                    {alreadyConfirmed ? (
-                      <span style={{ fontSize: 12, display: 'flex', alignItems: 'center' }}>✅</span>
+
+                  <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                    {pickedUpByThis ? (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#059669' }}>Retirou</span>
                     ) : isProibidoHoje ? (
-                      <span style={{ fontSize: 12, display: 'flex', alignItems: 'center' }}>⚠️</span>
+                      <AlertCircle size={14} style={{ color: '#ef4444' }} />
                     ) : (
-                      <ChevronRight size={13} style={{ opacity: 0.5 }} />
+                      <ChevronRight size={14} style={{ opacity: blocked ? 0.35 : 0.65 }} />
                     )}
                   </div>
                 </button>
@@ -1556,87 +1601,90 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
         )}
       </div>
 
-      {/* 3. RIGHT COLUMN: Confirmed Checkout Badge or Solo Exit Button */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-        {alreadyConfirmed ? (
-          <div style={{
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            borderRadius: 12,
-            padding: '12px 16px',
-            color: '#10b981',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-          }}>
-            {isSaiuSozinhoCall(confirmedCall) ? (
-              <>
-                <span style={{ fontWeight: 900, fontSize: 13 }}>🚶‍♂️ SAIU SOZINHO</span>
-                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
-                  Saída confirmada às {confirmedCall?.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall?.calledAt)}
+      {/* 3. ASIDE: Confirmed / Waiting / Solo Exit (only rendered when relevant) */}
+      {hasAside && (
+        <div className="search-student-aside" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', minWidth: 0 }}>
+          {alreadyConfirmed ? (
+            <div className="search-status-card" style={{
+              background: 'rgba(16, 185, 129, 0.07)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+            }}>
+              <div className="search-aside-icon" style={{
+                background: 'rgba(16, 185, 129, 0.14)',
+                color: '#059669',
+              }}>
+                {isSaiuSozinhoCall(confirmedCall) ? <UserCheck size={15} /> : <CheckCircle2 size={15} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, fontSize: 10, letterSpacing: '0.04em', color: '#059669', textTransform: 'uppercase' }}>
+                    {isSaiuSozinhoCall(confirmedCall) ? 'Saiu sozinho' : 'Retirado por'}
+                  </span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, color: '#047857',
+                    background: 'rgba(16, 185, 129, 0.13)', padding: '1px 6px', borderRadius: 999,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    às {confirmedCall?.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall?.calledAt)}
+                  </span>
+                </div>
+                <span style={{
+                  fontWeight: 700, fontSize: 12, color: '#065f46',
+                  overflowWrap: 'break-word', lineHeight: 1.25,
+                }}>
+                  {isSaiuSozinhoCall(confirmedCall)
+                    ? 'Saída autônoma confirmada'
+                    : (confirmedCall?.guardianName || 'Autorizado')}
                 </span>
-              </>
-            ) : (
-              <>
-                <span style={{ fontWeight: 900, fontSize: 12, opacity: 0.8 }}>👨‍👦 RETIRADO POR:</span>
-                <span style={{ fontWeight: 800, fontSize: 13, color: '#059669', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                  {confirmedCall?.guardianName || 'Autorizado'}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
-                  às {confirmedCall?.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall?.calledAt)}
-                </span>
-              </>
-            )}
-          </div>
-        ) : autorizaSaida ? (
-          <button
-            type="button"
-            onClick={handleSoloExitClick}
-            disabled={blocked}
-            style={{
-              width: '100%',
-              height: 48,
-              borderRadius: 12,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              border: 'none',
-              color: '#fff',
-              fontWeight: 800,
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0 18px',
-              cursor: blocked ? 'not-allowed' : 'pointer',
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)',
-              transition: 'all 0.2s',
-              opacity: blocked ? 0.6 : 1,
-            }}
-            onMouseEnter={e => {
-              if (blocked) return
-              const el = e.currentTarget
-              el.style.transform = 'translateY(-1px)'
-              el.style.filter = 'brightness(1.05)'
-            }}
-            onMouseLeave={e => {
-              if (blocked) return
-              const el = e.currentTarget
-              el.style.transform = 'none'
-              el.style.filter = 'none'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <UserCheck size={16} />
-              <span>Registrar saiu sozinho</span>
+              </div>
             </div>
-            <ChevronRight size={16} />
-          </button>
-        ) : (
-          <div />
-        )}
-      </div>
+          ) : alreadyCalled ? (
+            <div className="search-status-card" style={{
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+            }}>
+              <div className="search-aside-icon" style={{
+                background: 'rgba(245, 158, 11, 0.16)',
+                color: '#d97706',
+              }}>
+                <Megaphone size={14} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ fontWeight: 800, fontSize: 10.5, letterSpacing: '0.03em', color: '#b45309', textTransform: 'uppercase' }}>
+                  Chamado na TV
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', lineHeight: 1.25 }}>
+                  Aguardando confirmação
+                </span>
+              </div>
+            </div>
+          ) : autorizaSaida ? (
+            <button
+              type="button"
+              onClick={handleSoloExitClick}
+              disabled={blocked}
+              className="search-solo-btn"
+              style={{
+                cursor: blocked ? 'not-allowed' : 'pointer',
+                opacity: blocked ? 0.55 : 1,
+              }}
+            >
+              <div className="search-aside-icon search-solo-icon">
+                <UserCheck size={15} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>
+                  Registrar saiu sozinho
+                </span>
+                <span className="search-solo-sub" style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2 }}>
+                  Confirmar saída autônoma
+                </span>
+              </div>
+              <ChevronRight size={15} style={{ flexShrink: 0, opacity: 0.75 }} />
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* Warning Alert Screens & Modals */}
       {showProibidoAlert && (
@@ -1732,7 +1780,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
           </div>
         </div>
       )}
-    </div>
+    </article>
   )
 }, (prev, next) => {
   return prev.student.id === next.student.id && 
@@ -3769,10 +3817,11 @@ function ChamadasContent() {
           background: 'hsl(var(--bg-elevated))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 20,
-          padding: '12px 20px',
+          padding: isMobile ? '10px 12px' : '12px 18px',
           display: 'flex',
           alignItems: 'center',
-          gap: 16,
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          gap: isMobile ? 10 : 14,
           boxShadow: 'var(--shadow-sm)',
           marginBottom: 20,
           position: 'relative',
@@ -3781,15 +3830,15 @@ function ChamadasContent() {
         {/* Left: Blue Megaphone Circle + Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: '50%',
+            width: isMobile ? 32 : 36, height: isMobile ? 32 : 36, borderRadius: '50%',
             background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
           }}>
-            <Megaphone size={18} />
+            <Megaphone size={isMobile ? 16 : 18} />
           </div>
           <span style={{
-            fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 15,
+            fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: isMobile ? 14 : 15,
             color: '#2563eb', letterSpacing: '-0.01em', whiteSpace: 'nowrap',
           }}>
             Chamar aluno
@@ -3797,7 +3846,7 @@ function ChamadasContent() {
         </div>
 
         {/* Middle: Search Input */}
-        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        <div style={{ flex: isMobile ? '1 1 100%' : '1 1 0%', minWidth: 0, position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
           <input
             ref={topSearchInputRef}
@@ -3809,7 +3858,7 @@ function ChamadasContent() {
             onFocus={() => setSearchFocused(true)}
             placeholder="Buscar aluno por nome (mínimo 3 letras)..."
             style={{
-              width: '100%', padding: '10px 14px 10px 40px',
+              width: '100%', padding: '10px 36px 10px 40px',
               borderRadius: 14, border: '1px solid hsl(var(--border-subtle))',
               background: 'hsl(var(--bg-surface))', fontSize: 13,
               color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
@@ -3819,9 +3868,11 @@ function ChamadasContent() {
           />
           {studentSearch && (
             <button
+              type="button"
+              aria-label="Limpar busca de aluno"
               onClick={() => { setStudentSearch(''); }}
               style={{
-                position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: 'hsl(var(--text-muted))', padding: 4, display: 'flex', alignItems: 'center',
               }}
@@ -3829,48 +3880,50 @@ function ChamadasContent() {
               <X size={15}/>
             </button>
           )}
-
-          {/* OVERLAY DROPDOWN FOR RESULTS */}
-          {searchFocused && studentSearch.trim().length > 0 && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
-              background: 'hsl(var(--bg-elevated))',
-              border: '1px solid hsl(var(--border-subtle))',
-              borderRadius: 20,
-              boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.25)',
-              zIndex: 1000,
-              maxHeight: '65vh', overflowY: 'auto',
-              display: 'flex', flexDirection: 'column',
-              padding: 6,
-            }}>
-              {studentSearch.trim().length < 3 && (
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
-                  Digite pelo menos 3 letras do nome do aluno.
-                </div>
-              )}
-              
-              {isSearching && (
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <RefreshCw size={14} className="spin" /> Buscando alunos...
-                </div>
-              )}
-
-              {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 8 }}>
-                  {schoolResults.map((a: any) => (
-                    <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
-                  ))}
-                </div>
-              )}
-              
-              {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
-                  Nenhum aluno encontrado com esse nome.
-                </div>
-              )}
-            </div>
-          )}
         </div>
+
+        {/* OVERLAY DROPDOWN FOR RESULTS (ANCHORED TO FULL TOP BAR WIDTH) */}
+        {searchFocused && studentSearch.trim().length > 0 && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
+            background: 'hsl(var(--bg-elevated))',
+            border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 20,
+            boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.24)',
+            zIndex: 1000,
+            maxHeight: isMobile ? '70dvh' : '65vh',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            display: 'flex', flexDirection: 'column',
+            padding: isMobile ? 4 : 6,
+          }}>
+            {studentSearch.trim().length < 3 && (
+              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                Digite pelo menos 3 letras do nome do aluno.
+              </div>
+            )}
+            
+            {isSearching && (
+              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <RefreshCw size={14} className="spin" /> Buscando alunos...
+              </div>
+            )}
+
+            {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
+              <div className="search-results-list">
+                {schoolResults.map((a: any) => (
+                  <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
+                ))}
+              </div>
+            )}
+            
+            {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
+              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                Nenhum aluno encontrado com esse nome.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Right: Keyboard Shortcut Badge (Ctrl + K) */}
         {!isMobile && (
@@ -3997,73 +4050,40 @@ function ChamadasContent() {
             </div>
           </div>
 
-          {/* Filter Pills with Gradient on Active */}
-          {FILTERS.map(f => {
-            const isActive = filter === f.key
+          {/* Filter Dropdown List */}
+          {(() => {
+            const activeFilter = FILTERS.find(f => f.key === filter) || FILTERS[0]
             return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setFilter(f.key)
-                }}
+              <select
+                aria-label="Filtrar histórico de chamadas"
+                name="historico-filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as FilterType)}
+                className="historico-filter-select"
                 style={{
                   height: 32,
-                  padding: isMobile ? '0 10px' : '0 9px',
+                  padding: '0 12px',
                   borderRadius: 100,
-                  fontSize: 11,
-                  fontWeight: isActive ? 700 : 600,
-                  border: isActive ? '1px solid transparent' : '1px solid hsl(var(--border-subtle))',
-                  background: isActive ? f.gradient : 'hsl(var(--bg-surface))',
-                  color: isActive ? '#ffffff' : 'hsl(var(--text-secondary))',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  border: '1px solid transparent',
+                  background: activeFilter.gradient,
+                  color: '#ffffff',
                   cursor: 'pointer',
                   transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4.5,
-                  boxShadow: isActive ? f.glow : 'none',
+                  boxShadow: activeFilter.glow,
+                  outline: 'none',
                   whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-                onMouseEnter={e => {
-                  if (!isActive) {
-                    const el = e.currentTarget
-                    el.style.background = 'hsl(var(--bg-hover))'
-                    el.style.borderColor = `${f.color}70`
-                    el.style.color = f.color
-                    el.style.boxShadow = `0 2px 8px ${f.color}18`
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    const el = e.currentTarget
-                    el.style.background = 'hsl(var(--bg-surface))'
-                    el.style.borderColor = 'hsl(var(--border-subtle))'
-                    el.style.color = 'hsl(var(--text-secondary))'
-                    el.style.boxShadow = 'none'
-                  }
                 }}
               >
-                {f.label}
-                <span style={{
-                  background: isActive ? 'rgba(255, 255, 255, 0.28)' : 'hsl(var(--bg-overlay))',
-                  color: isActive ? '#ffffff' : 'hsl(var(--text-muted))',
-                  borderRadius: 100,
-                  fontSize: 9.5,
-                  padding: '1px 5.5px',
-                  fontWeight: 800,
-                  minWidth: 14,
-                  textAlign: 'center',
-                  boxShadow: isActive ? 'inset 0 1px 1px rgba(255, 255, 255, 0.3)' : 'none',
-                  transition: 'all 0.18s ease',
-                }}>
-                  {f.count}
-                </span>
-              </button>
+                {FILTERS.map(f => (
+                  <option key={f.key} value={f.key}>
+                    {f.label} ({f.count})
+                  </option>
+                ))}
+              </select>
             )
-          })}
+          })()}
         </div>
 
         {/* Right: Search Input + Confirmar Todos + Zerar Chamadas */}
@@ -4080,9 +4100,9 @@ function ChamadasContent() {
           {/* Search Input with Gradient Accent */}
           <div style={{
             position: 'relative',
-            flex: isMobile ? '1 1 100%' : '1 1 130px',
-            minWidth: isMobile ? 0 : 115,
-            maxWidth: isMobile ? '100%' : 190,
+            flex: isMobile ? '1 1 100%' : '1 1 150px',
+            minWidth: isMobile ? 0 : 120,
+            maxWidth: isMobile ? '100%' : 240,
           }}>
             <Search
               size={13}
@@ -4594,6 +4614,165 @@ function ChamadasContent() {
         .chamada-mini-card {
           contain: layout style;
         }
+
+        .search-results-list {
+          container: search-results / inline-size;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 6px;
+        }
+        .search-student-card {
+          background: hsl(var(--bg-surface));
+          border: 1px solid hsl(var(--border-subtle));
+          border-radius: 16px;
+          padding: 12px 14px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+          box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .search-student-card:hover {
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+        }
+        .search-student-guardians-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 7px;
+        }
+        .search-guardian-btn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 9px;
+          width: 100%;
+          min-height: 40px;
+          padding: 7px 12px;
+          border-radius: 10px;
+          transition: all 0.15s ease;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .search-guardian-btn:not(.is-blocked):not(.is-restricted):hover {
+          background: rgba(59, 130, 246, 0.14) !important;
+          border-color: rgba(59, 130, 246, 0.42) !important;
+          transform: translateY(-1px);
+        }
+        .search-status-card {
+          border-radius: 12px;
+          padding: 8px 11px;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          min-width: 0;
+          box-sizing: border-box;
+        }
+        .search-aside-icon {
+          width: 30px;
+          height: 30px;
+          border-radius: 9px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .search-solo-btn {
+          width: 100%;
+          min-height: 42px;
+          border-radius: 12px;
+          padding: 7px 11px;
+          background: rgba(16, 185, 129, 0.09);
+          border: 1px solid rgba(16, 185, 129, 0.34);
+          color: #047857;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          box-sizing: border-box;
+          transition: all 0.16s ease;
+          outline: none;
+        }
+        .search-solo-icon {
+          background: rgba(16, 185, 129, 0.16);
+          color: #059669;
+          transition: all 0.16s ease;
+        }
+        .search-solo-sub {
+          color: #059669;
+          opacity: 0.88;
+        }
+        .search-solo-btn:not(:disabled):hover {
+          background: linear-gradient(135deg, #10b981, #059669);
+          border-color: transparent;
+          color: #ffffff;
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+          transform: translateY(-1px);
+        }
+        .search-solo-btn:not(:disabled):hover .search-solo-icon {
+          background: rgba(255, 255, 255, 0.2);
+          color: #ffffff;
+        }
+        .search-solo-btn:not(:disabled):hover .search-solo-sub {
+          color: rgba(255, 255, 255, 0.9);
+        }
+        @media (pointer: coarse) {
+          .search-guardian-btn,
+          .search-solo-btn {
+            min-height: 44px;
+          }
+        }
+        @container search-results (inline-size >= 540px) {
+          .search-student-card {
+            grid-template-columns: minmax(0, 1fr);
+            padding: 13px 16px;
+            gap: 12px 14px;
+          }
+          .search-student-card:has(.search-student-aside) {
+            grid-template-columns: minmax(0, 1fr) minmax(190px, 235px);
+          }
+          .search-student-profile {
+            grid-column: 1;
+            grid-row: 1;
+          }
+          .search-student-aside {
+            grid-column: 2;
+            grid-row: 1;
+            align-self: center;
+          }
+          .search-student-guardians {
+            grid-column: 1 / -1;
+            grid-row: 2;
+          }
+          .search-student-guardians-grid {
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          }
+        }
+        @container search-results (inline-size >= 900px) {
+          .search-student-card {
+            grid-template-columns: minmax(220px, 1fr) minmax(320px, 2fr);
+            align-items: center;
+            gap: 16px;
+          }
+          .search-student-card:has(.search-student-aside) {
+            grid-template-columns: minmax(215px, 0.98fr) minmax(300px, 1.72fr) minmax(205px, 0.85fr);
+          }
+          .search-student-profile {
+            grid-column: 1;
+            grid-row: 1;
+          }
+          .search-student-guardians {
+            grid-column: 2;
+            grid-row: 1;
+          }
+          .search-student-aside {
+            grid-column: 3;
+            grid-row: 1;
+          }
+          .search-student-guardians-grid {
+            grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+          }
+        }
         
         .skeleton-shimmer {
           position: relative;
@@ -4647,6 +4826,56 @@ function ChamadasContent() {
           box-shadow: 0 8px 24px rgba(16,185,129,0.45);
           transform: translateY(-2px);
           filter: brightness(1.1);
+        }
+
+        .historico-filter-select option {
+          background-color: hsl(var(--bg-elevated));
+          color: hsl(var(--text-primary));
+          font-weight: 600;
+        }
+        @supports (appearance: base-select) {
+          .historico-filter-select,
+          .historico-filter-select::picker(select) {
+            appearance: base-select;
+          }
+          .historico-filter-select {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+          }
+          .historico-filter-select::picker(select) {
+            background: hsl(var(--bg-elevated));
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 14px;
+            padding: 4px;
+            margin-top: 6px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+            min-width: 185px;
+          }
+          .historico-filter-select::picker-icon {
+            color: #ffffff;
+            margin-inline-start: 4px;
+          }
+          .historico-filter-select option {
+            padding: 7px 10px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 600;
+            color: hsl(var(--text-primary));
+            background: transparent;
+            cursor: pointer;
+            transition: background 0.15s ease;
+          }
+          .historico-filter-select option:hover {
+            background: rgba(99, 102, 241, 0.1);
+          }
+          .historico-filter-select option:checked {
+            background: rgba(99, 102, 241, 0.14);
+            font-weight: 700;
+          }
+          .historico-filter-select option::checkmark {
+            color: #6366f1;
+          }
         }
 
         .btn-confirmar-todos {
