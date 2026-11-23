@@ -3,6 +3,7 @@ import 'katex/dist/katex.min.css'
 import katex from 'katex'
 import { Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
 import { cleanEnunciadoHtml } from '@/components/simulados/PaginationEngine'
+import { isCorruptedCurrencyFormula, sanitizeNonBreakingSpaces, splitMathSegments } from '@/lib/mathDelimiter'
 
 interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
   html: string
@@ -24,7 +25,11 @@ export function unpackMasksAndFormulas(html: string): string {
     formulaSpans.forEach(span => {
       const formula = span.getAttribute('data-value')
       if (formula) {
-        span.innerHTML = formula 
+        if (isCorruptedCurrencyFormula(formula)) {
+          span.parentNode?.replaceChild(doc.createTextNode(`$${formula}$`), span)
+          return
+        }
+        span.textContent = formula
         span.removeAttribute('contenteditable')
       }
     })
@@ -143,12 +148,35 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
     try {
       const parser = new DOMParser()
       const doc = parser.parseFromString(cleanedHtml, 'text/html')
-      
-      // 1. Render all .ql-formula elements
+
+      // 0. Normalize imported inline styles that would force horizontal overflow across boxes/pages
+      doc.body.querySelectorAll<HTMLElement>('*').forEach(el => {
+        if (el.closest('.ql-formula') || el.closest('.katex') || el.closest('.tag-mask')) return
+        const ws = el.style.whiteSpace
+        if (ws === 'nowrap') {
+          el.style.whiteSpace = 'normal'
+        } else if (ws === 'pre') {
+          el.style.whiteSpace = 'pre-wrap'
+        }
+        if (el.tagName !== 'IMG') {
+          if (el.style.width && /\d+(?:px|pt|cm|mm)$/i.test(el.style.width.trim())) {
+            el.style.maxWidth = '100%'
+          }
+          if (el.style.minWidth && /\d+(?:px|pt|cm|mm)$/i.test(el.style.minWidth.trim())) {
+            el.style.minWidth = '0'
+          }
+        }
+      })
+
+      // 1. Render all .ql-formula elements (and auto-heal any currency spans previously misparsed)
       const formulaSpans = doc.querySelectorAll('.ql-formula')
       formulaSpans.forEach(span => {
         const formula = span.getAttribute('data-value') || span.textContent
         if (formula) {
+          if (isCorruptedCurrencyFormula(formula)) {
+            span.parentNode?.replaceChild(doc.createTextNode(`$${formula}$`), span)
+            return
+          }
           try {
             const rendered = katex.renderToString(formula, { throwOnError: false })
             span.innerHTML = rendered
@@ -162,7 +190,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
         }
       })
 
-      // 2. Render any inline/display LaTeX patterns: \(...\), \[...\], $$...$$ in text nodes
+      // 2. Render any inline/display LaTeX patterns: \(...\), \[...\], $$...$$, and currency-safe $...$
       const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
       const textNodes: Text[] = []
       let currentNode = walker.nextNode()
@@ -176,22 +204,37 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
       }
 
       for (const node of textNodes) {
-        const val = node.nodeValue || ''
-        if (/\\[\(\[]|\$\$|\$[^\$]+\$/.test(val)) {
-          const replaced = val.replace(/\\(?:\[([\s\S]*?)\\\]|\(([\s\S]*?)\\\))|\$\$([\s\S]*?)\$\$|\$([^\$\n]+)\$/g, (match, d1, i1, d2, i2) => {
-            const formula = (d1 || i1 || d2 || i2 || '').trim()
-            const isDisplay = Boolean(d1 || d2)
-            if (!formula) return match
-            try {
-              return `<span class="ql-formula" data-value="${formula.replace(/"/g, '&quot;')}" contenteditable="false">${katex.renderToString(formula, { displayMode: isDisplay, throwOnError: false })}</span>`
-            } catch {
-              return match
+        const rawVal = node.nodeValue || ''
+        const val = sanitizeNonBreakingSpaces(rawVal)
+        if (val !== rawVal) {
+          node.nodeValue = val
+        }
+        if (/\\[\(\[]|\$/.test(val)) {
+          const segments = splitMathSegments(val)
+          if (segments.some(seg => seg.type === 'math')) {
+            const frag = doc.createDocumentFragment()
+            for (const seg of segments) {
+              if (seg.type === 'text') {
+                frag.appendChild(doc.createTextNode(seg.content))
+              } else {
+                try {
+                  const rendered = katex.renderToString(seg.content, {
+                    displayMode: Boolean(seg.displayMode),
+                    throwOnError: false,
+                  })
+                  const formulaSpan = doc.createElement('span')
+                  formulaSpan.className = 'ql-formula'
+                  formulaSpan.setAttribute('data-value', seg.content)
+                  formulaSpan.setAttribute('contenteditable', 'false')
+                  formulaSpan.innerHTML = rendered
+                  frag.appendChild(formulaSpan)
+                } catch {
+                  const delim = seg.displayMode ? '$$' : '$'
+                  frag.appendChild(doc.createTextNode(`${delim}${seg.content}${delim}`))
+                }
+              }
             }
-          })
-          if (replaced !== val) {
-            const temp = doc.createElement('span')
-            temp.innerHTML = replaced
-            node.parentNode?.replaceChild(temp, node)
+            node.parentNode?.replaceChild(frag, node)
           }
         }
       }
@@ -208,25 +251,48 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
         mNode = maskWalker.nextNode()
       }
 
+      const maskPattern = /\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/gi
       for (const node of maskTextNodes) {
         const val = node.nodeValue || ''
-        if (/\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/i.test(val)) {
-          const replaced = val.replace(/\[(IMAGEM\s*\d+|LINHAS_PAUTADAS\s*:\s*\d+|ESPACO_BRANCO\s*:\s*\d+)\]/gi, (match) => {
-            const upper = match.toUpperCase()
-            if (upper.includes('IMAGEM')) {
-              return `<span class="tag-mask tag-mask-imagem" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">🖼️</span><strong>${match}</strong></span>`
-            } else if (upper.includes('LINHAS_PAUTADAS')) {
-              return `<span class="tag-mask tag-mask-linhas" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">📝</span><strong>${match}</strong></span>`
-            } else if (upper.includes('ESPACO_BRANCO')) {
-              return `<span class="tag-mask tag-mask-espaco" data-mask="${match}" contenteditable="false"><span class="tag-mask-icon">📄</span><strong>${match}</strong></span>`
+        maskPattern.lastIndex = 0
+        if (maskPattern.test(val)) {
+          maskPattern.lastIndex = 0
+          const frag = doc.createDocumentFragment()
+          let lastIdx = 0
+          let m: RegExpExecArray | null
+          while ((m = maskPattern.exec(val)) !== null) {
+            if (m.index > lastIdx) {
+              frag.appendChild(doc.createTextNode(val.slice(lastIdx, m.index)))
             }
-            return match
-          })
-          if (replaced !== val) {
-            const temp = doc.createElement('span')
-            temp.innerHTML = replaced
-            node.parentNode?.replaceChild(temp, node)
+            const tagText = m[0]
+            const upper = tagText.toUpperCase()
+            const span = doc.createElement('span')
+            span.setAttribute('data-mask', tagText)
+            span.setAttribute('contenteditable', 'false')
+            let icon = '📄'
+            let variant = 'tag-mask-espaco'
+            if (upper.includes('IMAGEM')) {
+              icon = '🖼️'
+              variant = 'tag-mask-imagem'
+            } else if (upper.includes('LINHAS_PAUTADAS')) {
+              icon = '📝'
+              variant = 'tag-mask-linhas'
+            }
+            span.className = `tag-mask ${variant}`
+            const iconSpan = doc.createElement('span')
+            iconSpan.className = 'tag-mask-icon'
+            iconSpan.textContent = icon
+            const strongEl = doc.createElement('strong')
+            strongEl.textContent = tagText
+            span.appendChild(iconSpan)
+            span.appendChild(strongEl)
+            frag.appendChild(span)
+            lastIdx = m.index + tagText.length
           }
+          if (lastIdx < val.length) {
+            frag.appendChild(doc.createTextNode(val.slice(lastIdx)))
+          }
+          node.parentNode?.replaceChild(frag, node)
         }
       }
 
@@ -399,6 +465,29 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
   return (
     <>
       <style>{`
+        .html-content {
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-wrap: break-word;
+          word-wrap: break-word;
+        }
+        .html-content pre {
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          max-width: 100%;
+        }
+        .html-content .ql-formula {
+          max-width: 100%;
+        }
+        .html-content .katex {
+          white-space: normal;
+          max-width: 100%;
+        }
+        .html-content .katex-display {
+          max-width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+        }
         .html-content p {
           margin-top: 0;
           margin-bottom: 0.35em;
@@ -428,12 +517,15 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
         .html-content table {
           border-collapse: collapse;
           width: 100%;
+          max-width: 100%;
           margin: 0.5rem 0;
           font-size: 0.92em;
         }
         .html-content th, .html-content td {
           border: 1px solid #cbd5e1;
           padding: 5px 8px;
+          overflow-wrap: break-word;
+          word-break: break-word;
         }
         .html-content th {
           background-color: #f8fafc;
@@ -557,7 +649,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, on
         ref={containerRef}
         {...props} 
         className={`html-content ${props.className || ''}`}
-        style={{ display: 'flow-root', ...props.style }}
+        style={{ display: 'flow-root', maxWidth: '100%', boxSizing: 'border-box', overflowWrap: 'break-word', ...props.style }}
         contentEditable={editable}
         suppressContentEditableWarning={editable}
         onBlur={(e) => {

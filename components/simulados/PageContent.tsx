@@ -1122,6 +1122,7 @@ export function PageContent({
             <div style={{ 
               flex: 1, 
               minWidth: 0,
+              overflowWrap: 'break-word',
               fontSize: `${enunciadoFontSize}px`, 
               lineHeight: lineHeight || 1.5, 
               color: '#000', 
@@ -1591,6 +1592,7 @@ export function PageContent({
                               return (
                                 <div key={a.id || `alt-${aIndex}`} className="alt-row-item" style={{ 
                                   display: 'flex', gap: 12, 
+                                  minWidth: 0,
                                   marginTop: 6, 
                                   alignItems: 'flex-start', position: 'relative',
                                   zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : (imgMenuOpen === `${q.id}-${a.id}` ? 120 : 1)

@@ -2257,7 +2257,7 @@ export function QuestoesEditor({
                         onMouseUp={() => saveCaret(qIdx)}
                         onFocus={() => saveCaret(qIdx)}
                         onPasteImage={(fileOrBlob, srcUrl) => handlePasteImageIntoQuestion(qIdx, fileOrBlob, srcUrl)}
-                        style={{ width: '100%', minHeight: 120, padding: '16px 20px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, lineHeight: 1.6, outline: 'none', whiteSpace: 'pre-wrap' }}
+                        style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minHeight: 120, padding: '16px 20px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, lineHeight: 1.6, outline: 'none', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: 'break-word' }}
                       />
                     </div>
 
@@ -3153,7 +3153,7 @@ export function QuestoesEditor({
                                     </div>
                                   </div>
                                 )}
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                   {alt.imagem_url && (
                                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'rgba(59,130,246,0.06)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.2)', width: 'fit-content' }}>
                                       <img
@@ -3178,7 +3178,7 @@ export function QuestoesEditor({
                                     editable={!readOnly}
                                     html={alt.text || ''}
                                     onBlurHtml={(newHtml: string) => updateAlternativa(qIdx, aIdx, 'text', newHtml)}
-                                    style={{ flex: 1, border: 'none', background: 'transparent', color: alt.correct ? '#1e293b' : 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', width: '100%', minHeight: 24 }}
+                                    style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', color: alt.correct ? '#1e293b' : 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', width: '100%', minHeight: 24, overflowWrap: 'break-word', wordBreak: 'break-word' }}
                                   />
                                 </div>
                                 {!readOnly && (

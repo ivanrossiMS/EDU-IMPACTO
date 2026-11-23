@@ -1374,6 +1374,7 @@ export function PaginationEngine({
                           return (
                             <div key={`shadow-alt-${altKeys[aIdx] ?? a.id ?? aIdx}`} style={{ 
                               display: 'flex', gap: 12, alignItems: 'flex-start',
+                              minWidth: 0,
                               flex: colsNum > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
                               fontSize: `${alternativasFontSize}px`
                             }}>
