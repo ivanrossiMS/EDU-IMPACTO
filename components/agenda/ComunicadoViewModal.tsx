@@ -169,6 +169,7 @@ interface ComunicadoViewModalProps {
   initialOpenReminder?: boolean
   initialFocusComments?: boolean
   isAlunoView?: boolean
+  canManageAutorizacao?: boolean
   currentUserObj?: any
 }
 
@@ -200,6 +201,7 @@ export function ComunicadoViewModal({
   initialOpenReminder = false,
   initialFocusComments = false,
   isAlunoView = false,
+  canManageAutorizacao,
   currentUserObj
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
@@ -2740,8 +2742,10 @@ export function ComunicadoViewModal({
                   currentAluno={alunos && alunos.length === 1 ? alunos[0] : (!isAdminMode && !isStaff && currentUserSlug ? { id: currentUserSlug } : null)}
                   turmas={turmas}
                   alunos={alunos}
+                  cobrancas={cobrancasList}
                   isAdminMode={isAdminMode || isStaff}
                   isAlunoView={effectiveIsAlunoView}
+                  canManagePrazo={!effectiveIsAlunoView && Boolean(canManageAutorizacao ?? onEdit)}
                   onUpdateSuccess={(updatedAut) => {
                     setComunicado((prev: any) => {
                       const updatedCom = {

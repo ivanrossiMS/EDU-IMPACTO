@@ -2719,6 +2719,7 @@ function ColaboradorComunicadosContent() {
               currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
               isAdminMode={canManageCommentsSelected}
               isStaff={true}
+              canManageAutorizacao={canEditSelected}
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}
               setMaximizedVideoStr={setMaximizedVideoStr}

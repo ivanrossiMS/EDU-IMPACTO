@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileCheck2, Check, Lock, Unlock, Clock, Users, RefreshCw, 
@@ -25,6 +25,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api/apiClient'
 import { useData } from '@/lib/dataContext'
+import { isCobrancaPaidStatus } from '@/lib/cobrancasUtils'
 
 interface AutorizacaoWidgetProps {
   autorizacao: AutorizacaoData
@@ -33,8 +34,10 @@ interface AutorizacaoWidgetProps {
   currentAluno?: any
   turmas?: any[]
   alunos?: any[]
+  cobrancas?: any[]
   isAdminMode?: boolean
   isAlunoView?: boolean
+  canManagePrazo?: boolean
   onUpdateSuccess?: (updatedAutorizacao: AutorizacaoData) => void
 }
 
@@ -45,8 +48,10 @@ export function AutorizacaoWidget({
   currentAluno,
   turmas: turmasProp = [],
   alunos: alunosProp = [],
+  cobrancas: cobrancasProp,
   isAdminMode = false,
   isAlunoView = false,
+  canManagePrazo = false,
   onUpdateSuccess
 }: AutorizacaoWidgetProps) {
   const dataContext = useData() as any
@@ -95,7 +100,110 @@ export function AutorizacaoWidget({
   const [searchQuery, setSearchQuery] = useState('')
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [prazoDialogMode, setPrazoDialogMode] = useState<'reopen' | 'deadline' | null>(null)
+  const [draftDataLimite, setDraftDataLimite] = useState<string>('')
+  const [draftSemPrazo, setDraftSemPrazo] = useState<boolean>(false)
+  const [prazoError, setPrazoError] = useState<string | null>(null)
+  const prazoDialogRef = useRef<HTMLDialogElement>(null)
+  const pressedOutsideDialogRef = useRef<boolean>(false)
+  const prazoDialogTitleId = useId()
+  const prazoDateInputId = useId()
+  const prazoNoDeadlineId = useId()
+  const prazoErrorId = useId()
+  const [fetchedCobrancas, setFetchedCobrancas] = useState<any[]>([])
+  const [fetchedAlunosDir, setFetchedAlunosDir] = useState<Record<string, any>>({})
   const channelRef = useRef<any>(null)
+
+  useEffect(() => {
+    const dialog = prazoDialogRef.current
+    if (!dialog) return
+    if (prazoDialogMode) {
+      if (!dialog.open) {
+        dialog.showModal()
+      }
+    } else if (dialog.open) {
+      dialog.close()
+    }
+  }, [prazoDialogMode])
+
+  useEffect(() => {
+    if (!isAdminMode || !comunicadoId) return
+    if (cobrancasProp !== undefined) return
+    let active = true
+    apiFetch(`/api/cobrancas?comunicado_id=${encodeURIComponent(String(comunicadoId))}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => {
+        if (!active || !json) return
+        if (Array.isArray(json.cobrancas)) setFetchedCobrancas(json.cobrancas)
+        if (json.alunosDirectory) setFetchedAlunosDir(json.alunosDirectory)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [isAdminMode, comunicadoId, cobrancasProp])
+
+  const effectiveCobrancas = useMemo(
+    () => (cobrancasProp !== undefined ? cobrancasProp : fetchedCobrancas),
+    [cobrancasProp, fetchedCobrancas]
+  )
+
+  const hasCobranca = useMemo(
+    () => effectiveCobrancas.length > 0 || Boolean(autorizacao.valor && String(autorizacao.valor).trim()),
+    [effectiveCobrancas, autorizacao.valor]
+  )
+
+  const paymentLookup = useMemo(() => {
+    const byId = new Map<string, boolean>()
+    const byName = new Map<string, boolean>()
+    const cleanId = (v?: string | null) => String(v || '').trim().replace(/^(a_|_ALU|_)/i, '').trim()
+    const normName = (v?: string | null) =>
+      String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ')
+
+    const allAlunos = alunosProp.length > 0 ? [...alunosProp, ...contextAlunos] : contextAlunos
+    const idToNormName = new Map<string, string>()
+    allAlunos.forEach((a: any) => {
+      if (!a) return
+      const cid = cleanId(a.id)
+      const nm = normName(a.nome || a.dados?.nome)
+      if (cid && nm) idToNormName.set(cid, nm)
+    })
+    Object.entries(fetchedAlunosDir || {}).forEach(([k, v]: [string, any]) => {
+      const cid = cleanId(k)
+      const nm = normName(v?.nome)
+      if (cid && nm && !idToNormName.has(cid)) idToNormName.set(cid, nm)
+    })
+
+    effectiveCobrancas.forEach((cob: any) => {
+      const dests = Array.isArray(cob?.agenda_cobrancas_destinatarios) ? cob.agenda_cobrancas_destinatarios : []
+      dests.forEach((d: any) => {
+        const paid = isCobrancaPaidStatus(d?.status)
+        const did = cleanId(d?.destinatario_id || d?.aluno_id)
+        if (did) {
+          byId.set(did, Boolean(byId.get(did)) || paid)
+          const mappedNm = idToNormName.get(did)
+          if (mappedNm) byName.set(mappedNm, Boolean(byName.get(mappedNm)) || paid)
+        }
+        const dnm = normName(d?.destinatario_nome || d?.aluno_nome)
+        if (dnm) {
+          byName.set(dnm, Boolean(byName.get(dnm)) || paid)
+        }
+      })
+    })
+
+    return { byId, byName, cleanId, normName }
+  }, [effectiveCobrancas, alunosProp, contextAlunos, fetchedAlunosDir])
+
+  const getRespostaPaymentStatus = useCallback((r: AutorizacaoResposta): 'paid' | 'pending' | 'none' => {
+    if (!hasCobranca) return 'none'
+    const cid = paymentLookup.cleanId(r.alunoId)
+    if (cid && paymentLookup.byId.has(cid)) {
+      return paymentLookup.byId.get(cid) ? 'paid' : 'pending'
+    }
+    const nm = paymentLookup.normName(r.alunoNome)
+    if (nm && paymentLookup.byName.has(nm)) {
+      return paymentLookup.byName.get(nm) ? 'paid' : 'pending'
+    }
+    return 'pending'
+  }, [hasCobranca, paymentLookup])
 
   const currentUserId = currentUser?.id || currentUser?.uid || ''
   const currentAlunoId = currentAluno?.id || null
@@ -103,11 +211,14 @@ export function AutorizacaoWidget({
   const rawCurrentAlunoTurma = currentAluno?.turma_nome || currentAluno?.turmaNome || currentAluno?.turma || null
   const currentAlunoTurma = resolveTurmaNome(rawCurrentAlunoTurma, currentAlunoId) || rawCurrentAlunoTurma
 
-  // Sync prop changes safely without overwriting an already-recorded local signature with a stale snapshot
+  // Sync prop changes safely without overwriting an already-recorded local signature or newer update with a stale snapshot
   useEffect(() => {
     if (initialAutorizacao) {
       setAutorizacao(prev => {
         if (!prev || prev.id !== initialAutorizacao.id) return initialAutorizacao
+        const prevTime = prev.atualizadoEm ? new Date(prev.atualizadoEm).getTime() : 0
+        const nextTime = initialAutorizacao.atualizadoEm ? new Date(initialAutorizacao.atualizadoEm).getTime() : 0
+        if (prevTime > nextTime) return prev
         const ownKey = getAutorizacaoVoterKey(currentUserId, currentAlunoId)
         const ownResp = getUserAutorizacaoResposta(prev, currentUserId, currentAlunoId)
         const incomingResp = getUserAutorizacaoResposta(initialAutorizacao, currentUserId, currentAlunoId)
@@ -328,11 +439,24 @@ export function AutorizacaoWidget({
     }
   }
 
-  // Handle Toggle Status (Close / Reopen)
-  const handleToggleStatus = async () => {
-    if (!isAdminMode) return
+  const getLocalYmd = useCallback((daysOffset = 0): string => {
+    const d = new Date()
+    d.setDate(d.getDate() + daysOffset)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }, [])
+
+  const todayYmd = getLocalYmd(0)
+
+  const updateAutorizacaoStatus = async (
+    payload: { encerrada: boolean; dataLimite?: string | null },
+    successText?: string
+  ): Promise<boolean> => {
+    if (!canManagePrazo) return false
     setIsUpdatingStatus(true)
-    const newStatus = !autorizacao.encerrada
+    setPrazoError(null)
 
     try {
       const res = await apiFetch('/api/agenda/autorizacoes/status', {
@@ -340,20 +464,86 @@ export function AutorizacaoWidget({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           comunicadoId,
-          encerrada: newStatus
+          ...payload
         })
       })
 
-      const data = await res.json()
-      if (data.ok && data.autorizacao) {
-        setAutorizacao(data.autorizacao)
-        if (onUpdateSuccess) onUpdateSuccess(data.autorizacao)
-        broadcastUpdate(data.autorizacao, 'status_update')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok || !data.autorizacao) {
+        const errMsg = data?.error || 'Não foi possível atualizar a autorização.'
+        setPrazoError(errMsg)
+        if (!prazoDialogMode) {
+          setFeedbackMessage({ type: 'error', text: errMsg })
+          setTimeout(() => setFeedbackMessage(null), 5000)
+        }
+        return false
       }
-    } catch (err) {
-      console.error('Erro ao atualizar status da autorização:', err)
+
+      setAutorizacao(data.autorizacao)
+      if (onUpdateSuccess) onUpdateSuccess(data.autorizacao)
+      broadcastUpdate(data.autorizacao, 'status_update')
+      if (successText) {
+        setFeedbackMessage({ type: 'success', text: successText })
+        setTimeout(() => setFeedbackMessage(null), 4000)
+      }
+      return true
+    } catch (err: any) {
+      const errMsg = err?.message || 'Erro ao atualizar status da autorização.'
+      setPrazoError(errMsg)
+      if (!prazoDialogMode) {
+        setFeedbackMessage({ type: 'error', text: errMsg })
+        setTimeout(() => setFeedbackMessage(null), 5000)
+      }
+      return false
     } finally {
       setIsUpdatingStatus(false)
+    }
+  }
+
+  const openPrazoDialog = (mode: 'reopen' | 'deadline') => {
+    if (!canManagePrazo) return
+    const today = getLocalYmd(0)
+    const existingYmd = autorizacao.dataLimite ? String(autorizacao.dataLimite).trim().slice(0, 10) : ''
+    const hasValidFutureOrToday = /^\d{4}-\d{2}-\d{2}$/.test(existingYmd) && existingYmd >= today
+
+    setDraftDataLimite(hasValidFutureOrToday ? existingYmd : '')
+    setDraftSemPrazo(mode === 'deadline' && !autorizacao.dataLimite)
+    setPrazoError(null)
+    setPrazoDialogMode(mode)
+  }
+
+  const handleCloseAutorizacao = async () => {
+    await updateAutorizacaoStatus(
+      { encerrada: true },
+      'Prazo da autorização encerrado.'
+    )
+  }
+
+  const handleConfirmPrazoDialog = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canManagePrazo || isUpdatingStatus) return
+    const today = getLocalYmd(0)
+
+    if (!draftSemPrazo) {
+      const trimmed = draftDataLimite.trim()
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || trimmed < today) {
+        setPrazoError('Informe uma data de prazo válida (hoje ou futura) ou selecione a opção sem prazo limite.')
+        return
+      }
+    }
+
+    const ok = await updateAutorizacaoStatus(
+      {
+        encerrada: false,
+        dataLimite: draftSemPrazo ? null : draftDataLimite.trim()
+      },
+      prazoDialogMode === 'reopen'
+        ? (draftSemPrazo ? 'Autorização reaberta sem prazo limite!' : 'Autorização reaberta e novo prazo definido com sucesso!')
+        : (draftSemPrazo ? 'Prazo limite removido!' : 'Data do prazo atualizada com sucesso!')
+    )
+
+    if (ok) {
+      setPrazoDialogMode(null)
     }
   }
 
@@ -391,68 +581,261 @@ export function AutorizacaoWidget({
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
+    const escapeHtml = (val?: string | null) =>
+      String(val || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+
+    const totalPagosAut = hasCobranca
+      ? stats.respostasList.filter(r => getRespostaPaymentStatus(r) === 'paid').length
+      : 0
+    const percentPagosAut =
+      hasCobranca && stats.totalRespostas > 0
+        ? ((totalPagosAut / stats.totalRespostas) * 100).toFixed(1)
+        : '0.0'
+
+    const colgroupHtml = hasCobranca
+      ? `
+        <colgroup>
+          <col style="width: 3.5%;" />
+          <col style="width: 21.5%;" />
+          <col style="width: 11%;" />
+          <col style="width: 9.5%;" />
+          <col style="width: 9.5%;" />
+          <col style="width: 19%;" />
+          <col style="width: 11%;" />
+          <col style="width: 15%;" />
+        </colgroup>
+      `
+      : `
+        <colgroup>
+          <col style="width: 3.5%;" />
+          <col style="width: 23.5%;" />
+          <col style="width: 12%;" />
+          <col style="width: 10.5%;" />
+          <col style="width: 21.5%;" />
+          <col style="width: 12%;" />
+          <col style="width: 17%;" />
+        </colgroup>
+      `
+
     const htmlContent = `
       <!DOCTYPE html>
-      <html>
+      <html lang="pt-BR">
       <head>
-        <title>Lista de Autorizações - ${autorizacao.titulo}</title>
+        <meta charset="UTF-8" />
+        <title>Lista de Autorizações - ${escapeHtml(autorizacao.titulo)}</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #1e293b; }
-          h1 { font-size: 18px; margin-bottom: 4px; }
-          p { margin: 2px 0 12px 0; font-size: 12px; color: #64748b; }
-          .metrics { display: flex; gap: 16px; margin-bottom: 20px; }
-          .metric-card { border: 1px solid #e2e8f0; padding: 8px 14px; border-radius: 8px; font-size: 12px; }
-          .metric-value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
-          th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
-          th { background: #f8fafc; font-weight: bold; }
-          .badge-aprova { color: #166534; background: #dcfce7; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-          .badge-recusa { color: #991b1b; background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-          .obs-box { background: #fef3c7; border-left: 3px solid #f59e0b; padding: 4px 8px; margin-top: 4px; font-size: 11px; color: #92400e; font-weight: bold; }
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 16px;
+            margin: 0;
+            color: #1e293b;
+            background: #ffffff;
+          }
+          @media print {
+            body {
+              padding: 0;
+              margin: 0;
+            }
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 12px;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+          }
+          h1 {
+            font-size: 16px;
+            margin: 0 0 3px 0;
+            color: #0f172a;
+          }
+          .subtitle {
+            margin: 0;
+            font-size: 11px;
+            color: #475569;
+          }
+          .generated {
+            font-size: 10px;
+            color: #64748b;
+            text-align: right;
+            white-space: nowrap;
+          }
+          .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+          }
+          .metric-card {
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            padding: 7px 10px;
+            border-radius: 8px;
+            font-size: 10.5px;
+            font-weight: 700;
+          }
+          .metric-value {
+            font-size: 16px;
+            font-weight: 800;
+            margin-top: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 10.5px;
+          }
+          thead {
+            display: table-header-group;
+          }
+          tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 5px 7px;
+            text-align: left;
+            vertical-align: middle;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+          }
+          th {
+            background: #f1f5f9;
+            font-weight: 800;
+            font-size: 9.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #334155;
+          }
+          tbody tr:nth-child(even) td {
+            background: #f8fafc;
+          }
+          .col-center {
+            text-align: center;
+          }
+          .badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 999px;
+            font-size: 9.5px;
+            font-weight: 800;
+            white-space: nowrap;
+          }
+          .badge-aprova {
+            color: #166534;
+            background: #dcfce7;
+          }
+          .badge-recusa {
+            color: #991b1b;
+            background: #fee2e2;
+          }
+          .badge-pago {
+            color: #065f46;
+            background: #d1fae5;
+          }
+          .badge-pendente {
+            color: #92400e;
+            background: #fef3c7;
+          }
+          .obs-box {
+            background: #fef3c7;
+            border-left: 3px solid #f59e0b;
+            padding: 2px 6px;
+            font-size: 10px;
+            color: #92400e;
+            font-weight: 700;
+            border-radius: 3px;
+          }
+          .muted {
+            color: #94a3b8;
+            font-size: 10px;
+          }
         </style>
       </head>
       <body>
-        <h1>Colégio Impacto — Lista de Autorizações</h1>
-        <p><strong>Atividade:</strong> ${autorizacao.titulo} ${autorizacao.localEvento ? `| <strong>Local:</strong> ${autorizacao.localEvento}` : ''} ${autorizacao.dataEvento ? `| <strong>Data:</strong> ${formatDataEventoBR(autorizacao.dataEvento)}` : ''}</p>
-        <p>Documento gerado em ${new Date().toLocaleString('pt-BR')} para conferência pedagógica.</p>
+        <div class="header">
+          <div>
+            <h1>Colégio Impacto — Lista de Autorizações</h1>
+            <p class="subtitle">
+              <strong>Atividade:</strong> ${escapeHtml(autorizacao.titulo)}
+              ${autorizacao.localEvento ? ` | <strong>Local:</strong> ${escapeHtml(autorizacao.localEvento)}` : ''}
+              ${autorizacao.dataEvento ? ` | <strong>Data:</strong> ${escapeHtml(formatDataEventoBR(autorizacao.dataEvento))}` : ''}
+            </p>
+          </div>
+          <div class="generated">
+            Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))}<br/>
+            Conferência pedagógica
+          </div>
+        </div>
         
         <div class="metrics">
           <div class="metric-card">Total Respondidos: <div class="metric-value">${stats.totalRespostas}</div></div>
-          <div class="metric-card" style="color: #166534;">Autorizados (Sim): <div class="metric-value">${stats.totalAprovados} (${stats.percentAprovados}%)</div></div>
-          <div class="metric-card" style="color: #991b1b;">Não Autorizados: <div class="metric-value">${stats.totalRecusados} (${stats.percentRecusados}%)</div></div>
-          <div class="metric-card" style="color: #d97706;">Com Alergias/Obs: <div class="metric-value">${stats.respostasComObservacoes.length}</div></div>
+          <div class="metric-card" style="color: #166534; background: #f0fdf4; border-color: #bbf7d0;">Autorizados (Sim): <div class="metric-value">${stats.totalAprovados} (${stats.percentAprovados}%)</div></div>
+          <div class="metric-card" style="color: #991b1b; background: #fef2f2; border-color: #fecaca;">Não Autorizados: <div class="metric-value">${stats.totalRecusados} (${stats.percentRecusados}%)</div></div>
+          ${hasCobranca ? `<div class="metric-card" style="color: #047857; background: #ecfdf5; border-color: #a7f3d0;">Pagos: <div class="metric-value">${totalPagosAut} (${percentPagosAut}%)</div></div>` : ''}
+          <div class="metric-card" style="color: #b45309; background: #fffbeb; border-color: #fde68a;">Com Alergias/Obs: <div class="metric-value">${stats.respostasComObservacoes.length}</div></div>
         </div>
 
         <table>
+          ${colgroupHtml}
           <thead>
             <tr>
-              <th>#</th>
+              <th class="col-center">#</th>
               <th>Aluno</th>
               <th>Turma</th>
-              <th>Decisão</th>
+              <th class="col-center">Decisão</th>
+              ${hasCobranca ? '<th class="col-center">Pagamento</th>' : ''}
               <th>Responsável Assinante</th>
               <th>Data/Hora</th>
               <th>Observações Médicas / Restrições</th>
             </tr>
           </thead>
           <tbody>
-            ${stats.respostasList.map((r, i) => `
+            ${stats.respostasList.map((r, i) => {
+              const payStatus = getRespostaPaymentStatus(r)
+              const cpfDoc = r.cpfResponsavel || r.documentoResponsavel
+              return `
               <tr>
-                <td>${i + 1}</td>
-                <td><strong>${r.alunoNome || 'Não informado'}</strong></td>
-                <td>${resolveTurmaNome(r.alunoTurma, r.alunoId) || '-'}</td>
-                <td>
-                  <span class="${r.tipoDecisao === 'aprova' ? 'badge-aprova' : r.tipoDecisao === 'recusa' ? 'badge-recusa' : ''}">
-                    ${r.opcaoTexto}
+                <td class="col-center">${i + 1}</td>
+                <td><strong>${escapeHtml(r.alunoNome || 'Não informado')}</strong></td>
+                <td style="font-size: 10px;">${escapeHtml(resolveTurmaNome(r.alunoTurma, r.alunoId) || '-')}</td>
+                <td class="col-center">
+                  <span class="badge ${r.tipoDecisao === 'aprova' ? 'badge-aprova' : r.tipoDecisao === 'recusa' ? 'badge-recusa' : ''}">
+                    ${escapeHtml(r.opcaoTexto)}
                   </span>
                 </td>
-                <td>${r.usuarioNome} ${(r.cpfResponsavel || r.documentoResponsavel) ? `<br/><small>CPF: ${r.cpfResponsavel || r.documentoResponsavel}</small>` : ''}</td>
-                <td>${formatDateTimeBR(r.respondidoEm)}</td>
+                ${hasCobranca ? `
+                  <td class="col-center">
+                    <span class="badge ${payStatus === 'paid' ? 'badge-pago' : 'badge-pendente'}">
+                      ${payStatus === 'paid' ? 'Pago' : 'Não pago'}
+                    </span>
+                  </td>
+                ` : ''}
+                <td>${escapeHtml(r.usuarioNome)}${cpfDoc ? `<br/><small style="color:#64748b;">CPF: ${escapeHtml(cpfDoc)}</small>` : ''}</td>
+                <td style="font-size: 10px;">${escapeHtml(formatDateTimeBR(r.respondidoEm))}</td>
                 <td>
-                  ${r.observacoes ? `<div class="obs-box">⚠️ ${r.observacoes}</div>` : '<span style="color:#94a3b8;">Nenhuma</span>'}
+                  ${r.observacoes ? `<div class="obs-box">⚠️ ${escapeHtml(r.observacoes)}</div>` : '<span class="muted">Nenhuma</span>'}
                 </td>
               </tr>
-            `).join('')}
+              `
+            }).join('')}
           </tbody>
         </table>
       </body>
@@ -573,7 +956,7 @@ export function AutorizacaoWidget({
           </div>
 
           {/* PRAZO RESTANTE / ACTIONS */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {timeRemaining && !isClosed && (
               <div style={{
                 fontSize: 11,
@@ -591,34 +974,81 @@ export function AutorizacaoWidget({
               </div>
             )}
 
-            {isAdminMode && (
-              <button
-                type="button"
-                onClick={handleToggleStatus}
-                disabled={isUpdatingStatus}
-                style={{
-                  background: autorizacao.encerrada ? '#F0FDF4' : '#FEF2F2',
-                  border: `1px solid ${autorizacao.encerrada ? '#86EFAC' : '#FCA5A5'}`,
-                  color: autorizacao.encerrada ? '#15803D' : '#DC2626',
-                  borderRadius: 10,
-                  padding: '5px 10px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5
-                }}
-              >
-                {autorizacao.encerrada ? <Unlock size={12} /> : <Lock size={12} />}
-                <span>{autorizacao.encerrada ? 'Reabrir Autorização' : 'Encerrar Prazo'}</span>
-              </button>
+            {canManagePrazo && (
+              isClosed ? (
+                <button
+                  type="button"
+                  onClick={() => openPrazoDialog('reopen')}
+                  disabled={isUpdatingStatus}
+                  style={{
+                    background: '#F0FDF4',
+                    border: '1px solid #86EFAC',
+                    color: '#15803D',
+                    borderRadius: 10,
+                    padding: '6px 12px',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: isUpdatingStatus ? 'wait' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5
+                  }}
+                >
+                  <Unlock size={13} />
+                  <span>Reabrir e Definir Prazo</span>
+                </button>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => openPrazoDialog('deadline')}
+                    disabled={isUpdatingStatus}
+                    style={{
+                      background: '#F8FAFC',
+                      border: '1px solid #CBD5E1',
+                      color: '#334155',
+                      borderRadius: 10,
+                      padding: '5px 10px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: isUpdatingStatus ? 'wait' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                  >
+                    <Calendar size={12} />
+                    <span>{autorizacao.dataLimite ? 'Alterar Prazo' : 'Definir Prazo'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseAutorizacao}
+                    disabled={isUpdatingStatus}
+                    style={{
+                      background: '#FEF2F2',
+                      border: '1px solid #FCA5A5',
+                      color: '#DC2626',
+                      borderRadius: 10,
+                      padding: '5px 10px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: isUpdatingStatus ? 'wait' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                  >
+                    <Lock size={12} />
+                    <span>Encerrar Prazo</span>
+                  </button>
+                </div>
+              )
             )}
           </div>
         </div>
 
-        {/* PILLS DE EVENTO (LOCAL, DATA, VALOR) */}
-        {(autorizacao.localEvento || autorizacao.dataEvento || autorizacao.valor) && (
+        {/* PILLS DE EVENTO (LOCAL, DATA, VALOR, PRAZO) */}
+        {(autorizacao.localEvento || autorizacao.dataEvento || autorizacao.valor || autorizacao.dataLimite) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             {autorizacao.localEvento && (
               <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '3px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -635,6 +1065,23 @@ export function AutorizacaoWidget({
                 <DollarSign size={12} color="#059669" /> {autorizacao.valor}
               </span>
             )}
+            {autorizacao.dataLimite && (
+              <span style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: isClosed ? '#B91C1C' : '#92400E',
+                background: isClosed ? '#FEF2F2' : '#FFFBEB',
+                border: `1px solid ${isClosed ? '#FECACA' : '#FDE68A'}`,
+                padding: '3px 10px',
+                borderRadius: 8,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5
+              }}>
+                <Clock size={12} color={isClosed ? '#DC2626' : '#D97706'} />
+                {isClosed ? 'Prazo encerrado:' : 'Prazo:'} {formatDataEventoBR(String(autorizacao.dataLimite).slice(0, 10))}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -642,6 +1089,31 @@ export function AutorizacaoWidget({
       {/* BODY DO WIDGET */}
       <div style={{ padding: '18px 20px' }}>
         <style>{`
+          .autorizacao-prazo-dialog {
+            border: 1px solid #E2E8F0;
+            border-radius: 22px;
+            padding: 0;
+            width: min(460px, calc(100vw - 32px));
+            max-width: 100%;
+            background: #FFFFFF;
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.28);
+            margin: auto;
+            color: #0F172A;
+          }
+          .autorizacao-prazo-dialog:modal {
+            overscroll-behavior: contain;
+          }
+          .autorizacao-prazo-dialog::backdrop {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            overflow: hidden;
+            overscroll-behavior: contain;
+          }
+          .autorizacao-prazo-dialog button:focus-visible,
+          .autorizacao-prazo-dialog input:focus-visible {
+            outline: 2px solid #10B981;
+            outline-offset: 2px;
+          }
           .autorizacao-termo-content {
             white-space: pre-wrap;
             word-break: break-word;
@@ -1386,6 +1858,7 @@ export function AutorizacaoWidget({
                     const isAprova = r.tipoDecisao === 'aprova'
                     const isRecusa = r.tipoDecisao === 'recusa'
                     const displayTurma = resolveTurmaNome(r.alunoTurma, r.alunoId)
+                    const payStatus = getRespostaPaymentStatus(r)
 
                     return (
                       <div
@@ -1401,9 +1874,9 @@ export function AutorizacaoWidget({
                           transition: 'all 0.2s'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                           <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
                                 {r.alunoNome || 'Aluno(a)'}
                               </span>
@@ -1418,19 +1891,37 @@ export function AutorizacaoWidget({
                             </div>
                           </div>
 
-                          <div style={{
-                            padding: '4px 10px',
-                            borderRadius: 8,
-                            background: isAprova ? '#DCFCE7' : isRecusa ? '#FEE2E2' : '#F1F5F9',
-                            color: isAprova ? '#15803D' : isRecusa ? '#B91C1C' : '#475569',
-                            fontSize: 12,
-                            fontWeight: 800,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 5
-                          }}>
-                            {isAprova ? <CheckCircle2 size={14} /> : isRecusa ? <XCircle size={14} /> : null}
-                            <span>{r.opcaoTexto}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {payStatus !== 'none' && (
+                              <span style={{
+                                padding: '4px 9px',
+                                borderRadius: 8,
+                                background: payStatus === 'paid' ? '#D1FAE5' : '#FEF3C7',
+                                color: payStatus === 'paid' ? '#065F46' : '#92400E',
+                                fontSize: 11.5,
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}>
+                                <DollarSign size={12} />
+                                <span>{payStatus === 'paid' ? 'Pago' : 'Não pago'}</span>
+                              </span>
+                            )}
+                            <div style={{
+                              padding: '4px 10px',
+                              borderRadius: 8,
+                              background: isAprova ? '#DCFCE7' : isRecusa ? '#FEE2E2' : '#F1F5F9',
+                              color: isAprova ? '#15803D' : isRecusa ? '#B91C1C' : '#475569',
+                              fontSize: 12,
+                              fontWeight: 800,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 5
+                            }}>
+                              {isAprova ? <CheckCircle2 size={14} /> : isRecusa ? <XCircle size={14} /> : null}
+                              <span>{r.opcaoTexto}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -1461,6 +1952,312 @@ export function AutorizacaoWidget({
           </div>
         )}
       </AnimatePresence>
+
+      {/* DIALOG NATIVO: REABRIR AUTORIZAÇÃO E DEFINIR PRAZO */}
+      <dialog
+        ref={prazoDialogRef}
+        className="autorizacao-prazo-dialog"
+        aria-labelledby={prazoDialogTitleId}
+        {...({ closedby: 'any' } as any)}
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => {
+          e.stopPropagation()
+          const dialog = prazoDialogRef.current
+          if (!dialog) return
+          const r = dialog.getBoundingClientRect()
+          pressedOutsideDialogRef.current =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+        }}
+        onPointerUp={e => {
+          e.stopPropagation()
+          const dialog = prazoDialogRef.current
+          if (!dialog || isUpdatingStatus) {
+            pressedOutsideDialogRef.current = false
+            return
+          }
+          const r = dialog.getBoundingClientRect()
+          const releasedOutside =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+          if (pressedOutsideDialogRef.current && releasedOutside) {
+            setPrazoDialogMode(null)
+          }
+          pressedOutsideDialogRef.current = false
+        }}
+        onCancel={e => {
+          if (isUpdatingStatus) {
+            e.preventDefault()
+            return
+          }
+          setPrazoDialogMode(null)
+        }}
+        onClose={() => {
+          if (prazoDialogRef.current) {
+            prazoDialogRef.current.returnValue = ''
+          }
+          setPrazoDialogMode(null)
+        }}
+      >
+        <form onSubmit={handleConfirmPrazoDialog} style={{ padding: 0, margin: 0 }}>
+          <div style={{
+            padding: '18px 22px',
+            borderBottom: '1px solid #F1F5F9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.06) 100%)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 11,
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                flexShrink: 0
+              }}>
+                {prazoDialogMode === 'reopen' ? <Unlock size={18} /> : <Calendar size={18} />}
+              </div>
+              <div>
+                <h1 id={prazoDialogTitleId} style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {prazoDialogMode === 'reopen' ? 'Reabrir e Definir Prazo' : 'Definir Data do Prazo'}
+                </h1>
+                <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0 0' }}>
+                  {autorizacao.titulo}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              aria-label="Fechar janela de prazo"
+              disabled={isUpdatingStatus}
+              onClick={() => setPrazoDialogMode(null)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                background: '#F1F5F9',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: isUpdatingStatus ? 'not-allowed' : 'pointer',
+                color: '#64748B'
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {autorizacao.dataLimite && (
+              <div style={{
+                fontSize: 12,
+                color: '#475569',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: 10,
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}>
+                <Clock size={13} color="#64748B" />
+                <span>
+                  Prazo atual: <strong>{formatDataEventoBR(String(autorizacao.dataLimite).slice(0, 10))}</strong>
+                </span>
+              </div>
+            )}
+
+            <div>
+              <label
+                htmlFor={prazoDateInputId}
+                style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', display: 'block', marginBottom: 6 }}
+              >
+                Nova data limite para resposta dos responsáveis
+              </label>
+
+              <input
+                id={prazoDateInputId}
+                type="date"
+                min={todayYmd}
+                value={draftSemPrazo ? '' : draftDataLimite}
+                disabled={draftSemPrazo || isUpdatingStatus}
+                autoFocus
+                aria-invalid={prazoError ? true : undefined}
+                aria-describedby={prazoError ? prazoErrorId : undefined}
+                onChange={e => {
+                  setDraftSemPrazo(false)
+                  setDraftDataLimite(e.target.value)
+                  if (prazoError) setPrazoError(null)
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  border: `1.5px solid ${prazoError ? '#FCA5A5' : '#CBD5E1'}`,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: draftSemPrazo ? '#94A3B8' : '#0F172A',
+                  background: draftSemPrazo ? '#F8FAFC' : '#FFFFFF',
+                  boxSizing: 'border-box'
+                }}
+              />
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {[
+                  { label: 'Hoje', days: 0 },
+                  { label: '+2 dias', days: 2 },
+                  { label: '+5 dias', days: 5 },
+                  { label: '+1 semana', days: 7 }
+                ].map(preset => {
+                  const presetVal = getLocalYmd(preset.days)
+                  const isActive = !draftSemPrazo && draftDataLimite === presetVal
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => {
+                        setDraftSemPrazo(false)
+                        setDraftDataLimite(presetVal)
+                        if (prazoError) setPrazoError(null)
+                      }}
+                      style={{
+                        padding: '6px 11px',
+                        borderRadius: 8,
+                        border: isActive ? '1.5px solid #10B981' : '1px solid #CBD5E1',
+                        background: isActive ? '#ECFDF5' : '#FFFFFF',
+                        color: isActive ? '#047857' : '#475569',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: isUpdatingStatus ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <label
+              htmlFor={prazoNoDeadlineId}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: '#334155',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: 10,
+                padding: '9px 12px',
+                cursor: 'pointer'
+              }}
+            >
+              <input
+                id={prazoNoDeadlineId}
+                type="checkbox"
+                checked={draftSemPrazo}
+                disabled={isUpdatingStatus}
+                onChange={e => {
+                  setDraftSemPrazo(e.target.checked)
+                  if (prazoError) setPrazoError(null)
+                }}
+                style={{ width: 16, height: 16, accentColor: '#10B981', cursor: 'pointer' }}
+              />
+              <span>Manter aberta sem data limite (até encerrar manualmente)</span>
+            </label>
+
+            {prazoError && (
+              <div
+                id={prazoErrorId}
+                role="alert"
+                style={{
+                  background: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: 10,
+                  padding: '9px 12px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: '#B91C1C',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                <span>{prazoError}</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            padding: '14px 22px',
+            borderTop: '1px solid #F1F5F9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 10,
+            background: '#F8FAFC'
+          }}>
+            <button
+              type="button"
+              disabled={isUpdatingStatus}
+              onClick={() => setPrazoDialogMode(null)}
+              style={{
+                padding: '9px 16px',
+                borderRadius: 10,
+                border: '1px solid #CBD5E1',
+                background: '#FFFFFF',
+                color: '#475569',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: isUpdatingStatus ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="submit"
+              disabled={isUpdatingStatus}
+              style={{
+                padding: '9px 18px',
+                borderRadius: 10,
+                border: 'none',
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                color: '#FFFFFF',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: isUpdatingStatus ? 'wait' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+              }}
+            >
+              {isUpdatingStatus ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : (
+                <>
+                  <Unlock size={15} />
+                  <span>{prazoDialogMode === 'reopen' ? 'Confirmar e Reabrir' : 'Salvar Prazo'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </dialog>
     </div>
   )
 }

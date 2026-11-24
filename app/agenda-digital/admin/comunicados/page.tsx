@@ -2857,6 +2857,7 @@ export default function ADAdminComunicados() {
           allComunicados={comunicados}
           isAdminMode={canManageComunicadoComments(viewingCom)}
           isStaff={true}
+          canManageAutorizacao={true}
           initialFocusComments={viewingComFocusComments}
           initialOpenReminder={viewingComOpenReminder}
           alunos={alunos}
