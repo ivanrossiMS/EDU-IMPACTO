@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import {
   ShieldCheck,
+  FileCheck2,
   CheckCircle2,
   XCircle,
   Search,
@@ -32,6 +33,7 @@ import { supabase } from '@/lib/supabase'
 import { getInitials } from '@/lib/utils'
 import { ESTILOS_CHANCELA, carregarFontesCaligraficas } from '@/lib/contracts/sealUtils'
 import { SCHOOL_TIMEZONE, formatDateTimeSchoolBR } from '@/lib/autorizacoes/saidaSozinhoUtils'
+import { ComunicadosAutorizacoesTab } from './ComunicadosAutorizacoesTab'
 
 interface AdminSaidaRegistro {
   id: string
@@ -64,6 +66,8 @@ interface AdminSaidaRegistro {
   origem: 'agenda_digital' | 'gestao_alunos'
 }
 
+type MainAutorizacaoTab = 'saida' | 'comunicados'
+
 function escapeHtml(text?: string | null): string {
   return String(text || '')
     .replace(/&/g, '&amp;')
@@ -87,6 +91,26 @@ function legacyCopyText(text: string): boolean {
 }
 
 export default function ADAdminAutorizacoesPage() {
+  const [activeMainTab, setActiveMainTab] = useState<MainAutorizacaoTab>('saida')
+  const [initialComunicadoId, setInitialComunicadoId] = useState<string | null>(null)
+  const [comunicadosCounts, setComunicadosCounts] = useState<{
+    totalComunicados: number
+    comunicadosAbertos: number
+    pendentesEmAberto: number
+  }>({
+    totalComunicados: 0,
+    comunicadosAbertos: 0,
+    pendentesEmAberto: 0,
+  })
+
+  const tabSaidaRef = useRef<HTMLButtonElement | null>(null)
+  const tabComunicadosRef = useRef<HTMLButtonElement | null>(null)
+  const panelSaidaRef = useRef<HTMLDivElement | null>(null)
+  const panelComunicadosRef = useRef<HTMLDivElement | null>(null)
+  const tabSaidaId = useId()
+  const tabComunicadosId = useId()
+
+  // Estado da aba de Saída Sozinho
   const [viewMode, setViewMode] = useState<'registros' | 'alunos'>('registros')
   const [decisaoFiltro, setDecisaoFiltro] = useState<'todos' | 'autorizado' | 'desautorizado'>('todos')
   const [turmaFiltro, setTurmaFiltro] = useState<string>('todas')
@@ -111,6 +135,66 @@ export default function ADAdminAutorizacoesPage() {
   useEffect(() => {
     carregarFontesCaligraficas()
   }, [])
+
+  // Sincronizar aba ativa e comunicado alvo pela URL inicial (?tab=comunicados&comunicado=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sp = new URLSearchParams(window.location.search)
+    const tabParam = sp.get('tab')
+    const comParam = sp.get('comunicado')
+    if (comParam) {
+      setInitialComunicadoId(comParam)
+      setActiveMainTab('comunicados')
+    } else if (tabParam === 'comunicados' || tabParam === 'saida') {
+      setActiveMainTab(tabParam)
+    }
+  }, [])
+
+  const selectMainTab = useCallback((nextTab: MainAutorizacaoTab, focusButton = false) => {
+    setActiveMainTab(nextTab)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      url.searchParams.set('tab', nextTab)
+      if (nextTab !== 'comunicados') {
+        url.searchParams.delete('comunicado')
+      }
+      window.history.replaceState(null, '', url.pathname + url.search)
+    }
+    const targetBtn = nextTab === 'saida' ? tabSaidaRef.current : tabComunicadosRef.current
+    if (targetBtn) {
+      if (focusButton) targetBtn.focus()
+      targetBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
+  }, [])
+
+  // Suporte a Find-in-Page (Ctrl+F / Cmd+F) em painéis hidden="until-found"
+  useEffect(() => {
+    const pSaida = panelSaidaRef.current
+    const pCom = panelComunicadosRef.current
+    const onMatchSaida = () => selectMainTab('saida', false)
+    const onMatchCom = () => selectMainTab('comunicados', false)
+
+    pSaida?.addEventListener('beforematch', onMatchSaida)
+    pCom?.addEventListener('beforematch', onMatchCom)
+    return () => {
+      pSaida?.removeEventListener('beforematch', onMatchSaida)
+      pCom?.removeEventListener('beforematch', onMatchCom)
+    }
+  }, [selectMainTab])
+
+  const handleMainTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault()
+      const next: MainAutorizacaoTab = activeMainTab === 'saida' ? 'comunicados' : 'saida'
+      selectMainTab(next, true)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      selectMainTab('saida', true)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      selectMainTab('comunicados', true)
+    }
+  }
 
   const { data, isLoading, isFetching, refetch } = useQuery<{
     registros: AdminSaidaRegistro[]
@@ -140,7 +224,7 @@ export default function ADAdminAutorizacoesPage() {
     staleTime: 20_000,
   })
 
-  // Atualização em tempo real quando qualquer responsável assina na Agenda Digital
+  // Atualização em tempo real quando qualquer responsável assina saída na Agenda Digital
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
     const triggerRefresh = () => {
@@ -185,7 +269,7 @@ export default function ADAdminAutorizacoesPage() {
   const turmasDisponiveis = data?.turmas || []
 
   const activeSourceList = useMemo(() => {
-    return viewMode === 'alunos' ? (data?.alunosStatus || []) : (data?.registros || [])
+    return viewMode === 'alunos' ? data?.alunosStatus || [] : data?.registros || []
   }, [viewMode, data?.alunosStatus, data?.registros])
 
   const filteredList = useMemo(() => {
@@ -232,7 +316,7 @@ export default function ADAdminAutorizacoesPage() {
     return filteredList.slice(start, start + pageSize)
   }, [filteredList, safePage, pageSize])
 
-  // Dialog nativo (<dialog>)
+  // Dialog nativo (<dialog>) de Saída Sozinho
   const openComprovanteDialog = (item: AdminSaidaRegistro) => {
     setSelectedRegistro(item)
     setCopyState('idle')
@@ -506,10 +590,75 @@ export default function ADAdminAutorizacoesPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, fontFamily: 'Outfit, Inter, sans-serif' }}>
+    <div
+      className="ad-aut-page-shell"
+      style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: 'Outfit, Inter, sans-serif' }}
+    >
       <style
         dangerouslySetInnerHTML={{
           __html: `
+            .ad-aut-page-shell {
+              --ad-aut-target: 36px;
+              container: aut-main / inline-size;
+            }
+            @media (pointer: coarse) {
+              .ad-aut-page-shell {
+                --ad-aut-target: 44px;
+              }
+            }
+            .ad-aut-main-tablist {
+              display: flex;
+              align-items: stretch;
+              gap: 8px;
+              overflow-x: auto;
+              scrollbar-width: none;
+              -ms-overflow-style: none;
+              background: #ffffff;
+              border: 1px solid #e2e8f0;
+              border-radius: 18px;
+              padding: 6px;
+              box-shadow: 0 3px 14px -6px rgba(15, 23, 42, 0.06);
+              scroll-snap-type: inline proximity;
+            }
+            .ad-aut-main-tablist::-webkit-scrollbar {
+              display: none;
+            }
+            .ad-aut-main-tab {
+              position: relative;
+              flex: 1 0 auto;
+              min-inline-size: 220px;
+              min-block-size: var(--ad-aut-target);
+              padding: 11px 16px 13px;
+              border-radius: 13px;
+              border: 1px solid transparent;
+              background: transparent;
+              color: #475569;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              text-align: left;
+              font-family: inherit;
+              scroll-snap-align: start;
+              transition: background-color 0.16s ease, color 0.16s ease;
+            }
+            .ad-aut-main-tab:hover {
+              background: #f8fafc;
+              color: #0f172a;
+            }
+            .ad-aut-main-tab[aria-selected="true"] {
+              background: var(--tab-active-bg, #eef2ff);
+              color: #0f172a;
+            }
+            /* Indicador geométrico obrigatório (WCAG 1.4.1 e forced-colors) sem alterar dimensões */
+            .ad-aut-main-tab[aria-selected="true"]::after {
+              content: "";
+              position: absolute;
+              inset: auto 14px 0 14px;
+              border-block-end: 3px solid var(--tab-accent, #4f46e5);
+              border-radius: 3px 3px 0 0;
+            }
             .ad-aut-kpis {
               display: grid;
               grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -526,7 +675,7 @@ export default function ADAdminAutorizacoesPage() {
               padding: 0;
               border: none;
               border-radius: 24px;
-              width: min(580px, calc(100vw - 24px));
+              width: min(580px, calc(100vw - 20px));
               max-height: 90dvh;
               background: #ffffff;
               box-shadow: 0 28px 65px -16px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08);
@@ -586,15 +735,33 @@ export default function ADAdminAutorizacoesPage() {
             }
             .ad-aut-copy-tip.visible { opacity: 1; }
             .ad-aut-copy-tip.failed { color: #b91c1c; }
-            @media (max-width: 960px) {
+
+            @container aut-main (inline-size < 900px) {
               .ad-aut-kpis {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
               }
             }
-            @media (max-width: 600px) {
+            @container aut-main (inline-size < 600px) {
+              .ad-aut-main-tab {
+                min-inline-size: 168px;
+                padding: 10px 12px 12px;
+              }
+              .ad-aut-tab-subtitle {
+                display: none;
+              }
               .ad-aut-kpis {
                 grid-template-columns: 1fr 1fr;
-                gap: 10px;
+                gap: 9px;
+              }
+              .ad-aut-saida-header {
+                padding: 14px 15px !important;
+              }
+              .ad-aut-saida-header-btns {
+                width: 100%;
+              }
+              .ad-aut-saida-header-btns > button {
+                flex: 1;
+                justify-content: center;
               }
               .ad-aut-card-row {
                 flex-direction: column;
@@ -603,810 +770,1051 @@ export default function ADAdminAutorizacoesPage() {
               .ad-aut-card-actions {
                 width: 100%;
                 justify-content: space-between !important;
+                padding-top: 8px;
+                border-top: 1px solid #f1f5f9;
               }
             }
           `,
         }}
       />
 
-      {/* Cabeçalho Principal */}
+      {/* Navegação Superior de Separação entre Saída Sozinho e Autorizações de Comunicados */}
       <div
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 20,
-          padding: '18px 22px',
-          boxShadow: '0 4px 18px -6px rgba(15, 23, 42, 0.05)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
+        role="tablist"
+        aria-label="Categorias de autorizações da Agenda Digital"
+        onKeyDown={handleMainTabKeyDown}
+        className="ad-aut-main-tablist"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div
-            style={{
-              width: 46,
-              height: 46,
-              borderRadius: 15,
-              background: 'linear-gradient(135deg, #4f46e5 0%, #10b981 100%)',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 18px -4px rgba(79, 70, 229, 0.3)',
-              flexShrink: 0,
-            }}
-          >
-            <ShieldCheck size={22} strokeWidth={2.3} aria-hidden="true" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 19, fontWeight: 900, color: '#0f172a', lineHeight: 1.2 }}>
-                Autorizações de Saída Sozinho
-              </h1>
-              <span
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 800,
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  background: '#eef2ff',
-                  color: '#4338ca',
-                  border: '1px solid #e0e7ff',
-                }}
-              >
-                {filteredList.length} {filteredList.length === 1 ? 'registro' : 'registros'}
-              </span>
-            </div>
-            <p style={{ margin: '3px 0 0 0', fontSize: 12.5, color: '#64748b', fontWeight: 500 }}>
-              Autorizações e desautorizações assinadas digitalmente pelos responsáveis na Agenda Digital.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="ad-aut-focusable"
-            style={{
-              minHeight: 38,
-              padding: '0 14px',
-              borderRadius: 11,
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#334155',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <FileSpreadsheet size={15} color="#059669" aria-hidden="true" />
-            <span>Exportar Excel</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="ad-aut-focusable"
-            style={{
-              minHeight: 38,
-              padding: '0 14px',
-              borderRadius: 11,
-              border: 'none',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
-              color: '#ffffff',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: isFetching ? 'wait' : 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 6px 14px -4px rgba(79, 70, 229, 0.35)',
-            }}
-          >
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} aria-hidden="true" />
-            <span>{isFetching ? 'Atualizando...' : 'Atualizar'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* KPIs Leves */}
-      <div className="ad-aut-kpis">
-        {[
-          {
-            label: 'Total na Agenda Digital',
-            value: stats.totalRegistros,
-            sub: `${stats.totalAutorizacoes} aut. • ${stats.totalDesautorizacoes} desaut.`,
-            color: '#4f46e5',
-            bg: '#eef2ff',
-            icon: <History size={17} aria-hidden="true" />,
-          },
-          {
-            label: 'Autorizados Vigentes',
-            value: stats.vigentesAutorizados,
-            sub: 'Podem sair sozinhos atualmente',
-            color: '#059669',
-            bg: '#ecfdf5',
-            icon: <CheckCircle2 size={17} aria-hidden="true" />,
-          },
-          {
-            label: 'Desautorizados Vigentes',
-            value: stats.vigentesDesautorizados,
-            sub: 'Requerem acompanhante na saída',
-            color: '#e11d48',
-            bg: '#fff1f2',
-            icon: <XCircle size={17} aria-hidden="true" />,
-          },
-          {
-            label: 'Assinaturas Hoje',
-            value: stats.registrosHoje,
-            sub: 'Movimentações registradas hoje',
-            color: '#0284c7',
-            bg: '#e0f2fe',
-            icon: <CalendarClock size={17} aria-hidden="true" />,
-          },
-        ].map((kpi, idx) => (
-          <div
-            key={idx}
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 16,
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              boxShadow: '0 2px 10px -4px rgba(15, 23, 42, 0.04)',
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  color: '#64748b',
-                }}
-              >
-                {kpi.label}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: kpi.color, lineHeight: 1.15, marginTop: 4 }}>
-                {kpi.value}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginTop: 2 }}>
-                {kpi.sub}
-              </div>
-            </div>
+        <button
+          ref={tabSaidaRef}
+          id={tabSaidaId}
+          type="button"
+          role="tab"
+          aria-selected={activeMainTab === 'saida'}
+          tabIndex={activeMainTab === 'saida' ? 0 : -1}
+          onClick={() => selectMainTab('saida')}
+          className="ad-aut-main-tab ad-aut-focusable"
+          style={
+            {
+              '--tab-accent': '#4f46e5',
+              '--tab-active-bg': '#f5f7ff',
+            } as React.CSSProperties
+          }
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
             <div
               style={{
                 width: 38,
                 height: 38,
-                borderRadius: 12,
-                background: kpi.bg,
-                color: kpi.color,
+                borderRadius: 11,
+                background:
+                  activeMainTab === 'saida'
+                    ? 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)'
+                    : '#f1f5f9',
+                color: activeMainTab === 'saida' ? '#ffffff' : '#475569',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              {kpi.icon}
+              <ShieldCheck size={19} aria-hidden="true" />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.2 }}>
+                Saída Desacompanhada
+              </div>
+              <div
+                className="ad-aut-tab-subtitle"
+                style={{ fontSize: 11.5, fontWeight: 500, color: '#64748b', marginTop: 2 }}
+              >
+                Controle de portaria e saída sozinho
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Barra de Filtros e Modos */}
-      <div
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 18,
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          boxShadow: '0 2px 10px -4px rgba(15, 23, 42, 0.04)',
-        }}
-      >
-        {/* Linha 1: Abas de Visão + Toggle Secretaria + Paginação */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div
-            role="tablist"
-            aria-label="Modo de visualização"
+          <span
             style={{
-              display: 'inline-flex',
-              background: '#f1f5f9',
-              padding: 4,
-              borderRadius: 12,
-              gap: 4,
+              fontSize: 11.5,
+              fontWeight: 800,
+              padding: '3px 9px',
+              borderRadius: 999,
+              background: activeMainTab === 'saida' ? '#e0e7ff' : '#f1f5f9',
+              color: activeMainTab === 'saida' ? '#3730a3' : '#475569',
+              flexShrink: 0,
             }}
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'registros'}
-              onClick={() => setViewMode('registros')}
-              className="ad-aut-focusable"
+            {stats.totalRegistros}
+          </span>
+        </button>
+
+        <button
+          ref={tabComunicadosRef}
+          id={tabComunicadosId}
+          type="button"
+          role="tab"
+          aria-selected={activeMainTab === 'comunicados'}
+          tabIndex={activeMainTab === 'comunicados' ? 0 : -1}
+          onClick={() => selectMainTab('comunicados')}
+          className="ad-aut-main-tab ad-aut-focusable"
+          style={
+            {
+              '--tab-accent': '#059669',
+              '--tab-active-bg': '#f0fdf4',
+            } as React.CSSProperties
+          }
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+            <div
               style={{
-                padding: '7px 14px',
-                borderRadius: 9,
-                border: 'none',
-                background: viewMode === 'registros' ? '#ffffff' : 'transparent',
-                color: viewMode === 'registros' ? '#0f172a' : '#64748b',
-                fontSize: 12.5,
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: viewMode === 'registros' ? '0 2px 6px rgba(15,23,42,0.08)' : 'none',
-                display: 'inline-flex',
+                width: 38,
+                height: 38,
+                borderRadius: 11,
+                background:
+                  activeMainTab === 'comunicados'
+                    ? 'linear-gradient(135deg, #059669 0%, #0d9488 100%)'
+                    : '#f1f5f9',
+                color: activeMainTab === 'comunicados' ? '#ffffff' : '#475569',
+                display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              <History size={14} aria-hidden="true" />
-              <span>Movimentações ({data?.registros?.length || 0})</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'alunos'}
-              onClick={() => setViewMode('alunos')}
-              className="ad-aut-focusable"
-              style={{
-                padding: '7px 14px',
-                borderRadius: 9,
-                border: 'none',
-                background: viewMode === 'alunos' ? '#ffffff' : 'transparent',
-                color: viewMode === 'alunos' ? '#0f172a' : '#64748b',
-                fontSize: 12.5,
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: viewMode === 'alunos' ? '0 2px 6px rgba(15,23,42,0.08)' : 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <UserCheck size={14} aria-hidden="true" />
-              <span>Por Aluno ({data?.alunosStatus?.length || 0})</span>
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <label
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#475569',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={incluirSecretaria}
-                onChange={(e) => setIncluirSecretaria(e.target.checked)}
-                style={{ width: 15, height: 15, accentColor: '#4f46e5', cursor: 'pointer' }}
-              />
-              <span>Incluir alterações da Secretaria</span>
-            </label>
-
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {[10, 20, 50].map((sz) => (
-                <button
-                  key={sz}
-                  type="button"
-                  onClick={() => setPageSize(sz)}
-                  className="ad-aut-focusable"
-                  style={{
-                    padding: '4px 9px',
-                    borderRadius: 8,
-                    border: '1px solid',
-                    borderColor: pageSize === sz ? '#4f46e5' : '#e2e8f0',
-                    background: pageSize === sz ? '#eef2ff' : '#ffffff',
-                    color: pageSize === sz ? '#4338ca' : '#64748b',
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {sz}
-                </button>
-              ))}
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginLeft: 2 }}>/ pág</span>
+              <FileCheck2 size={19} aria-hidden="true" />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.2 }}>
+                Relatório de Comunicados
+              </div>
+              <div
+                className="ad-aut-tab-subtitle"
+                style={{ fontSize: 11.5, fontWeight: 500, color: '#64748b', marginTop: 2 }}
+              >
+                Passeios, eventos e termos por comunicado
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Linha 2: Chips de Decisão + Turma + Período + Busca */}
-        <div className="ad-aut-filters">
-          <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-            {[
-              { id: 'todos' as const, label: 'Todas', color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' },
-              { id: 'autorizado' as const, label: 'Autorizados', color: '#047857', bg: '#ecfdf5', border: '#a7f3d0' },
-              { id: 'desautorizado' as const, label: 'Desautorizados', color: '#be123c', bg: '#fff1f2', border: '#fecdd3' },
-            ].map((pill) => {
-              const active = decisaoFiltro === pill.id
-              return (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: 800,
+                padding: '3px 9px',
+                borderRadius: 999,
+                background: activeMainTab === 'comunicados' ? '#d1fae5' : '#f1f5f9',
+                color: activeMainTab === 'comunicados' ? '#065f46' : '#475569',
+              }}
+            >
+              {comunicadosCounts.totalComunicados}
+            </span>
+            {comunicadosCounts.pendentesEmAberto > 0 && (
+              <span
+                title={`${comunicadosCounts.pendentesEmAberto} assinatura(s) pendente(s) em aberto`}
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  padding: '2.5px 7px',
+                  borderRadius: 999,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  border: '1px solid #fde68a',
+                }}
+              >
+                {comunicadosCounts.pendentesEmAberto} pend.
+              </span>
+            )}
+          </div>
+        </button>
+      </div>
+
+      {/* Container de Painéis sem gap direto para compatibilidade estrita com hidden="until-found" */}
+      <div>
+        {/* PAINEL 1: Autorizações de Saída Sozinho */}
+        <div
+          ref={panelSaidaRef}
+          role="tabpanel"
+          aria-labelledby={tabSaidaId}
+          {...(activeMainTab !== 'saida' ? ({ hidden: 'until-found' } as any) : {})}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Cabeçalho da Aba de Saída */}
+            <div
+              className="ad-aut-saida-header"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 20,
+                padding: '18px 22px',
+                boxShadow: '0 4px 18px -6px rgba(15, 23, 42, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 280px' }}>
+                <div
+                  style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: 15,
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #10b981 100%)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 8px 18px -4px rgba(79, 70, 229, 0.3)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <ShieldCheck size={22} strokeWidth={2.3} aria-hidden="true" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <h2
+                      style={{
+                        margin: 0,
+                        fontSize: 18.5,
+                        fontWeight: 900,
+                        color: '#0f172a',
+                        lineHeight: 1.2,
+                        textWrap: 'balance',
+                      }}
+                    >
+                      Autorizações de Saída Sozinho
+                    </h2>
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        padding: '3px 10px',
+                        borderRadius: 999,
+                        background: '#eef2ff',
+                        color: '#4338ca',
+                        border: '1px solid #e0e7ff',
+                      }}
+                    >
+                      {filteredList.length} {filteredList.length === 1 ? 'registro' : 'registros'}
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      margin: '3px 0 0 0',
+                      fontSize: 12.5,
+                      color: '#64748b',
+                      fontWeight: 500,
+                      textWrap: 'pretty',
+                    }}
+                  >
+                    Autorizações e desautorizações permanentes de saída desacompanhada assinadas na Agenda Digital.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="ad-aut-saida-header-btns"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+              >
                 <button
-                  key={pill.id}
                   type="button"
-                  onClick={() => setDecisaoFiltro(pill.id)}
+                  onClick={handleExportExcel}
                   className="ad-aut-focusable"
                   style={{
-                    minHeight: 36,
-                    padding: '0 12px',
-                    borderRadius: 10,
-                    border: `1.5px solid ${active ? pill.border : '#e2e8f0'}`,
-                    background: active ? pill.bg : '#ffffff',
-                    color: active ? pill.color : '#64748b',
-                    fontSize: 12,
-                    fontWeight: 800,
+                    minBlockSize: 'var(--ad-aut-target)',
+                    padding: '0 14px',
+                    borderRadius: 11,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#334155',
+                    fontSize: 12.5,
+                    fontWeight: 700,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 5,
+                    gap: 6,
                   }}
                 >
-                  {pill.id === 'autorizado' && <CheckCircle2 size={13} color="#10b981" aria-hidden="true" />}
-                  {pill.id === 'desautorizado' && <XCircle size={13} color="#ef4444" aria-hidden="true" />}
-                  <span>{pill.label}</span>
+                  <FileSpreadsheet size={15} color="#059669" aria-hidden="true" />
+                  <span>Exportar Excel</span>
                 </button>
-              )
-            })}
-          </div>
 
-          <select
-            id={turmaSelectId}
-            aria-label="Filtrar por turma"
-            value={turmaFiltro}
-            onChange={(e) => setTurmaFiltro(e.target.value)}
-            className="ad-aut-focusable"
-            style={{
-              minHeight: 36,
-              padding: '0 12px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-              color: '#0f172a',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
-          >
-            <option value="todas">Todas as Turmas</option>
-            {turmasDisponiveis.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                  className="ad-aut-focusable"
+                  style={{
+                    minBlockSize: 'var(--ad-aut-target)',
+                    padding: '0 14px',
+                    borderRadius: 11,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                    color: '#ffffff',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: isFetching ? 'wait' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 6px 14px -4px rgba(79, 70, 229, 0.35)',
+                  }}
+                >
+                  <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} aria-hidden="true" />
+                  <span>{isFetching ? 'Atualizando...' : 'Atualizar'}</span>
+                </button>
+              </div>
+            </div>
 
-          <select
-            id={periodoSelectId}
-            aria-label="Filtrar por período"
-            value={periodoFiltro}
-            onChange={(e) => setPeriodoFiltro(e.target.value as any)}
-            className="ad-aut-focusable"
-            style={{
-              minHeight: 36,
-              padding: '0 12px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-              color: '#0f172a',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
-          >
-            <option value="todos">Todo o período</option>
-            <option value="hoje">Somente hoje</option>
-            <option value="7d">Últimos 7 dias</option>
-            <option value="30d">Últimos 30 dias</option>
-          </select>
-
-          <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
-            <label htmlFor={searchInputId} style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}>
-              Buscar por aluno, matrícula, responsável ou protocolo
-            </label>
-            <Search
-              size={15}
-              color="#94a3b8"
-              aria-hidden="true"
-              style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-            />
-            <input
-              id={searchInputId}
-              type="search"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar aluno, matrícula, responsável ou protocolo..."
-              className="ad-aut-focusable"
-              style={{
-                width: '100%',
-                minHeight: 36,
-                padding: '0 12px 0 36px',
-                borderRadius: 10,
-                border: '1px solid #cbd5e1',
-                background: '#f8fafc',
-                color: '#0f172a',
-                fontSize: 12.5,
-                fontWeight: 600,
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Lista de Autorizações & Desautorizações */}
-      {isLoading ? (
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: 20,
-            border: '1px solid #e2e8f0',
-            padding: 48,
-            textAlign: 'center',
-            color: '#64748b',
-            fontSize: 13.5,
-            fontWeight: 600,
-          }}
-        >
-          Carregando autorizações assinadas pelos responsáveis...
-        </div>
-      ) : paginatedList.length === 0 ? (
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: 20,
-            border: '1px dashed #cbd5e1',
-            padding: '48px 24px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
-              background: '#f1f5f9',
-              color: '#64748b',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <SlidersHorizontal size={22} aria-hidden="true" />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
-            Nenhuma autorização encontrada com estes filtros
-          </div>
-          <div style={{ fontSize: 12.5, color: '#64748b', maxWidth: 420 }}>
-            Quando os responsáveis autorizarem ou desautorizarem a saída sozinho pelo perfil na Agenda Digital, todos os registros com assinatura aparecerão aqui automaticamente.
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {paginatedList.map((item) => {
-            const isAut = viewMode === 'alunos' ? item.atualAutorizado : item.autorizado
-            return (
-              <div
-                key={item.id}
-                className="ad-aut-card-row"
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderLeft: `4px solid ${isAut ? '#10b981' : '#ef4444'}`,
-                  borderRadius: 18,
-                  padding: '14px 18px',
-                  boxShadow: '0 2px 12px -6px rgba(15, 23, 42, 0.06)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                }}
-              >
-                {/* Esquerda: Avatar + Dados do Aluno + Assinante */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+            {/* KPIs Leves de Saída */}
+            <div className="ad-aut-kpis">
+              {[
+                {
+                  label: 'Total na Agenda Digital',
+                  value: stats.totalRegistros,
+                  sub: `${stats.totalAutorizacoes} aut. • ${stats.totalDesautorizacoes} desaut.`,
+                  color: '#4f46e5',
+                  bg: '#eef2ff',
+                  icon: <History size={17} aria-hidden="true" />,
+                },
+                {
+                  label: 'Autorizados Vigentes',
+                  value: stats.vigentesAutorizados,
+                  sub: 'Podem sair sozinhos atualmente',
+                  color: '#059669',
+                  bg: '#ecfdf5',
+                  icon: <CheckCircle2 size={17} aria-hidden="true" />,
+                },
+                {
+                  label: 'Desautorizados Vigentes',
+                  value: stats.vigentesDesautorizados,
+                  sub: 'Requerem acompanhante na saída',
+                  color: '#e11d48',
+                  bg: '#fff1f2',
+                  icon: <XCircle size={17} aria-hidden="true" />,
+                },
+                {
+                  label: 'Assinaturas Hoje',
+                  value: stats.registrosHoje,
+                  sub: 'Movimentações registradas hoje',
+                  color: '#0284c7',
+                  bg: '#e0f2fe',
+                  icon: <CalendarClock size={17} aria-hidden="true" />,
+                },
+              ].map((kpi, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 16,
+                    padding: '13px 15px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    boxShadow: '0 2px 10px -4px rgba(15, 23, 42, 0.04)',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        color: '#64748b',
+                      }}
+                    >
+                      {kpi.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 21,
+                        fontWeight: 900,
+                        color: kpi.color,
+                        lineHeight: 1.15,
+                        marginTop: 4,
+                      }}
+                    >
+                      {kpi.value}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginTop: 2 }}>
+                      {kpi.sub}
+                    </div>
+                  </div>
                   <div
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 15,
-                      background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
-                      color: '#4338ca',
-                      fontWeight: 900,
-                      fontSize: 16,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 12,
+                      background: kpi.bg,
+                      color: kpi.color,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      overflow: 'hidden',
                       flexShrink: 0,
-                      border: '1px solid #e2e8f0',
                     }}
                   >
-                    {item.alunoFoto ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.alunoFoto}
-                        alt={item.alunoNome}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      getInitials(item.alunoNome)
-                    )}
-                  </div>
-
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    {/* Linha 1: Nome do aluno + Turma + Pill da decisão */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>
-                        {item.alunoNome}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          color: '#64748b',
-                          background: '#f1f5f9',
-                          padding: '2px 7px',
-                          borderRadius: 6,
-                        }}
-                      >
-                        #{item.alunoMatricula}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          color: '#4338ca',
-                          background: '#eef2ff',
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                        }}
-                      >
-                        {item.alunoTurma}
-                      </span>
-
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          padding: '3px 9px',
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 800,
-                          background: isAut ? '#ecfdf5' : '#fff1f2',
-                          color: isAut ? '#047857' : '#be123c',
-                          border: `1px solid ${isAut ? '#a7f3d0' : '#fecdd3'}`,
-                        }}
-                      >
-                        {isAut ? (
-                          <CheckCircle2 size={12} color="#10b981" aria-hidden="true" />
-                        ) : (
-                          <XCircle size={12} color="#ef4444" aria-hidden="true" />
-                        )}
-                        <span>{isAut ? 'Autorizado a Sair Sozinho' : 'Desautorizado (Saída Restrita)'}</span>
-                      </span>
-
-                      {viewMode === 'registros' && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 800,
-                            padding: '2px 7px',
-                            borderRadius: 6,
-                            background: item.isRegistroVigente ? '#f0fdfa' : '#f8fafc',
-                            color: item.isRegistroVigente ? '#0f766e' : '#94a3b8',
-                            border: `1px solid ${item.isRegistroVigente ? '#99f6e4' : '#e2e8f0'}`,
-                          }}
-                        >
-                          {item.isRegistroVigente ? 'VIGENTE' : 'HISTÓRICO'}
-                        </span>
-                      )}
-
-                      {item.origem === 'gestao_alunos' && (
-                        <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: 6,
-                            background: '#fffbeb',
-                            color: '#b45309',
-                            border: '1px solid #fde68a',
-                          }}
-                        >
-                          Secretaria
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Linha 2: Signatário + Data/Hora + CPF */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        flexWrap: 'wrap',
-                        marginTop: 6,
-                        fontSize: 12,
-                        color: '#475569',
-                        fontWeight: 500,
-                      }}
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <PenTool size={13} color="#6366f1" aria-hidden="true" />
-                        <span>
-                          Por <strong style={{ color: '#0f172a' }}>{item.assinanteNome}</strong> ({item.assinanteParentesco})
-                        </span>
-                      </span>
-
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <Clock size={13} color="#64748b" aria-hidden="true" />
-                        <span>{item.dataHoraFormatada}</span>
-                      </span>
-
-                      {item.assinanteCpfMascarado && (
-                        <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>
-                          CPF {item.assinanteCpfMascarado}
-                        </span>
-                      )}
-                    </div>
-
-                    {item.observacoes && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          fontSize: 11.5,
-                          color: '#92400e',
-                          background: '#fffbeb',
-                          border: '1px solid #fde68a',
-                          borderRadius: 8,
-                          padding: '4px 9px',
-                          display: 'inline-block',
-                        }}
-                      >
-                        <strong>Obs.:</strong> {item.observacoes}
-                      </div>
-                    )}
+                    {kpi.icon}
                   </div>
                 </div>
+              ))}
+            </div>
 
-                {/* Direita: Protocolo + Botão Ver Comprovante */}
+            {/* Barra de Filtros e Modos de Saída */}
+            <div
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 18,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                boxShadow: '0 2px 10px -4px rgba(15, 23, 42, 0.04)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <div
-                  className="ad-aut-card-actions"
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}
+                  role="group"
+                  aria-label="Modo de visualização de saída"
+                  style={{
+                    display: 'inline-flex',
+                    background: '#f1f5f9',
+                    padding: 4,
+                    borderRadius: 12,
+                    gap: 4,
+                    maxWidth: '100%',
+                    overflowX: 'auto',
+                  }}
                 >
-                  <span
-                    style={{
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: '#475569',
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      padding: '5px 9px',
-                      borderRadius: 8,
-                    }}
-                  >
-                    {item.protocolo}
-                  </span>
-
                   <button
                     type="button"
-                    onClick={() => openComprovanteDialog(item)}
+                    aria-pressed={viewMode === 'registros'}
+                    onClick={() => setViewMode('registros')}
                     className="ad-aut-focusable"
                     style={{
-                      minHeight: 36,
+                      minBlockSize: 'var(--ad-aut-target)',
                       padding: '0 13px',
-                      borderRadius: 10,
-                      border: '1px solid #c7d2fe',
-                      background: '#eef2ff',
-                      color: '#3730a3',
-                      fontSize: 12,
+                      borderRadius: 9,
+                      border: 'none',
+                      background: viewMode === 'registros' ? '#ffffff' : 'transparent',
+                      color: viewMode === 'registros' ? '#0f172a' : '#64748b',
+                      fontSize: 12.5,
                       fontWeight: 800,
                       cursor: 'pointer',
+                      boxShadow: viewMode === 'registros' ? '0 2px 6px rgba(15,23,42,0.08)' : 'none',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    <FileBadge2 size={14} aria-hidden="true" />
-                    <span>Ver Comprovante</span>
+                    <History size={14} aria-hidden="true" />
+                    <span>Movimentações ({data?.registros?.length || 0})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-pressed={viewMode === 'alunos'}
+                    onClick={() => setViewMode('alunos')}
+                    className="ad-aut-focusable"
+                    style={{
+                      minBlockSize: 'var(--ad-aut-target)',
+                      padding: '0 13px',
+                      borderRadius: 9,
+                      border: 'none',
+                      background: viewMode === 'alunos' ? '#ffffff' : 'transparent',
+                      color: viewMode === 'alunos' ? '#0f172a' : '#64748b',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      boxShadow: viewMode === 'alunos' ? '0 2px 6px rgba(15,23,42,0.08)' : 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <UserCheck size={14} aria-hidden="true" />
+                    <span>Por Aluno ({data?.alunosStatus?.length || 0})</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      minBlockSize: 'var(--ad-aut-target)',
+                      gap: 7,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#475569',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={incluirSecretaria}
+                      onChange={(e) => setIncluirSecretaria(e.target.checked)}
+                      style={{ width: 16, height: 16, accentColor: '#4f46e5', cursor: 'pointer' }}
+                    />
+                    <span>Incluir alterações da Secretaria</span>
+                  </label>
+
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {[10, 20, 50].map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => setPageSize(sz)}
+                        className="ad-aut-focusable"
+                        style={{
+                          minBlockSize: 32,
+                          padding: '4px 9px',
+                          borderRadius: 8,
+                          border: '1px solid',
+                          borderColor: pageSize === sz ? '#4f46e5' : '#e2e8f0',
+                          background: pageSize === sz ? '#eef2ff' : '#ffffff',
+                          color: pageSize === sz ? '#4338ca' : '#64748b',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {sz}
+                      </button>
+                    ))}
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginLeft: 2 }}>
+                      / pág
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ad-aut-filters">
+                <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'todos' as const, label: 'Todas', color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' },
+                    { id: 'autorizado' as const, label: 'Autorizados', color: '#047857', bg: '#ecfdf5', border: '#a7f3d0' },
+                    { id: 'desautorizado' as const, label: 'Desautorizados', color: '#be123c', bg: '#fff1f2', border: '#fecdd3' },
+                  ].map((pill) => {
+                    const active = decisaoFiltro === pill.id
+                    return (
+                      <button
+                        key={pill.id}
+                        type="button"
+                        onClick={() => setDecisaoFiltro(pill.id)}
+                        className="ad-aut-focusable"
+                        style={{
+                          minBlockSize: 'var(--ad-aut-target)',
+                          padding: '0 12px',
+                          borderRadius: 10,
+                          border: `1.5px solid ${active ? pill.border : '#e2e8f0'}`,
+                          background: active ? pill.bg : '#ffffff',
+                          color: active ? pill.color : '#64748b',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                        }}
+                      >
+                        {pill.id === 'autorizado' && <CheckCircle2 size={13} color="#10b981" aria-hidden="true" />}
+                        {pill.id === 'desautorizado' && <XCircle size={13} color="#ef4444" aria-hidden="true" />}
+                        <span>{pill.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <select
+                  id={turmaSelectId}
+                  aria-label="Filtrar por turma"
+                  value={turmaFiltro}
+                  onChange={(e) => setTurmaFiltro(e.target.value)}
+                  className="ad-aut-focusable"
+                  style={{
+                    minBlockSize: 'var(--ad-aut-target)',
+                    padding: '0 12px',
+                    borderRadius: 10,
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    flex: '1 1 160px',
+                  }}
+                >
+                  <option value="todas">Todas as Turmas</option>
+                  {turmasDisponiveis.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  id={periodoSelectId}
+                  aria-label="Filtrar por período"
+                  value={periodoFiltro}
+                  onChange={(e) => setPeriodoFiltro(e.target.value as any)}
+                  className="ad-aut-focusable"
+                  style={{
+                    minBlockSize: 'var(--ad-aut-target)',
+                    padding: '0 12px',
+                    borderRadius: 10,
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#0f172a',
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    flex: '1 1 150px',
+                  }}
+                >
+                  <option value="todos">Todo o período</option>
+                  <option value="hoje">Somente hoje</option>
+                  <option value="7d">Últimos 7 dias</option>
+                  <option value="30d">Últimos 30 dias</option>
+                </select>
+
+                <div style={{ flex: '2 1 220px', minInlineSize: 0, position: 'relative' }}>
+                  <label
+                    htmlFor={searchInputId}
+                    style={{
+                      position: 'absolute',
+                      width: 1,
+                      height: 1,
+                      overflow: 'hidden',
+                      clipPath: 'inset(50%)',
+                    }}
+                  >
+                    Buscar por aluno, matrícula, responsável ou protocolo
+                  </label>
+                  <Search
+                    size={15}
+                    color="#94a3b8"
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      left: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  <input
+                    id={searchInputId}
+                    type="search"
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar aluno, matrícula, responsável ou protocolo..."
+                    className="ad-aut-focusable"
+                    style={{
+                      width: '100%',
+                      minBlockSize: 'var(--ad-aut-target)',
+                      padding: '0 12px 0 36px',
+                      borderRadius: 10,
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#0f172a',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Autorizações & Desautorizações de Saída */}
+            {isLoading ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 20,
+                  border: '1px solid #e2e8f0',
+                  padding: 48,
+                  textAlign: 'center',
+                  color: '#64748b',
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                }}
+              >
+                Carregando autorizações assinadas pelos responsáveis...
+              </div>
+            ) : paginatedList.length === 0 ? (
+              <div
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 20,
+                  border: '1px dashed #cbd5e1',
+                  padding: '48px 24px',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 16,
+                    background: '#f1f5f9',
+                    color: '#64748b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <SlidersHorizontal size={22} aria-hidden="true" />
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                  Nenhuma autorização de saída encontrada com estes filtros
+                </div>
+                <div style={{ fontSize: 12.5, color: '#64748b', maxWidth: 420, textWrap: 'pretty' }}>
+                  Quando os responsáveis autorizarem ou desautorizarem a saída sozinho pelo perfil na Agenda Digital, todos os registros com assinatura aparecerão aqui automaticamente.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {paginatedList.map((item) => {
+                  const isAut = viewMode === 'alunos' ? item.atualAutorizado : item.autorizado
+                  return (
+                    <div
+                      key={item.id}
+                      className="ad-aut-card-row"
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderLeft: `4px solid ${isAut ? '#10b981' : '#ef4444'}`,
+                        borderRadius: 18,
+                        padding: '14px 18px',
+                        boxShadow: '0 2px 12px -6px rgba(15, 23, 42, 0.06)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 14,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            width: 46,
+                            height: 46,
+                            borderRadius: 14,
+                            background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                            color: '#4338ca',
+                            fontWeight: 900,
+                            fontSize: 15,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          {item.alunoFoto ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.alunoFoto}
+                              alt={item.alunoNome}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            getInitials(item.alunoNome)
+                          )}
+                        </div>
+
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>
+                              {item.alunoNome}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#64748b',
+                                background: '#f1f5f9',
+                                padding: '2px 7px',
+                                borderRadius: 6,
+                              }}
+                            >
+                              #{item.alunoMatricula}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 800,
+                                color: '#4338ca',
+                                background: '#eef2ff',
+                                padding: '2px 8px',
+                                borderRadius: 6,
+                              }}
+                            >
+                              {item.alunoTurma}
+                            </span>
+
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '3px 9px',
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 800,
+                                background: isAut ? '#ecfdf5' : '#fff1f2',
+                                color: isAut ? '#047857' : '#be123c',
+                                border: `1px solid ${isAut ? '#a7f3d0' : '#fecdd3'}`,
+                              }}
+                            >
+                              {isAut ? (
+                                <CheckCircle2 size={12} color="#10b981" aria-hidden="true" />
+                              ) : (
+                                <XCircle size={12} color="#ef4444" aria-hidden="true" />
+                              )}
+                              <span>
+                                {isAut ? 'Autorizado a Sair Sozinho' : 'Desautorizado (Saída Restrita)'}
+                              </span>
+                            </span>
+
+                            {viewMode === 'registros' && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: item.isRegistroVigente ? '#f0fdfa' : '#f8fafc',
+                                  color: item.isRegistroVigente ? '#0f766e' : '#94a3b8',
+                                  border: `1px solid ${item.isRegistroVigente ? '#99f6e4' : '#e2e8f0'}`,
+                                }}
+                              >
+                                {item.isRegistroVigente ? 'VIGENTE' : 'HISTÓRICO'}
+                              </span>
+                            )}
+
+                            {item.origem === 'gestao_alunos' && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  background: '#fffbeb',
+                                  color: '#b45309',
+                                  border: '1px solid #fde68a',
+                                }}
+                              >
+                                Secretaria
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              flexWrap: 'wrap',
+                              marginTop: 6,
+                              fontSize: 12,
+                              color: '#475569',
+                              fontWeight: 500,
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              <PenTool size={13} color="#6366f1" aria-hidden="true" />
+                              <span>
+                                Por <strong style={{ color: '#0f172a' }}>{item.assinanteNome}</strong> (
+                                {item.assinanteParentesco})
+                              </span>
+                            </span>
+
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                              <Clock size={13} color="#64748b" aria-hidden="true" />
+                              <span>{item.dataHoraFormatada}</span>
+                            </span>
+
+                            {item.assinanteCpfMascarado && (
+                              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>
+                                CPF {item.assinanteCpfMascarado}
+                              </span>
+                            )}
+                          </div>
+
+                          {item.observacoes && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                fontSize: 11.5,
+                                color: '#92400e',
+                                background: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                borderRadius: 8,
+                                padding: '4px 9px',
+                                display: 'inline-block',
+                              }}
+                            >
+                              <strong>Obs.:</strong> {item.observacoes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className="ad-aut-card-actions"
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap' }}
+                      >
+                        <code
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: '#475569',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            padding: '5px 9px',
+                            borderRadius: 8,
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
+                          {item.protocolo}
+                        </code>
+
+                        <button
+                          type="button"
+                          onClick={() => openComprovanteDialog(item)}
+                          className="ad-aut-focusable"
+                          style={{
+                            minBlockSize: 'var(--ad-aut-target)',
+                            padding: '0 13px',
+                            borderRadius: 10,
+                            border: '1px solid #c7d2fe',
+                            background: '#eef2ff',
+                            color: '#3730a3',
+                            fontSize: 12,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <FileBadge2 size={14} aria-hidden="true" />
+                          <span>Ver Comprovante</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Paginação de Saída */}
+            {totalPages > 1 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 14,
+                  padding: '10px 16px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: '#475569',
+                }}
+              >
+                <span>
+                  Página <strong>{safePage}</strong> de <strong>{totalPages}</strong> (
+                  {filteredList.length} registros)
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={safePage <= 1}
+                    className="ad-aut-focusable"
+                    style={{
+                      minBlockSize: 'var(--ad-aut-target)',
+                      padding: '0 11px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#334155',
+                      cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                      opacity: safePage <= 1 ? 0.5 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <ChevronLeft size={14} aria-hidden="true" /> Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={safePage >= totalPages}
+                    className="ad-aut-focusable"
+                    style={{
+                      minBlockSize: 'var(--ad-aut-target)',
+                      padding: '0 11px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#334155',
+                      cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                      opacity: safePage >= totalPages ? 0.5 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    Próxima <ChevronRight size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Paginação */}
-      {totalPages > 1 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 14,
-            padding: '10px 16px',
-            fontSize: 12.5,
-            fontWeight: 600,
-            color: '#475569',
-          }}
-        >
-          <span>
-            Página <strong>{safePage}</strong> de <strong>{totalPages}</strong> ({filteredList.length} registros)
-          </span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={safePage <= 1}
-              className="ad-aut-focusable"
-              style={{
-                minHeight: 32,
-                padding: '0 10px',
-                borderRadius: 8,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#334155',
-                cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
-                opacity: safePage <= 1 ? 0.5 : 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              <ChevronLeft size={14} aria-hidden="true" /> Anterior
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safePage >= totalPages}
-              className="ad-aut-focusable"
-              style={{
-                minHeight: 32,
-                padding: '0 10px',
-                borderRadius: 8,
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#334155',
-                cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
-                opacity: safePage >= totalPages ? 0.5 : 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              Próxima <ChevronRight size={14} aria-hidden="true" />
-            </button>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Modal Nativo <dialog> do Comprovante Completo */}
+        {/* PAINEL 2: Relatório de Autorizações Digitais dos Comunicados */}
+        <div
+          ref={panelComunicadosRef}
+          role="tabpanel"
+          aria-labelledby={tabComunicadosId}
+          {...(activeMainTab !== 'comunicados' ? ({ hidden: 'until-found' } as any) : {})}
+        >
+          <ComunicadosAutorizacoesTab
+            initialComunicadoId={initialComunicadoId}
+            onCountsChange={setComunicadosCounts}
+          />
+        </div>
+      </div>
+
+      {/* Modal Nativo <dialog> do Comprovante de Saída Sozinho */}
       <dialog
         ref={dialogRef}
         className="ad-aut-dialog"
@@ -1428,19 +1836,19 @@ export default function ADAdminAutorizacoesPage() {
                 gap: 12,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <FileBadge2
                   size={22}
                   color={selectedRegistro.autorizado ? '#059669' : '#e11d48'}
                   aria-hidden="true"
                 />
-                <div>
-                  <h2
+                <div style={{ minWidth: 0 }}>
+                  <h1
                     id={dialogTitleId}
                     style={{ margin: 0, fontSize: 16.5, fontWeight: 900, color: '#0f172a' }}
                   >
                     Comprovante de {selectedRegistro.autorizado ? 'Autorização' : 'Desautorização'}
-                  </h2>
+                  </h1>
                   <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
                     {selectedRegistro.alunoNome} • #{selectedRegistro.alunoMatricula} • {selectedRegistro.alunoTurma}
                   </p>
@@ -1471,7 +1879,6 @@ export default function ADAdminAutorizacoesPage() {
             </div>
 
             <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Protocolo + Copiar */}
               <div
                 style={{
                   display: 'flex',
@@ -1489,9 +1896,9 @@ export default function ADAdminAutorizacoesPage() {
                   <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
                     Protocolo:
                   </span>
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>
+                  <code style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a', overflowWrap: 'anywhere' }}>
                     {selectedRegistro.protocolo}
-                  </span>
+                  </code>
                 </div>
 
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1503,11 +1910,17 @@ export default function ADAdminAutorizacoesPage() {
                     data-copied={copyState === 'copied' ? '' : undefined}
                     data-failed={copyState === 'failed' ? '' : undefined}
                   >
-                    {copyState === 'copied' ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+                    {copyState === 'copied' ? (
+                      <Check size={13} aria-hidden="true" />
+                    ) : (
+                      <Copy size={13} aria-hidden="true" />
+                    )}
                     <span>{copyState === 'copied' ? 'Copiado' : 'Copiar'}</span>
                   </button>
                   <span
-                    className={`ad-aut-copy-tip ${copyStatusMsg ? 'visible' : ''} ${copyState === 'failed' ? 'failed' : ''}`}
+                    className={`ad-aut-copy-tip ${copyStatusMsg ? 'visible' : ''} ${
+                      copyState === 'failed' ? 'failed' : ''
+                    }`}
                     role="status"
                   >
                     {copyStatusMsg}
@@ -1515,8 +1928,7 @@ export default function ADAdminAutorizacoesPage() {
                 </div>
               </div>
 
-              {/* Grid de Metadados */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
                 <div style={{ padding: '10px 12px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>
                     Data e Hora (MS)
@@ -1555,7 +1967,16 @@ export default function ADAdminAutorizacoesPage() {
                   <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b' }}>
                     Autenticidade (SHA-256)
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700, color: '#334155', marginTop: 3, wordBreak: 'break-all' }}>
+                  <div
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: '#334155',
+                      marginTop: 3,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
                     {selectedRegistro.hashVerificacao || 'N/D'}
                     {selectedRegistro.assinanteCpfMascarado ? ` • CPF ${selectedRegistro.assinanteCpfMascarado}` : ''}
                   </div>
@@ -1594,7 +2015,6 @@ export default function ADAdminAutorizacoesPage() {
                 </div>
               )}
 
-              {/* Assinatura */}
               <div
                 style={{
                   padding: '14px 16px',
@@ -1610,7 +2030,17 @@ export default function ADAdminAutorizacoesPage() {
                 <div style={{ minHeight: 76, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {renderSignaturePreview(selectedRegistro)}
                 </div>
-                <div style={{ borderTop: '1px solid #cbd5e1', maxWidth: 300, margin: '8px auto 0', paddingTop: 6, fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                <div
+                  style={{
+                    borderTop: '1px solid #cbd5e1',
+                    maxWidth: 300,
+                    margin: '8px auto 0',
+                    paddingTop: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: '#334155',
+                  }}
+                >
                   {selectedRegistro.assinanteNome}
                 </div>
               </div>
@@ -1632,7 +2062,7 @@ export default function ADAdminAutorizacoesPage() {
                 href={`/agenda-digital/admin/pessoas/${encodeURIComponent(selectedRegistro.alunoId)}`}
                 className="ad-aut-focusable"
                 style={{
-                  minHeight: 38,
+                  minBlockSize: 38,
                   padding: '0 14px',
                   borderRadius: 10,
                   border: '1px solid #cbd5e1',
@@ -1656,7 +2086,7 @@ export default function ADAdminAutorizacoesPage() {
                   onClick={() => handlePrintComprovante(selectedRegistro)}
                   className="ad-aut-focusable"
                   style={{
-                    minHeight: 38,
+                    minBlockSize: 38,
                     padding: '0 14px',
                     borderRadius: 10,
                     border: 'none',
@@ -1679,7 +2109,7 @@ export default function ADAdminAutorizacoesPage() {
                   onClick={closeComprovanteDialog}
                   className="ad-aut-focusable"
                   style={{
-                    minHeight: 38,
+                    minBlockSize: 38,
                     padding: '0 14px',
                     borderRadius: 10,
                     border: '1px solid #cbd5e1',

@@ -411,6 +411,9 @@ export async function buildComunicadoAuditoria(
     'coordenador(a) pedagogico(a)',
     'gestor',
     'auxiliar administrativo',
+    'secretaria',
+    'secretario',
+    'secretaria escolar',
   ]
   const isAdmin = adminRoles.some(
     r =>
@@ -418,10 +421,12 @@ export async function buildComunicadoAuditoria(
       viewerCargoNorm === r ||
       viewerPerfilNorm.includes('administrador') ||
       viewerCargoNorm.includes('administrador master') ||
-      viewerPerfilNorm.includes('diretor geral') ||
-      viewerCargoNorm.includes('diretor geral') ||
+      viewerPerfilNorm.includes('diretor') ||
+      viewerCargoNorm.includes('diretor') ||
       viewerPerfilNorm.includes('coordenad') ||
-      viewerCargoNorm.includes('coordenad')
+      viewerCargoNorm.includes('coordenad') ||
+      viewerPerfilNorm.includes('gestor') ||
+      viewerCargoNorm.includes('gestor')
   )
   const viewerStaffIds = new Set(
     [

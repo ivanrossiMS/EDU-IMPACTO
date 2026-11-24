@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback, useId } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink, Vote, Smile, MessageSquare, ChevronRight, Users, Maximize2, Printer, Search, RefreshCw, Copy, Check, Phone, MessageCircle, UserCheck, RotateCcw, Clock, FileSpreadsheet, DollarSign, ShieldCheck, BellRing, AlertTriangle } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -119,6 +119,26 @@ const normalizeText = (text: any): string => {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 };
 
+let supportsCobDisplayTransition: boolean | undefined;
+function canCobTransitionDisplay(): boolean {
+  if (supportsCobDisplayTransition !== undefined) return supportsCobDisplayTransition;
+  if (typeof window === 'undefined' || !window.CSS?.supports?.('transition-behavior', 'allow-discrete') || !document.body) {
+    return false;
+  }
+  const probe = document.createElement('div');
+  probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;';
+  document.body.appendChild(probe);
+  getComputedStyle(probe).display;
+  probe.style.display = 'none';
+  supportsCobDisplayTransition = getComputedStyle(probe).display === 'block';
+  probe.remove();
+  return supportsCobDisplayTransition;
+}
+
+function supportsCobTopLayerExit(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.CSS?.supports?.('overlay', 'auto')) && canCobTransitionDisplay();
+}
+
 export interface ChatMessageReaction {
   emoji: string
   user_id: string
@@ -140,6 +160,14 @@ interface ChatMessage {
   autor_foto?: string | null
   autor_id?: string | null
 }
+
+export type ComunicadoReminderMode =
+  | 'all'
+  | 'unread'
+  | 'unpaid'
+  | 'unanswered_auth'
+  | 'unanswered_report'
+  | 'unanswered_poll'
 
 interface ComunicadoViewModalProps {
   comunicado: any
@@ -164,7 +192,7 @@ interface ComunicadoViewModalProps {
   onEdit?: (comunicado: any) => void
   onDelete?: (id: string) => void
   onForward?: (comunicado: any) => void
-  onSendReminder?: (comunicado: any, options: { mode: 'all' | 'unread'; customMessage?: string }) => Promise<any>
+  onSendReminder?: (comunicado: any, options: { mode: ComunicadoReminderMode; customMessage?: string }) => Promise<any>
   onReminderSent?: (updatedComunicado: any, result: any) => void
   initialOpenReminder?: boolean
   initialFocusComments?: boolean
@@ -281,6 +309,52 @@ export function ComunicadoViewModal({
   const [cobSyncingId, setCobSyncingId] = useState<string | null>(null)
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null)
   const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string | null>>({});
+  const cobDialogRef = useRef<HTMLDialogElement>(null)
+  const pressedOutsideCobDialogRef = useRef<boolean>(false)
+  const cobDialogTitleId = useId()
+
+  const closeCobModal = useCallback(async () => {
+    const dialog = cobDialogRef.current
+    if (!dialog || !dialog.open) {
+      setSelectedCobrancaModalId(null)
+      return
+    }
+    if (!supportsCobTopLayerExit() && typeof dialog.getAnimations === 'function') {
+      dialog.setAttribute('data-closing', '')
+      const animations = dialog.getAnimations({ subtree: true })
+      if (animations.length > 0) {
+        await Promise.race([
+          Promise.allSettled(animations.map(a => a.finished)),
+          new Promise(r => setTimeout(r, 260))
+        ])
+      }
+      if (!dialog.hasAttribute('data-closing')) return
+      dialog.removeAttribute('data-closing')
+    }
+    setSelectedCobrancaModalId(null)
+  }, [])
+
+  useEffect(() => {
+    const dialog = cobDialogRef.current
+    if (!dialog) return
+    if (selectedCobrancaModalId) {
+      dialog.removeAttribute('data-closing')
+      if (!dialog.open) {
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal()
+        } else {
+          dialog.setAttribute('open', '')
+        }
+      }
+    } else if (dialog.open) {
+      dialog.removeAttribute('data-closing')
+      if (typeof dialog.close === 'function') {
+        dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [selectedCobrancaModalId])
 
   const fetchCobrancas = useCallback(async () => {
     if (!comunicado?.id) return;
@@ -533,17 +607,45 @@ export function ComunicadoViewModal({
   const [showDestinatariosModal, setShowDestinatariosModal] = useState(false)
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
   const [showReminderModal, setShowReminderModal] = useState(Boolean(initialOpenReminder))
-  const [reminderMode, setReminderMode] = useState<'all' | 'unread'>('all')
+  const [reminderMode, setReminderMode] = useState<ComunicadoReminderMode>('all')
   const [reminderCustomMsg, setReminderCustomMsg] = useState('')
   const [isSendingReminder, setIsSendingReminder] = useState(false)
   const [reminderFeedback, setReminderFeedback] = useState<{ type: 'success' | 'warning' | 'error'; text: string } | null>(null)
-
-  useEffect(() => {
-    if (initialOpenReminder && onSendReminder && comunicado?.status !== 'rascunho' && comunicado?.status !== 'agendado') {
-      setReminderFeedback(null)
-      setShowReminderModal(true)
+  const [reminderSummary, setReminderSummary] = useState<{
+    capabilities?: {
+      hasCobranca?: boolean
+      cobrancaTitulo?: string | null
+      cobrancaOverdue?: boolean
+      hasAutorizacao?: boolean
+      autorizacaoTitulo?: string | null
+      autorizacaoClosed?: boolean
+      hasRelatorio?: boolean
+      relatorioLabel?: string | null
+      hasEnquete?: boolean
+      enquetePergunta?: string | null
+      enqueteClosed?: boolean
+      exigeCiencia?: boolean
+      isInterno?: boolean
+      isReport?: boolean
     }
-  }, [initialOpenReminder, onSendReminder, comunicado?.id, comunicado?.status])
+    counts?: {
+      all?: number
+      unread?: number
+      unpaid?: number | null
+      paid?: number | null
+      unanswered_auth?: number | null
+      answered_auth?: number | null
+      unanswered_report?: number | null
+      answered_report?: number | null
+      unanswered_poll?: number | null
+      answered_poll?: number | null
+    }
+    lembretes_historico?: any[]
+  } | null>(null)
+  const [isLoadingReminderSummary, setIsLoadingReminderSummary] = useState(false)
+  const reminderDialogRef = useRef<HTMLDialogElement>(null)
+  const pressedOutsideReminderDialogRef = useRef<boolean>(false)
+  const reminderDialogTitleId = useId()
 
   const canShowReminderButton = Boolean(
     onSendReminder &&
@@ -551,6 +653,193 @@ export function ComunicadoViewModal({
     comunicado?.status !== 'rascunho' &&
     comunicado?.status !== 'agendado'
   )
+
+  const closeReminderModal = useCallback(() => {
+    if (isSendingReminder) return
+    const dialog = reminderDialogRef.current
+    if (dialog && dialog.open) {
+      if (typeof dialog.close === 'function') {
+        dialog.close('')
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+    setShowReminderModal(false)
+  }, [isSendingReminder])
+
+  useEffect(() => {
+    const dialog = reminderDialogRef.current
+    if (!dialog) return
+    if (showReminderModal && canShowReminderButton) {
+      if (!dialog.open) {
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal()
+        } else {
+          dialog.setAttribute('open', '')
+        }
+      }
+    } else if (dialog.open) {
+      if (typeof dialog.close === 'function') {
+        dialog.close('')
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [showReminderModal, canShowReminderButton])
+
+  const fetchReminderSummary = useCallback(async (targetId: string) => {
+    if (!targetId) return
+    setIsLoadingReminderSummary(true)
+    try {
+      const res = await apiFetch(`/api/comunicados/lembrete?id=${encodeURIComponent(targetId)}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json?.ok) {
+          setReminderSummary(json)
+        }
+      }
+    } catch {
+      // Fallback silencioso: detecção local mantém todas as opções disponíveis
+    } finally {
+      setIsLoadingReminderSummary(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    setReminderSummary(null)
+    setReminderMode('all')
+    setReminderFeedback(null)
+  }, [comunicado?.id])
+
+  useEffect(() => {
+    if (showReminderModal && canShowReminderButton && comunicado?.id) {
+      void fetchReminderSummary(String(comunicado.id))
+    }
+  }, [showReminderModal, canShowReminderButton, comunicado?.id, fetchReminderSummary])
+
+  useEffect(() => {
+    if (initialOpenReminder && onSendReminder && comunicado?.status !== 'rascunho' && comunicado?.status !== 'agendado') {
+      setReminderFeedback(null)
+      setReminderMode('all')
+      setShowReminderModal(true)
+    }
+  }, [initialOpenReminder, onSendReminder, comunicado?.id, comunicado?.status])
+
+  // Detecção híbrida (instantânea local + confirmada pelo servidor) das funcionalidades do comunicado
+  const reminderDetectedFeatures = useMemo(() => {
+    const rawAnexos = [
+      ...(Array.isArray(comunicado?.anexos) ? comunicado.anexos : []),
+      ...(Array.isArray(comunicado?.dados?.anexos) ? comunicado.dados.anexos : []),
+    ]
+    let annexHasCob = false
+    let annexHasAut = false
+    let annexHasEnq = false
+    let annexHasRel = false
+    let annexRelLabel: string | null = null
+
+    for (const raw of rawAnexos) {
+      const parsed = parseAnexo(raw)
+      if (!parsed) continue
+      const nLower = String(parsed.name || '').toLowerCase()
+      const uLower = String(parsed.url || '').toLowerCase()
+      const mLower = String(parsed.mime || '').toLowerCase()
+      const rawStr = typeof raw === 'string' ? raw : ''
+
+      if (mLower === 'cobranca' || mLower === 'cobrança' || uLower.startsWith('cobranca:') || nLower.startsWith('cobrança:') || nLower.startsWith('cobranca:')) {
+        annexHasCob = true
+      }
+      if (mLower === 'autorizacao' || uLower.startsWith('autorizacao:') || nLower.startsWith('autorização:')) {
+        annexHasAut = true
+      }
+      if (mLower === 'enquete' || uLower.startsWith('enquete:') || nLower.startsWith('enquete:')) {
+        annexHasEnq = true
+      }
+      if (
+        rawStr.endsWith('|report-payload') ||
+        mLower === 'report-payload' ||
+        uLower.startsWith('payload:') ||
+        nLower.startsWith('relatório personalizado:') ||
+        nLower.startsWith('relatorio personalizado:') ||
+        (nLower.startsWith('relatório:') && !uLower.startsWith('form:'))
+      ) {
+        annexHasRel = true
+        annexRelLabel = annexRelLabel || 'Relatório'
+      } else if (nLower.startsWith('tarefa de relatório:') || nLower.startsWith('tarefa de relatorio:') || uLower.startsWith('report-task:')) {
+        annexHasRel = true
+        annexRelLabel = annexRelLabel || 'Tarefa de Relatório'
+      } else if (nLower.startsWith('formulário:') || nLower.startsWith('formulario:') || nLower.startsWith('relatório:') || uLower.startsWith('form:')) {
+        annexHasRel = true
+        annexRelLabel = annexRelLabel || 'Formulário / Relatório'
+      }
+    }
+
+    const comIdStr = String(comunicado?.id || '')
+    const rawCobs = Array.isArray(comunicado?.cobrancas || comunicado?.dados?.cobrancas)
+      ? (comunicado?.cobrancas || comunicado?.dados?.cobrancas)
+      : (comunicado?.cobranca || comunicado?.dados?.cobranca ? [comunicado.cobranca || comunicado.dados.cobranca] : [])
+    const localHasCobranca =
+      (Array.isArray(cobrancasList) && cobrancasList.length > 0) ||
+      rawCobs.some((c: any) => Number(String(c?.valor || 0).replace(',', '.')) > 0) ||
+      annexHasCob
+
+    const autObj = comunicado?.autorizacao || comunicado?.dados?.autorizacao || null
+    const localHasAutorizacao =
+      Boolean(autObj && typeof autObj === 'object' && (autObj.id || autObj.titulo || Array.isArray(autObj.opcoes))) ||
+      annexHasAut
+
+    const enqObj = comunicado?.enquete || comunicado?.dados?.enquete || null
+    const localHasEnquete =
+      Boolean(enqObj && typeof enqObj === 'object' && Array.isArray(enqObj.opcoes) && enqObj.opcoes.length > 0) ||
+      annexHasEnq
+
+    const stuIdsArr = comunicado?.stuIds || comunicado?.dados?.stuIds
+    const localHasRelatorio =
+      comIdStr.startsWith('AD-COM-REL-') ||
+      normalizeText(comunicado?.tipo || comunicado?.dados?.tipo) === 'relatorio' ||
+      Boolean(comunicado?.dados?.tipoRelatorio) ||
+      (Array.isArray(stuIdsArr) && stuIdsArr.length > 0) ||
+      annexHasRel
+
+    const srvCaps = reminderSummary?.capabilities
+    const primaryLocalCob = cobrancasList?.[0] || rawCobs?.[0] || null
+    let localCobOverdue = false
+    if (primaryLocalCob?.vencimento) {
+      const vStr = String(primaryLocalCob.vencimento).trim()
+      const vDate = new Date(vStr.includes('T') ? vStr : `${vStr}T23:59:59`)
+      if (!isNaN(vDate.getTime()) && vDate.getTime() < Date.now()) {
+        localCobOverdue = true
+      }
+    }
+
+    return {
+      hasCobranca: Boolean(srvCaps?.hasCobranca || localHasCobranca),
+      cobrancaTitulo: srvCaps?.cobrancaTitulo || primaryLocalCob?.titulo || comunicado?.titulo || 'Cobrança',
+      cobrancaOverdue: srvCaps?.cobrancaOverdue ?? localCobOverdue,
+      hasAutorizacao: Boolean(srvCaps?.hasAutorizacao || localHasAutorizacao),
+      autorizacaoTitulo: srvCaps?.autorizacaoTitulo || autObj?.titulo || comunicado?.titulo || 'Autorização',
+      autorizacaoClosed: Boolean(srvCaps?.autorizacaoClosed ?? autObj?.encerrada),
+      hasRelatorio: Boolean(srvCaps?.hasRelatorio || localHasRelatorio),
+      relatorioLabel: srvCaps?.relatorioLabel || annexRelLabel || 'Relatório',
+      hasEnquete: Boolean(srvCaps?.hasEnquete || localHasEnquete),
+      enquetePergunta: srvCaps?.enquetePergunta || enqObj?.pergunta || enqObj?.titulo || comunicado?.titulo || 'Enquete',
+      enqueteClosed: Boolean(srvCaps?.enqueteClosed ?? enqObj?.encerrada),
+      exigeCiencia: Boolean(srvCaps?.exigeCiencia ?? (comunicado?.exigeCiencia || comunicado?.dados?.exigeCiencia)),
+      isReport: Boolean(srvCaps?.isReport || localHasRelatorio),
+    }
+  }, [comunicado, cobrancasList, reminderSummary])
+
+  // Garante que reminderMode sempre aponte para uma opção válida deste comunicado
+  useEffect(() => {
+    if (reminderMode === 'unpaid' && !reminderDetectedFeatures.hasCobranca) {
+      setReminderMode('all')
+    } else if (reminderMode === 'unanswered_auth' && !reminderDetectedFeatures.hasAutorizacao) {
+      setReminderMode('all')
+    } else if (reminderMode === 'unanswered_report' && !reminderDetectedFeatures.hasRelatorio) {
+      setReminderMode('all')
+    } else if (reminderMode === 'unanswered_poll' && !reminderDetectedFeatures.hasEnquete) {
+      setReminderMode('all')
+    }
+  }, [reminderMode, reminderDetectedFeatures])
 
   const handleTriggerSendReminder = async () => {
     if (!onSendReminder || !comunicado?.id || isSendingReminder) return
@@ -562,6 +851,9 @@ export function ComunicadoViewModal({
         customMessage: reminderCustomMsg.trim() || undefined,
       })
       if (result && result.ok === false) {
+        if (result.counts) {
+          setReminderSummary(prev => ({ ...(prev || {}), counts: result.counts }))
+        }
         setReminderFeedback({
           type: 'error',
           text: result.error || 'Não foi possível enviar o lembrete.',
@@ -575,7 +867,14 @@ export function ComunicadoViewModal({
           dados: { ...(comunicado.dados || {}), lembretes_historico: result.lembretes_historico },
         }
         setComunicado(updatedCom)
+        setReminderSummary(prev => ({
+          ...(prev || {}),
+          lembretes_historico: result.lembretes_historico,
+          ...(result.counts ? { counts: result.counts } : {}),
+        }))
         onReminderSent?.(updatedCom, result)
+      } else if (result?.counts) {
+        setReminderSummary(prev => ({ ...(prev || {}), counts: result.counts }))
       }
       const noSubsOnly = result?.sent === 0 && (result?.noSubscribers || 0) > 0
       setReminderFeedback({
@@ -3915,6 +4214,7 @@ export function ComunicadoViewModal({
                       onClick={(e: any) => {
                         e.stopPropagation();
                         setReminderFeedback(null);
+                        setReminderMode('all');
                         setShowReminderModal(true);
                       }}
                       title="Enviar nova notificação push de lembrete para os destinatários"
@@ -4018,7 +4318,7 @@ export function ComunicadoViewModal({
         onOpenReminderModal={
           canShowReminderButton
             ? () => {
-                setReminderMode('unread')
+                setReminderMode(reminderDetectedFeatures.hasRelatorio ? 'unanswered_report' : 'unread')
                 setReminderFeedback(null)
                 setShowReminderModal(true)
               }
@@ -4026,376 +4326,1139 @@ export function ComunicadoViewModal({
         }
       />
 
-      {/* Modal de Confirmação e Envio de Lembrete Push */}
-      <AnimatePresence>
+      {/* Modal Nativo (<dialog>) de Confirmação e Envio Inteligente de Lembrete Push */}
+      <dialog
+        ref={reminderDialogRef}
+        className="cvm-reminder-dialog"
+        aria-labelledby={reminderDialogTitleId}
+        {...({ closedby: 'any' } as any)}
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => {
+          e.stopPropagation();
+          if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return;
+          const dialog = reminderDialogRef.current;
+          if (!dialog) return;
+          const r = dialog.getBoundingClientRect();
+          pressedOutsideReminderDialogRef.current =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+        }}
+        onPointerUp={e => {
+          e.stopPropagation();
+          if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return;
+          const dialog = reminderDialogRef.current;
+          if (!dialog) {
+            pressedOutsideReminderDialogRef.current = false;
+            return;
+          }
+          const r = dialog.getBoundingClientRect();
+          const releasedOutside =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+          if (pressedOutsideReminderDialogRef.current && releasedOutside) {
+            closeReminderModal();
+          }
+          pressedOutsideReminderDialogRef.current = false;
+        }}
+        onCancel={e => {
+          e.preventDefault();
+          closeReminderModal();
+        }}
+        onClose={() => {
+          if (reminderDialogRef.current) {
+            reminderDialogRef.current.returnValue = '';
+          }
+          if (!isSendingReminder) {
+            setShowReminderModal(false);
+          }
+        }}
+      >
         {showReminderModal && canShowReminderButton && (() => {
-          const remHistory: any[] = Array.isArray(comunicado?.lembretes_historico || comunicado?.dados?.lembretes_historico)
-            ? (comunicado?.lembretes_historico || comunicado?.dados?.lembretes_historico)
-            : [];
+          const srvHist = reminderSummary?.lembretes_historico;
+          const localHist = comunicado?.lembretes_historico || comunicado?.dados?.lembretes_historico;
+          const remHistory: any[] = Array.isArray(srvHist) && srvHist.length > 0
+            ? srvHist
+            : Array.isArray(localHist)
+              ? localHist
+              : [];
           const lastRem = remHistory[0] || null;
+
+          const senderName = currentUserName || comunicado?.autor || 'Equipe Escolar';
           const tituloCom = String(comunicado?.titulo || 'Comunicado').trim();
-          const previewTitle = `🔔 Lembrete: ${tituloCom}`;
+          const tituloCob = String(reminderDetectedFeatures.cobrancaTitulo || tituloCom).trim();
+          const tituloAut = String(reminderDetectedFeatures.autorizacaoTitulo || tituloCom).trim();
+          const tituloEnq = String(reminderDetectedFeatures.enquetePergunta || tituloCom).trim();
+
+          // Contagens instantâneas locais enquanto o resumo da API carrega
+          let localUnpaidFallback: number | null = null;
+          let localTotalCobFallback: number | null = null;
+          if (reminderDetectedFeatures.hasCobranca && cobrancasList.length > 0) {
+            const firstCobDests = getEffectiveCobDestinatarios(cobrancasList[0]);
+            if (firstCobDests.length > 0) {
+              localTotalCobFallback = firstCobDests.length;
+              const paidCountLocal = firstCobDests.filter((d: any) => isCobrancaPaidStatus(d?.status)).length;
+              localUnpaidFallback = Math.max(0, firstCobDests.length - paidCountLocal);
+            }
+          }
+
+          const srvCounts = reminderSummary?.counts;
+          const allCount = typeof srvCounts?.all === 'number' ? srvCounts.all : localTotalCobFallback;
+          const unpaidCount = typeof srvCounts?.unpaid === 'number' ? srvCounts.unpaid : localUnpaidFallback;
+          const paidCount = typeof srvCounts?.paid === 'number'
+            ? srvCounts.paid
+            : (localTotalCobFallback !== null && localUnpaidFallback !== null ? Math.max(0, localTotalCobFallback - localUnpaidFallback) : null);
+          const unauthCount = typeof srvCounts?.unanswered_auth === 'number' ? srvCounts.unanswered_auth : null;
+          const answeredAuthCount = typeof srvCounts?.answered_auth === 'number' ? srvCounts.answered_auth : null;
+          const unreportCount = typeof srvCounts?.unanswered_report === 'number' ? srvCounts.unanswered_report : null;
+          const answeredReportCount = typeof srvCounts?.answered_report === 'number' ? srvCounts.answered_report : null;
+          const unpollCount = typeof srvCounts?.unanswered_poll === 'number' ? srvCounts.unanswered_poll : null;
+          const answeredPollCount = typeof srvCounts?.answered_poll === 'number' ? srvCounts.answered_poll : null;
+          const unreadCount = typeof srvCounts?.unread === 'number' ? srvCounts.unread : null;
+
+          type ReminderOptionCard = {
+            mode: ComunicadoReminderMode;
+            title: string;
+            description: string;
+            count: number | null;
+            completedHint?: string | null;
+            icon: React.ReactNode;
+            accentColor: string;
+            accentBg: string;
+          };
+
+          const optionsList: ReminderOptionCard[] = [
+            {
+              mode: 'all',
+              title: 'Todos os destinatários',
+              description: reminderDetectedFeatures.isReport
+                ? 'Reenvia o alerta push para todos os destinatários deste relatório'
+                : 'Reenvia o alerta push para todos os destinatários deste comunicado',
+              count: allCount,
+              icon: <Users size={16} />,
+              accentColor: '#d97706',
+              accentBg: '#fef3c7',
+            },
+          ];
+
+          if (reminderDetectedFeatures.hasCobranca) {
+            optionsList.push({
+              mode: 'unpaid',
+              title: 'Apenas não pagos',
+              description:
+                paidCount !== null && paidCount > 0
+                  ? `Envia somente para os responsáveis com pagamento pendente (${paidCount} já confirmados)`
+                  : 'Envia somente para os responsáveis com pagamento pendente nesta cobrança',
+              count: unpaidCount,
+              completedHint: unpaidCount === 0 ? 'Todos quitados' : null,
+              icon: <CreditCard size={16} />,
+              accentColor: '#059669',
+              accentBg: '#d1fae5',
+            });
+          }
+
+          if (reminderDetectedFeatures.hasAutorizacao) {
+            optionsList.push({
+              mode: 'unanswered_auth',
+              title: 'Apenas sem autorização',
+              description:
+                answeredAuthCount !== null && answeredAuthCount > 0
+                  ? `Envia somente para os responsáveis que ainda não assinaram a autorização (${answeredAuthCount} já responderam)`
+                  : 'Envia somente para os responsáveis que ainda não responderam/assinaram a autorização',
+              count: unauthCount,
+              completedHint: unauthCount === 0 ? 'Todos assinaram' : null,
+              icon: <ShieldCheck size={16} />,
+              accentColor: '#4f46e5',
+              accentBg: '#e0e7ff',
+            });
+          }
+
+          if (reminderDetectedFeatures.hasRelatorio) {
+            optionsList.push({
+              mode: 'unanswered_report',
+              title: 'Apenas sem resposta dos relatórios',
+              description:
+                answeredReportCount !== null && answeredReportCount > 0
+                  ? `Envia somente para quem ainda não enviou resposta ou ciência no relatório (${answeredReportCount} já responderam)`
+                  : 'Envia somente para quem ainda não enviou resposta ou confirmação neste relatório',
+              count: unreportCount,
+              completedHint: unreportCount === 0 ? 'Todos responderam' : null,
+              icon: <FileText size={16} />,
+              accentColor: '#7c3aed',
+              accentBg: '#ede9fe',
+            });
+          }
+
+          if (reminderDetectedFeatures.hasEnquete) {
+            optionsList.push({
+              mode: 'unanswered_poll',
+              title: 'Apenas sem resposta na enquete',
+              description:
+                answeredPollCount !== null && answeredPollCount > 0
+                  ? `Envia somente para quem ainda não votou na enquete (${answeredPollCount} já votaram)`
+                  : 'Envia somente para quem ainda não registrou voto nesta enquete',
+              count: unpollCount,
+              completedHint: unpollCount === 0 ? 'Todos votaram' : null,
+              icon: <Vote size={16} />,
+              accentColor: '#0284c7',
+              accentBg: '#e0f2fe',
+            });
+          }
+
+          optionsList.push({
+            mode: 'unread',
+            title: reminderDetectedFeatures.exigeCiencia
+              ? 'Apenas sem leitura ou ciência'
+              : 'Apenas quem ainda não leu',
+            description: reminderDetectedFeatures.exigeCiencia
+              ? 'Envia somente para quem ainda não abriu ou não confirmou ciência'
+              : reminderDetectedFeatures.isReport
+                ? 'Ignora quem já visualizou o relatório e notifica apenas quem não abriu'
+                : 'Ignora quem já abriu o comunicado e notifica apenas os não lidos',
+            count: unreadCount,
+            completedHint: unreadCount === 0 ? 'Todos visualizaram' : null,
+            icon: <BellRing size={16} />,
+            accentColor: '#ea580c',
+            accentBg: '#ffedd5',
+          });
+
+          const activeOption = optionsList.find(o => o.mode === reminderMode) || optionsList[0];
+          const isSelectedZeroTargets = activeOption && typeof activeOption.count === 'number' && activeOption.count === 0;
+
+          const previewTitle =
+            reminderMode === 'unpaid'
+              ? `💳 Pagamento pendente: ${tituloCob}`
+              : reminderMode === 'unanswered_auth'
+                ? `✍️ Autorização pendente: ${tituloAut}`
+                : reminderMode === 'unanswered_report'
+                  ? `📋 Relatório pendente: ${tituloCom}`
+                  : reminderMode === 'unanswered_poll'
+                    ? `📊 Enquete pendente: ${tituloCom}`
+                    : `🔔 Lembrete: ${tituloCom}`;
+
           const trimmedCustom = reminderCustomMsg.trim();
           const previewBody = trimmedCustom
             ? `Nome do aluno: ${trimmedCustom}`
-            : `Lembrete de ${currentUserName || comunicado?.autor || 'Equipe Escolar'}: confira o comunicado "${tituloCom}". Toque para abrir!`;
+            : reminderMode === 'unpaid'
+              ? `Lembrete de ${senderName}: há uma cobrança pendente ("${tituloCob}") referente a Nome do aluno na Agenda Digital. Toque para conferir!`
+              : reminderMode === 'unanswered_auth'
+                ? `A autorização "${tituloAut}" referente a Nome do aluno aguarda sua assinatura na Agenda Digital. Toque para responder!`
+                : reminderMode === 'unanswered_report'
+                  ? `Lembrete de ${senderName}: o relatório "${tituloCom}" de Nome do aluno aguarda sua resposta na Agenda Digital. Toque para abrir!`
+                  : reminderMode === 'unanswered_poll'
+                    ? `A enquete "${tituloEnq}" referente a Nome do aluno aguarda sua participação na Agenda Digital. Toque para votar!`
+                    : reminderDetectedFeatures.isReport
+                      ? `Lembrete de ${senderName}: confira o relatório "${tituloCom}" de Nome do aluno. Toque para abrir!`
+                      : `Lembrete de ${senderName}: confira o comunicado "${tituloCom}" para Nome do aluno. Toque para abrir!`;
+
+          const lastRemModeLabel = lastRem?.modeLabel || (
+            lastRem?.mode === 'unpaid'
+              ? 'Apenas não pagos'
+              : lastRem?.mode === 'unanswered_auth'
+                ? 'Apenas sem autorização'
+                : lastRem?.mode === 'unanswered_report'
+                  ? 'Sem resposta dos relatórios'
+                  : lastRem?.mode === 'unanswered_poll'
+                    ? 'Sem resposta na enquete'
+                    : lastRem?.mode === 'unread'
+                      ? 'Apenas não lidos'
+                      : null
+          );
 
           return (
-            <motion.div
-              key="send-reminder-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => {
-                if (!isSendingReminder) setShowReminderModal(false);
-              }}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(15, 23, 42, 0.62)',
-                backdropFilter: 'blur(6px)',
-                WebkitBackdropFilter: 'blur(6px)',
-                zIndex: 100025,
+            <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 'inherit', overflow: 'hidden' }}>
+              {/* Header */}
+              <div style={{
+                padding: '18px 22px',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                padding: 16,
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 16 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 16 }}
-                onClick={e => e.stopPropagation()}
-                style={{
-                  background: '#ffffff',
-                  borderRadius: 24,
-                  width: '100%',
-                  maxWidth: 480,
-                  maxHeight: '90vh',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.35)',
-                  border: '1px solid #e2e8f0',
-                }}
-              >
-                {/* Header */}
-                <div style={{
-                  padding: '20px 22px',
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                    <div style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 14,
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <BellRing size={21} color="#ffffff" />
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff' }}>
-                        Enviar lembrete
-                      </h3>
-                      <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
-                        Nova notificação push com abertura direta do comunicado
-                      </p>
-                    </div>
+                justifyContent: 'space-between',
+                gap: 12,
+                flexShrink: 0,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 14,
+                    background: 'rgba(255, 255, 255, 0.22)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <BellRing size={21} color="#ffffff" />
                   </div>
-                  <button
-                    type="button"
-                    disabled={isSendingReminder}
-                    onClick={() => setShowReminderModal(false)}
-                    aria-label="Fechar modal de lembrete"
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 10,
-                      border: 'none',
-                      background: 'rgba(255, 255, 255, 0.2)',
-                      color: '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: isSendingReminder ? 'not-allowed' : 'pointer',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <X size={18} />
-                  </button>
+                  <div style={{ minWidth: 0 }}>
+                    <h1 id={reminderDialogTitleId} style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff' }}>
+                      Enviar lembrete push
+                    </h1>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.92)', fontWeight: 500 }}>
+                      Escolha o público-alvo para disparar a notificação no celular
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  disabled={isSendingReminder}
+                  onClick={closeReminderModal}
+                  aria-label="Fechar modal de lembrete"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    border: 'none',
+                    background: 'rgba(255, 255, 255, 0.22)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                {/* Body */}
-                <div style={{ padding: '20px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {lastRem && (
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
+              {/* Body */}
+              <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 15, flex: 1 }}>
+                {lastRem && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    fontSize: 12,
+                    color: '#92400e',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}>
+                    <Clock size={14} style={{ flexShrink: 0, color: '#d97706', marginTop: 1 }} />
+                    <span>
+                      Último lembrete
+                      {lastRemModeLabel ? ` (${lastRemModeLabel})` : ''} em{' '}
+                      {new Date(lastRem.sentAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                      {lastRem.sentByName ? ` por ${lastRem.sentByName}` : ''}
+                      {typeof lastRem.sent === 'number' ? ` • ${lastRem.sent} enviado${lastRem.sent === 1 ? '' : 's'}` : ''}
+                    </span>
+                  </div>
+                )}
+
+                {/* Público-alvo dinâmico */}
+                <fieldset style={{ border: 'none', margin: 0, padding: 0, minInlineSize: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <legend style={{ padding: 0, fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Quem deve receber o lembrete?
+                    </legend>
+                    {isLoadingReminderSummary && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#64748b' }}>
+                        <Loader2 size={12} className="animate-spin" />
+                        Calculando pendentes...
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                    {optionsList.map((opt) => {
+                      const isSelected = reminderMode === opt.mode;
+                      const isZero = typeof opt.count === 'number' && opt.count === 0;
+                      const isDisabledCard = isSendingReminder || isZero;
+
+                      return (
+                        <label
+                          key={opt.mode}
+                          className="cvm-reminder-opt"
+                          style={{
+                            position: 'relative',
+                            textAlign: 'left',
+                            padding: '11px 13px',
+                            borderRadius: 14,
+                            border: isSelected ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                            background: isZero ? '#f8fafc' : isSelected ? '#fffbeb' : '#ffffff',
+                            opacity: isZero ? 0.72 : 1,
+                            cursor: isDisabledCard ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 11,
+                            transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="cvm-reminder-mode"
+                            value={opt.mode}
+                            checked={isSelected}
+                            disabled={isDisabledCard}
+                            autoFocus={isSelected}
+                            onChange={() => {
+                              setReminderFeedback(null);
+                              setReminderMode(opt.mode);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              opacity: 0,
+                              width: 1,
+                              height: 1,
+                              margin: 0,
+                              pointerEvents: 'none',
+                            }}
+                          />
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11, minWidth: 0, flex: 1 }}>
+                            <div style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 10,
+                              background: isZero ? '#dcfce7' : opt.accentBg,
+                              color: isZero ? '#16a34a' : opt.accentColor,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              marginTop: 1,
+                            }}>
+                              {isZero ? <CheckCircle2 size={16} /> : opt.icon}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                                  {opt.title}
+                                </span>
+                                {typeof opt.count === 'number' && (
+                                  <span style={{
+                                    fontSize: 11,
+                                    fontWeight: 800,
+                                    padding: '2px 8px',
+                                    borderRadius: 999,
+                                    background: isZero ? '#dcfce7' : isSelected ? '#fde68a' : '#f1f5f9',
+                                    color: isZero ? '#166534' : isSelected ? '#92400e' : '#475569',
+                                  }}>
+                                    {isZero
+                                      ? (opt.completedHint || '0 pendentes')
+                                      : opt.mode === 'all'
+                                        ? `${opt.count} ${opt.count === 1 ? 'destinatário' : 'destinatários'}`
+                                        : `${opt.count} ${opt.count === 1 ? 'pendente' : 'pendentes'}`}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, lineHeight: 1.35 }}>
+                                {opt.description}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: '50%',
+                            border: isSelected ? '5px solid #f59e0b' : '2px solid #cbd5e1',
+                            background: '#ffffff',
+                            flexShrink: 0,
+                          }} />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {/* Alertas contextuais preventivos */}
+                {reminderMode === 'unanswered_auth' && reminderDetectedFeatures.autorizacaoClosed && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    background: '#fffbeb',
+                    border: '1px solid #fcd34d',
+                    fontSize: 12,
+                    color: '#92400e',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#d97706' }} />
+                    <span>
+                      O prazo desta autorização consta como encerrado. Se desejar que os responsáveis consigam assinar ao abrir o lembrete, reabra o prazo no card da autorização.
+                    </span>
+                  </div>
+                )}
+
+                {reminderMode === 'unanswered_poll' && reminderDetectedFeatures.enqueteClosed && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    background: '#fffbeb',
+                    border: '1px solid #fcd34d',
+                    fontSize: 12,
+                    color: '#92400e',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#d97706' }} />
+                    <span>
+                      Esta enquete consta como encerrada. Reabra a enquete caso deseje permitir novos votos.
+                    </span>
+                  </div>
+                )}
+
+                {reminderMode === 'unpaid' && reminderDetectedFeatures.cobrancaOverdue && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    fontSize: 12,
+                    color: '#334155',
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                  }}>
+                    <Info size={15} style={{ flexShrink: 0, marginTop: 1, color: '#475569' }} />
+                    <span>
+                      Esta cobrança encontra-se vencida. Os responsáveis com pagamento em aberto receberão o alerta da pendência e abrirão diretamente este comunicado.
+                    </span>
+                  </div>
+                )}
+
+                {/* Mensagem personalizada opcional */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label htmlFor="cvm-reminder-custom-msg" style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Mensagem personalizada (opcional)
+                    </label>
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+                      {reminderCustomMsg.length}/160
+                    </span>
+                  </div>
+                  <input
+                    id="cvm-reminder-custom-msg"
+                    type="text"
+                    maxLength={160}
+                    disabled={isSendingReminder}
+                    value={reminderCustomMsg}
+                    onChange={e => setReminderCustomMsg(e.target.value)}
+                    placeholder={
+                      reminderMode === 'unpaid'
+                        ? 'Ex: Lembramos que o pagamento segue pendente. Em caso de dúvida, fale com a secretaria!'
+                        : reminderMode === 'unanswered_auth'
+                          ? 'Ex: Último dia para assinar a autorização na Agenda Digital!'
+                          : reminderMode === 'unanswered_report'
+                            ? 'Ex: Confira o relatório pedagógico e envie sua resposta ou observação!'
+                            : 'Ex: Último dia para confirmação é 20/11!'
+                    }
+                    style={{
+                      width: '100%',
                       padding: '10px 12px',
                       borderRadius: 12,
-                      background: '#fffbeb',
-                      border: '1px solid #fde68a',
-                      fontSize: 12,
-                      color: '#92400e',
-                      fontWeight: 600,
-                    }}>
-                      <Clock size={14} style={{ flexShrink: 0, color: '#d97706' }} />
-                      <span>
-                        Último lembrete em{' '}
-                        {new Date(lastRem.sentAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                        {lastRem.sentByName ? ` por ${lastRem.sentByName}` : ''}
-                        {typeof lastRem.sent === 'number' ? ` (${lastRem.sent} enviado${lastRem.sent === 1 ? '' : 's'})` : ''}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Público-alvo */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      Quem deve receber o lembrete?
-                    </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-                      <button
-                        type="button"
-                        disabled={isSendingReminder}
-                        onClick={() => setReminderMode('all')}
-                        style={{
-                          textAlign: 'left',
-                          padding: '12px 14px',
-                          borderRadius: 14,
-                          border: reminderMode === 'all' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
-                          background: reminderMode === 'all' ? '#fffbeb' : '#ffffff',
-                          cursor: isSendingReminder ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
-                            Todos os destinatários
-                          </div>
-                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                            Reenvia o alerta push para todos os destinatários deste comunicado
-                          </div>
-                        </div>
-                        <div style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: '50%',
-                          border: reminderMode === 'all' ? '5px solid #f59e0b' : '2px solid #cbd5e1',
-                          flexShrink: 0,
-                        }} />
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isSendingReminder}
-                        onClick={() => setReminderMode('unread')}
-                        style={{
-                          textAlign: 'left',
-                          padding: '12px 14px',
-                          borderRadius: 14,
-                          border: reminderMode === 'unread' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
-                          background: reminderMode === 'unread' ? '#fffbeb' : '#ffffff',
-                          cursor: isSendingReminder ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
-                            {comunicado?.exigeCiencia ? 'Apenas pendentes (sem leitura ou ciência)' : 'Apenas quem ainda não leu'}
-                          </div>
-                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                            {comunicado?.exigeCiencia
-                              ? 'Envia somente para quem ainda não abriu ou não confirmou ciência'
-                              : 'Ignora quem já abriu o comunicado e notifica apenas os pendentes'}
-                          </div>
-                        </div>
-                        <div style={{
-                          width: 18,
-                          height: 18,
-                          borderRadius: '50%',
-                          border: reminderMode === 'unread' ? '5px solid #f59e0b' : '2px solid #cbd5e1',
-                          flexShrink: 0,
-                        }} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Mensagem personalizada opcional */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <label htmlFor="cvm-reminder-custom-msg" style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Mensagem personalizada (opcional)
-                      </label>
-                      <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-                        {reminderCustomMsg.length}/160
-                      </span>
-                    </div>
-                    <input
-                      id="cvm-reminder-custom-msg"
-                      type="text"
-                      maxLength={160}
-                      disabled={isSendingReminder}
-                      value={reminderCustomMsg}
-                      onChange={e => setReminderCustomMsg(e.target.value)}
-                      placeholder="Ex: Último dia para confirmação e pagamento é 20/11!"
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        borderRadius: 12,
-                        border: '1px solid #cbd5e1',
-                        fontSize: 13,
-                        color: '#0f172a',
-                        background: '#ffffff',
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-
-                  {/* Prévia da notificação */}
-                  <div style={{
-                    background: '#0f172a',
-                    color: '#f8fafc',
-                    borderRadius: 16,
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: '#94a3b8', textTransform: 'uppercase' }}>
-                      Prévia da notificação no celular • Ao tocar abre este comunicado
-                    </div>
-                    <div style={{ fontSize: 13.5, fontWeight: 800, color: '#ffffff', lineHeight: 1.3 }}>
-                      {previewTitle}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.4 }}>
-                      {previewBody}
-                    </div>
-                  </div>
-
-                  {reminderFeedback && (
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 10,
-                      padding: '11px 13px',
-                      borderRadius: 12,
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      lineHeight: 1.4,
-                      background:
-                        reminderFeedback.type === 'success'
-                          ? '#f0fdf4'
-                          : reminderFeedback.type === 'warning'
-                            ? '#fffbeb'
-                            : '#fef2f2',
-                      border:
-                        reminderFeedback.type === 'success'
-                          ? '1px solid #bbf7d0'
-                          : reminderFeedback.type === 'warning'
-                            ? '1px solid #fde68a'
-                            : '1px solid #fecaca',
-                      color:
-                        reminderFeedback.type === 'success'
-                          ? '#166534'
-                          : reminderFeedback.type === 'warning'
-                            ? '#92400e'
-                            : '#b91c1c',
-                    }}>
-                      {reminderFeedback.type === 'success' ? (
-                        <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-                      ) : (
-                        <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-                      )}
-                      <span>{reminderFeedback.text}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div style={{
-                  padding: '14px 22px',
-                  borderTop: '1px solid #e2e8f0',
-                  background: '#f8fafc',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: 10,
-                }}>
-                  <button
-                    type="button"
-                    disabled={isSendingReminder}
-                    onClick={() => setShowReminderModal(false)}
-                    style={{
-                      padding: '10px 16px',
-                      borderRadius: 12,
                       border: '1px solid #cbd5e1',
+                      fontSize: 13,
+                      color: '#0f172a',
                       background: '#ffffff',
-                      color: '#475569',
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                      outline: 'none',
+                      boxSizing: 'border-box',
                     }}
-                  >
-                    {reminderFeedback?.type === 'success' ? 'Fechar' : 'Cancelar'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSendingReminder}
-                    onClick={handleTriggerSendReminder}
-                    style={{
-                      padding: '10px 18px',
-                      borderRadius: 12,
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                      color: '#ffffff',
-                      fontSize: 13.5,
-                      fontWeight: 700,
-                      cursor: isSendingReminder ? 'wait' : 'pointer',
-                      opacity: isSendingReminder ? 0.8 : 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      boxShadow: '0 6px 16px -4px rgba(217, 119, 6, 0.45)',
-                    }}
-                  >
-                    {isSendingReminder ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Enviando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <BellRing size={16} />
-                        <span>{reminderFeedback?.type === 'success' ? 'Enviar novamente' : 'Disparar lembrete'}</span>
-                      </>
-                    )}
-                  </button>
+                  />
                 </div>
-              </motion.div>
-            </motion.div>
+
+                {/* Prévia da notificação */}
+                <div style={{
+                  background: '#0f172a',
+                  color: '#f8fafc',
+                  borderRadius: 16,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: '#94a3b8', textTransform: 'uppercase' }}>
+                    Prévia da notificação no celular • Ao tocar abre este comunicado
+                  </div>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#ffffff', lineHeight: 1.3 }}>
+                    {previewTitle}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.4 }}>
+                    {previewBody}
+                  </div>
+                </div>
+
+                {reminderFeedback && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    padding: '11px 13px',
+                    borderRadius: 12,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    lineHeight: 1.4,
+                    background:
+                      reminderFeedback.type === 'success'
+                        ? '#f0fdf4'
+                        : reminderFeedback.type === 'warning'
+                          ? '#fffbeb'
+                          : '#fef2f2',
+                    border:
+                      reminderFeedback.type === 'success'
+                        ? '1px solid #bbf7d0'
+                        : reminderFeedback.type === 'warning'
+                          ? '1px solid #fde68a'
+                          : '1px solid #fecaca',
+                    color:
+                      reminderFeedback.type === 'success'
+                        ? '#166534'
+                        : reminderFeedback.type === 'warning'
+                          ? '#92400e'
+                          : '#b91c1c',
+                  }}>
+                    {reminderFeedback.type === 'success' ? (
+                      <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                    ) : (
+                      <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                    )}
+                    <span>{reminderFeedback.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{
+                padding: '14px 22px',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 10,
+                flexShrink: 0,
+              }}>
+                <button
+                  type="button"
+                  disabled={isSendingReminder}
+                  onClick={closeReminderModal}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 12,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#475569',
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    cursor: isSendingReminder ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {reminderFeedback?.type === 'success' ? 'Fechar' : 'Cancelar'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingReminder || Boolean(isSelectedZeroTargets)}
+                  onClick={handleTriggerSendReminder}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: isSelectedZeroTargets
+                      ? '#cbd5e1'
+                      : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: isSelectedZeroTargets ? '#64748b' : '#ffffff',
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    cursor: isSendingReminder ? 'wait' : isSelectedZeroTargets ? 'not-allowed' : 'pointer',
+                    opacity: isSendingReminder ? 0.8 : 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    boxShadow: isSelectedZeroTargets ? 'none' : '0 6px 16px -4px rgba(217, 119, 6, 0.45)',
+                  }}
+                >
+                  {isSendingReminder ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BellRing size={16} />
+                      <span>
+                        {isSelectedZeroTargets
+                          ? 'Sem pendentes nesta opção'
+                          : reminderFeedback?.type === 'success'
+                            ? 'Enviar novamente'
+                            : typeof activeOption?.count === 'number' && activeOption.count > 0
+                              ? `Disparar lembrete (${activeOption.count})`
+                              : 'Disparar lembrete'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           );
         })()}
-      </AnimatePresence>
-      <AnimatePresence>
+      </dialog>
+      <style dangerouslySetInnerHTML={{ __html: `
+        dialog.cvm-reminder-dialog {
+          border: 1px solid #e2e8f0;
+          border-radius: 24px;
+          padding: 0;
+          width: calc(100% - 28px);
+          max-width: 520px;
+          max-height: min(90dvh, 760px);
+          margin: auto;
+          background: #ffffff;
+          color: #0f172a;
+          overflow: hidden;
+          box-sizing: border-box;
+          box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.38);
+        }
+        dialog.cvm-reminder-dialog[open] {
+          display: flex;
+          flex-direction: column;
+        }
+        dialog.cvm-reminder-dialog:modal {
+          overscroll-behavior: contain;
+        }
+        dialog.cvm-reminder-dialog::backdrop {
+          background-color: rgba(15, 23, 42, 0.62);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          overflow: hidden;
+          overscroll-behavior: contain;
+        }
+        label.cvm-reminder-opt:has(input:focus-visible) {
+          outline: 2px solid #f59e0b;
+          outline-offset: 2px;
+        }
+        @media (max-width: 639px) {
+          dialog.cvm-reminder-dialog {
+            width: 100%;
+            max-width: 100%;
+            margin: auto 0 0 0;
+            border-radius: 22px 22px 0 0;
+            max-height: min(92dvh, calc(100dvh - max(10px, env(safe-area-inset-top, 0px))));
+          }
+        }
+        dialog.cvm-cob-dialog {
+          border: none;
+          padding: 0;
+          background: #ffffff;
+          color: #0f172a;
+          overflow: hidden;
+          box-sizing: border-box;
+          box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.4);
+          opacity: 0;
+          transition-property: opacity, transform, display, overlay;
+          transition-duration: 0.24s;
+          transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+          transition-behavior: allow-discrete;
+        }
+        dialog.cvm-cob-dialog[open] {
+          display: flex;
+          flex-direction: column;
+        }
+        dialog.cvm-cob-dialog[open]:not(:modal) {
+          position: fixed;
+          inset: 0;
+          z-index: 100100;
+        }
+        dialog.cvm-cob-dialog:modal {
+          overscroll-behavior: contain;
+        }
+        dialog.cvm-cob-dialog::backdrop {
+          background-color: rgba(15, 23, 42, 0);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          overflow: hidden;
+          overscroll-behavior: contain;
+          transition-property: background-color, display, overlay;
+          transition-duration: 0.24s;
+          transition-timing-function: ease-out;
+          transition-behavior: allow-discrete;
+        }
+        @media (max-width: 639px) {
+          dialog.cvm-cob-dialog {
+            width: 100%;
+            max-width: 100%;
+            margin: auto 0 0 0;
+            border-radius: 22px 22px 0 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.14);
+            height: 92vh;
+            height: min(92dvh, calc(100dvh - max(10px, env(safe-area-inset-top, 0px))));
+            max-height: 94vh;
+            max-height: min(94dvh, calc(100dvh - max(10px, env(safe-area-inset-top, 0px))));
+          }
+          .cvm-cob-desktop-only {
+            display: none !important;
+          }
+        }
+        @media (max-width: 639px) and (prefers-reduced-motion: no-preference) {
+          dialog.cvm-cob-dialog {
+            transform: translateY(28px);
+          }
+        }
+        @media (min-width: 640px) {
+          dialog.cvm-cob-dialog {
+            width: min(1040px, calc(100vw - 32px));
+            max-width: 1040px;
+            max-height: 90vh;
+            max-height: min(90dvh, 880px);
+            margin: auto;
+            border-radius: 22px;
+            border: 1px solid #e2e8f0;
+          }
+          .cvm-cob-mobile-only {
+            display: none !important;
+          }
+        }
+        @media (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+          dialog.cvm-cob-dialog {
+            transform: scale(0.96);
+          }
+        }
+        dialog.cvm-cob-dialog[open]:where(:not([data-closing])) {
+          opacity: 1;
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          dialog.cvm-cob-dialog[open]:where(:not([data-closing])) {
+            transform: none;
+          }
+        }
+        dialog.cvm-cob-dialog[open]:where(:not([data-closing]))::backdrop {
+          background-color: rgba(15, 23, 42, 0.68);
+        }
+        @starting-style {
+          dialog.cvm-cob-dialog[open]:where(:not([data-closing])) {
+            opacity: 0;
+          }
+          dialog.cvm-cob-dialog[open]:where(:not([data-closing]))::backdrop {
+            background-color: rgba(15, 23, 42, 0);
+          }
+        }
+        @media (max-width: 639px) and (prefers-reduced-motion: no-preference) {
+          @starting-style {
+            dialog.cvm-cob-dialog[open]:where(:not([data-closing])) {
+              transform: translateY(28px);
+            }
+          }
+        }
+        @media (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+          @starting-style {
+            dialog.cvm-cob-dialog[open]:where(:not([data-closing])) {
+              transform: scale(0.96);
+            }
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          dialog.cvm-cob-dialog,
+          dialog.cvm-cob-dialog::backdrop {
+            transition-duration: 0.1s;
+          }
+        }
+        .cvm-cob-header {
+          padding: 8px 14px 10px;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          color: #ffffff;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          flex-shrink: 0;
+        }
+        .cvm-cob-sheet-handle {
+          width: 36px;
+          height: 4px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.24);
+          margin: 0 auto 2px;
+          flex-shrink: 0;
+        }
+        .cvm-cob-header-main {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .cvm-cob-scroll-area {
+          flex: 1;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          scroll-padding-top: 96px;
+          background: #f8fafc;
+          display: flex;
+          flex-direction: column;
+        }
+        .cvm-cob-overview {
+          padding: 10px 14px 8px;
+          background: #ffffff;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .cvm-cob-kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 6px;
+        }
+        .cvm-cob-kpi-btn {
+          text-align: left;
+          cursor: pointer;
+          border-radius: 10px;
+          padding: 7px 8px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          gap: 3px;
+          min-width: 0;
+          transition: border-color 0.15s ease, transform 0.12s ease;
+        }
+        .cvm-cob-sticky-toolbar {
+          position: sticky;
+          top: 0;
+          z-index: 15;
+          padding: 8px 14px 10px;
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border-bottom: 1px solid #e2e8f0;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .cvm-cob-tabs {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          background: #f1f5f9;
+          padding: 3px;
+          border-radius: 10px;
+          gap: 2px;
+          border: 1px solid #e2e8f0;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .cvm-cob-tab-btn {
+          padding: 6px 4px;
+          min-height: 32px;
+          border-radius: 7px;
+          font-size: 11.5px;
+          font-weight: 700;
+          cursor: pointer;
+          border: none;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .cvm-cob-search-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+        .cvm-cob-search-box {
+          flex: 1 1 0%;
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: #f8fafc;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          padding: 0 9px;
+          min-height: 38px;
+          transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .cvm-cob-search-box:focus-within {
+          background: #ffffff;
+          border-color: #10b981;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+        }
+        .cvm-cob-search-input {
+          border: none;
+          outline: none;
+          width: 100%;
+          min-width: 0;
+          font-size: 16px;
+          color: #0f172a;
+          background: transparent;
+          padding: 6px 0;
+        }
+        .cvm-cob-turma-select {
+          flex: 0 0 auto;
+          max-width: 136px;
+          min-height: 38px;
+          padding: 0 8px;
+          border-radius: 10px;
+          font-size: 16px;
+          font-weight: 700;
+          border: 1px solid #cbd5e1;
+          background: #ffffff;
+          color: #334155;
+          cursor: pointer;
+          text-overflow: ellipsis;
+        }
+        .cvm-cob-list {
+          padding: 10px 14px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          container: cob-list / inline-size;
+        }
+        .cvm-cob-card-main {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .cvm-cob-actions-row {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-wrap: wrap;
+        }
+        .cvm-cob-row-btn {
+          min-height: 33px;
+          padding: 0 9px;
+          border-radius: 8px;
+          font-size: 11.5px;
+          font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          white-space: nowrap;
+        }
+        .cvm-cob-details {
+          padding-left: 0;
+        }
+        .cvm-cob-hit {
+          position: relative;
+        }
+        @media (pointer: coarse) {
+          .cvm-cob-hit::after {
+            content: "";
+            position: absolute;
+            inset: -6px;
+          }
+        }
+        @container cob-list (inline-size > 580px) {
+          .cvm-cob-card-main {
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+          }
+        }
+        @media (min-width: 640px) {
+          .cvm-cob-header {
+            padding: 14px 20px;
+          }
+          .cvm-cob-overview {
+            padding: 12px 20px 8px;
+            gap: 10px;
+          }
+          .cvm-cob-kpi-grid {
+            gap: 10px;
+          }
+          .cvm-cob-kpi-btn {
+            padding: 9px 13px;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+          }
+          .cvm-cob-sticky-toolbar {
+            padding: 8px 20px 12px;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+          }
+          .cvm-cob-tabs {
+            display: inline-flex;
+            width: auto;
+            flex-shrink: 0;
+          }
+          .cvm-cob-tab-btn {
+            padding: 5px 11px;
+          }
+          .cvm-cob-search-row {
+            flex: 1 1 260px;
+            justify-content: flex-end;
+          }
+          .cvm-cob-search-box {
+            max-width: 310px;
+            min-height: 34px;
+          }
+          .cvm-cob-search-input {
+            font-size: 12.5px;
+          }
+          .cvm-cob-turma-select {
+            max-width: 210px;
+            min-height: 34px;
+            font-size: 12px;
+            padding: 0 10px;
+          }
+          .cvm-cob-list {
+            padding: 12px 20px 16px;
+          }
+          .cvm-cob-details {
+            padding-left: 44px;
+          }
+          .cvm-cob-scroll-area {
+            scroll-padding-top: 64px;
+          }
+        }
+      ` }} />
+
+      <dialog
+        ref={cobDialogRef}
+        className="cvm-cob-dialog"
+        aria-labelledby={cobDialogTitleId}
+        {...({ closedby: 'any' } as any)}
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => {
+          e.stopPropagation();
+          if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return;
+          const dialog = cobDialogRef.current;
+          if (!dialog) return;
+          const r = dialog.getBoundingClientRect();
+          pressedOutsideCobDialogRef.current =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+        }}
+        onPointerUp={e => {
+          e.stopPropagation();
+          if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return;
+          const dialog = cobDialogRef.current;
+          if (!dialog) {
+            pressedOutsideCobDialogRef.current = false;
+            return;
+          }
+          const r = dialog.getBoundingClientRect();
+          const releasedOutside =
+            e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+          if (pressedOutsideCobDialogRef.current && releasedOutside) {
+            void closeCobModal();
+          }
+          pressedOutsideCobDialogRef.current = false;
+        }}
+        onCancel={e => {
+          e.preventDefault();
+          void closeCobModal();
+        }}
+        onClose={() => {
+          if (cobDialogRef.current) {
+            cobDialogRef.current.returnValue = '';
+          }
+          setSelectedCobrancaModalId(null);
+        }}
+      >
         {selectedCobrancaModalId && (() => {
           const activeCob = (cobrancasList || []).find((c: any) => String(c.id) === String(selectedCobrancaModalId)) || cobrancasList?.[0];
           if (!activeCob) return null;
@@ -4404,7 +5467,6 @@ export function ComunicadoViewModal({
           const allResolved = rawDests
             .map((dest: any) => ({ dest, info: resolveCobDestInfo(dest, activeCob) }))
             .sort((a, b) => {
-              // Em modo ALL, prioriza pagantes ou ordena alfabeticamente
               if (cobModalFilter === 'PAID' && a.info.paidAt && b.info.paidAt) {
                 return new Date(b.info.paidAt).getTime() - new Date(a.info.paidAt).getTime();
               }
@@ -4447,433 +5509,448 @@ export function ComunicadoViewModal({
           const isSyncingThis = cobSyncingId === String(activeCob.id);
 
           return (
-            <motion.div
-              key="cobranca-payers-modal"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedCobrancaModalId(null)}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(15, 23, 42, 0.65)',
-                backdropFilter: 'blur(6px)',
-                WebkitBackdropFilter: 'blur(6px)',
-                zIndex: 100050,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 16
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.96, opacity: 0, y: 16 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.96, opacity: 0, y: 16 }}
-                onClick={e => e.stopPropagation()}
-                style={{
-                  background: '#ffffff',
-                  borderRadius: 20,
-                  width: '100%',
-                  maxWidth: 1040,
-                  maxHeight: '90vh',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  boxShadow: '0 25px 60px -12px rgba(15, 23, 42, 0.35)',
-                  overflow: 'hidden',
-                  border: '1px solid #e2e8f0'
-                }}
-              >
-                {/* Modal Header */}
-                <div style={{
-                  padding: '14px 20px',
-                  background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  borderBottom: '1px solid rgba(255,255,255,0.08)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 280px' }}>
+            <>
+              {/* Modal Header */}
+              <div className="cvm-cob-header">
+                <div className="cvm-cob-sheet-handle cvm-cob-mobile-only" aria-hidden="true" />
+
+                <div className="cvm-cob-header-main">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0, flex: 1 }}>
                     <div style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 11,
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
                       background: 'rgba(16, 185, 129, 0.18)',
                       border: '1px solid rgba(16, 185, 129, 0.35)',
                       color: '#34d399',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      flexShrink: 0
-                    }}>
-                      <CreditCard size={19} />
+                      flexShrink: 0,
+                      marginTop: 1
+                    }} aria-hidden="true">
+                      <CreditCard size={17} />
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
                         <span style={{
-                          fontSize: 10,
+                          fontSize: 9.5,
                           fontWeight: 800,
                           textTransform: 'uppercase',
-                          letterSpacing: 0.6,
+                          letterSpacing: 0.5,
                           background: 'rgba(16, 185, 129, 0.2)',
                           color: '#6ee7b7',
-                          padding: '2px 8px',
+                          padding: '2px 7px',
                           borderRadius: 999
                         }}>
-                          CONTROLE DE PAGANTES • {totalPagos}/{totalEnviados} ({pctPaid.label})
+                          Controle de Pagantes
                         </span>
                         {activeCob.vencimento && (
-                          <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 600 }}>
-                            Vencimento: {new Date(activeCob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                          <span style={{ fontSize: 11, color: isCobOverdue ? '#fca5a5' : '#cbd5e1', fontWeight: 600 }}>
+                            Venc: {new Date(activeCob.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                           </span>
                         )}
                       </div>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {activeCob.titulo || 'Cobrança'} — R$ {fmtBRL(valorUnit)}
-                      </h3>
+
+                      <h1
+                        id={cobDialogTitleId}
+                        style={{
+                          margin: 0,
+                          fontSize: 15.5,
+                          fontWeight: 800,
+                          color: '#ffffff',
+                          lineHeight: 1.25,
+                          overflowWrap: 'break-word',
+                          textWrap: 'balance' as any
+                        }}
+                      >
+                        {activeCob.titulo || 'Cobrança'} — <span style={{ color: '#6ee7b7', whiteSpace: 'nowrap' }}>R$ {fmtBRL(valorUnit)}</span>
+                      </h1>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
-                      disabled={isSyncingThis}
-                      title="Sincronizar lista de alunos destinatários com as turmas do comunicado"
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        color: '#f8fafc',
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        padding: '6px 10px',
-                        borderRadius: 9,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: isSyncingThis ? 'wait' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5
-                      }}
-                    >
-                      <RefreshCw size={13} style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
-                      <span>{isSyncingThis ? 'Sincronizando...' : 'Sincronizar Alunos'}</span>
-                    </button>
+                  {/* Desktop inline utilities + Always top-right Close Button */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <div className="cvm-cob-desktop-only" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
+                        disabled={isSyncingThis}
+                        title="Sincronizar lista de alunos destinatários com as turmas do comunicado"
+                        style={{
+                          background: 'rgba(255,255,255,0.1)',
+                          color: '#f8fafc',
+                          border: '1px solid rgba(255,255,255,0.18)',
+                          minHeight: 34,
+                          padding: '0 10px',
+                          borderRadius: 9,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: isSyncingThis ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <RefreshCw size={13} aria-hidden="true" style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
+                        <span>{isSyncingThis ? 'Sincronizando...' : 'Sincronizar Alunos'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleExportCobXlsx(activeCob, filteredRows)}
+                        title="Exportar lista atual para planilha Excel (.xlsx)"
+                        style={{
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          color: '#6ee7b7',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          minHeight: 34,
+                          padding: '0 10px',
+                          borderRadius: 9,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <FileSpreadsheet size={13} aria-hidden="true" />
+                        <span>Excel</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
+                        title="Imprimir lista de pagantes"
+                        style={{
+                          background: 'rgba(255,255,255,0.1)',
+                          color: '#f8fafc',
+                          border: '1px solid rgba(255,255,255,0.18)',
+                          minHeight: 34,
+                          padding: '0 10px',
+                          borderRadius: 9,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5
+                        }}
+                      >
+                        <Printer size={13} aria-hidden="true" />
+                        <span>Imprimir</span>
+                      </button>
+                    </div>
 
                     <button
                       type="button"
-                      onClick={() => handleExportCobXlsx(activeCob, filteredRows)}
-                      title="Exportar lista atual para planilha Excel (.xlsx)"
-                      style={{
-                        background: 'rgba(16, 185, 129, 0.2)',
-                        color: '#6ee7b7',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
-                        padding: '6px 10px',
-                        borderRadius: 9,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5
-                      }}
-                    >
-                      <FileSpreadsheet size={13} />
-                      <span>Excel</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
-                      title="Imprimir lista de pagantes"
-                      style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        color: '#f8fafc',
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        padding: '6px 10px',
-                        borderRadius: 9,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5
-                      }}
-                    >
-                      <Printer size={13} />
-                      <span>Imprimir</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCobrancaModalId(null)}
+                      className="cvm-cob-hit"
+                      onClick={() => void closeCobModal()}
                       aria-label="Fechar modal de pagantes"
                       style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 9,
-                        background: 'rgba(255,255,255,0.1)',
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        background: 'rgba(255,255,255,0.12)',
                         border: 'none',
                         color: '#ffffff',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        flexShrink: 0
                       }}
                     >
-                      <X size={17} />
+                      <X size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
 
-                {/* Summary Progress & KPIs */}
-                <div style={{
-                  padding: '12px 20px',
-                  background: '#ffffff',
-                  borderBottom: '1px solid #e2e8f0',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10
-                }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 8 }}>
+                {/* Mobile Compact Quick-Action Strip */}
+                <div className="cvm-cob-mobile-only" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
+                    disabled={isSyncingThis}
+                    style={{
+                      flex: 1,
+                      minHeight: 32,
+                      background: 'rgba(255,255,255,0.1)',
+                      color: '#f8fafc',
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      padding: '0 9px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: isSyncingThis ? 'wait' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <RefreshCw size={12} aria-hidden="true" style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
+                    <span>{isSyncingThis ? 'Sincronizando...' : 'Sincronizar'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExportCobXlsx(activeCob, filteredRows)}
+                    style={{
+                      minHeight: 32,
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      color: '#6ee7b7',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <FileSpreadsheet size={12} aria-hidden="true" />
+                    <span>Excel</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
+                    style={{
+                      minHeight: 32,
+                      background: 'rgba(255,255,255,0.1)',
+                      color: '#f8fafc',
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <Printer size={12} aria-hidden="true" />
+                    <span>Imprimir</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Unified Scroll Area: KPI Overview glides away on mobile scroll while Filter+Search stays sticky */}
+              <div className="cvm-cob-scroll-area">
+                <div className="cvm-cob-overview">
+                  {/* 3 Balanced Financial KPIs (Single compact row on mobile AND desktop) */}
+                  <div className="cvm-cob-kpi-grid">
                     <button
                       type="button"
+                      className="cvm-cob-kpi-btn"
                       onClick={() => setCobModalFilter('ALL')}
                       style={{
-                        textAlign: 'left',
-                        cursor: 'pointer',
                         background: cobModalFilter === 'ALL' ? '#f8fafc' : '#ffffff',
-                        border: cobModalFilter === 'ALL' ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
-                        borderRadius: 10,
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8
+                        border: cobModalFilter === 'ALL' ? '1.5px solid #0f172a' : '1px solid #e2e8f0'
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Total Destinatários</div>
-                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#0f172a', marginTop: 1 }}>{totalEnviados} alunos</div>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textAlign: 'right' }}>
-                        <div>Previsto</div>
-                        <div style={{ color: '#0f172a' }}>R$ {fmtBRL(valorEsperado)}</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setCobModalFilter('PAID')}
-                      style={{
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        background: '#f0fdf4',
-                        border: cobModalFilter === 'PAID' ? '1.5px solid #16a34a' : '1px solid #bbf7d0',
-                        borderRadius: 10,
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>Pagantes Confirmados</div>
-                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#15803d', marginTop: 1 }}>
-                          {totalPagos}/{totalEnviados} <span style={{ fontSize: 12, fontWeight: 700 }}>({pctPaid.label})</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Previsto ({totalEnviados})
+                        </div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', marginTop: 1, whiteSpace: 'nowrap' }}>
+                          R$ {fmtBRL(valorEsperado)}
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 700, textAlign: 'right' }}>
-                        <div>Recebido</div>
-                        <div>R$ {fmtBRL(valorRecebido)}</div>
+                      <div className="cvm-cob-desktop-only" style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Destinatários</div>
+                        <div style={{ color: '#0f172a' }}>{totalEnviados} alunos</div>
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setCobModalFilter('PENDING')}
+                      className="cvm-cob-kpi-btn"
+                      onClick={() => setCobModalFilter('PAID')}
                       style={{
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        background: '#fffbeb',
-                        border: cobModalFilter === 'PENDING' ? '1.5px solid #d97706' : '1px solid #fde68a',
-                        borderRadius: 10,
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8
+                        background: '#f0fdf4',
+                        border: cobModalFilter === 'PAID' ? '1.5px solid #16a34a' : '1px solid #bbf7d0'
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>Pendentes</div>
-                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#b45309', marginTop: 1 }}>{totalPendentes} alunos</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: '#15803d', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Recebido ({pctPaid.label})
+                        </div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: '#15803d', marginTop: 1, whiteSpace: 'nowrap' }}>
+                          R$ {fmtBRL(valorRecebido)}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, textAlign: 'right' }}>
-                        <div>Em aberto</div>
-                        <div>R$ {fmtBRL(valorPendente)}</div>
+                      <div className="cvm-cob-desktop-only" style={{ fontSize: 11, color: '#166534', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Confirmados</div>
+                        <div>{totalPagos}/{totalEnviados}</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cvm-cob-kpi-btn"
+                      onClick={() => setCobModalFilter('PENDING')}
+                      style={{
+                        background: '#fffbeb',
+                        border: cobModalFilter === 'PENDING' ? '1.5px solid #d97706' : '1px solid #fde68a'
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Em Aberto ({totalPendentes})
+                        </div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: '#b45309', marginTop: 1, whiteSpace: 'nowrap' }}>
+                          R$ {fmtBRL(valorPendente)}
+                        </div>
+                      </div>
+                      <div className="cvm-cob-desktop-only" style={{ fontSize: 11, color: '#92400e', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Pendentes</div>
+                        <div>{totalPendentes} alunos</div>
                       </div>
                     </button>
                   </div>
 
-                  {/* Barra de Pagantes X/X */}
+                  {/* Slim Semantic Progress Bar */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, fontWeight: 700, color: '#475569' }}>
+                    <div className="cvm-cob-desktop-only" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, fontWeight: 700, color: '#475569' }}>
                       <span>Progresso: <strong style={{ color: '#0f172a' }}>{totalPagos}/{totalEnviados}</strong> ({pctPaid.label})</span>
                       <span style={{ color: '#059669' }}>R$ {fmtBRL(valorRecebido)} / R$ {fmtBRL(valorEsperado)}</span>
                     </div>
                     <progress
                       className="cvm-cob-progress"
-                      style={{ height: 8 }}
+                      style={{ height: 6 }}
                       max={Math.max(totalEnviados, 1)}
                       value={totalPagos}
                       aria-label={`Progresso de pagantes: ${totalPagos} de ${totalEnviados}`}
                     />
                   </div>
+                </div>
 
-                  {/* Filters + Search Row */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 10, gap: 2, border: '1px solid #e2e8f0' }}>
-                        <button
-                          type="button"
-                          onClick={() => setCobModalFilter('ALL')}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: 7,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            border: 'none',
-                            background: cobModalFilter === 'ALL' ? '#0f172a' : 'transparent',
-                            color: cobModalFilter === 'ALL' ? '#ffffff' : '#475569'
-                          }}
-                        >
-                          Todos ({totalEnviados})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCobModalFilter('PAID')}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: 7,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            border: 'none',
-                            background: cobModalFilter === 'PAID' ? '#16a34a' : 'transparent',
-                            color: cobModalFilter === 'PAID' ? '#ffffff' : '#15803d'
-                          }}
-                        >
-                          ✓ Pagantes ({totalPagos})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCobModalFilter('PENDING')}
-                          style={{
-                            padding: '5px 10px',
-                            borderRadius: 7,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            border: 'none',
-                            background: cobModalFilter === 'PENDING' ? '#d97706' : 'transparent',
-                            color: cobModalFilter === 'PENDING' ? '#ffffff' : '#b45309'
-                          }}
-                        >
-                          ⏳ Pendentes ({totalPendentes})
-                        </button>
-                      </div>
+                {/* Sticky Filter + Full-Width Search & Turma Row */}
+                <div className="cvm-cob-sticky-toolbar">
+                  <div className="cvm-cob-tabs" role="group" aria-label="Filtrar destinatários por status">
+                    <button
+                      type="button"
+                      className="cvm-cob-tab-btn"
+                      aria-pressed={cobModalFilter === 'ALL'}
+                      onClick={() => setCobModalFilter('ALL')}
+                      style={{
+                        background: cobModalFilter === 'ALL' ? '#0f172a' : 'transparent',
+                        color: cobModalFilter === 'ALL' ? '#ffffff' : '#475569'
+                      }}
+                    >
+                      Todos ({totalEnviados})
+                    </button>
+                    <button
+                      type="button"
+                      className="cvm-cob-tab-btn"
+                      aria-pressed={cobModalFilter === 'PAID'}
+                      onClick={() => setCobModalFilter('PAID')}
+                      style={{
+                        background: cobModalFilter === 'PAID' ? '#16a34a' : 'transparent',
+                        color: cobModalFilter === 'PAID' ? '#ffffff' : '#15803d'
+                      }}
+                    >
+                      ✓ Pagos ({totalPagos})
+                    </button>
+                    <button
+                      type="button"
+                      className="cvm-cob-tab-btn"
+                      aria-pressed={cobModalFilter === 'PENDING'}
+                      onClick={() => setCobModalFilter('PENDING')}
+                      style={{
+                        background: cobModalFilter === 'PENDING' ? '#d97706' : 'transparent',
+                        color: cobModalFilter === 'PENDING' ? '#ffffff' : '#b45309'
+                      }}
+                    >
+                      ⏳ Pend. ({totalPendentes})
+                    </button>
+                  </div>
 
-                      {availableTurmas.length > 1 && (
-                        <select
-                          value={cobModalTurmaFilter}
-                          onChange={e => setCobModalTurmaFilter(e.target.value)}
-                          aria-label="Filtrar por turma"
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: 9,
-                            fontSize: 11.5,
-                            fontWeight: 700,
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#334155',
-                            cursor: 'pointer',
-                            maxWidth: 210
-                          }}
-                        >
-                          <option value="ALL">Todas as Turmas ({availableTurmas.length})</option>
-                          {availableTurmas.map(tm => (
-                            <option key={tm} value={tm}>{tm}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    <div style={{
-                      flex: '1 1 210px',
-                      maxWidth: 320,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: 9,
-                      padding: '5px 10px'
-                    }}>
-                      <Search size={14} color="#64748b" style={{ flexShrink: 0 }} />
+                  <div className="cvm-cob-search-row">
+                    <div className="cvm-cob-search-box">
+                      <Search size={14} color="#64748b" aria-hidden="true" style={{ flexShrink: 0 }} />
                       <input
-                        type="text"
+                        type="search"
+                        className="cvm-cob-search-input"
+                        aria-label="Buscar aluno, pagador ou responsável"
                         value={cobModalSearch}
                         onChange={e => setCobModalSearch(e.target.value)}
-                        placeholder="Buscar aluno, pagador, responsável..."
-                        style={{
-                          border: 'none',
-                          outline: 'none',
-                          width: '100%',
-                          fontSize: 12,
-                          color: '#0f172a',
-                          background: 'transparent'
-                        }}
+                        placeholder="Buscar aluno ou pagador..."
                       />
                       {cobModalSearch && (
                         <button
                           type="button"
+                          className="cvm-cob-hit"
                           onClick={() => setCobModalSearch('')}
                           aria-label="Limpar busca"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                          style={{
+                            background: '#e2e8f0',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: 20,
+                            height: 20,
+                            cursor: 'pointer',
+                            color: '#475569',
+                            padding: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}
                         >
-                          <X size={13} />
+                          <X size={12} aria-hidden="true" />
                         </button>
                       )}
                     </div>
+
+                    {availableTurmas.length > 1 && (
+                      <select
+                        value={cobModalTurmaFilter}
+                        onChange={e => setCobModalTurmaFilter(e.target.value)}
+                        aria-label="Filtrar por turma"
+                        className="cvm-cob-turma-select"
+                      >
+                        <option value="ALL">Turmas ({availableTurmas.length})</option>
+                        {availableTurmas.map(tm => (
+                          <option key={tm} value={tm}>{tm}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
 
                 {/* Payers & Recipients List Body */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 7, background: '#f8fafc' }}>
+                <div className="cvm-cob-list">
                   {filteredRows.length === 0 ? (
                     <div style={{
-                      padding: '36px 20px',
+                      padding: '32px 18px',
                       textAlign: 'center',
                       color: '#64748b',
                       background: '#ffffff',
                       borderRadius: 14,
                       border: '1px dashed #cbd5e1'
                     }}>
-                      <Users size={30} style={{ margin: '0 auto 8px', opacity: 0.45, display: 'block' }} />
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      <Users size={30} aria-hidden="true" style={{ margin: '0 auto 8px', opacity: 0.45, display: 'block' }} />
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
                         {cobModalFilter === 'PAID'
                           ? 'Nenhum pagante confirmado encontrado para este filtro.'
                           : cobModalFilter === 'PENDING'
                           ? 'Nenhum aluno pendente encontrado para este filtro.'
                           : 'Nenhum destinatário localizado.'}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: totalEnviados === 0 ? 12 : 0 }}>
                         {totalEnviados === 0
-                          ? 'Clique em "Sincronizar Alunos" para vincular os alunos das turmas deste comunicado.'
+                          ? 'Toque em "Sincronizar" para vincular os alunos das turmas deste comunicado.'
                           : 'Tente alterar a aba de filtro ou limpar o campo de busca.'}
                       </div>
                       {totalEnviados === 0 && (
@@ -4885,7 +5962,8 @@ export function ComunicadoViewModal({
                             background: '#0f172a',
                             color: '#ffffff',
                             border: 'none',
-                            padding: '8px 14px',
+                            minHeight: 36,
+                            padding: '0 14px',
                             borderRadius: 9,
                             fontSize: 12,
                             fontWeight: 700,
@@ -4906,36 +5984,44 @@ export function ComunicadoViewModal({
 
                       return (
                         <div key={rowKey} className={`cvm-cob-card ${cardStatusClass}`}>
-                          {/* Compact Primary Row */}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 360px', minWidth: 0 }}>
-                              <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={36} />
-                              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {/* Line 1: Student Name + Status + Turma */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>{info.nome}</span>
+                          <div className="cvm-cob-card-main">
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+                              <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={34} />
+                              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                {/* Line 1: Student Name + Status Pill */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', overflowWrap: 'break-word' }}>
+                                    {info.nome}
+                                  </span>
                                   <span style={{
                                     fontSize: 10,
                                     fontWeight: 800,
-                                    padding: '1px 7px',
+                                    padding: '2px 7px',
                                     borderRadius: 999,
                                     background: info.isPaid ? '#16a34a' : isCobOverdue ? '#fee2e2' : '#fef3c7',
                                     color: info.isPaid ? '#ffffff' : isCobOverdue ? '#b91c1c' : '#b45309',
                                     textTransform: 'uppercase',
-                                    letterSpacing: 0.3
+                                    letterSpacing: 0.3,
+                                    whiteSpace: 'nowrap'
                                   }}>
                                     {info.isPaid ? '✓ Pago' : isCobOverdue ? 'Vencido' : 'Pendente'}
                                   </span>
-                                  <span style={{
-                                    fontSize: 10.5,
-                                    fontWeight: 700,
-                                    padding: '1px 7px',
-                                    borderRadius: 6,
-                                    background: '#eff6ff',
-                                    color: '#2563eb'
-                                  }}>
-                                    {info.turma}
-                                  </span>
+                                </div>
+
+                                {/* Line 2: Turma & Authorization Chips */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                                  {info.turma && (
+                                    <span style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 700,
+                                      padding: '1px 7px',
+                                      borderRadius: 6,
+                                      background: '#eff6ff',
+                                      color: '#2563eb'
+                                    }}>
+                                      {info.turma}
+                                    </span>
+                                  )}
                                   {info.autResp && (
                                     <span style={{
                                       fontSize: 10,
@@ -4950,8 +6036,8 @@ export function ComunicadoViewModal({
                                   )}
                                 </div>
 
-                                {/* Line 2: Key Payer/Guardian & Payment Info */}
-                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 10px', fontSize: 11.5, color: '#475569' }}>
+                                {/* Line 3: Payer/Guardian & Payment Timestamp */}
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', fontSize: 11.5, color: '#475569', lineHeight: 1.35 }}>
                                   {info.isPaid ? (
                                     <span>
                                       <strong style={{ color: '#15803d' }}>Pagador:</strong>{' '}
@@ -4963,108 +6049,91 @@ export function ComunicadoViewModal({
                                     </span>
                                   )}
                                   {!info.isPaid && info.telefone && (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#64748b' }}>
-                                      <Phone size={10} />
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                      <Phone size={10} aria-hidden="true" />
                                       <span>{info.telefone}</span>
                                     </span>
                                   )}
-                                  <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                                  <span style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
                                     • R$ {fmtBRL(valorUnit)}
                                   </span>
                                   {info.isPaid && info.paidAt && (
-                                    <span style={{ color: '#15803d', fontWeight: 700 }}>
-                                      • Pago em {new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                    <span style={{ color: '#15803d', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                      • {new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                                     </span>
                                   )}
                                 </div>
                               </div>
                             </div>
 
-                            {/* Compact Row Actions */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flexShrink: 0 }}>
+                            {/* Compact Touch-Friendly Row Actions */}
+                            <div className="cvm-cob-actions-row">
                               <button
                                 type="button"
+                                className="cvm-cob-row-btn"
                                 onClick={() => handleToggleCobDestPaid(activeCob, dest)}
                                 disabled={isRowLoading}
                                 title={info.isPaid ? 'Reabrir cobrança para pendente' : 'Confirmar pagamento manualmente (Dar Baixa)'}
                                 style={{
-                                  padding: '5px 9px',
-                                  borderRadius: 8,
-                                  fontSize: 11.5,
-                                  fontWeight: 700,
                                   cursor: isRowLoading ? 'wait' : 'pointer',
                                   border: info.isPaid ? '1px solid #cbd5e1' : '1px solid #16a34a',
                                   background: info.isPaid ? '#ffffff' : '#16a34a',
-                                  color: info.isPaid ? '#475569' : '#ffffff',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4
+                                  color: info.isPaid ? '#475569' : '#ffffff'
                                 }}
                               >
                                 {isRowLoading ? (
-                                  <Loader2 size={12} />
+                                  <Loader2 size={12} aria-hidden="true" />
                                 ) : info.isPaid ? (
-                                  <RotateCcw size={12} />
+                                  <RotateCcw size={12} aria-hidden="true" />
                                 ) : (
-                                  <CheckCircle2 size={12} />
+                                  <CheckCircle2 size={12} aria-hidden="true" />
                                 )}
                                 <span>{info.isPaid ? 'Reabrir' : 'Dar Baixa'}</span>
                               </button>
 
                               <button
                                 type="button"
+                                className="cvm-cob-row-btn"
                                 onClick={() => handleWhatsAppCobReminder(activeCob, dest, info)}
                                 title={info.isPaid ? 'Enviar comprovante/confirmação por WhatsApp' : 'Enviar lembrete de pagamento por WhatsApp'}
                                 style={{
-                                  padding: '5px 9px',
-                                  borderRadius: 8,
-                                  fontSize: 11.5,
-                                  fontWeight: 700,
                                   cursor: 'pointer',
                                   border: '1px solid #bbf7d0',
                                   background: '#ecfdf5',
-                                  color: '#047857',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4
+                                  color: '#047857'
                                 }}
                               >
-                                <MessageCircle size={12} />
+                                <MessageCircle size={12} aria-hidden="true" />
                                 <span>WhatsApp</span>
                               </button>
 
                               <button
                                 type="button"
+                                className="cvm-cob-row-btn"
                                 onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'open')}
                                 disabled={isLinkLoading}
                                 title={info.isPaid ? 'Abrir comprovante de pagamento' : 'Abrir ou gerar link da fatura deste aluno'}
                                 style={{
-                                  padding: '5px 9px',
-                                  borderRadius: 8,
-                                  fontSize: 11.5,
-                                  fontWeight: 700,
                                   cursor: isLinkLoading ? 'wait' : 'pointer',
                                   border: info.isPaid ? '1px solid #86efac' : '1px solid #cbd5e1',
                                   background: info.isPaid ? '#f0fdf4' : '#f8fafc',
-                                  color: info.isPaid ? '#15803d' : '#334155',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4
+                                  color: info.isPaid ? '#15803d' : '#334155'
                                 }}
                               >
-                                {info.isPaid ? <FileText size={12} /> : <ExternalLink size={12} />}
+                                {info.isPaid ? <FileText size={12} aria-hidden="true" /> : <ExternalLink size={12} aria-hidden="true" />}
                                 <span>{isLinkLoading ? 'Gerando...' : info.isPaid ? 'Comprovante' : 'Fatura'}</span>
                               </button>
 
                               <button
                                 type="button"
+                                className="cvm-cob-hit"
                                 onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'copy')}
                                 disabled={isLinkLoading}
                                 title={info.isPaid ? 'Copiar link do comprovante de pagamento' : 'Copiar link de pagamento'}
                                 aria-label={isCopied ? 'Link copiado' : info.isPaid ? 'Copiar link do comprovante de pagamento' : 'Copiar link de pagamento'}
                                 style={{
-                                  width: 28,
-                                  height: 28,
+                                  width: 33,
+                                  height: 33,
                                   borderRadius: 8,
                                   cursor: isLinkLoading ? 'wait' : 'pointer',
                                   border: isCopied ? '1px solid #16a34a' : '1px solid #cbd5e1',
@@ -5072,18 +6141,19 @@ export function ComunicadoViewModal({
                                   color: isCopied ? '#15803d' : '#475569',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center'
+                                  justifyContent: 'center',
+                                  flexShrink: 0
                                 }}
                               >
-                                {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                                {isCopied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
                               </button>
                             </div>
                           </div>
 
                           {/* Progressive Disclosure for Secondary Metadata */}
-                          <details className="cvm-cob-details" style={{ paddingLeft: 46 }}>
+                          <details className="cvm-cob-details">
                             <summary>
-                              <ChevronRight size={12} />
+                              <ChevronRight size={12} aria-hidden="true" />
                               <span>Mais detalhes</span>
                             </summary>
                             <div className="cvm-cob-details-grid">
@@ -5119,65 +6189,70 @@ export function ComunicadoViewModal({
                     })
                   )}
                 </div>
+              </div>
 
-                {/* Modal Footer */}
-                <div style={{
-                  padding: '10px 20px',
-                  background: '#ffffff',
-                  borderTop: '1px solid #e2e8f0',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 10
-                }}>
-                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
-                    Exibindo <strong>{filteredRows.length}</strong> de <strong>{totalEnviados}</strong> destinatários • Pagantes: <strong style={{ color: '#15803d' }}>{totalPagos}/{totalEnviados}</strong>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
-                      style={{
-                        padding: '7px 12px',
-                        borderRadius: 9,
-                        border: '1px solid #cbd5e1',
-                        background: '#ffffff',
-                        color: '#334155',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5
-                      }}
-                    >
-                      <Printer size={13} />
-                      <span>Imprimir Filtro Atual</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCobrancaModalId(null)}
-                      style={{
-                        padding: '7px 16px',
-                        borderRadius: 9,
-                        border: 'none',
-                        background: '#0f172a',
-                        color: '#ffffff',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Fechar
-                    </button>
-                  </div>
+              {/* Compact De-duplicated Modal Footer */}
+              <div style={{
+                padding: '8px 14px',
+                paddingBottom: 'max(10px, env(safe-area-inset-bottom, 0px))',
+                background: '#ffffff',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexShrink: 0
+              }}>
+                <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                  Exibindo <strong style={{ color: '#0f172a' }}>{filteredRows.length}</strong> de <strong style={{ color: '#0f172a' }}>{totalEnviados}</strong>
+                  <span className="cvm-cob-desktop-only"> destinatários • Pagantes: <strong style={{ color: '#15803d' }}>{totalPagos}/{totalEnviados}</strong></span>
                 </div>
-              </motion.div>
-            </motion.div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="cvm-cob-desktop-only"
+                    onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
+                    style={{
+                      minHeight: 34,
+                      padding: '0 12px',
+                      borderRadius: 9,
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#334155',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                  >
+                    <Printer size={13} aria-hidden="true" />
+                    <span>Imprimir Filtro Atual</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void closeCobModal()}
+                    style={{
+                      minHeight: 34,
+                      padding: '0 16px',
+                      borderRadius: 9,
+                      border: 'none',
+                      background: '#0f172a',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </>
           );
         })()}
-      </AnimatePresence>
+      </dialog>
 
       <AnimatePresence>
         {internalMaximizedImage && (

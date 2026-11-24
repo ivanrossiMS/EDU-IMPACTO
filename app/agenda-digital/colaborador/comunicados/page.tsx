@@ -19,7 +19,7 @@ import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRigh
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
-import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
+import { ComunicadoViewModal, type ComunicadoReminderMode } from '@/components/agenda/ComunicadoViewModal'
 import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
 import { seedComunicadosRespostasCache, prefetchComunicadoMessages, getGlobalCachedMessages } from '@/lib/comunicadosRespostasCache'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
@@ -2678,16 +2678,34 @@ function ColaboradorComunicadosContent() {
           const canDeleteSelected = Boolean(isUserAdmin || isAuthor);
           const canEditSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
           const canEditReportSelected = Boolean(!isMirroring && (isUserAdmin || isAuthor));
+          // Permissões de lembrete (alinhadas ao backend: Admin, Direção, Coordenação, Gestão, Secretaria ou Autor)
+          const checkCanRemindRole = (u: any) => {
+            if (!u) return false;
+            const p = String(u.perfil || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const c = String(u.cargo || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return (
+              checkAdmin(u) ||
+              p.includes('coordenad') ||
+              c.includes('coordenad') ||
+              p.includes('gestor') ||
+              c.includes('gestor') ||
+              p === 'auxiliar administrativo' ||
+              c === 'auxiliar administrativo' ||
+              p.startsWith('secretari') ||
+              c.startsWith('secretari')
+            );
+          };
+
           const canSendReminderSelected = Boolean(
             !isMirroring &&
-            (isUserAdmin || isMasterAdmin || isAuthor) &&
+            (isUserAdmin || isMasterAdmin || isAuthor || checkCanRemindRole(currentUser) || checkCanRemindRole(effectiveUser)) &&
             selectedComunicado?.status !== 'rascunho' &&
             selectedComunicado?.status !== 'agendado'
           );
 
           const handleSendReminderSelected = async (
             comunicadoTarget: any,
-            options: { mode: 'all' | 'unread'; customMessage?: string }
+            options: { mode: ComunicadoReminderMode; customMessage?: string }
           ) => {
             const res = await apiFetch('/api/comunicados/lembrete', {
               method: 'POST',

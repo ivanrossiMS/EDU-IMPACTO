@@ -1,14 +1,34 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { 
   FileCheck2, Check, Lock, Unlock, Clock, Users, RefreshCw, 
   AlertCircle, CheckCircle2, XCircle, X, Shield, Sparkles, 
   MapPin, Calendar, DollarSign, HeartPulse, ShieldCheck, 
   Printer, Search, ChevronRight, Loader2, Filter
 } from 'lucide-react'
+import Portal from '@/components/Portal'
 import { AutorizacaoData, AutorizacaoResposta } from '@/lib/autorizacoes/types'
+
+let supportsAutDisplayTransition: boolean | undefined
+function canAutTransitionDisplay(): boolean {
+  if (supportsAutDisplayTransition !== undefined) return supportsAutDisplayTransition
+  if (typeof window === 'undefined' || !window.CSS?.supports?.('transition-behavior', 'allow-discrete') || !document.body) {
+    return false
+  }
+  const probe = document.createElement('div')
+  probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;'
+  document.body.appendChild(probe)
+  getComputedStyle(probe).display
+  probe.style.display = 'none'
+  supportsAutDisplayTransition = getComputedStyle(probe).display === 'block'
+  probe.remove()
+  return supportsAutDisplayTransition
+}
+
+function supportsAutTopLayerExit(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.CSS?.supports?.('overlay', 'auto')) && canAutTransitionDisplay()
+}
 import { 
   calculateAutorizacaoStats, 
   getUserAutorizacaoResposta, 
@@ -106,6 +126,9 @@ export function AutorizacaoWidget({
   const [prazoError, setPrazoError] = useState<string | null>(null)
   const prazoDialogRef = useRef<HTMLDialogElement>(null)
   const pressedOutsideDialogRef = useRef<boolean>(false)
+  const detailsDialogRef = useRef<HTMLDialogElement>(null)
+  const pressedOutsideDetailsRef = useRef<boolean>(false)
+  const detailsDialogTitleId = useId()
   const prazoDialogTitleId = useId()
   const prazoDateInputId = useId()
   const prazoNoDeadlineId = useId()
@@ -114,15 +137,66 @@ export function AutorizacaoWidget({
   const [fetchedAlunosDir, setFetchedAlunosDir] = useState<Record<string, any>>({})
   const channelRef = useRef<any>(null)
 
+  const closeDetailsDialog = useCallback(async () => {
+    const dialog = detailsDialogRef.current
+    if (!dialog || !dialog.open) {
+      setShowDetailsModal(false)
+      return
+    }
+    if (!supportsAutTopLayerExit() && typeof dialog.getAnimations === 'function') {
+      dialog.setAttribute('data-closing', '')
+      const animations = dialog.getAnimations({ subtree: true })
+      if (animations.length > 0) {
+        await Promise.race([
+          Promise.allSettled(animations.map(a => a.finished)),
+          new Promise(r => setTimeout(r, 260))
+        ])
+      }
+      if (!dialog.hasAttribute('data-closing')) return
+      dialog.removeAttribute('data-closing')
+    }
+    setShowDetailsModal(false)
+  }, [])
+
+  useEffect(() => {
+    const dialog = detailsDialogRef.current
+    if (!dialog) return
+    if (showDetailsModal) {
+      dialog.removeAttribute('data-closing')
+      if (!dialog.open) {
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal()
+        } else {
+          dialog.setAttribute('open', '')
+        }
+      }
+    } else if (dialog.open) {
+      dialog.removeAttribute('data-closing')
+      if (typeof dialog.close === 'function') {
+        dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [showDetailsModal])
+
   useEffect(() => {
     const dialog = prazoDialogRef.current
     if (!dialog) return
     if (prazoDialogMode) {
       if (!dialog.open) {
-        dialog.showModal()
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal()
+        } else {
+          dialog.setAttribute('open', '')
+        }
       }
     } else if (dialog.open) {
-      dialog.close()
+      if (typeof dialog.close === 'function') {
+        dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
     }
   }, [prazoDialogMode])
 
@@ -1689,78 +1763,353 @@ export function AutorizacaoWidget({
         )}
       </div>
 
-      {/* MODAL DETALHADA COM LISTA DE ALUNOS E OBSERVAÇÕES MÉDICAS */}
-      <AnimatePresence>
-        {showDetailsModal && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(15, 23, 42, 0.75)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 99999999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}
-            onClick={() => setShowDetailsModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 15 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: '780px',
-                maxHeight: '90vh',
-                background: '#FFFFFF',
-                borderRadius: '24px',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden'
-              }}
-            >
+      {/* PORTAL PARA MODAIS DE TOP-LAYER (EVITA CONFLITOS DE STACKING CONTEXT NO MOBILE) */}
+      <Portal>
+        <style>{`
+          dialog.aut-details-dialog {
+            border: none;
+            padding: 0;
+            background: #FFFFFF;
+            color: #0F172A;
+            overflow: hidden;
+            box-sizing: border-box;
+            box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.35);
+            opacity: 0;
+            transition-property: opacity, transform, display, overlay;
+            transition-duration: 0.24s;
+            transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+            transition-behavior: allow-discrete;
+          }
+          dialog.aut-details-dialog[open] {
+            display: flex;
+            flex-direction: column;
+          }
+          dialog.aut-details-dialog[open]:not(:modal) {
+            position: fixed;
+            inset: 0;
+            z-index: 100100;
+          }
+          dialog.aut-details-dialog:modal {
+            overscroll-behavior: contain;
+          }
+          dialog.aut-details-dialog::backdrop {
+            background-color: rgba(15, 23, 42, 0);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            overflow: hidden;
+            overscroll-behavior: contain;
+            transition-property: background-color, display, overlay;
+            transition-duration: 0.24s;
+            transition-timing-function: ease-out;
+            transition-behavior: allow-discrete;
+          }
+          @media (max-width: 639px) {
+            dialog.aut-details-dialog {
+              width: 100%;
+              max-width: 100%;
+              margin: auto 0 0 0;
+              border-radius: 22px 22px 0 0;
+              border-top: 1px solid #E2E8F0;
+              height: 90vh;
+              height: min(90dvh, calc(100dvh - max(12px, env(safe-area-inset-top, 0px))));
+              max-height: 92vh;
+              max-height: min(92dvh, calc(100dvh - max(12px, env(safe-area-inset-top, 0px))));
+            }
+          }
+          @media (max-width: 639px) and (prefers-reduced-motion: no-preference) {
+            dialog.aut-details-dialog {
+              transform: translateY(28px);
+            }
+          }
+          @media (min-width: 640px) {
+            dialog.aut-details-dialog {
+              width: min(780px, calc(100vw - 32px));
+              max-width: 780px;
+              max-height: 88vh;
+              max-height: min(88dvh, 840px);
+              margin: auto;
+              border-radius: 22px;
+              border: 1px solid #E2E8F0;
+            }
+            .aut-sheet-handle {
+              display: none !important;
+            }
+          }
+          @media (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+            dialog.aut-details-dialog {
+              transform: scale(0.96);
+            }
+          }
+          dialog.aut-details-dialog[open]:where(:not([data-closing])) {
+            opacity: 1;
+          }
+          @media (prefers-reduced-motion: no-preference) {
+            dialog.aut-details-dialog[open]:where(:not([data-closing])) {
+              transform: none;
+            }
+          }
+          dialog.aut-details-dialog[open]:where(:not([data-closing]))::backdrop {
+            background-color: rgba(15, 23, 42, 0.68);
+          }
+          @starting-style {
+            dialog.aut-details-dialog[open]:where(:not([data-closing])) {
+              opacity: 0;
+            }
+            dialog.aut-details-dialog[open]:where(:not([data-closing]))::backdrop {
+              background-color: rgba(15, 23, 42, 0);
+            }
+          }
+          @media (max-width: 639px) and (prefers-reduced-motion: no-preference) {
+            @starting-style {
+              dialog.aut-details-dialog[open]:where(:not([data-closing])) {
+                transform: translateY(28px);
+              }
+            }
+          }
+          @media (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+            @starting-style {
+              dialog.aut-details-dialog[open]:where(:not([data-closing])) {
+                transform: scale(0.96);
+              }
+            }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            dialog.aut-details-dialog,
+            dialog.aut-details-dialog::backdrop {
+              transition-duration: 0.1s;
+            }
+          }
+          .aut-sheet-handle {
+            width: 36px;
+            height: 4px;
+            border-radius: 999px;
+            background: #CBD5E1;
+            margin: 8px auto 2px;
+            flex-shrink: 0;
+          }
+          .aut-details-header {
+            padding: 10px 14px 12px;
+            border-bottom: 1px solid #F1F5F9;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(6, 182, 212, 0.04) 100%);
+            flex-shrink: 0;
+          }
+          .aut-details-toolbar {
+            padding: 10px 14px;
+            border-bottom: 1px solid #E2E8F0;
+            background: #FFFFFF;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+          }
+          .aut-filter-strip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 1px;
+          }
+          .aut-filter-strip::-webkit-scrollbar {
+            display: none;
+          }
+          .aut-filter-chip {
+            padding: 6px 11px;
+            min-height: 34px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          }
+          .aut-search-wrap {
+            position: relative;
+            width: 100%;
+            display: flex;
+            align-items: center;
+          }
+          .aut-search-input {
+            width: 100%;
+            padding: 8px 32px 8px 34px;
+            border-radius: 11px;
+            border: 1px solid #CBD5E1;
+            background: #F8FAFC;
+            color: #0F172A;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+          }
+          .aut-search-input:focus {
+            background: #FFFFFF;
+            border-color: #10B981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+          }
+          .aut-details-list {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            background: #F8FAFC;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            container: aut-list / inline-size;
+          }
+          .aut-student-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-left-width: 3px;
+            border-radius: 13px;
+            padding: 11px 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+          }
+          .aut-student-card-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          @container aut-list (inline-size > 520px) {
+            .aut-student-card-main {
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+            }
+          }
+          .aut-icon-hit {
+            position: relative;
+          }
+          @media (pointer: coarse) {
+            .aut-icon-hit::after {
+              content: "";
+              position: absolute;
+              inset: -6px;
+            }
+            .aut-filter-chip {
+              min-height: 36px;
+            }
+          }
+          @media (min-width: 640px) {
+            .aut-details-header {
+              padding: 16px 22px;
+            }
+            .aut-details-toolbar {
+              padding: 12px 22px;
+              flex-direction: row;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+            }
+            .aut-search-wrap {
+              width: 245px;
+              flex-shrink: 0;
+            }
+            .aut-search-input {
+              font-size: 12.5px;
+              padding: 7px 28px 7px 32px;
+            }
+            .aut-details-list {
+              padding: 14px 22px;
+              gap: 10px;
+            }
+          }
+        `}</style>
+
+        {/* MODAL DETALHADA COM LISTA DE ALUNOS E OBSERVAÇÕES MÉDICAS */}
+        <dialog
+          ref={detailsDialogRef}
+          className="aut-details-dialog"
+          aria-labelledby={detailsDialogTitleId}
+          {...({ closedby: 'any' } as any)}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => {
+            e.stopPropagation()
+            if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return
+            const dialog = detailsDialogRef.current
+            if (!dialog) return
+            const r = dialog.getBoundingClientRect()
+            pressedOutsideDetailsRef.current =
+              e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+          }}
+          onPointerUp={e => {
+            e.stopPropagation()
+            if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return
+            const dialog = detailsDialogRef.current
+            if (!dialog) {
+              pressedOutsideDetailsRef.current = false
+              return
+            }
+            const r = dialog.getBoundingClientRect()
+            const releasedOutside =
+              e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+            if (pressedOutsideDetailsRef.current && releasedOutside) {
+              void closeDetailsDialog()
+            }
+            pressedOutsideDetailsRef.current = false
+          }}
+          onCancel={e => {
+            e.preventDefault()
+            void closeDetailsDialog()
+          }}
+          onClose={() => {
+            if (detailsDialogRef.current) {
+              detailsDialogRef.current.returnValue = ''
+            }
+            setShowDetailsModal(false)
+          }}
+        >
+          {showDetailsModal && (
+            <>
+              <div className="aut-sheet-handle" aria-hidden="true" />
+
               {/* MODAL HEADER */}
-              <div style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid #F1F5F9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="aut-details-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                   <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 12,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 11,
                     background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#FFFFFF'
-                  }}>
-                    <Users size={20} />
+                    color: '#FFFFFF',
+                    flexShrink: 0
+                  }} aria-hidden="true">
+                    <Users size={18} />
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                      Lista de Alunos e Autorizações
-                    </h3>
-                    <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0 0' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <h1 id={detailsDialogTitleId} style={{ fontSize: 15.5, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1.25, textWrap: 'balance' as any }}>
+                      Lista de Autorizações
+                    </h1>
+                    <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0 0', overflowWrap: 'break-word' }}>
                       {autorizacao.titulo}
                     </p>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <button
                     type="button"
                     onClick={handlePrintSummary}
                     style={{
-                      padding: '8px 12px',
+                      minHeight: 36,
+                      padding: '0 11px',
                       background: '#FFFFFF',
                       border: '1px solid #CBD5E1',
                       borderRadius: 10,
@@ -1768,21 +2117,23 @@ export function AutorizacaoWidget({
                       fontWeight: 700,
                       color: '#334155',
                       cursor: 'pointer',
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 6
+                      gap: 5
                     }}
                   >
-                    <Printer size={14} />
+                    <Printer size={14} aria-hidden="true" />
                     <span>Imprimir</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setShowDetailsModal(false)}
+                    className="aut-icon-hit"
+                    aria-label="Fechar lista de autorizações"
+                    onClick={() => void closeDetailsDialog()}
                     style={{
-                      width: 32,
-                      height: 32,
+                      width: 36,
+                      height: 36,
                       borderRadius: 10,
                       background: '#F1F5F9',
                       border: 'none',
@@ -1790,68 +2141,110 @@ export function AutorizacaoWidget({
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      color: '#64748B'
+                      color: '#475569',
+                      flexShrink: 0
                     }}
                   >
-                    <X size={16} />
+                    <X size={17} aria-hidden="true" />
                   </button>
                 </div>
               </div>
 
-              {/* FILTROS E BUSCA */}
-              <div style={{ padding: '14px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', gap: 6 }}>
+              {/* FILTROS COMPACTOS EM PILLS + BUSCA FULL-WIDTH */}
+              <div className="aut-details-toolbar">
+                <div className="aut-filter-strip" role="group" aria-label="Filtrar respostas">
                   {[
-                    { key: 'all', label: `Todos (${stats.totalRespostas})` },
-                    { key: 'aprova', label: `Autorizados (${stats.totalAprovados})` },
-                    { key: 'recusa', label: `Não Autorizados (${stats.totalRecusados})` },
-                    { key: 'obs', label: `Com Alergias/Obs (${stats.respostasComObservacoes.length})` }
-                  ].map(tab => (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => setSelectedFilter(tab.key as any)}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: 10,
-                        border: selectedFilter === tab.key ? '1.5px solid #10B981' : '1px solid #E2E8F0',
-                        background: selectedFilter === tab.key ? 'rgba(16, 185, 129, 0.1)' : '#FFFFFF',
-                        color: selectedFilter === tab.key ? '#065F46' : '#64748B',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                    { key: 'all', label: 'Todos', count: stats.totalRespostas, activeBorder: '#0F172A', activeBg: '#0F172A', activeColor: '#FFFFFF' },
+                    { key: 'aprova', label: 'Autorizados', count: stats.totalAprovados, activeBorder: '#059669', activeBg: '#ECFDF5', activeColor: '#065F46' },
+                    { key: 'recusa', label: 'Não Autorizados', count: stats.totalRecusados, activeBorder: '#DC2626', activeBg: '#FEF2F2', activeColor: '#991B1B' },
+                    { key: 'obs', label: 'Alergias/Obs', count: stats.respostasComObservacoes.length, activeBorder: '#D97706', activeBg: '#FFFBEB', activeColor: '#92400E' }
+                  ].map(tab => {
+                    const isActive = selectedFilter === tab.key
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        className="aut-filter-chip"
+                        aria-pressed={isActive}
+                        onClick={() => setSelectedFilter(tab.key as any)}
+                        style={{
+                          border: isActive ? `1.5px solid ${tab.activeBorder}` : '1px solid #E2E8F0',
+                          background: isActive ? tab.activeBg : '#F8FAFC',
+                          color: isActive ? tab.activeColor : '#475569'
+                        }}
+                      >
+                        {tab.key === 'aprova' && <CheckCircle2 size={13} aria-hidden="true" />}
+                        {tab.key === 'recusa' && <XCircle size={13} aria-hidden="true" />}
+                        {tab.key === 'obs' && <HeartPulse size={13} aria-hidden="true" />}
+                        <span>{tab.label}</span>
+                        <span style={{
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          background: isActive ? (tab.key === 'all' ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.08)') : '#E2E8F0',
+                          color: isActive ? tab.activeColor : '#334155'
+                        }}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
 
-                <div style={{ position: 'relative', width: 220 }}>
-                  <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: 10, top: 10 }} />
+                <div className="aut-search-wrap">
+                  <Search size={15} color="#94A3B8" aria-hidden="true" style={{ position: 'absolute', left: 11, pointerEvents: 'none' }} />
                   <input
-                    type="text"
-                    placeholder="Buscar aluno ou responsável..."
+                    type="search"
+                    className="aut-search-input"
+                    aria-label="Buscar aluno, turma ou responsável"
+                    placeholder="Buscar aluno, turma ou responsável..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '7px 10px 7px 32px',
-                      borderRadius: 10,
-                      border: '1px solid #CBD5E1',
-                      fontSize: 12,
-                      boxSizing: 'border-box'
-                    }}
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      className="aut-icon-hit"
+                      aria-label="Limpar busca"
+                      onClick={() => setSearchQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        border: 'none',
+                        background: '#E2E8F0',
+                        color: '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      <X size={12} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* LISTA */}
-              <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* LISTA OTIMIZADA */}
+              <div className="aut-details-list">
                 {filteredRespostas.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
-                    <Users size={36} strokeWidth={1.5} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                    <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Nenhuma resposta encontrada para este filtro.</p>
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '36px 20px',
+                    color: '#64748B',
+                    background: '#FFFFFF',
+                    borderRadius: 14,
+                    border: '1px dashed #CBD5E1'
+                  }}>
+                    <Users size={34} strokeWidth={1.6} aria-hidden="true" style={{ margin: '0 auto 8px', opacity: 0.45 }} />
+                    <p style={{ fontSize: 13.5, fontWeight: 700, color: '#334155', margin: 0 }}>
+                      Nenhuma resposta encontrada para este filtro.
+                    </p>
                   </div>
                 ) : (
                   filteredRespostas.map(r => {
@@ -1859,88 +2252,98 @@ export function AutorizacaoWidget({
                     const isRecusa = r.tipoDecisao === 'recusa'
                     const displayTurma = resolveTurmaNome(r.alunoTurma, r.alunoId)
                     const payStatus = getRespostaPaymentStatus(r)
+                    const borderAccent = isAprova ? '#10B981' : isRecusa ? '#EF4444' : '#CBD5E1'
 
                     return (
                       <div
                         key={r.usuarioId + (r.alunoId || '')}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1px solid #E2E8F0',
-                          borderRadius: 14,
-                          padding: '12px 16px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          transition: 'all 0.2s'
-                        }}
+                        className="aut-student-card"
+                        style={{ borderLeftColor: borderAccent }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>
+                        <div className="aut-student-card-main">
+                          <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', overflowWrap: 'break-word' }}>
                                 {r.alunoNome || 'Aluno(a)'}
                               </span>
                               {displayTurma && (
-                                <span style={{ fontSize: 11, fontWeight: 700, color: '#6366F1', background: '#EEF2FF', padding: '2px 8px', borderRadius: 6 }}>
+                                <span style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 700,
+                                  color: '#4F46E5',
+                                  background: '#EEF2FF',
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                  whiteSpace: 'nowrap'
+                                }}>
                                   {displayTurma}
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                              Responsável: <strong>{r.usuarioNome}</strong> {(r.cpfResponsavel || r.documentoResponsavel) ? `(CPF: ${r.cpfResponsavel || r.documentoResponsavel})` : ''} • {formatDateTimeBR(r.respondidoEm)}
+
+                            <div style={{ fontSize: 12, color: '#64748B', lineHeight: 1.4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 6px' }}>
+                              <span>
+                                Resp: <strong style={{ color: '#334155' }}>{r.usuarioNome}</strong>
+                                {(r.cpfResponsavel || r.documentoResponsavel) ? ` (${r.cpfResponsavel || r.documentoResponsavel})` : ''}
+                              </span>
+                              <span style={{ whiteSpace: 'nowrap', color: '#94A3B8', fontSize: 11.5 }}>
+                                • {formatDateTimeBR(r.respondidoEm)}
+                              </span>
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
                             {payStatus !== 'none' && (
                               <span style={{
-                                padding: '4px 9px',
-                                borderRadius: 8,
+                                padding: '3px 8px',
+                                borderRadius: 999,
                                 background: payStatus === 'paid' ? '#D1FAE5' : '#FEF3C7',
                                 color: payStatus === 'paid' ? '#065F46' : '#92400E',
-                                fontSize: 11.5,
+                                fontSize: 11,
                                 fontWeight: 800,
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 4
+                                gap: 3,
+                                whiteSpace: 'nowrap'
                               }}>
-                                <DollarSign size={12} />
+                                <DollarSign size={11} aria-hidden="true" />
                                 <span>{payStatus === 'paid' ? 'Pago' : 'Não pago'}</span>
                               </span>
                             )}
-                            <div style={{
-                              padding: '4px 10px',
-                              borderRadius: 8,
+                            <span style={{
+                              padding: '3px 9px',
+                              borderRadius: 999,
                               background: isAprova ? '#DCFCE7' : isRecusa ? '#FEE2E2' : '#F1F5F9',
                               color: isAprova ? '#15803D' : isRecusa ? '#B91C1C' : '#475569',
-                              fontSize: 12,
+                              fontSize: 11.5,
                               fontWeight: 800,
-                              display: 'flex',
+                              display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 5
+                              gap: 4,
+                              whiteSpace: 'nowrap'
                             }}>
-                              {isAprova ? <CheckCircle2 size={14} /> : isRecusa ? <XCircle size={14} /> : null}
+                              {isAprova ? <CheckCircle2 size={13} aria-hidden="true" /> : isRecusa ? <XCircle size={13} aria-hidden="true" /> : null}
                               <span>{r.opcaoTexto}</span>
-                            </div>
+                            </span>
                           </div>
                         </div>
 
                         {/* ALERTA DE OBSERVAÇÕES MÉDICAS / ALERGIAS */}
                         {r.observacoes && (
                           <div style={{
-                            background: '#FEF3C7',
-                            borderLeft: '4px solid #F59E0B',
-                            borderRadius: 6,
-                            padding: '8px 12px',
+                            background: '#FFFBEB',
+                            borderLeft: '3px solid #F59E0B',
+                            borderRadius: 7,
+                            padding: '7px 10px',
                             fontSize: 12,
                             color: '#92400E',
                             fontWeight: 600,
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: 8
+                            alignItems: 'flex-start',
+                            gap: 7
                           }}>
-                            <HeartPulse size={15} color="#D97706" style={{ flexShrink: 0 }} />
-                            <span><strong>Observação / Alergia:</strong> {r.observacoes}</span>
+                            <HeartPulse size={14} color="#D97706" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+                            <span style={{ overflowWrap: 'break-word' }}><strong>Alergia / Obs:</strong> {r.observacoes}</span>
                           </div>
                         )}
                       </div>
@@ -1948,14 +2351,47 @@ export function AutorizacaoWidget({
                   })
                 )}
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
-      {/* DIALOG NATIVO: REABRIR AUTORIZAÇÃO E DEFINIR PRAZO */}
-      <dialog
-        ref={prazoDialogRef}
+              {/* FOOTER COMPACTO COM SAFE-AREA */}
+              <div style={{
+                padding: '9px 14px',
+                paddingBottom: 'max(10px, env(safe-area-inset-bottom, 0px))',
+                borderTop: '1px solid #E2E8F0',
+                background: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexShrink: 0
+              }}>
+                <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>
+                  Exibindo <strong style={{ color: '#0F172A' }}>{filteredRespostas.length}</strong> de <strong style={{ color: '#0F172A' }}>{stats.totalRespostas}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void closeDetailsDialog()}
+                  style={{
+                    minHeight: 34,
+                    padding: '0 16px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: '#0F172A',
+                    color: '#FFFFFF',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </>
+          )}
+        </dialog>
+
+        {/* DIALOG NATIVO: REABRIR AUTORIZAÇÃO E DEFINIR PRAZO */}
+        <dialog
+          ref={prazoDialogRef}
         className="autorizacao-prazo-dialog"
         aria-labelledby={prazoDialogTitleId}
         {...({ closedby: 'any' } as any)}
@@ -2258,6 +2694,7 @@ export function AutorizacaoWidget({
           </div>
         </form>
       </dialog>
+      </Portal>
     </div>
   )
 }

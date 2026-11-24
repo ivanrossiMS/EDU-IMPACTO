@@ -1661,7 +1661,7 @@ export function ComunicadoDestinatariosModal({
                 </button>
               )}
 
-              {data?.permissions?.canSendReminder && onOpenReminderModal && totalPendentesLembrete > 0 && (
+              {data?.permissions?.canSendReminder && onOpenReminderModal && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1684,7 +1684,7 @@ export function ComunicadoDestinatariosModal({
                     boxShadow: '0 4px 12px -3px rgba(217, 119, 6, 0.45)',
                   }}
                 >
-                  <BellRing size={14} /> Lembrete ({totalPendentesLembrete})
+                  <BellRing size={14} /> {totalPendentesLembrete > 0 ? `Lembrete (${totalPendentesLembrete})` : 'Lembrete'}
                 </button>
               )}
 

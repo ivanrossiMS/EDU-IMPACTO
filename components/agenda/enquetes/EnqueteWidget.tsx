@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react'
+import { motion } from 'framer-motion'
 import { 
   Vote, Check, Lock, Unlock, Clock, Users, RefreshCw, 
   BarChart3, AlertCircle, CheckCircle2, ChevronRight, X,
   Shield, Sparkles, Trophy, Loader2
 } from 'lucide-react'
+import Portal from '@/components/Portal'
 import { EnqueteData, EnqueteVoto } from '@/lib/enquetes/types'
 import { 
   calculateEnqueteStats, 
@@ -45,6 +46,29 @@ export function EnqueteWidget({
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const channelRef = useRef<any>(null)
+  const votersDialogRef = useRef<HTMLDialogElement>(null)
+  const pressedOutsideVotersRef = useRef<boolean>(false)
+  const votersDialogTitleId = useId()
+
+  useEffect(() => {
+    const dialog = votersDialogRef.current
+    if (!dialog) return
+    if (showVotersModal) {
+      if (!dialog.open) {
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal()
+        } else {
+          dialog.setAttribute('open', '')
+        }
+      }
+    } else if (dialog.open) {
+      if (typeof dialog.close === 'function') {
+        dialog.close()
+      } else {
+        dialog.removeAttribute('open')
+      }
+    }
+  }, [showVotersModal])
 
   const currentUserId = currentUser?.id || currentUser?.uid || ''
   const currentAlunoId = currentAluno?.id || null
@@ -871,50 +895,130 @@ export function EnqueteWidget({
         </div>
       </div>
 
-      {/* MODAL DE DETALHES DOS VOTANTES (ADMIN / GESTÃO) */}
-      <AnimatePresence>
-        {showVotersModal && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(15, 23, 42, 0.75)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 99999999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '16px'
-            }}
-            onClick={() => setShowVotersModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: '620px',
-                maxHeight: '85vh',
-                background: '#FFFFFF',
-                borderRadius: '24px',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden'
-              }}
-            >
+      {/* MODAL DE DETALHES DOS VOTANTES (PORTAL + TOP-LAYER DIALOG) */}
+      <Portal>
+        <style>{`
+          dialog.enq-voters-dialog {
+            border: none;
+            padding: 0;
+            background: #FFFFFF;
+            color: #0F172A;
+            overflow: hidden;
+            box-sizing: border-box;
+            box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.35);
+          }
+          dialog.enq-voters-dialog[open] {
+            display: flex;
+            flex-direction: column;
+          }
+          dialog.enq-voters-dialog[open]:not(:modal) {
+            position: fixed;
+            inset: 0;
+            z-index: 100100;
+          }
+          dialog.enq-voters-dialog:modal {
+            overscroll-behavior: contain;
+          }
+          dialog.enq-voters-dialog::backdrop {
+            background: rgba(15, 23, 42, 0.68);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            overflow: hidden;
+            overscroll-behavior: contain;
+          }
+          @media (max-width: 639px) {
+            dialog.enq-voters-dialog {
+              width: 100%;
+              max-width: 100%;
+              margin: auto 0 0 0;
+              border-radius: 22px 22px 0 0;
+              border-top: 1px solid #E2E8F0;
+              height: 88vh;
+              height: min(88dvh, calc(100dvh - max(12px, env(safe-area-inset-top, 0px))));
+              max-height: 92vh;
+              max-height: min(92dvh, calc(100dvh - max(12px, env(safe-area-inset-top, 0px))));
+            }
+          }
+          @media (min-width: 640px) {
+            dialog.enq-voters-dialog {
+              width: min(620px, calc(100vw - 32px));
+              max-width: 620px;
+              max-height: 86vh;
+              max-height: min(86dvh, 800px);
+              margin: auto;
+              border-radius: 22px;
+              border: 1px solid #E2E8F0;
+            }
+            .enq-sheet-handle {
+              display: none !important;
+            }
+          }
+        `}</style>
+        <dialog
+          ref={votersDialogRef}
+          className="enq-voters-dialog"
+          aria-labelledby={votersDialogTitleId}
+          {...({ closedby: 'any' } as any)}
+          onClick={e => e.stopPropagation()}
+          onPointerDown={e => {
+            e.stopPropagation()
+            if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return
+            const dialog = votersDialogRef.current
+            if (!dialog) return
+            const r = dialog.getBoundingClientRect()
+            pressedOutsideVotersRef.current =
+              e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+          }}
+          onPointerUp={e => {
+            e.stopPropagation()
+            if (typeof HTMLDialogElement !== 'undefined' && 'closedBy' in HTMLDialogElement.prototype) return
+            const dialog = votersDialogRef.current
+            if (!dialog) {
+              pressedOutsideVotersRef.current = false
+              return
+            }
+            const r = dialog.getBoundingClientRect()
+            const releasedOutside =
+              e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+            if (pressedOutsideVotersRef.current && releasedOutside) {
+              setShowVotersModal(false)
+            }
+            pressedOutsideVotersRef.current = false
+          }}
+          onCancel={() => setShowVotersModal(false)}
+          onClose={() => {
+            if (votersDialogRef.current) {
+              votersDialogRef.current.returnValue = ''
+            }
+            setShowVotersModal(false)
+          }}
+        >
+          {showVotersModal && (
+            <>
+              <div
+                className="enq-sheet-handle"
+                aria-hidden="true"
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 999,
+                  background: '#CBD5E1',
+                  margin: '8px auto 2px',
+                  flexShrink: 0
+                }}
+              />
               {/* HEADER DO MODAL */}
               <div style={{
-                padding: '18px 24px',
+                padding: '12px 16px',
                 borderBottom: '1px solid #F1F5F9',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: '#FAFAFC'
+                gap: 10,
+                background: '#FAFAFC',
+                flexShrink: 0
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                   <div style={{
                     width: 36,
                     height: 36,
@@ -923,14 +1027,15 @@ export function EnqueteWidget({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#FFF'
-                  }}>
+                    color: '#FFF',
+                    flexShrink: 0
+                  }} aria-hidden="true">
                     <Users size={18} />
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <h1 id={votersDialogTitleId} style={{ fontSize: 15.5, fontWeight: 800, color: '#0F172A', margin: 0, textWrap: 'balance' as any }}>
                       Registro de Votos da Enquete
-                    </h3>
+                    </h1>
                     <div style={{ fontSize: 12, color: '#64748B' }}>
                       {stats.totalVotantes} {stats.totalVotantes === 1 ? 'participante registrado' : 'participantes registrados'}
                     </div>
@@ -939,37 +1044,42 @@ export function EnqueteWidget({
 
                 <button
                   type="button"
+                  aria-label="Fechar registro de votos"
                   onClick={() => setShowVotersModal(false)}
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
                     background: '#F1F5F9',
                     border: 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    color: '#64748B'
+                    color: '#475569',
+                    flexShrink: 0
                   }}
                 >
-                  <X size={16} />
+                  <X size={17} aria-hidden="true" />
                 </button>
               </div>
 
               {/* FILTROS POR OPÇÃO */}
               <div style={{
-                padding: '10px 24px',
+                padding: '10px 16px',
                 borderBottom: '1px solid #F1F5F9',
                 display: 'flex',
-                gap: 8,
-                overflowX: 'auto'
+                gap: 6,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                flexShrink: 0
               }}>
                 <button
                   type="button"
                   onClick={() => setSelectedVotersFilter('all')}
                   style={{
-                    padding: '6px 12px',
+                    minHeight: 34,
+                    padding: '0 12px',
                     borderRadius: 999,
                     border: selectedVotersFilter === 'all' ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
                     background: selectedVotersFilter === 'all' ? 'rgba(99, 102, 241, 0.1)' : '#FFFFFF',
@@ -977,7 +1087,8 @@ export function EnqueteWidget({
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
                   }}
                 >
                   Todos ({allVotersList.length})
@@ -992,7 +1103,8 @@ export function EnqueteWidget({
                       type="button"
                       onClick={() => setSelectedVotersFilter(op.id)}
                       style={{
-                        padding: '6px 12px',
+                        minHeight: 34,
+                        padding: '0 12px',
                         borderRadius: 999,
                         border: isCur ? '1.5px solid #6366F1' : '1px solid #E2E8F0',
                         background: isCur ? 'rgba(99, 102, 241, 0.1)' : '#FFFFFF',
@@ -1001,12 +1113,13 @@ export function EnqueteWidget({
                         fontWeight: 700,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 5
+                        gap: 5,
+                        flexShrink: 0
                       }}
                     >
-                      {op.emoji && <span>{op.emoji}</span>}
+                      {op.emoji && <span aria-hidden="true">{op.emoji}</span>}
                       <span>{op.texto} ({count})</span>
                     </button>
                   )
@@ -1014,19 +1127,19 @@ export function EnqueteWidget({
               </div>
 
               {/* CONTEÚDO DOS VOTANTES */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#F8FAFC' }}>
                 {enquete.anonima ? (
                   <div style={{
                     padding: '24px 18px',
                     textAlign: 'center',
-                    background: '#F8FAFC',
+                    background: '#FFFFFF',
                     borderRadius: 16,
                     border: '1px dashed #CBD5E1'
                   }}>
-                    <Lock size={32} color="#D97706" style={{ margin: '0 auto 12px' }} />
-                    <h4 style={{ fontSize: 15, fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
+                    <Lock size={32} color="#D97706" aria-hidden="true" style={{ margin: '0 auto 12px' }} />
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0' }}>
                       Esta enquete foi criada com Voto Anônimo
-                    </h4>
+                    </h2>
                     <p style={{ fontSize: 13, color: '#64748B', margin: 0, lineHeight: 1.5, maxWidth: 400, marginInline: 'auto' }}>
                       Por privacidade e transparência, os nomes e dados individuais dos votantes foram preservados pelo sistema e não podem ser revelados.
                     </p>
@@ -1036,7 +1149,7 @@ export function EnqueteWidget({
                     Nenhum voto registrado para este filtro.
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {filteredVoters.map((v, idx) => {
                       const voteTime = new Date(v.votadoEm)
                       const timeStr = voteTime.toLocaleDateString('pt-BR') + ' às ' + voteTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -1046,21 +1159,21 @@ export function EnqueteWidget({
                         <div
                           key={idx}
                           style={{
-                            padding: '12px 16px',
-                            borderRadius: 14,
+                            padding: '11px 14px',
+                            borderRadius: 13,
                             border: '1px solid #E2E8F0',
                             background: '#FFFFFF',
                             display: 'flex',
+                            flexWrap: 'wrap',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            gap: 12
+                            gap: 10
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            {/* AVATAR */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 200px' }}>
                             <div style={{
-                              width: 38,
-                              height: 38,
+                              width: 36,
+                              height: 36,
                               borderRadius: '50%',
                               background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
                               color: '#FFF',
@@ -1079,18 +1192,18 @@ export function EnqueteWidget({
                               )}
                             </div>
 
-                            <div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A', overflowWrap: 'break-word' }}>
                                 {v.usuarioNome}
                               </div>
-                              <div style={{ fontSize: 12, color: '#64748B' }}>
-                                {v.alunoNome ? `Aluno(a): ${v.alunoNome}` : (v.usuarioTipo === 'responsavel' ? 'Responsável' : 'Colaborador')} • {timeStr}
+                              <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                                {v.alunoNome ? `Aluno(a): ${v.alunoNome}` : (v.usuarioTipo === 'responsavel' ? 'Responsável' : 'Colaborador')}{' '}
+                                <span style={{ whiteSpace: 'nowrap' }}>• {timeStr}</span>
                               </div>
                             </div>
                           </div>
 
-                          {/* OPÇÕES VOTADAS */}
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {chosenOptions.map(op => (
                               <span
                                 key={op.id}
@@ -1100,13 +1213,13 @@ export function EnqueteWidget({
                                   background: 'rgba(99, 102, 241, 0.1)',
                                   color: '#4338CA',
                                   padding: '3px 8px',
-                                  borderRadius: 8,
+                                  borderRadius: 999,
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: 4
                                 }}
                               >
-                                {op.emoji && <span>{op.emoji}</span>}
+                                {op.emoji && <span aria-hidden="true">{op.emoji}</span>}
                                 <span>{op.texto}</span>
                               </span>
                             ))}
@@ -1120,22 +1233,25 @@ export function EnqueteWidget({
 
               {/* FOOTER DO MODAL */}
               <div style={{
-                padding: '14px 24px',
-                borderTop: '1px solid #F1F5F9',
-                background: '#FAFAFC',
+                padding: '9px 16px',
+                paddingBottom: 'max(10px, env(safe-area-inset-bottom, 0px))',
+                borderTop: '1px solid #E2E8F0',
+                background: '#FFFFFF',
                 display: 'flex',
-                justifyContent: 'flex-end'
+                justifyContent: 'flex-end',
+                flexShrink: 0
               }}>
                 <button
                   type="button"
                   onClick={() => setShowVotersModal(false)}
                   style={{
-                    padding: '8px 18px',
-                    borderRadius: 10,
-                    border: '1px solid #CBD5E1',
-                    background: '#FFF',
-                    color: '#475569',
-                    fontSize: 13,
+                    minHeight: 34,
+                    padding: '0 16px',
+                    borderRadius: 9,
+                    border: 'none',
+                    background: '#0F172A',
+                    color: '#FFFFFF',
+                    fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
@@ -1143,10 +1259,10 @@ export function EnqueteWidget({
                   Fechar
                 </button>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </>
+          )}
+        </dialog>
+      </Portal>
     </div>
   )
 }
