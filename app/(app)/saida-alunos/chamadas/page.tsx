@@ -2458,23 +2458,25 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
 
 
   return (
-    <div style={{
-      position: 'relative',
-      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.04) 100%)',
-      border: '1.5px solid rgba(245, 158, 11, 0.35)',
-      borderRadius: 24,
-      padding: '14px 18px',
-      boxShadow: 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.03)',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-start',
-      height: '100%',
-      minHeight: 0,
-      maxHeight: isMobile ? undefined : 410,
-      minWidth: 0,
-      maxWidth: '100%',
-      boxSizing: 'border-box',
-    }}
+    <div
+      className="special-exit-card"
+      style={{
+        position: 'relative',
+        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.04) 100%)',
+        border: '1.5px solid rgba(245, 158, 11, 0.35)',
+        borderRadius: 24,
+        padding: '14px 18px',
+        boxShadow: 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.03)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-start',
+        height: '100%',
+        minHeight: 0,
+        maxHeight: isMobile ? undefined : 410,
+        minWidth: 0,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+      }}
     >
       {/* 📌 Floating Pushpin */}
       <div style={{
@@ -2542,17 +2544,10 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         </button>
       </div>
 
-      {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, TIME, DAYS, SUBMIT BUTTON) - SINGLE LINE ON DESKTOP */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 10,
-        flexWrap: isMobile ? 'wrap' : 'nowrap',
-        flexShrink: 0,
-      }}>
+      {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, TIME, DAYS, SUBMIT BUTTON) - ADAPTS CLEANLY TO TABLET/MOBILE */}
+      <div className="special-exit-form">
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
-        <div style={{ flex: isMobile ? '1 1 100%' : '1.1 1 0%', minWidth: 0, position: 'relative' }}>
+        <div className="special-exit-field-student" style={{ minWidth: 0, position: 'relative' }}>
           {!selectedStudent ? (
             <div style={{ position: 'relative' }}>
               <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
@@ -2681,7 +2676,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         </div>
 
         {/* COLUMN 2: AUTHORIZED PERSON */}
-        <div style={{ flex: isMobile ? '1 1 100%' : '0.95 1 0%', minWidth: 0 }}>
+        <div className="special-exit-field-auth" style={{ minWidth: 0 }}>
           <input
             value={authorizedPerson}
             onChange={e => setAuthorizedPerson(e.target.value)}
@@ -2700,7 +2695,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         </div>
 
         {/* COLUMN 3: SCHEDULED TIME */}
-        <div style={{ flex: isMobile ? '1 1 calc(50% - 4px)' : '0.9 1 0%', minWidth: 0, position: 'relative' }}>
+        <div className="special-exit-field-time" style={{ minWidth: 0, position: 'relative' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 4, height: 36, width: '100%', minWidth: 0,
             padding: '0 6px', borderRadius: 10,
@@ -2730,7 +2725,7 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         </div>
 
         {/* COLUMN 4: VALIDITY DAYS (QUANTIDADE DE DIAS DE VALIDADE) */}
-        <div style={{ flex: isMobile ? '1 1 calc(50% - 4px)' : '0.95 1 0%', minWidth: 0, position: 'relative' }}>
+        <div className="special-exit-field-days" style={{ minWidth: 0, position: 'relative' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 4, height: 36, width: '100%', minWidth: 0,
             padding: '0 6px', borderRadius: 10,
@@ -2814,10 +2809,10 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
         {/* SUBMIT BUTTON: LANÇAR */}
         <button
           type="button"
+          className="special-exit-submit-btn"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
           disabled={!selectedStudent || !authorizedPerson.trim()}
           style={{
-            flex: isMobile ? '1 0 100%' : '0 0 auto',
             height: 36, padding: '0 11px', borderRadius: 10,
             background: (!selectedStudent || !authorizedPerson.trim())
               ? 'hsl(var(--bg-elevated))'
@@ -2860,18 +2855,18 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
           </div>
         </div>
 
-        <div style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          overscrollBehavior: 'contain',
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
-          alignContent: 'start',
-          alignItems: 'start',
-          gap: 8,
-          paddingRight: 4,
-        }}>
+        <div
+          className="special-exit-grid"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            alignContent: 'start',
+            alignItems: 'start',
+            paddingRight: 4,
+          }}
+        >
           {launches.map(l => (
             <div
               key={l.id}
@@ -2914,20 +2909,19 @@ const SpecialExitSticker = React.memo(function SpecialExitSticker({ showToast }:
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontWeight: 800,
-                    fontSize: 11,
+                    fontSize: 11.5,
                     color: l.confirmedOut ? '#065f46' : 'hsl(var(--text-primary))',
-                    lineHeight: 1.15,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    lineHeight: 1.2,
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
                   }}
                   title={l.studentName}
                   >
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {abbreviateStudentName(l.studentName, 22)}
+                    <span>
+                      {abbreviateStudentName(l.studentName, 30)}
                     </span>
                   </div>
                   <div style={{ fontSize: 9, color: l.confirmedOut ? '#047857' : 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.25, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
@@ -3341,7 +3335,7 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
         )}
       </div>
       
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', paddingRight: 4 }}>
+      <div className="proibidos-scroll-body" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', paddingRight: 4 }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 12, padding: '20px 0', opacity: 0.7 }}>Buscando restrições...</div>
         ) : restritos.length === 0 ? (
@@ -3349,23 +3343,29 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
             Nenhuma restrição encontrada para hoje.
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
-            gap: 8,
-          }}>
+          <div className="proibidos-grid">
             {restritos.map(aluno => (
-              <div key={aluno.id} style={{
-                background: 'hsl(var(--bg-surface))',
-                border: '1px solid rgba(239, 68, 68, 0.15)',
-                borderRadius: 12, padding: '8px 10px',
-                display: 'flex', alignItems: 'center', gap: 10,
-                boxShadow: 'var(--shadow-sm)'
-              }}>
+              <div
+                key={aluno.id}
+                className="proibidos-item"
+                style={{
+                  background: 'hsl(var(--bg-surface))',
+                  border: '1px solid rgba(239, 68, 68, 0.16)',
+                  borderRadius: 12,
+                  padding: '9px 11px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  boxShadow: 'var(--shadow-sm)',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                }}
+              >
                 <div style={{
-                  width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
+                  width: 34, height: 34, borderRadius: 9, overflow: 'hidden',
                   background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 900, color: '#ef4444', flexShrink: 0,
+                  fontSize: 12, fontWeight: 900, color: '#ef4444', flexShrink: 0, marginTop: 1,
                 }}>
                   {aluno.foto ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -3375,19 +3375,40 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={aluno.nome}>
-                    {abbreviateStudentName(aluno.nome, 22)}
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 12.5,
+                      lineHeight: 1.25,
+                      color: 'hsl(var(--text-primary))',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                    }}
+                    title={aluno.nome}
+                  >
+                    {abbreviateStudentName(aluno.nome, 32)}
                   </div>
                   {aluno.restritos.map((r: any, idx: number) => (
-                    <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
+                    <div
+                      key={idx}
+                      style={{
+                        fontSize: 11,
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '4px 6px',
+                        marginTop: 5,
+                        minWidth: 0,
+                      }}
+                    >
                       <span style={{ 
-                        fontSize: 8, 
-                        fontWeight: 700, 
+                        fontSize: 8.5, 
+                        fontWeight: 800, 
                         padding: '2px 6px', 
                         borderRadius: 4, 
                         textTransform: 'uppercase',
                         backgroundColor: 'rgba(156, 163, 175, 0.15)',
-                        color: '#6b7280',
+                        color: '#4b5563',
                         border: '1px solid rgba(156, 163, 175, 0.3)',
                         flexShrink: 0,
                       }}>
@@ -3396,25 +3417,26 @@ const ProibidosRetiradaCard = React.memo(function ProibidosRetiradaCard() {
                       <span
                         title={r.nome}
                         style={{
-                          fontWeight: 700,
-                          color: '#ef4444',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
+                          fontWeight: 800,
+                          fontSize: 11.5,
+                          lineHeight: 1.25,
+                          color: '#dc2626',
+                          overflowWrap: 'anywhere',
+                          wordBreak: 'break-word',
                           minWidth: 0,
                         }}
                       >
-                        {abbreviateStudentName(r.nome, 18)}
+                        {r.nome}
                       </span>
                       <span style={{ 
-                        fontSize: 8, 
+                        fontSize: 8.5, 
                         fontWeight: 800, 
                         padding: '2px 6px', 
                         borderRadius: 4, 
                         textTransform: 'uppercase',
                         backgroundColor: r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(249, 115, 22, 0.1)',
                         color: r.motivo === 'Proibido' ? '#ef4444' : '#f97316',
-                        border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`,
+                        border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(249, 115, 22, 0.22)'}`,
                         flexShrink: 0,
                       }}>
                         {r.motivo}
@@ -3978,14 +4000,8 @@ function ChamadasContent() {
         )}
       </div>
 
-      {/* ── 2 CARDS GRID (PROIBIDOS RETIRADA & AUTORIZAÇÃO ESPECIAL - 50% EACH) ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)',
-        gap: 20,
-        marginBottom: 28,
-        alignItems: 'stretch',
-      }}>
+      {/* ── 2 CARDS GRID (PROIBIDOS RETIRADA & AUTORIZAÇÃO ESPECIAL - ADAPTS TO TABLET/MOBILE) ── */}
+      <div className="chamada-top-cards-grid">
         {/* ── PROIBIDOS RETIRADA (50% WIDTH, INTERNAL 2-COLUMNS) ────────────── */}
         <ProibidosRetiradaCard />
 
@@ -4857,6 +4873,91 @@ function ChamadasContent() {
           }
         }
         
+        .chamada-top-cards-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 16px;
+          margin-bottom: 24px;
+          align-items: stretch;
+        }
+        @media (min-width: 880px) {
+          .chamada-top-cards-grid {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 20px;
+            margin-bottom: 28px;
+          }
+        }
+        .proibidos-scroll-body {
+          container: proibidos-panel / inline-size;
+        }
+        .proibidos-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 8px;
+          width: 100%;
+          min-width: 0;
+        }
+        @container proibidos-panel (inline-size >= 500px) {
+          .proibidos-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        .special-exit-card {
+          container: special-exit-panel / inline-size;
+        }
+        .special-exit-form {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-bottom: 10px;
+          flex-shrink: 0;
+        }
+        .special-exit-field-student,
+        .special-exit-field-auth {
+          flex: 1 1 calc(50% - 3px);
+        }
+        .special-exit-field-time,
+        .special-exit-field-days {
+          flex: 1 1 110px;
+        }
+        .special-exit-submit-btn {
+          flex: 0 0 auto;
+        }
+        @container special-exit-panel (inline-size < 380px) {
+          .special-exit-field-student,
+          .special-exit-field-auth {
+            flex: 1 1 100%;
+          }
+          .special-exit-field-time,
+          .special-exit-field-days {
+            flex: 1 1 calc(50% - 3px);
+          }
+          .special-exit-submit-btn {
+            flex: 1 0 100%;
+          }
+        }
+        @container special-exit-panel (inline-size >= 560px) {
+          .special-exit-form {
+            flex-wrap: nowrap;
+          }
+          .special-exit-field-student { flex: 1.15 1 0%; }
+          .special-exit-field-auth { flex: 0.95 1 0%; }
+          .special-exit-field-time { flex: 0.85 1 0%; }
+          .special-exit-field-days { flex: 0.95 1 0%; }
+        }
+        .special-exit-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 8px;
+          width: 100%;
+          min-width: 0;
+        }
+        @container special-exit-panel (inline-size >= 500px) {
+          .special-exit-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
         .skeleton-shimmer {
           position: relative;
           overflow: hidden;

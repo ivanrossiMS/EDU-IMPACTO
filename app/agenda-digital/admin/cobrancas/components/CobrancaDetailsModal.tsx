@@ -5,6 +5,12 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
 import {
+  isCobrancaPaidStatus,
+  resolveCobrancaPaymentTimestamp,
+  formatCobrancaDatePtBr,
+  formatCobrancaDateTimePtBr
+} from '@/lib/cobrancasUtils'
+import {
   X,
   Search,
   FileSpreadsheet,
@@ -19,7 +25,8 @@ import {
   RotateCcw,
   UserCheck,
   Calendar,
-  Users
+  Users,
+  FileText
 } from 'lucide-react'
 
 function formatBRL(val: number): string {
@@ -103,8 +110,8 @@ export function CobrancaDetailsModal({
   }, [allDestinatarios, resolveStudentInfo])
 
   const filteredList = useMemo(() => {
-    return allDestinatarios.filter((d: any) => {
-      const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED'
+    const filtered = allDestinatarios.filter((d: any) => {
+      const isPaid = isCobrancaPaidStatus(d.status)
       if (filterStatus === 'PAID' && !isPaid) return false
       if (filterStatus === 'PENDING' && isPaid) return false
 
@@ -118,6 +125,19 @@ export function CobrancaDetailsModal({
       }
       return true
     })
+
+    if (filterStatus === 'PAID') {
+      return [...filtered].sort((a: any, b: any) => {
+        const ta = resolveCobrancaPaymentTimestamp(a)
+        const tb = resolveCobrancaPaymentTimestamp(b)
+        if (ta && tb) return new Date(tb).getTime() - new Date(ta).getTime()
+        if (tb) return 1
+        if (ta) return -1
+        return resolveStudentInfo(a).nome.localeCompare(resolveStudentInfo(b).nome, 'pt-BR')
+      })
+    }
+
+    return filtered
   }, [allDestinatarios, filterStatus, filterTurma, searchTerm, resolveStudentInfo])
 
   if (typeof window === 'undefined' || !selectedGroup) return null
@@ -154,44 +174,167 @@ export function CobrancaDetailsModal({
         }}
       >
         <style>{`
+          .cobranca-table-wrapper {
+            overflow-x: auto;
+            max-inline-size: 100%;
+            width: 100%;
+          }
+          .cobranca-report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+          }
           @media print {
-            body, html { height: auto !important; overflow: visible !important; }
-            body * { visibility: hidden !important; }
-            #print-overlay, #print-overlay * { visibility: visible !important; }
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+            html, body {
+              height: auto !important;
+              overflow: visible !important;
+              background: #ffffff !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body > *:not(#print-overlay) {
+              display: none !important;
+            }
+            body * {
+              visibility: hidden !important;
+            }
+            #print-overlay, #print-overlay * {
+              visibility: visible !important;
+            }
             #print-overlay {
-              position: absolute !important;
+              position: static !important;
               left: 0 !important;
               top: 0 !important;
               width: 100% !important;
+              max-width: 100% !important;
               display: block !important;
               padding: 0 !important;
-              background: none !important;
+              margin: 0 !important;
+              background: #ffffff !important;
               backdrop-filter: none !important;
             }
             #print-modal {
               position: static !important;
               width: 100% !important;
-              max-width: none !important;
+              max-width: 100% !important;
               max-height: none !important;
               height: auto !important;
               overflow: visible !important;
               box-shadow: none !important;
+              border-radius: 0 !important;
               transform: none !important;
               padding: 0 !important;
               margin: 0 !important;
-              background: white !important;
+              background: #ffffff !important;
               display: block !important;
+              box-sizing: border-box !important;
             }
-            #print-modal-scroll {
+            #print-modal .ad-modal-header {
+              padding: 4px 0 12px !important;
+              border-bottom: 1px solid #cbd5e1 !important;
+            }
+            #print-modal .ad-modal-kpi-grid {
+              display: grid !important;
+              grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+              gap: 10px !important;
+              margin-top: 12px !important;
+            }
+            #print-modal .ad-modal-kpi-grid > div {
+              padding: 10px 12px !important;
+            }
+            #print-modal-scroll,
+            #print-modal .ad-modal-body {
               overflow: visible !important;
               max-height: none !important;
               height: auto !important;
               display: block !important;
+              padding: 0 !important;
             }
-            .no-print, .no-print * { display: none !important; }
-            table { page-break-inside: auto !important; width: 100% !important; }
-            tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-            td, th { page-break-inside: avoid !important; }
+            .cobranca-table-wrapper {
+              overflow: visible !important;
+              width: 100% !important;
+              max-inline-size: 100% !important;
+            }
+            .no-print, .no-print * {
+              display: none !important;
+            }
+            .cobranca-report-table {
+              width: 100% !important;
+              min-width: 0 !important;
+              table-layout: fixed !important;
+              border-collapse: collapse !important;
+              page-break-inside: auto !important;
+            }
+            .cobranca-report-table thead {
+              display: table-header-group !important;
+            }
+            .cobranca-report-table tr {
+              page-break-inside: avoid !important;
+              page-break-after: auto !important;
+            }
+            .cobranca-report-table th,
+            .cobranca-report-table td {
+              page-break-inside: avoid !important;
+              box-sizing: border-box !important;
+              padding: 7px 6px !important;
+              vertical-align: middle !important;
+            }
+            .cobranca-report-table thead th {
+              font-size: 9.5px !important;
+              line-height: 1.2 !important;
+              white-space: normal !important;
+            }
+            .cobranca-report-table .col-aluno {
+              width: 30% !important;
+              overflow-wrap: anywhere !important;
+              word-break: break-word !important;
+            }
+            .cobranca-report-table .col-pagador {
+              width: 24% !important;
+              overflow-wrap: anywhere !important;
+              word-break: break-word !important;
+            }
+            .cobranca-report-table .col-valor {
+              width: 12% !important;
+              white-space: nowrap !important;
+            }
+            .cobranca-report-table .col-datas {
+              width: 18% !important;
+              white-space: nowrap !important;
+            }
+            .cobranca-report-table .col-status {
+              width: 16% !important;
+            }
+            .cobranca-report-table .cobranca-student-name {
+              font-size: 11.5px !important;
+              line-height: 1.25 !important;
+            }
+            .cobranca-report-table .cobranca-turma-badge {
+              font-size: 9.5px !important;
+              padding: 1px 6px !important;
+            }
+            .cobranca-report-table .cobranca-payer-cell {
+              font-size: 11px !important;
+              line-height: 1.25 !important;
+            }
+            .cobranca-report-table .cobranca-valor-cell {
+              font-size: 11.5px !important;
+            }
+            .cobranca-report-table .cobranca-datas-cell {
+              font-size: 10.5px !important;
+              line-height: 1.3 !important;
+            }
+            .cobranca-report-table .cobranca-status-badge {
+              font-size: 10px !important;
+              padding: 3px 8px !important;
+              white-space: nowrap !important;
+            }
           }
         `}</style>
 
@@ -580,108 +723,118 @@ export function CobrancaDetailsModal({
                 </button>
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0' }}>
-                    <th style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
-                      ALUNO / TURMA
-                    </th>
-                    <th style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
-                      PAGADOR / CONFIRMAÇÃO
-                    </th>
-                    <th style={{ padding: '11px 8px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
-                      VALOR
-                    </th>
-                    <th style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
-                      DATAS
-                    </th>
-                    <th style={{ padding: '11px 8px', textAlign: 'center', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
-                      STATUS DO PAGAMENTO
-                    </th>
-                    <th
-                      className="no-print"
-                      style={{ padding: '11px 8px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: '#64748b' }}
-                    >
-                      AÇÕES & LINKS
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedList.map((d: any) => {
-                    const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED'
-                    const info = resolveStudentInfo(d)
-                    const enviadoDate = d.created_at ? new Date(d.created_at).toLocaleDateString('pt-BR') : '--'
-                    const payDate = isPaid && (d.updated_at || d.created_at)
-                      ? new Date(d.updated_at || d.created_at).toLocaleDateString('pt-BR')
-                      : null
-                    const isGenerating = Boolean(generatingLinkIds[d.id])
-                    const isToggling = Boolean(togglingStatusIds[d.id])
-                    const isCopied = copiedLinkId === d.id
+              <div className="cobranca-table-wrapper" role="region" aria-label="Relatório de cobrança por aluno" tabIndex={0}>
+                <table className="cobranca-report-table">
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0' }}>
+                      <th scope="col" className="col-aluno" style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
+                        ALUNO / TURMA
+                      </th>
+                      <th scope="col" className="col-pagador" style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
+                        PAGADOR / CONFIRMAÇÃO
+                      </th>
+                      <th scope="col" className="col-valor" style={{ padding: '11px 8px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
+                        VALOR
+                      </th>
+                      <th scope="col" className="col-datas" style={{ padding: '11px 8px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
+                        DATAS
+                      </th>
+                      <th scope="col" className="col-status" style={{ padding: '11px 8px', textAlign: 'center', fontSize: 11, fontWeight: 800, color: '#64748b' }}>
+                        STATUS DO PAGAMENTO
+                      </th>
+                      <th
+                        scope="col"
+                        className="no-print"
+                        style={{ padding: '11px 8px', textAlign: 'right', fontSize: 11, fontWeight: 800, color: '#64748b' }}
+                      >
+                        AÇÕES & LINKS
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedList.map((d: any) => {
+                      const isPaid = isCobrancaPaidStatus(d.status)
+                      const info = resolveStudentInfo(d)
+                      const enviadoDate = formatCobrancaDatePtBr(d.created_at) || '--'
+                      const paidIso = resolveCobrancaPaymentTimestamp(d)
+                      const payDate = paidIso ? formatCobrancaDatePtBr(paidIso) : null
+                      const payDateTime = paidIso ? formatCobrancaDateTimePtBr(paidIso) : null
+                      const isGenerating = Boolean(generatingLinkIds[d.id])
+                      const isToggling = Boolean(togglingStatusIds[d.id])
+                      const isCopied = copiedLinkId === d.id
 
-                    return (
-                      <tr key={d.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '12px 8px' }}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13.5 }}>{info.nome}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                      return (
+                        <tr key={d.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td className="col-aluno" style={{ padding: '12px 8px' }}>
+                            <div className="cobranca-student-name" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13.5 }}>{info.nome}</div>
                             {info.turma && info.turma !== '--' && (
-                              <span
-                                style={{
-                                  fontSize: 10.5,
-                                  fontWeight: 800,
-                                  color: '#2563eb',
-                                  background: '#eff6ff',
-                                  padding: '1px 7px',
-                                  borderRadius: 6
-                                }}
-                              >
-                                {info.turma}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                                <span
+                                  className="cobranca-turma-badge"
+                                  style={{
+                                    fontSize: 10.5,
+                                    fontWeight: 800,
+                                    color: '#2563eb',
+                                    background: '#eff6ff',
+                                    padding: '1px 7px',
+                                    borderRadius: 6
+                                  }}
+                                >
+                                  {info.turma}
+                                </span>
+                              </div>
                             )}
-                            {info.responsavel && (
-                              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                                Resp: {info.responsavel}
-                              </span>
+                          </td>
+
+                          <td className="col-pagador cobranca-payer-cell" style={{ padding: '12px 8px', fontSize: 13, color: '#475569', fontWeight: 600 }}>
+                            {d.pagador_usuario_nome ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                                <CheckCircle2 size={13} color="#10b981" style={{ flexShrink: 0 }} />
+                                <span style={{ minWidth: 0 }}>{d.pagador_usuario_nome}</span>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>--</span>
                             )}
-                          </div>
-                        </td>
+                          </td>
 
-                        <td style={{ padding: '12px 8px', fontSize: 13, color: '#475569', fontWeight: 600 }}>
-                          {d.pagador_usuario_nome ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <CheckCircle2 size={13} color="#10b981" />
-                              <span>{d.pagador_usuario_nome}</span>
-                            </div>
-                          ) : (
-                            <span style={{ color: '#94a3b8' }}>--</span>
-                          )}
-                        </td>
+                          <td className="col-valor cobranca-valor-cell" style={{ padding: '12px 8px', fontSize: 13.5, fontWeight: 800, color: '#0f172a', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            R$ {formatBRL(m.valorUnitario)}
+                          </td>
 
-                        <td style={{ padding: '12px 8px', fontSize: 13.5, fontWeight: 800, color: '#0f172a', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          R$ {formatBRL(m.valorUnitario)}
-                        </td>
+                          <td className="col-datas cobranca-datas-cell" style={{ padding: '12px 8px', fontSize: 12, color: '#64748b' }}>
+                            <div>Envio: {enviadoDate}</div>
+                            {isPaid && (
+                              payDate ? (
+                                <div
+                                  style={{ color: '#059669', fontWeight: 700 }}
+                                  title={payDateTime ? `Pago em ${payDateTime}` : undefined}
+                                >
+                                  Pgto: {payDate}
+                                </div>
+                              ) : (
+                                <div style={{ color: '#94a3b8', fontWeight: 600 }}>
+                                  Pgto: Não informada
+                                </div>
+                              )
+                            )}
+                          </td>
 
-                        <td style={{ padding: '12px 8px', fontSize: 12, color: '#64748b' }}>
-                          <div>Envio: {enviadoDate}</div>
-                          {payDate && (
-                            <div style={{ color: '#059669', fontWeight: 700 }}>Pgto: {payDate}</div>
-                          )}
-                        </td>
-
-                        <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              padding: '4px 11px',
-                              background: isPaid ? '#dcfce7' : m.isOverdue ? '#fee2e2' : '#fef3c7',
-                              color: isPaid ? '#15803d' : m.isOverdue ? '#b91c1c' : '#b45309',
-                              borderRadius: 20,
-                              fontSize: 11.5,
-                              fontWeight: 800,
-                              display: 'inline-block'
-                            }}
-                          >
-                            {isPaid ? 'Pago' : m.isOverdue ? 'Vencido' : 'Aguardando'}
-                          </span>
-                        </td>
+                          <td className="col-status" style={{ padding: '12px 8px', textAlign: 'center' }}>
+                            <span
+                              className="cobranca-status-badge"
+                              style={{
+                                padding: '4px 11px',
+                                background: isPaid ? '#dcfce7' : m.isOverdue ? '#fee2e2' : '#fef3c7',
+                                color: isPaid ? '#15803d' : m.isOverdue ? '#b91c1c' : '#b45309',
+                                borderRadius: 20,
+                                fontSize: 11.5,
+                                fontWeight: 800,
+                                display: 'inline-block'
+                              }}
+                            >
+                              {isPaid ? 'Pago' : m.isOverdue ? 'Vencido' : 'Aguardando'}
+                            </span>
+                          </td>
 
                         <td className="no-print" style={{ padding: '12px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
@@ -709,84 +862,81 @@ export function CobrancaDetailsModal({
                               {isPaid ? 'Reabrir' : 'Dar Baixa'}
                             </button>
 
-                            {!isPaid && (
-                              <>
-                                {/* WhatsApp Reminder */}
-                                <button
-                                  type="button"
-                                  disabled={isGenerating}
-                                  onClick={() => onWhatsAppReminder(d, selectedGroup.cobranca)}
-                                  style={{
-                                    width: 30,
-                                    height: 30,
-                                    borderRadius: 8,
-                                    border: '1px solid #86efac',
-                                    background: '#dcfce7',
-                                    color: '#15803d',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Enviar cobrança com link via WhatsApp"
-                                >
-                                  <MessageCircle size={14} />
-                                </button>
+                            {/* WhatsApp Reminder / Receipt */}
+                            <button
+                              type="button"
+                              disabled={isGenerating}
+                              onClick={() => onWhatsAppReminder(d, selectedGroup.cobranca)}
+                              style={{
+                                width: 30,
+                                height: 30,
+                                borderRadius: 8,
+                                border: '1px solid #86efac',
+                                background: '#dcfce7',
+                                color: '#15803d',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}
+                              title={isPaid ? 'Enviar confirmação e comprovante via WhatsApp' : 'Enviar cobrança com link via WhatsApp'}
+                            >
+                              <MessageCircle size={14} />
+                            </button>
 
-                                {/* Abrir Link Mercado Pago */}
-                                <button
-                                  type="button"
-                                  disabled={isGenerating}
-                                  onClick={() => onOpenPaymentLink(d)}
-                                  style={{
-                                    padding: '5px 10px',
-                                    borderRadius: 8,
-                                    border: '1px solid #bfdbfe',
-                                    background: '#eff6ff',
-                                    color: '#1d4ed8',
-                                    fontSize: 11.5,
-                                    fontWeight: 800,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    cursor: isGenerating ? 'wait' : 'pointer'
-                                  }}
-                                  title="Abrir link de pagamento Mercado Pago"
-                                >
-                                  <ExternalLink size={12} />
-                                  {isGenerating ? 'Gerando...' : 'Fatura'}
-                                </button>
+                            {/* Abrir Comprovante (se pago) ou Link Mercado Pago (se pendente) */}
+                            <button
+                              type="button"
+                              disabled={isGenerating}
+                              onClick={() => onOpenPaymentLink(d)}
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: 8,
+                                border: isPaid ? '1px solid #86efac' : '1px solid #bfdbfe',
+                                background: isPaid ? '#f0fdf4' : '#eff6ff',
+                                color: isPaid ? '#15803d' : '#1d4ed8',
+                                fontSize: 11.5,
+                                fontWeight: 800,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                cursor: isGenerating ? 'wait' : 'pointer'
+                              }}
+                              title={isPaid ? 'Abrir comprovante de pagamento' : 'Abrir link de pagamento Mercado Pago'}
+                            >
+                              {isPaid ? <FileText size={12} /> : <ExternalLink size={12} />}
+                              {isGenerating ? 'Gerando...' : isPaid ? 'Comprovante' : 'Fatura'}
+                            </button>
 
-                                {/* Copiar Link */}
-                                <button
-                                  type="button"
-                                  disabled={isGenerating}
-                                  onClick={() => onCopyPaymentLink(d)}
-                                  style={{
-                                    width: 30,
-                                    height: 30,
-                                    borderRadius: 8,
-                                    border: isCopied ? '1px solid #86efac' : '1px solid #cbd5e1',
-                                    background: isCopied ? '#dcfce7' : '#ffffff',
-                                    color: isCopied ? '#15803d' : '#475569',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Copiar link de pagamento"
-                                >
-                                  {isCopied ? <Check size={13} /> : <Copy size={13} />}
-                                </button>
-                              </>
-                            )}
+                            {/* Copiar Link (comprovante se pago, fatura se pendente) */}
+                            <button
+                              type="button"
+                              disabled={isGenerating}
+                              onClick={() => onCopyPaymentLink(d)}
+                              style={{
+                                width: 30,
+                                height: 30,
+                                borderRadius: 8,
+                                border: isCopied ? '1px solid #86efac' : '1px solid #cbd5e1',
+                                background: isCopied ? '#dcfce7' : '#ffffff',
+                                color: isCopied ? '#15803d' : '#475569',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer'
+                              }}
+                              title={isPaid ? 'Copiar link do comprovante de pagamento' : 'Copiar link de pagamento'}
+                            >
+                              {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                            </button>
                           </div>
                         </td>
                       </tr>
                     )
                   })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 

@@ -31,6 +31,11 @@ import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/api/apiClient'
 import {
+  isCobrancaPaidStatus,
+  resolveCobrancaPaymentTimestamp,
+  formatCobrancaDatePtBr
+} from '@/lib/cobrancasUtils'
+import {
   NovaCobrancaModal,
   EditarCobrancaModal,
   ErpMensalidadesView
@@ -112,12 +117,13 @@ export default function ADAdminCobrancas() {
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(10)
 
-  const fetchChargesData = useCallback(async (silent = false) => {
+  const fetchChargesData = useCallback(async (silent = false, syncMp = false) => {
     if (!silent) setLoading(true)
     else setIsRefreshing(true)
 
     try {
-      const res = await apiFetch('/api/cobrancas')
+      const url = syncMp ? '/api/cobrancas?sync_mp=1' : '/api/cobrancas'
+      const res = await apiFetch(url)
       if (res.ok) {
         const data = await res.json()
         setCobrancasRows(data.cobrancas || [])
@@ -277,7 +283,7 @@ export default function ADAdminCobrancas() {
       const valorUnitario = Number(grp.cobranca?.valor || 0)
       const totalEnviados = grp.destinatarios.length
       const totalPagos = grp.destinatarios.filter(
-        (d: any) => d.status === 'CONFIRMED' || d.status === 'RECEIVED'
+        (d: any) => isCobrancaPaidStatus(d.status)
       ).length
       const totalAguardando = Math.max(0, totalEnviados - totalPagos)
 
@@ -467,16 +473,33 @@ export default function ADAdminCobrancas() {
     }
   }
 
+  const getReceiptUrlForDest = (dest: any): string | null => {
+    if (!dest) return null
+    const rawPath =
+      dest.receipt_url ||
+      (dest.id ? `/recibo/cobranca/${encodeURIComponent(String(dest.id))}` : null)
+    if (!rawPath) return null
+    if (typeof window !== 'undefined' && rawPath.startsWith('/')) {
+      return new URL(rawPath, window.location.origin).toString()
+    }
+    return rawPath
+  }
+
   const handleOpenPaymentLink = async (dest: any) => {
     if (!dest) return
-    if (dest.url_pagamento) {
-      window.open(dest.url_pagamento, '_blank', 'noopener,noreferrer')
+    const isPaid = isCobrancaPaidStatus(dest.status)
+    if (isPaid) {
+      const receiptUrl = getReceiptUrlForDest(dest)
+      if (receiptUrl) {
+        window.open(receiptUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
+      toast.info('Esta cobrança já está quitada.')
       return
     }
 
-    const isPaid = dest.status === 'CONFIRMED' || dest.status === 'RECEIVED'
-    if (isPaid) {
-      toast.info('Esta cobrança já está quitada.')
+    if (dest.url_pagamento) {
+      window.open(dest.url_pagamento, '_blank', 'noopener,noreferrer')
       return
     }
 
@@ -496,13 +519,18 @@ export default function ADAdminCobrancas() {
 
   const handleCopyPaymentLink = async (dest: any) => {
     if (!dest) return
-    const url = dest.url_pagamento ? String(dest.url_pagamento) : await ensurePaymentLink(dest)
+    const isPaid = isCobrancaPaidStatus(dest.status)
+    const url = isPaid
+      ? getReceiptUrlForDest(dest)
+      : dest.url_pagamento
+        ? String(dest.url_pagamento)
+        : await ensurePaymentLink(dest)
     if (!url) return
 
     try {
       await navigator.clipboard.writeText(url)
       setCopiedLinkId(dest.id)
-      toast.success('Link de pagamento copiado!')
+      toast.success(isPaid ? 'Link do comprovante copiado!' : 'Link de pagamento copiado!')
       setTimeout(() => {
         setCopiedLinkId(prev => (prev === dest.id ? null : prev))
       }, 2200)
@@ -514,14 +542,21 @@ export default function ADAdminCobrancas() {
   const handleWhatsAppReminder = async (dest: any, cobranca: any) => {
     if (!dest) return
     const info = resolveStudentInfo(dest)
-    const url = dest.url_pagamento ? String(dest.url_pagamento) : await ensurePaymentLink(dest)
-    if (!url) return
-
+    const isPaid = isCobrancaPaidStatus(dest.status)
     const vencFmt = cobranca?.vencimento
       ? new Date(cobranca.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
       : '--'
     const valorFmt = formatBRL(Number(cobranca?.valor || 0))
-    const msg = `Olá${info.responsavel ? `, *${info.responsavel}*` : ''}! Tudo bem?\n\nSegue o link para pagamento da cobrança escolar referente ao(à) aluno(a) *${info.nome}*:\n\n📌 *Motivo:* ${cobranca?.titulo || 'Cobrança Escolar'}\n💰 *Valor:* R$ ${valorFmt}\n📅 *Vencimento:* ${vencFmt}\n\n🔗 *Link seguro (Pix ou Cartão):*\n${url}`
+
+    let msg = ''
+    if (isPaid) {
+      const receiptUrl = getReceiptUrlForDest(dest)
+      msg = `Olá${info.responsavel ? `, *${info.responsavel}*` : ''}! Tudo bem?\n\nConfirmamos o recebimento do pagamento da cobrança escolar referente ao(à) aluno(a) *${info.nome}*:\n\n📌 *Motivo:* ${cobranca?.titulo || 'Cobrança Escolar'}\n💰 *Valor:* R$ ${valorFmt}${receiptUrl ? `\n\n🧾 *Comprovante de pagamento:*\n${receiptUrl}` : ''}\n\nAgradecemos pela confirmação!`
+    } else {
+      const url = dest.url_pagamento ? String(dest.url_pagamento) : await ensurePaymentLink(dest)
+      if (!url) return
+      msg = `Olá${info.responsavel ? `, *${info.responsavel}*` : ''}! Tudo bem?\n\nSegue o link para pagamento da cobrança escolar referente ao(à) aluno(a) *${info.nome}*:\n\n📌 *Motivo:* ${cobranca?.titulo || 'Cobrança Escolar'}\n💰 *Valor:* R$ ${valorFmt}\n📅 *Vencimento:* ${vencFmt}\n\n🔗 *Link seguro (Pix ou Cartão):*\n${url}`
+    }
 
     const digits = (info.telefone || '').replace(/\D/g, '')
     const phoneParam = digits.length >= 10 ? (digits.startsWith('55') ? digits : `55${digits}`) : ''
@@ -536,7 +571,7 @@ export default function ADAdminCobrancas() {
     if (!dest?.id) return
     setTogglingStatusIds(prev => ({ ...prev, [dest.id]: true }))
     try {
-      const isPaid = dest.status === 'CONFIRMED' || dest.status === 'RECEIVED'
+      const isPaid = isCobrancaPaidStatus(dest.status)
       const novoStatus = isPaid ? 'PENDING' : 'RECEIVED'
       const res = await apiFetch('/api/cobrancas', {
         method: 'PATCH',
@@ -640,13 +675,11 @@ export default function ADAdminCobrancas() {
     }
 
     const rows = targetList.map((d: any) => {
-      const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED'
+      const isPaid = isCobrancaPaidStatus(d.status)
       const info = resolveStudentInfo(d)
-      const enviadoEm = d.created_at ? new Date(d.created_at).toLocaleDateString('pt-BR') : '--'
-      const dataPgto =
-        isPaid && (d.updated_at || d.created_at)
-          ? new Date(d.updated_at || d.created_at).toLocaleDateString('pt-BR')
-          : '--'
+      const enviadoEm = formatCobrancaDatePtBr(d.created_at) || '--'
+      const paidIso = resolveCobrancaPaymentTimestamp(d)
+      const dataPgto = paidIso ? formatCobrancaDatePtBr(paidIso) || '--' : '--'
       const statusLabel = isPaid ? 'Pago' : d.status === 'PENDING' ? 'Aguardando' : d.status || 'Pendente'
 
       return {
@@ -662,13 +695,13 @@ export default function ADAdminCobrancas() {
         Vencimento: vencimentoStr,
         'Data Pgto.': dataPgto,
         'Status do Pagamento': statusLabel,
-        'Link de Pagamento': d.url_pagamento || '--'
+        'Link de Pagamento / Comprovante': isPaid ? (getReceiptUrlForDest(d) || '--') : (d.url_pagamento || '--')
       }
     })
 
     const totalDest = allDestinatarios.length
     const totalPagos = allDestinatarios.filter(
-      (d: any) => d.status === 'CONFIRMED' || d.status === 'RECEIVED'
+      (d: any) => isCobrancaPaidStatus(d.status)
     ).length
     const totalAguardando = totalDest - totalPagos
 
@@ -756,8 +789,9 @@ export default function ADAdminCobrancas() {
         : '--'
 
       ;(group.destinatarios || []).forEach((d: any) => {
-        const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED'
+        const isPaid = isCobrancaPaidStatus(d.status)
         const info = resolveStudentInfo(d)
+        const paidIso = resolveCobrancaPaymentTimestamp(d)
         todosDestinatarios.push({
           'Cobrança / Motivo': cob.titulo || 'Sem Título',
           'Destinatário (Aluno)': info.nome,
@@ -767,14 +801,11 @@ export default function ADAdminCobrancas() {
           'Valor Unitário (R$)': valUnit,
           'Valor Pago (R$)': isPaid ? valUnit : 0,
           'Valor em Aberto (R$)': isPaid ? 0 : valUnit,
-          'Enviado em': d.created_at ? new Date(d.created_at).toLocaleDateString('pt-BR') : '--',
+          'Enviado em': formatCobrancaDatePtBr(d.created_at) || '--',
           Vencimento: venc,
-          'Data Pgto.':
-            isPaid && (d.updated_at || d.created_at)
-              ? new Date(d.updated_at || d.created_at).toLocaleDateString('pt-BR')
-              : '--',
+          'Data Pgto.': paidIso ? formatCobrancaDatePtBr(paidIso) || '--' : '--',
           'Status do Pagamento': isPaid ? 'Pago' : d.status === 'PENDING' ? 'Aguardando' : d.status || 'Pendente',
-          'Link de Pagamento': d.url_pagamento || '--'
+          'Link de Pagamento / Comprovante': isPaid ? (getReceiptUrlForDest(d) || '--') : (d.url_pagamento || '--')
         })
       })
     })
@@ -1080,7 +1111,7 @@ export default function ADAdminCobrancas() {
         <div className="ad-cobrancas-top-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <button
             type="button"
-            onClick={() => fetchChargesData(true)}
+            onClick={() => fetchChargesData(true, true)}
             disabled={isRefreshing || loading}
             style={{
               padding: '10px 14px',

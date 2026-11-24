@@ -5,7 +5,8 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData, EventoAgenda } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, useRef, use } from 'react'
-import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Eye } from 'lucide-react'
+import { CalendarMonthToolbar } from '@/app/agenda-digital/components/agenda/CalendarMonthToolbar'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { 
   getAlunoTodasTurmasEGrupos, 
@@ -664,159 +665,19 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         </div>
       </div>
 
-      {/* 📅 BARRA DO MÊS CENTRALIZADA */}
-      <div style={{
-        background: '#fff',
-        borderRadius: 20,
-        padding: '10px 16px',
-        marginBottom: 20,
-        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.03)',
-        border: '1px solid #f1f5f9',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        gap: 10,
-        position: 'relative',
-        width: '100%',
-        maxWidth: '100%',
-        boxSizing: 'border-box'
-      }}>
-        {/* Month Switcher Controls */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          background: '#f8fafc',
-          padding: '5px 8px',
-          borderRadius: 16,
-          border: '1px solid #e2e8f0',
-          maxWidth: '100%',
-          boxSizing: 'border-box'
-        }}>
-          <button
-            onClick={() => setViewDate(new Date(year, month - 1, 1))}
-            style={{
-              border: 'none',
-              background: '#fff',
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              color: '#475569',
-              transition: 'all 0.15s ease'
-            }}
-            title="Mês anterior"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          
-          <div style={{
-            padding: '0 14px',
-            fontSize: 15,
-            fontWeight: 700,
-            color: '#0f172a',
-            minWidth: 140,
-            textAlign: 'center',
-            letterSpacing: '-0.01em',
-            fontFamily: 'Outfit, sans-serif'
-          }}>
-            {MESES[month]} {year}
-          </div>
-
-          <button
-            onClick={() => setViewDate(new Date(year, month + 1, 1))}
-            style={{
-              border: 'none',
-              background: '#fff',
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              color: '#475569',
-              transition: 'all 0.15s ease'
-            }}
-            title="Próximo mês"
-          >
-            <ChevronRight size={16} />
-          </button>
-
-          {(currentYearNow !== year || currentMonthNow !== month) && (
-            <button
-              onClick={() => setViewDate(new Date(currentYearNow, currentMonthNow, 1))}
-              style={{
-                marginLeft: 4,
-                padding: '4px 10px',
-                borderRadius: 10,
-                background: '#e0e7ff',
-                color: '#4338ca',
-                fontSize: 11.5,
-                fontWeight: 700,
-                border: '1px solid #c7d2fe',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Voltar para o mês atual"
-            >
-              Hoje
-            </button>
-          )}
-        </div>
-
-        {/* Botão Mostrar Todos / Ocultar Passados */}
-        <button
-          type="button"
-          onClick={() => setMostrarTodos(prev => !prev)}
-          style={{
-            height: 46,
-            padding: '0 16px',
-            borderRadius: 16,
-            background: mostrarTodos
-              ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
-              : '#f8fafc',
-            color: mostrarTodos ? '#ffffff' : '#4f46e5',
-            border: mostrarTodos ? '1px solid #4f46e5' : '1px solid #e2e8f0',
-            fontSize: 13,
-            fontWeight: 700,
-            fontFamily: 'Outfit, sans-serif',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: mostrarTodos
-              ? '0 4px 12px rgba(99, 102, 241, 0.25)'
-              : '0 1px 3px rgba(0, 0, 0, 0.03)',
-            transition: 'all 0.2s ease',
-            whiteSpace: 'nowrap',
-            boxSizing: 'border-box'
-          }}
-          title={mostrarTodos ? 'Ocultar eventos que já passaram' : 'Mostrar todos os eventos do mês (incluindo realizados)'}
-        >
-          {mostrarTodos ? <EyeOff size={15} /> : <Eye size={15} />}
-          <span>{mostrarTodos ? 'Ocultar passados' : 'Mostrar todos'}</span>
-          {eventosPassadosCount > 0 && (
-            <span style={{
-              padding: '2px 7px',
-              borderRadius: 999,
-              fontSize: 11,
-              fontWeight: 800,
-              background: mostrarTodos ? 'rgba(255, 255, 255, 0.22)' : 'rgba(99, 102, 241, 0.12)',
-              color: mostrarTodos ? '#ffffff' : '#4f46e5',
-              lineHeight: 1.2
-            }}>
-              {meventosNoMes.length}
-            </span>
-          )}
-        </button>
-      </div>
+      {/* 📅 BARRA DO MÊS E FILTRO LADO A LADO */}
+      <CalendarMonthToolbar
+        year={year}
+        month={month}
+        isCurrentMonth={currentYearNow === year && currentMonthNow === month}
+        mostrarTodos={mostrarTodos}
+        eventosPassadosCount={eventosPassadosCount}
+        totalEventosNoMes={meventosNoMes.length}
+        onPrevMonth={() => setViewDate(new Date(year, month - 1, 1))}
+        onNextMonth={() => setViewDate(new Date(year, month + 1, 1))}
+        onToday={() => setViewDate(new Date(currentYearNow, currentMonthNow, 1))}
+        onToggleMostrarTodos={() => setMostrarTodos(prev => !prev)}
+      />
 
       {/* 🚀 LAYOUT PRINCIPAL EM LISTA (2 COLUNAS: LISTA DE EVENTOS + CARD DE ANIVERSARIANTES) */}
       <div className="ad-calendar-main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 24, alignItems: 'start', width: '100%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>

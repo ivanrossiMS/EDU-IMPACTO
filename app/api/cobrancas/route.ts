@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { resolveUserRole } from '@/lib/server/authGuard'
 import { getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
+import { isCobrancaPaidStatus } from '@/lib/cobrancasUtils'
+import {
+  enrichDestinatariosWithPaymentDates,
+  reconcilePendingMercadoPagoPayments
+} from '@/lib/server/mercadopagoSync'
+import { buildCobrancaReceiptPath } from '@/lib/server/receiptToken'
 import {
   getAlunoTurmaCursando,
   getAlunoNomesTurmasEGrupos,
@@ -278,6 +284,32 @@ function extractStudentFoto(a: any): string | null {
   return f ? String(f) : null
 }
 
+async function fetchAllTableRows(table: string, selectCols = '*', maxRows = 10000): Promise<any[]> {
+  const allRows: any[] = []
+  const pageSize = 1000
+  let from = 0
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(selectCols)
+      .range(from, from + pageSize - 1)
+
+    if (error) {
+      console.error(`Erro ao buscar lote de ${table}:`, error)
+      break
+    }
+    if (!data || data.length === 0) break
+
+    allRows.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+    if (from >= maxRows) break
+  }
+
+  return allRows
+}
+
 async function fetchAllDestinatarios() {
   const allRows: any[] = []
   const pageSize = 1000
@@ -315,8 +347,18 @@ export async function GET(request: Request) {
 
     const reqUrl = new URL(request.url)
     const comunicadoIdParam = (reqUrl.searchParams.get('comunicado_id') || '').trim()
+    const syncMp = reqUrl.searchParams.get('sync_mp') === '1'
 
-    const [cobrancasRes, destinatariosAll, alunosRes, gruposRes, turmasRes] = await Promise.all([
+    const [
+      cobrancasRes,
+      destinatariosAll,
+      allAlunosRows,
+      gruposRes,
+      turmasRes,
+      alunoRespRows,
+      responsaveisRows,
+      systemUsersRows
+    ] = await Promise.all([
       comunicadoIdParam
         ? supabase
             .from('agenda_cobrancas')
@@ -328,16 +370,88 @@ export async function GET(request: Request) {
             .select('*')
             .order('created_at', { ascending: false }),
       comunicadoIdParam ? Promise.resolve([] as any[]) : fetchAllDestinatarios(),
-      supabase
-        .from('alunos')
-        .select('id, nome, turma, matricula, email, status, dados'),
+      fetchAllTableRows('alunos', 'id, nome, turma, matricula, email, telefone, responsavel, responsavel_financeiro, responsavel_pedagogico, status, dados'),
       supabase
         .from('agenda_grupos')
         .select('id, dados'),
       supabase
         .from('turmas')
-        .select('id, nome, codigo, ano, turno, serie, dados')
+        .select('id, nome, codigo, ano, turno, serie, dados'),
+      fetchAllTableRows('aluno_responsavel', 'aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, prioridade'),
+      fetchAllTableRows('responsaveis', 'id, nome, email, telefone, celular, dados, auth_id'),
+      fetchAllTableRows('system_users', 'id, nome, email, auth_id')
     ])
+
+    const alunosRes = { data: allAlunosRows }
+
+    // Mapear responsáveis relacionais (aluno_responsavel -> responsaveis) e auth_id -> nome
+    const responsaveisById = new Map<string, any>()
+    const userNameByAuthId = new Map<string, string>()
+
+    for (const r of responsaveisRows || []) {
+      if (!r) continue
+      const rId = String(r.id || '').trim()
+      if (rId) responsaveisById.set(rId, r)
+      const rNome = String(r.nome || r.dados?.nome || '').trim()
+      if (r.auth_id && rNome) {
+        userNameByAuthId.set(String(r.auth_id).trim(), rNome)
+      }
+      if (r.email && rNome) {
+        userNameByAuthId.set(`email:${String(r.email).trim().toLowerCase()}`, rNome)
+      }
+    }
+
+    for (const su of systemUsersRows || []) {
+      if (!su) continue
+      const suNome = String(su.nome || '').trim()
+      if (!suNome) continue
+      if (su.auth_id) userNameByAuthId.set(String(su.auth_id).trim(), suNome)
+      if (su.id) userNameByAuthId.set(String(su.id).trim(), suNome)
+      if (su.email) userNameByAuthId.set(`email:${String(su.email).trim().toLowerCase()}`, suNome)
+    }
+
+    const linkedRespsByAlunoId = new Map<string, any[]>()
+    for (const link of alunoRespRows || []) {
+      if (!link) continue
+      const resp = responsaveisById.get(String(link.responsavel_id || '').trim())
+      if (!resp) continue
+      const cleanAlunoId = normalizeId(link.aluno_id)
+      const rawAlunoId = String(link.aluno_id || '').trim()
+      const respNome = String(resp.nome || resp.dados?.nome || '').trim()
+      if (!respNome && !resp.telefone && !resp.celular && !resp.email) continue
+
+      const hydratedResp = {
+        id: resp.id,
+        nome: respNome,
+        email: String(resp.email || resp.dados?.email || '').trim(),
+        telefone: String(resp.telefone || resp.celular || resp.dados?.telefone || resp.dados?.celular || '').trim(),
+        celular: String(resp.celular || resp.telefone || resp.dados?.celular || '').trim(),
+        cpf: String(resp.dados?.cpf || resp.dados?.documento || '').trim(),
+        parentesco: String(link.parentesco || '').trim(),
+        isFinanceiro: Boolean(link.resp_financeiro),
+        respFinanceiro: Boolean(link.resp_financeiro),
+        isPedagogico: Boolean(link.resp_pedagogico),
+        respPedagogico: Boolean(link.resp_pedagogico),
+        prioridade: Number(link.prioridade || 0),
+        dados: resp.dados || {}
+      }
+
+      for (const key of [cleanAlunoId, rawAlunoId].filter(Boolean)) {
+        const list = linkedRespsByAlunoId.get(key) || []
+        if (!list.some(item => String(item.id) === String(hydratedResp.id))) {
+          list.push(hydratedResp)
+          linkedRespsByAlunoId.set(key, list)
+        }
+      }
+    }
+
+    for (const [, list] of linkedRespsByAlunoId.entries()) {
+      list.sort((a, b) => {
+        if (a.isFinanceiro !== b.isFinanceiro) return a.isFinanceiro ? -1 : 1
+        if (a.isPedagogico !== b.isPedagogico) return a.isPedagogico ? -1 : 1
+        return (a.prioridade || 0) - (b.prioridade || 0)
+      })
+    }
 
     const allTurmas = turmasRes.data || []
     const allGrupos = gruposRes.data || []
@@ -575,17 +689,27 @@ export async function GET(request: Request) {
 
     for (const a of alunosRes.data || []) {
       const cleanId = normalizeId(a.id)
+      const linkedResps =
+        linkedRespsByAlunoId.get(cleanId) ||
+        linkedRespsByAlunoId.get(String(a.id)) ||
+        []
+      const existingDadosResps = Array.isArray(a.dados?.responsaveis) ? a.dados.responsaveis : []
+      const enrichedAluno = {
+        ...a,
+        responsaveis: linkedResps.length > 0 ? linkedResps : existingDadosResps
+      }
+
       const nome = String(a.nome || a.dados?.nome || '').trim()
       const grupos = gruposByAlunoId[cleanId] || []
-      const turma = extractStudentTurma(a, turmaMap, allTurmas, allGrupos) || grupos[0] || ''
+      const turma = extractStudentTurma(enrichedAluno, turmaMap, allTurmas, allGrupos) || grupos[0] || ''
       const matricula = String(a.matricula || a.dados?.matricula || '').trim()
-      const responsavel = extractStudentResponsavel(a)
-      const cpfResponsavel = extractStudentResponsavelCpf(a)
-      const parentesco = extractStudentResponsavelParentesco(a)
-      const telefone = extractStudentPhone(a)
-      const email = extractStudentResponsavelEmail(a)
-      const foto = extractStudentFoto(a)
-      const ativo = isStudentActive(a)
+      const responsavel = extractStudentResponsavel(enrichedAluno)
+      const cpfResponsavel = extractStudentResponsavelCpf(enrichedAluno)
+      const parentesco = extractStudentResponsavelParentesco(enrichedAluno)
+      const telefone = extractStudentPhone(enrichedAluno)
+      const email = extractStudentResponsavelEmail(enrichedAluno)
+      const foto = extractStudentFoto(enrichedAluno)
+      const ativo = isStudentActive(enrichedAluno)
 
       if (turma) turmasSet.add(turma)
       if (ativo && cleanId && nome) {
@@ -604,6 +728,7 @@ export async function GET(request: Request) {
         parentesco,
         telefone,
         email,
+        responsaveis: linkedResps,
         foto,
         ativo
       }
@@ -613,6 +738,32 @@ export async function GET(request: Request) {
       if (nome) {
         alunosDirectory[nome.toLowerCase()] = entry
       }
+    }
+
+    // Se solicitado (?sync_mp=1), reconcilia pagamentos pendentes que já possuem link gerado no Mercado Pago
+    const cobrancasById = new Map<string, any>(
+      (cobrancas || []).map((c: any) => [String(c.id), c])
+    )
+    if (syncMp && destinatarios.length > 0) {
+      destinatarios = await reconcilePendingMercadoPagoPayments(destinatarios, cobrancasById, supabase)
+    }
+
+    // Garante que todos os registros pagos via Mercado Pago possuam a data real de pagamento (date_approved),
+    // nunca caindo em created_at (data de envio)
+    if (destinatarios.length > 0) {
+      destinatarios = await enrichDestinatariosWithPaymentDates(destinatarios, supabase, {
+        persistToDb: true
+      })
+
+      // Enriquece pagador_usuario_nome a partir de pagador_usuario_id caso o nome esteja ausente ou abreviado
+      destinatarios = destinatarios.map(d => {
+        if (!d || !d.pagador_usuario_id) return d
+        const authFullName = userNameByAuthId.get(String(d.pagador_usuario_id).trim())
+        if (!authFullName) return d
+        const curName = String(d.pagador_usuario_nome || '').trim()
+        const curLooksLikeHandle = !curName || (!curName.includes(' ') && authFullName.includes(' '))
+        return curLooksLikeHandle ? { ...d, pagador_usuario_nome: authFullName } : d
+      })
     }
 
     // Se filtrado por comunicado_id, anexa agenda_cobrancas_destinatarios dentro de cada cobranca
@@ -916,35 +1067,39 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'Registro de destinatário não encontrado.' }, { status: 404 })
       }
 
-      const isCurrentlyPaid = existingRow.status === 'RECEIVED' || existingRow.status === 'CONFIRMED'
+      const isCurrentlyPaid = isCobrancaPaidStatus(existingRow.status)
       const targetStatus = novo_status || (isCurrentlyPaid ? 'PENDING' : 'RECEIVED')
+      const isMarkingPaid = isCobrancaPaidStatus(targetStatus)
       const adminName = dbUser?.nome || user.user_metadata?.nome || user.email?.split('@')[0] || 'Admin'
+      const nowIso = new Date().toISOString()
 
-      const updatePayload: Record<string, any> = {
+      const basePayload: Record<string, any> = {
         status: targetStatus
       }
 
-      if ('updated_at' in existingRow) {
-        updatePayload.updated_at = new Date().toISOString()
-      }
-
-      if (targetStatus === 'RECEIVED' || targetStatus === 'CONFIRMED') {
+      if (isMarkingPaid) {
         if ('pagador_usuario_nome' in existingRow) {
-          updatePayload.pagador_usuario_nome =
+          basePayload.pagador_usuario_nome =
             observacao_pagador || existingRow.pagador_usuario_nome || `Baixa Manual (${adminName})`
         }
         if ('pagador_usuario_id' in existingRow && !existingRow.pagador_usuario_id) {
-          updatePayload.pagador_usuario_id = user.id
+          basePayload.pagador_usuario_id = user.id
         }
       } else {
         if ('pagador_usuario_nome' in existingRow && String(existingRow.pagador_usuario_nome || '').startsWith('Baixa Manual')) {
-          updatePayload.pagador_usuario_nome = null
+          basePayload.pagador_usuario_nome = null
         }
+      }
+
+      const extendedPayload: Record<string, any> = {
+        ...basePayload,
+        paid_at: isMarkingPaid ? nowIso : null,
+        updated_at: nowIso
       }
 
       let { data: updatedDest, error: errUpd } = await supabase
         .from('agenda_cobrancas_destinatarios')
-        .update(updatePayload)
+        .update(extendedPayload)
         .eq('id', destinatario_row_id)
         .select('*')
         .single()
@@ -952,7 +1107,7 @@ export async function PATCH(request: Request) {
       if (errUpd) {
         const fallback = await supabase
           .from('agenda_cobrancas_destinatarios')
-          .update({ status: targetStatus })
+          .update(basePayload)
           .eq('id', destinatario_row_id)
           .select('*')
           .single()
@@ -964,7 +1119,15 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: errUpd.message }, { status: 400 })
       }
 
-      return NextResponse.json({ success: true, destinatario: updatedDest })
+      const normalizedDest = updatedDest
+        ? {
+            ...updatedDest,
+            paid_at: 'paid_at' in updatedDest ? updatedDest.paid_at : (isMarkingPaid ? nowIso : null),
+            receipt_url: isMarkingPaid ? buildCobrancaReceiptPath(String(updatedDest.id || destinatario_row_id)) : null
+          }
+        : updatedDest
+
+      return NextResponse.json({ success: true, destinatario: normalizedDest })
     }
 
     // 3. Sincronizar / Adicionar Destinatários Faltantes na Cobrança

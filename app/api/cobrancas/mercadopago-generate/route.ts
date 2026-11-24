@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { resolveUserRole, getAuthorizedAlunoIdsForUser } from '@/lib/server/authGuard'
+import { isCobrancaPaidStatus } from '@/lib/cobrancasUtils'
+import { buildCobrancaReceiptPath } from '@/lib/server/receiptToken'
 
 export async function POST(request: Request) {
   try {
@@ -45,15 +47,14 @@ export async function POST(request: Request) {
       )
     }
 
-    if (existingDest.status === 'RECEIVED' || existingDest.status === 'CONFIRMED' || existingDest.status === 'pago') {
-      if (existingDest.url_pagamento) {
-        return NextResponse.json({
-          success: true,
-          invoiceUrl: existingDest.url_pagamento,
-          pix: null
-        })
-      }
-      return NextResponse.json({ error: 'Esta cobrança já se encontra quitada' }, { status: 400 })
+    if (isCobrancaPaidStatus(existingDest.status)) {
+      return NextResponse.json({
+        success: true,
+        alreadyPaid: true,
+        receiptUrl: buildCobrancaReceiptPath(String(existingDest.id)),
+        invoiceUrl: null,
+        pix: null
+      })
     }
 
     const rawTargetAlunoId = String(existingDest.destinatario_id || existingDest.aluno_id || '').trim()
@@ -115,26 +116,72 @@ export async function POST(request: Request) {
       }
     }
 
+    const isGeneratedByAdmin = Boolean(body.from_admin) && !isFamilyOrStudent
+
+    // Resolver o nome completo real do usuário logado (priorizando system_users -> responsaveis -> metadata -> email)
+    let loggedInUserName = String(
+      dbUser?.nome ||
+      user.user_metadata?.nome ||
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      ''
+    ).trim()
+
+    if (!isGeneratedByAdmin && (!loggedInUserName || !loggedInUserName.includes(' '))) {
+      try {
+        const safeEmail = (user.email || '').trim().replace(/"/g, '')
+        const legacyId = String(user.user_metadata?.responsavel_id || user.user_metadata?.uid_legacy || '').trim()
+        const orClauses = [`auth_id.eq."${user.id}"`]
+        if (legacyId) orClauses.push(`id.eq."${legacyId}"`)
+        if (safeEmail) orClauses.push(`email.ilike."${safeEmail}"`)
+
+        const { data: respRow } = await supabase
+          .from('responsaveis')
+          .select('nome, email, dados')
+          .or(orClauses.join(','))
+          .limit(1)
+          .maybeSingle()
+
+        const respNome = String(respRow?.nome || respRow?.dados?.nome || '').trim()
+        if (respNome) {
+          loggedInUserName = respNome
+        }
+      } catch {}
+    }
+
+    const resolvedPayerName =
+      loggedInUserName ||
+      user.email?.split('@')[0] ||
+      'Responsável'
+
     // IDEMPOTÊNCIA: Verifica se já existe preferência de pagamento gerada para este destinatário
     if (existingDest.url_pagamento && existingDest.status !== 'RECEIVED' && existingDest.status !== 'pago') {
-      return NextResponse.json({ 
-        success: true, 
+      if (!isGeneratedByAdmin && (!existingDest.pagador_usuario_id || !existingDest.pagador_usuario_nome)) {
+        const payerPatch: Record<string, any> = {}
+        if ('pagador_usuario_id' in existingDest && !existingDest.pagador_usuario_id) {
+          payerPatch.pagador_usuario_id = user.id
+        }
+        if ('pagador_usuario_nome' in existingDest && !existingDest.pagador_usuario_nome) {
+          payerPatch.pagador_usuario_nome = resolvedPayerName
+        }
+        if (Object.keys(payerPatch).length > 0) {
+          await supabase
+            .from('agenda_cobrancas_destinatarios')
+            .update(payerPatch)
+            .eq('id', existingDest.id)
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
         invoiceUrl: existingDest.url_pagamento,
         pix: null
       })
     }
 
-    const isGeneratedByAdmin = Boolean(body.from_admin) && !isFamilyOrStudent
-    const resolvedUserName =
-      dbUser?.nome ||
-      user.user_metadata?.nome ||
-      user.user_metadata?.name ||
-      existingDest.destinatario_nome ||
-      user.email?.split('@')[0] ||
-      'Cliente'
     const nome = isGeneratedByAdmin
-      ? (existingDest.destinatario_nome || resolvedUserName)
-      : resolvedUserName
+      ? (existingDest.destinatario_nome || resolvedPayerName)
+      : resolvedPayerName
 
     const rawUserEmail = String(user.email || dbUser?.email || '').trim().toLowerCase()
     const isValidExternalEmail =

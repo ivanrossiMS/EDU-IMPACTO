@@ -16,6 +16,7 @@ import { triggerHaptic } from '@/lib/utils/haptics'
 import { ImagePinchZoomModal } from '@/components/agenda/ImagePinchZoomModal'
 import { ComunicadoDestinatariosModal } from '@/components/agenda/ComunicadoDestinatariosModal'
 import { apiFetch } from '@/lib/api/apiClient'
+import { isCobrancaPaidStatus, resolveCobrancaPaymentTimestamp } from '@/lib/cobrancasUtils'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -1178,7 +1179,10 @@ export function ComunicadoViewModal({
         })
       });
       const data = await res.json();
-      if (!res.ok || data.error || !data.invoiceUrl) {
+      if (data.alreadyPaid && data.receiptUrl) {
+        fetchCobrancas();
+        window.open(data.receiptUrl, '_blank', 'noopener,noreferrer');
+      } else if (!res.ok || data.error || !data.invoiceUrl) {
         alert('Erro ao gerar cobrança: ' + (data.error || 'Não foi possível gerar o link de pagamento'));
       } else {
         setPaymentLinksMap(prev => ({ ...prev, [cob.id]: data.invoiceUrl }));
@@ -1397,12 +1401,17 @@ export function ComunicadoViewModal({
     }
 
     const statusStr = String(dest?.status || 'PENDING').toUpperCase();
-    const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED' || statusStr === 'PAID' || statusStr === 'PAGO';
-    const pagadorNome = dest?.pagador_nome || (isPaid ? (responsavel || 'Confirmado') : '');
-    const paidAt = dest?.paid_at || null;
+    const isPaid = isCobrancaPaidStatus(statusStr);
+    const pagadorNome = dest?.pagador_usuario_nome || dest?.pagador_nome || (isPaid ? (responsavel || 'Confirmado') : '');
+    const paidAt = resolveCobrancaPaymentTimestamp(dest);
     const createdAt = dest?.created_at || cob?.created_at || null;
     const asaasId = String(dest?.asaas_payment_id || '');
-    const origemPagamento = asaasId.startsWith('MP_')
+    const urlPagamento = dest?.url_pagamento || '';
+    const isMercadoPago =
+      asaasId.startsWith('MP_') ||
+      /^\d{9,}$/.test(asaasId) ||
+      urlPagamento.includes('mercadopago');
+    const origemPagamento = isMercadoPago
       ? 'Mercado Pago'
       : asaasId
       ? 'Asaas / Online'
@@ -1410,7 +1419,6 @@ export function ComunicadoViewModal({
       ? 'Baixa Manual (Secretaria)'
       : '';
     const transactionId = asaasId ? asaasId.replace(/^MP_/, '') : '';
-    const urlPagamento = dest?.url_pagamento || '';
 
     return {
       cleanId,
@@ -1507,11 +1515,15 @@ export function ComunicadoViewModal({
           ...c,
           agenda_cobrancas_destinatarios: (c.agenda_cobrancas_destinatarios || []).map((d: any) => {
             if (String(d.id) !== String(targetRowId)) return d;
+            const updatedDest = json.destinatario || {};
+            const nextStatus = updatedDest.status || json.status || d.status;
+            const nextIsPaid = isCobrancaPaidStatus(nextStatus);
             return {
               ...d,
-              status: json.status,
-              paid_at: json.status === 'PAID' ? new Date().toISOString() : null,
-              pagador_nome: json.status === 'PAID' ? (d.pagador_nome || 'Baixa Manual (Secretaria)') : null
+              ...updatedDest,
+              status: nextStatus,
+              paid_at: updatedDest.paid_at ?? (nextIsPaid ? new Date().toISOString() : null),
+              pagador_usuario_nome: updatedDest.pagador_usuario_nome ?? (nextIsPaid ? (d.pagador_usuario_nome || d.pagador_nome || 'Baixa Manual (Secretaria)') : null)
             };
           })
         };
@@ -1523,9 +1535,46 @@ export function ComunicadoViewModal({
     }
   };
 
+  const getCobReceiptUrl = (dest: any): string => {
+    if (!dest) return '';
+    const rawPath =
+      dest.receipt_url ||
+      (dest.id && !String(dest.id).startsWith('virtual_')
+        ? `/recibo/cobranca/${encodeURIComponent(String(dest.id))}`
+        : '');
+    if (!rawPath) return '';
+    if (typeof window !== 'undefined' && rawPath.startsWith('/')) {
+      return new URL(rawPath, window.location.origin).toString();
+    }
+    return rawPath;
+  };
+
   const handleOpenOrCopyCobPaymentLink = async (cob: any, dest: any, mode: 'open' | 'copy' = 'open') => {
     if (!cob?.id) return;
     const key = `link_${dest?.id || dest?.destinatario_id}`;
+    const isPaid = isCobrancaPaidStatus(dest?.status);
+
+    // Se já estiver pago, abre/copia o COMPROVANTE DE PAGAMENTO e nunca a fatura para pagar novamente
+    if (isPaid) {
+      const receiptUrl = getCobReceiptUrl(dest);
+      if (!receiptUrl) {
+        alert('Não foi possível localizar o comprovante deste pagamento. Tente clicar em Sincronizar Alunos.');
+        return;
+      }
+      if (mode === 'copy') {
+        try {
+          await navigator.clipboard.writeText(receiptUrl);
+          setCopiedLinkId(String(dest.id || dest.destinatario_id));
+          setTimeout(() => setCopiedLinkId(null), 2200);
+        } catch (_) {
+          prompt('Copie o link do comprovante abaixo:', receiptUrl);
+        }
+      } else {
+        window.open(receiptUrl, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
     const existingUrl = dest?.url_pagamento;
 
     if (existingUrl) {
@@ -1538,7 +1587,7 @@ export function ComunicadoViewModal({
           prompt('Copie o link da fatura abaixo:', existingUrl);
         }
       } else {
-        window.open(existingUrl, '_blank');
+        window.open(existingUrl, '_blank', 'noopener,noreferrer');
       }
       return;
     }
@@ -1564,6 +1613,20 @@ export function ComunicadoViewModal({
         })
       });
       const data = await res.json();
+      if (data.alreadyPaid && data.receiptUrl) {
+        const fullReceipt = typeof window !== 'undefined'
+          ? new URL(data.receiptUrl, window.location.origin).toString()
+          : data.receiptUrl;
+        if (mode === 'copy') {
+          await navigator.clipboard.writeText(fullReceipt).catch(() => prompt('Copie o link do comprovante abaixo:', fullReceipt));
+          setCopiedLinkId(String(dest.id || dest.destinatario_id));
+          setTimeout(() => setCopiedLinkId(null), 2200);
+        } else {
+          window.open(fullReceipt, '_blank', 'noopener,noreferrer');
+        }
+        return;
+      }
+
       if (!res.ok || data.error || !data.invoiceUrl) {
         alert('Não foi possível gerar a fatura: ' + (data.error || 'Verifique a configuração do Mercado Pago'));
         return;
@@ -1590,7 +1653,7 @@ export function ComunicadoViewModal({
           prompt('Copie o link da fatura abaixo:', data.invoiceUrl);
         }
       } else {
-        window.open(data.invoiceUrl, '_blank');
+        window.open(data.invoiceUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (e: any) {
       alert('Erro ao obter fatura: ' + e.message);
@@ -1614,7 +1677,8 @@ export function ComunicadoViewModal({
 
     let msg = '';
     if (info.isPaid) {
-      msg = `${saudacao}\n\nConfirmamos o recebimento do pagamento referente a *${cob.titulo}* do(a) aluno(a) *${info.nome}* (${info.turma}) no valor de *R$ ${valorFmt}*.\n\nAgradecemos pela confirmação!`;
+      const receiptUrl = getCobReceiptUrl(dest);
+      msg = `${saudacao}\n\nConfirmamos o recebimento do pagamento referente a *${cob.titulo}* do(a) aluno(a) *${info.nome}* (${info.turma}) no valor de *R$ ${valorFmt}*.${receiptUrl ? `\n\n🧾 *Comprovante de pagamento:*\n${receiptUrl}` : ''}\n\nAgradecemos pela confirmação!`;
     } else {
       msg = `${saudacao}\n\nLembramos sobre a cobrança referente a *${cob.titulo}* do(a) aluno(a) *${info.nome}* (${info.turma}).\n💰 *Valor:* R$ ${valorFmt}\n📅 *Vencimento:* ${vencFmt}${info.urlPagamento ? `\n\n🔗 *Link para pagamento:* ${info.urlPagamento}` : '\n\nO pagamento também pode ser realizado diretamente pelo aplicativo da Agenda Digital.'}\n\nQualquer dúvida, estamos à disposição!`;
     }
@@ -2010,6 +2074,66 @@ export function ComunicadoViewModal({
             background: linear-gradient(90deg, #10b981 0%, #059669 100%);
             border-radius: 999px;
             transition: inline-size 0.35s ease;
+          }
+          .cvm-cob-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-left: 3px solid #f59e0b;
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+          }
+          .cvm-cob-card:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+          }
+          .cvm-cob-card.is-paid {
+            border-color: #bbf7d0;
+            border-left-color: #16a34a;
+            background: linear-gradient(90deg, rgba(240, 253, 244, 0.65) 0%, #ffffff 34%);
+          }
+          .cvm-cob-card.is-overdue {
+            border-color: #fecaca;
+            border-left-color: #dc2626;
+          }
+          .cvm-cob-details > summary {
+            list-style: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            user-select: none;
+            padding: 1px 0;
+          }
+          .cvm-cob-details > summary::-webkit-details-marker {
+            display: none;
+          }
+          .cvm-cob-details > summary:hover {
+            color: #334155;
+          }
+          .cvm-cob-details > summary svg {
+            transition: transform 0.15s ease;
+          }
+          .cvm-cob-details[open] > summary svg {
+            transform: rotate(90deg);
+          }
+          .cvm-cob-details-grid {
+            margin-top: 6px;
+            padding: 7px 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+            font-size: 11px;
+            color: #475569;
           }
           .cvm-actions-footer {
             background: rgba(255, 255, 255, 0.95);
@@ -3179,8 +3303,40 @@ export function ComunicadoViewModal({
                           {/* Right Column: Actions */}
                           <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
                              {isPaid ? (
-                               <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
-                                  <CheckCircle2 size={18} /> Pago
+                               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                 <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, background: colors.accentBg, padding: '8px 16px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <CheckCircle2 size={18} /> Pago
+                                    </div>
+                                    {cobDest?.paid_at && (
+                                      <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>
+                                        em {new Date(cobDest.paid_at).toLocaleDateString('pt-BR')}
+                                      </span>
+                                    )}
+                                 </div>
+                                 {cobDest?.id && (
+                                   <button
+                                     type="button"
+                                     onClick={() => handleOpenOrCopyCobPaymentLink(cob, cobDest, 'open')}
+                                     style={{
+                                       background: '#059669',
+                                       color: '#fff',
+                                       border: 'none',
+                                       padding: '10px 16px',
+                                       borderRadius: 12,
+                                       fontSize: 13,
+                                       fontWeight: 700,
+                                       cursor: 'pointer',
+                                       display: 'inline-flex',
+                                       alignItems: 'center',
+                                       gap: 6,
+                                       boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
+                                     }}
+                                   >
+                                     <FileText size={16} />
+                                     Ver Comprovante
+                                   </button>
+                                 )}
                                </div>
                              ) : curPaymentLink ? (
                                 <button 
@@ -4259,6 +4415,8 @@ export function ComunicadoViewModal({
           const valorRecebido = totalPagos * valorUnit;
           const valorEsperado = totalEnviados * valorUnit;
           const valorPendente = Math.max(0, valorEsperado - valorRecebido);
+          const fmtBRL = (val: number) =>
+            Number(val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           const vencDate = activeCob.vencimento
             ? new Date(String(activeCob.vencimento).includes('T') ? activeCob.vencimento : `${activeCob.vencimento}T23:59:59`)
             : null;
@@ -4311,9 +4469,9 @@ export function ComunicadoViewModal({
                 onClick={e => e.stopPropagation()}
                 style={{
                   background: '#ffffff',
-                  borderRadius: 24,
+                  borderRadius: 20,
                   width: '100%',
-                  maxWidth: 980,
+                  maxWidth: 1040,
                   maxHeight: '90vh',
                   display: 'flex',
                   flexDirection: 'column',
@@ -4324,21 +4482,21 @@ export function ComunicadoViewModal({
               >
                 {/* Modal Header */}
                 <div style={{
-                  padding: '20px 24px',
+                  padding: '14px 20px',
                   background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
                   color: '#ffffff',
                   display: 'flex',
                   flexWrap: 'wrap',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 14,
+                  gap: 12,
                   borderBottom: '1px solid rgba(255,255,255,0.08)'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: '1 1 300px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 280px' }}>
                     <div style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 14,
+                      width: 38,
+                      height: 38,
+                      borderRadius: 11,
                       background: 'rgba(16, 185, 129, 0.18)',
                       border: '1px solid rgba(16, 185, 129, 0.35)',
                       color: '#34d399',
@@ -4347,10 +4505,10 @@ export function ComunicadoViewModal({
                       justifyContent: 'center',
                       flexShrink: 0
                     }}>
-                      <CreditCard size={22} />
+                      <CreditCard size={19} />
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
                         <span style={{
                           fontSize: 10,
                           fontWeight: 800,
@@ -4369,13 +4527,13 @@ export function ComunicadoViewModal({
                           </span>
                         )}
                       </div>
-                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {activeCob.titulo || 'Cobrança'} — R$ {valorUnit.toFixed(2).replace('.', ',')}
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {activeCob.titulo || 'Cobrança'} — R$ {fmtBRL(valorUnit)}
                       </h3>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => handleSyncCobDestinatarios(String(activeCob.id))}
@@ -4385,17 +4543,17 @@ export function ComunicadoViewModal({
                         background: 'rgba(255,255,255,0.1)',
                         color: '#f8fafc',
                         border: '1px solid rgba(255,255,255,0.18)',
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        fontSize: 12,
+                        padding: '6px 10px',
+                        borderRadius: 9,
+                        fontSize: 11.5,
                         fontWeight: 700,
                         cursor: isSyncingThis ? 'wait' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 5
                       }}
                     >
-                      <RefreshCw size={14} style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
+                      <RefreshCw size={13} style={{ animation: isSyncingThis ? 'spin 1s linear infinite' : 'none' }} />
                       <span>{isSyncingThis ? 'Sincronizando...' : 'Sincronizar Alunos'}</span>
                     </button>
 
@@ -4407,17 +4565,17 @@ export function ComunicadoViewModal({
                         background: 'rgba(16, 185, 129, 0.2)',
                         color: '#6ee7b7',
                         border: '1px solid rgba(16, 185, 129, 0.35)',
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        fontSize: 12,
+                        padding: '6px 10px',
+                        borderRadius: 9,
+                        fontSize: 11.5,
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 5
                       }}
                     >
-                      <FileSpreadsheet size={14} />
+                      <FileSpreadsheet size={13} />
                       <span>Excel</span>
                     </button>
 
@@ -4429,17 +4587,17 @@ export function ComunicadoViewModal({
                         background: 'rgba(255,255,255,0.1)',
                         color: '#f8fafc',
                         border: '1px solid rgba(255,255,255,0.18)',
-                        padding: '8px 12px',
-                        borderRadius: 10,
-                        fontSize: 12,
+                        padding: '6px 10px',
+                        borderRadius: 9,
+                        fontSize: 11.5,
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 5
                       }}
                     >
-                      <Printer size={14} />
+                      <Printer size={13} />
                       <span>Imprimir</span>
                     </button>
 
@@ -4448,9 +4606,9 @@ export function ComunicadoViewModal({
                       onClick={() => setSelectedCobrancaModalId(null)}
                       aria-label="Fechar modal de pagantes"
                       style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 9,
                         background: 'rgba(255,255,255,0.1)',
                         border: 'none',
                         color: '#ffffff',
@@ -4460,50 +4618,111 @@ export function ComunicadoViewModal({
                         justifyContent: 'center'
                       }}
                     >
-                      <X size={18} />
+                      <X size={17} />
                     </button>
                   </div>
                 </div>
 
                 {/* Summary Progress & KPIs */}
                 <div style={{
-                  padding: '16px 24px',
-                  background: '#f8fafc',
+                  padding: '12px 20px',
+                  background: '#ffffff',
                   borderBottom: '1px solid #e2e8f0',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 12
+                  gap: 10
                 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 10 }}>
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px' }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Total Destinatários</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{totalEnviados} alunos</div>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Previsto: R$ {valorEsperado.toFixed(2).replace('.', ',')}</div>
-                    </div>
-
-                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '10px 14px' }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>Pagantes Confirmados</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#15803d', marginTop: 2 }}>
-                        {totalPagos}/{totalEnviados} <span style={{ fontSize: 13, fontWeight: 700 }}>({pctPaid.label})</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setCobModalFilter('ALL')}
+                      style={{
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        background: cobModalFilter === 'ALL' ? '#f8fafc' : '#ffffff',
+                        border: cobModalFilter === 'ALL' ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                        borderRadius: 10,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Total Destinatários</div>
+                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#0f172a', marginTop: 1 }}>{totalEnviados} alunos</div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 700 }}>Recebido: R$ {valorRecebido.toFixed(2).replace('.', ',')}</div>
-                    </div>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Previsto</div>
+                        <div style={{ color: '#0f172a' }}>R$ {fmtBRL(valorEsperado)}</div>
+                      </div>
+                    </button>
 
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '10px 14px' }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>Pendentes</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#b45309', marginTop: 2 }}>{totalPendentes} alunos</div>
-                      <div style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>Falta receber: R$ {valorPendente.toFixed(2).replace('.', ',')}</div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCobModalFilter('PAID')}
+                      style={{
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        background: '#f0fdf4',
+                        border: cobModalFilter === 'PAID' ? '1.5px solid #16a34a' : '1px solid #bbf7d0',
+                        borderRadius: 10,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#15803d', textTransform: 'uppercase' }}>Pagantes Confirmados</div>
+                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#15803d', marginTop: 1 }}>
+                          {totalPagos}/{totalEnviados} <span style={{ fontSize: 12, fontWeight: 700 }}>({pctPaid.label})</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Recebido</div>
+                        <div>R$ {fmtBRL(valorRecebido)}</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCobModalFilter('PENDING')}
+                      style={{
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        background: '#fffbeb',
+                        border: cobModalFilter === 'PENDING' ? '1.5px solid #d97706' : '1px solid #fde68a',
+                        borderRadius: 10,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>Pendentes</div>
+                        <div style={{ fontSize: 16.5, fontWeight: 800, color: '#b45309', marginTop: 1 }}>{totalPendentes} alunos</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, textAlign: 'right' }}>
+                        <div>Em aberto</div>
+                        <div>R$ {fmtBRL(valorPendente)}</div>
+                      </div>
+                    </button>
                   </div>
 
                   {/* Barra de Pagantes X/X */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, fontWeight: 700, color: '#334155' }}>
-                      <span>Barra de Pagantes: <strong>{totalPagos}/{totalEnviados}</strong> ({pctPaid.label} concluído)</span>
-                      <span style={{ color: '#059669' }}>R$ {valorRecebido.toFixed(2).replace('.', ',')} / R$ {valorEsperado.toFixed(2).replace('.', ',')}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, fontWeight: 700, color: '#475569' }}>
+                      <span>Progresso: <strong style={{ color: '#0f172a' }}>{totalPagos}/{totalEnviados}</strong> ({pctPaid.label})</span>
+                      <span style={{ color: '#059669' }}>R$ {fmtBRL(valorRecebido)} / R$ {fmtBRL(valorEsperado)}</span>
                     </div>
                     <progress
                       className="cvm-cob-progress"
+                      style={{ height: 8 }}
                       max={Math.max(totalEnviados, 1)}
                       value={totalPagos}
                       aria-label={`Progresso de pagantes: ${totalPagos} de ${totalEnviados}`}
@@ -4511,56 +4730,58 @@ export function ComunicadoViewModal({
                   </div>
 
                   {/* Filters + Search Row */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => setCobModalFilter('ALL')}
-                        style={{
-                          padding: '7px 13px',
-                          borderRadius: 10,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: cobModalFilter === 'ALL' ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                          background: cobModalFilter === 'ALL' ? '#0f172a' : '#ffffff',
-                          color: cobModalFilter === 'ALL' ? '#ffffff' : '#475569'
-                        }}
-                      >
-                        Todos ({totalEnviados})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCobModalFilter('PAID')}
-                        style={{
-                          padding: '7px 13px',
-                          borderRadius: 10,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: cobModalFilter === 'PAID' ? '1px solid #16a34a' : '1px solid #bbf7d0',
-                          background: cobModalFilter === 'PAID' ? '#16a34a' : '#f0fdf4',
-                          color: cobModalFilter === 'PAID' ? '#ffffff' : '#15803d'
-                        }}
-                      >
-                        ✓ Pagantes ({totalPagos}/{totalEnviados})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCobModalFilter('PENDING')}
-                        style={{
-                          padding: '7px 13px',
-                          borderRadius: 10,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: cobModalFilter === 'PENDING' ? '1px solid #d97706' : '1px solid #fde68a',
-                          background: cobModalFilter === 'PENDING' ? '#d97706' : '#fffbeb',
-                          color: cobModalFilter === 'PENDING' ? '#ffffff' : '#b45309'
-                        }}
-                      >
-                        ⏳ Pendentes ({totalPendentes})
-                      </button>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: 3, borderRadius: 10, gap: 2, border: '1px solid #e2e8f0' }}>
+                        <button
+                          type="button"
+                          onClick={() => setCobModalFilter('ALL')}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 7,
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: 'none',
+                            background: cobModalFilter === 'ALL' ? '#0f172a' : 'transparent',
+                            color: cobModalFilter === 'ALL' ? '#ffffff' : '#475569'
+                          }}
+                        >
+                          Todos ({totalEnviados})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCobModalFilter('PAID')}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 7,
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: 'none',
+                            background: cobModalFilter === 'PAID' ? '#16a34a' : 'transparent',
+                            color: cobModalFilter === 'PAID' ? '#ffffff' : '#15803d'
+                          }}
+                        >
+                          ✓ Pagantes ({totalPagos})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCobModalFilter('PENDING')}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 7,
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: 'none',
+                            background: cobModalFilter === 'PENDING' ? '#d97706' : 'transparent',
+                            color: cobModalFilter === 'PENDING' ? '#ffffff' : '#b45309'
+                          }}
+                        >
+                          ⏳ Pendentes ({totalPendentes})
+                        </button>
+                      </div>
 
                       {availableTurmas.length > 1 && (
                         <select
@@ -4568,14 +4789,15 @@ export function ComunicadoViewModal({
                           onChange={e => setCobModalTurmaFilter(e.target.value)}
                           aria-label="Filtrar por turma"
                           style={{
-                            padding: '7px 10px',
-                            borderRadius: 10,
-                            fontSize: 12,
+                            padding: '6px 10px',
+                            borderRadius: 9,
+                            fontSize: 11.5,
                             fontWeight: 700,
                             border: '1px solid #cbd5e1',
                             background: '#ffffff',
                             color: '#334155',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            maxWidth: 210
                           }}
                         >
                           <option value="ALL">Todas as Turmas ({availableTurmas.length})</option>
@@ -4587,27 +4809,27 @@ export function ComunicadoViewModal({
                     </div>
 
                     <div style={{
-                      flex: '1 1 250px',
-                      maxWidth: 380,
+                      flex: '1 1 210px',
+                      maxWidth: 320,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
-                      background: '#ffffff',
+                      gap: 7,
+                      background: '#f8fafc',
                       border: '1px solid #cbd5e1',
-                      borderRadius: 10,
-                      padding: '6px 12px'
+                      borderRadius: 9,
+                      padding: '5px 10px'
                     }}>
-                      <Search size={15} color="#64748b" />
+                      <Search size={14} color="#64748b" style={{ flexShrink: 0 }} />
                       <input
                         type="text"
                         value={cobModalSearch}
                         onChange={e => setCobModalSearch(e.target.value)}
-                        placeholder="Buscar aluno, pagador, responsável, CPF, turma..."
+                        placeholder="Buscar aluno, pagador, responsável..."
                         style={{
                           border: 'none',
                           outline: 'none',
                           width: '100%',
-                          fontSize: 12.5,
+                          fontSize: 12,
                           color: '#0f172a',
                           background: 'transparent'
                         }}
@@ -4616,9 +4838,10 @@ export function ComunicadoViewModal({
                         <button
                           type="button"
                           onClick={() => setCobModalSearch('')}
+                          aria-label="Limpar busca"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
                         >
-                          <X size={14} />
+                          <X size={13} />
                         </button>
                       )}
                     </div>
@@ -4626,25 +4849,25 @@ export function ComunicadoViewModal({
                 </div>
 
                 {/* Payers & Recipients List Body */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 10, background: '#ffffff' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 7, background: '#f8fafc' }}>
                   {filteredRows.length === 0 ? (
                     <div style={{
-                      padding: '44px 20px',
+                      padding: '36px 20px',
                       textAlign: 'center',
                       color: '#64748b',
-                      background: '#f8fafc',
-                      borderRadius: 16,
+                      background: '#ffffff',
+                      borderRadius: 14,
                       border: '1px dashed #cbd5e1'
                     }}>
-                      <Users size={34} style={{ margin: '0 auto 10px', opacity: 0.45, display: 'block' }} />
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                      <Users size={30} style={{ margin: '0 auto 8px', opacity: 0.45, display: 'block' }} />
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 4 }}>
                         {cobModalFilter === 'PAID'
                           ? 'Nenhum pagante confirmado encontrado para este filtro.'
                           : cobModalFilter === 'PENDING'
                           ? 'Nenhum aluno pendente encontrado para este filtro.'
                           : 'Nenhum destinatário localizado.'}
                       </div>
-                      <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 14 }}>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
                         {totalEnviados === 0
                           ? 'Clique em "Sincronizar Alunos" para vincular os alunos das turmas deste comunicado.'
                           : 'Tente alterar a aba de filtro ou limpar o campo de busca.'}
@@ -4658,9 +4881,9 @@ export function ComunicadoViewModal({
                             background: '#0f172a',
                             color: '#ffffff',
                             border: 'none',
-                            padding: '10px 16px',
-                            borderRadius: 10,
-                            fontSize: 12.5,
+                            padding: '8px 14px',
+                            borderRadius: 9,
+                            fontSize: 12,
                             fontWeight: 700,
                             cursor: 'pointer'
                           }}
@@ -4675,225 +4898,218 @@ export function ComunicadoViewModal({
                       const isRowLoading = !!cobActionLoading[rowKey];
                       const isLinkLoading = !!cobActionLoading[`link_${rowKey}`];
                       const isCopied = copiedLinkId === rowKey;
+                      const cardStatusClass = info.isPaid ? 'is-paid' : isCobOverdue ? 'is-overdue' : '';
 
                       return (
-                        <div
-                          key={rowKey}
-                          style={{
-                            border: `1px solid ${info.isPaid ? '#bbf7d0' : '#e2e8f0'}`,
-                            background: info.isPaid ? '#f0fdf4' : '#ffffff',
-                            borderRadius: 14,
-                            padding: '14px 16px',
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 14,
-                            transition: 'all 0.15s'
-                          }}
-                        >
-                          {/* Student + Payer + Guardian Details */}
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: '1 1 380px', minWidth: 0 }}>
-                            <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={44} />
-                            <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {/* Line 1: Student Name + Badges */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{info.nome}</span>
-                                <span style={{
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  padding: '2px 8px',
-                                  borderRadius: 999,
-                                  background: info.isPaid ? '#16a34a' : isCobOverdue ? '#fee2e2' : '#fef3c7',
-                                  color: info.isPaid ? '#ffffff' : isCobOverdue ? '#b91c1c' : '#b45309',
-                                  textTransform: 'uppercase',
-                                  letterSpacing: 0.4
-                                }}>
-                                  {info.isPaid ? '✓ PAGO' : isCobOverdue ? 'VENCIDO' : '⏳ PENDENTE'}
-                                </span>
-                                <span style={{
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: 6,
-                                  background: '#f1f5f9',
-                                  color: '#475569'
-                                }}>
-                                  {info.turma}
-                                </span>
-                                {info.matricula && (
-                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                                    Mat: {info.matricula}
+                        <div key={rowKey} className={`cvm-cob-card ${cardStatusClass}`}>
+                          {/* Compact Primary Row */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '1 1 360px', minWidth: 0 }}>
+                              <UserAvatar userId={info.cleanId} name={info.nome} fotoUrl={info.foto} size={36} />
+                              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                {/* Line 1: Student Name + Status + Turma */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>{info.nome}</span>
+                                  <span style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    padding: '1px 7px',
+                                    borderRadius: 999,
+                                    background: info.isPaid ? '#16a34a' : isCobOverdue ? '#fee2e2' : '#fef3c7',
+                                    color: info.isPaid ? '#ffffff' : isCobOverdue ? '#b91c1c' : '#b45309',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.3
+                                  }}>
+                                    {info.isPaid ? '✓ Pago' : isCobOverdue ? 'Vencido' : 'Pendente'}
                                   </span>
-                                )}
-                                {info.autResp && (
                                   <span style={{
                                     fontSize: 10.5,
                                     fontWeight: 700,
-                                    padding: '2px 8px',
+                                    padding: '1px 7px',
                                     borderRadius: 6,
-                                    background: info.autResp.status === 'AUTHORIZED' ? '#dcfce7' : '#fee2e2',
-                                    color: info.autResp.status === 'AUTHORIZED' ? '#166534' : '#991b1b'
+                                    background: '#eff6ff',
+                                    color: '#2563eb'
                                   }}>
-                                    {info.autResp.status === 'AUTHORIZED' ? 'Autorização: Sim' : 'Autorização: Não'}
+                                    {info.turma}
                                   </span>
-                                )}
-                              </div>
+                                  {info.autResp && (
+                                    <span style={{
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      padding: '1px 6px',
+                                      borderRadius: 6,
+                                      background: info.autResp.status === 'AUTHORIZED' ? '#dcfce7' : '#fee2e2',
+                                      color: info.autResp.status === 'AUTHORIZED' ? '#166534' : '#991b1b'
+                                    }}>
+                                      {info.autResp.status === 'AUTHORIZED' ? 'Aut: Sim' : 'Aut: Não'}
+                                    </span>
+                                  )}
+                                </div>
 
-                              {/* Line 2: Payer / Financial Guardian Info */}
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: 12, color: '#334155' }}>
-                                {info.isPaid && (
-                                  <span>
-                                    <strong style={{ color: '#15803d' }}>Pagador:</strong>{' '}
-                                    <span style={{ fontWeight: 700 }}>{info.pagadorNome || info.responsavel || 'Confirmado'}</span>
+                                {/* Line 2: Key Payer/Guardian & Payment Info */}
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 10px', fontSize: 11.5, color: '#475569' }}>
+                                  {info.isPaid ? (
+                                    <span>
+                                      <strong style={{ color: '#15803d' }}>Pagador:</strong>{' '}
+                                      <span style={{ fontWeight: 700, color: '#0f172a' }}>{info.pagadorNome || info.responsavel || 'Confirmado'}</span>
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      <strong>Resp:</strong> {info.responsavel || 'Não informado'}
+                                    </span>
+                                  )}
+                                  {!info.isPaid && info.telefone && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#64748b' }}>
+                                      <Phone size={10} />
+                                      <span>{info.telefone}</span>
+                                    </span>
+                                  )}
+                                  <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                                    • R$ {fmtBRL(valorUnit)}
                                   </span>
-                                )}
-                                <span>
-                                  <strong style={{ color: '#475569' }}>Responsável:</strong>{' '}
-                                  <span>{info.responsavel || 'Não informado'}</span>
-                                  {info.parentesco ? <span style={{ color: '#64748b' }}> ({info.parentesco})</span> : null}
-                                </span>
-                                {info.cpfResponsavel && (
-                                  <span>
-                                    <strong style={{ color: '#475569' }}>CPF:</strong> {info.cpfResponsavel}
-                                  </span>
-                                )}
-                                {info.telefone && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    <Phone size={11} color="#64748b" />
-                                    <span>{info.telefone}</span>
-                                  </span>
-                                )}
-                                {info.email && (
-                                  <span style={{ color: '#64748b' }}>
-                                    {info.email}
-                                  </span>
-                                )}
+                                  {info.isPaid && info.paidAt && (
+                                    <span style={{ color: '#15803d', fontWeight: 700 }}>
+                                      • Pago em {new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+                            </div>
 
-                              {/* Line 3: Payment Timestamp, Amount & Origin */}
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
-                                <span style={{ fontWeight: 700, color: '#0f172a' }}>
-                                  Valor: R$ {valorUnit.toFixed(2).replace('.', ',')}
-                                </span>
-                                {info.isPaid && info.paidAt && (
-                                  <span style={{ color: '#15803d', fontWeight: 700 }}>
-                                    • Pago em {new Date(info.paidAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                                  </span>
+                            {/* Compact Row Actions */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCobDestPaid(activeCob, dest)}
+                                disabled={isRowLoading}
+                                title={info.isPaid ? 'Reabrir cobrança para pendente' : 'Confirmar pagamento manualmente (Dar Baixa)'}
+                                style={{
+                                  padding: '5px 9px',
+                                  borderRadius: 8,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: isRowLoading ? 'wait' : 'pointer',
+                                  border: info.isPaid ? '1px solid #cbd5e1' : '1px solid #16a34a',
+                                  background: info.isPaid ? '#ffffff' : '#16a34a',
+                                  color: info.isPaid ? '#475569' : '#ffffff',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                {isRowLoading ? (
+                                  <Loader2 size={12} />
+                                ) : info.isPaid ? (
+                                  <RotateCcw size={12} />
+                                ) : (
+                                  <CheckCircle2 size={12} />
                                 )}
-                                {info.origemPagamento && (
-                                  <span>
-                                    • Origem: <strong>{info.origemPagamento}</strong>
-                                    {info.transactionId ? ` (ID: ${info.transactionId.substring(0, 14)})` : ''}
-                                  </span>
-                                )}
-                              </div>
+                                <span>{info.isPaid ? 'Reabrir' : 'Dar Baixa'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleWhatsAppCobReminder(activeCob, dest, info)}
+                                title={info.isPaid ? 'Enviar comprovante/confirmação por WhatsApp' : 'Enviar lembrete de pagamento por WhatsApp'}
+                                style={{
+                                  padding: '5px 9px',
+                                  borderRadius: 8,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  border: '1px solid #bbf7d0',
+                                  background: '#ecfdf5',
+                                  color: '#047857',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                <MessageCircle size={12} />
+                                <span>WhatsApp</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'open')}
+                                disabled={isLinkLoading}
+                                title={info.isPaid ? 'Abrir comprovante de pagamento' : 'Abrir ou gerar link da fatura deste aluno'}
+                                style={{
+                                  padding: '5px 9px',
+                                  borderRadius: 8,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: isLinkLoading ? 'wait' : 'pointer',
+                                  border: info.isPaid ? '1px solid #86efac' : '1px solid #cbd5e1',
+                                  background: info.isPaid ? '#f0fdf4' : '#f8fafc',
+                                  color: info.isPaid ? '#15803d' : '#334155',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                {info.isPaid ? <FileText size={12} /> : <ExternalLink size={12} />}
+                                <span>{isLinkLoading ? 'Gerando...' : info.isPaid ? 'Comprovante' : 'Fatura'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'copy')}
+                                disabled={isLinkLoading}
+                                title={info.isPaid ? 'Copiar link do comprovante de pagamento' : 'Copiar link de pagamento'}
+                                aria-label={isCopied ? 'Link copiado' : info.isPaid ? 'Copiar link do comprovante de pagamento' : 'Copiar link de pagamento'}
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: 8,
+                                  cursor: isLinkLoading ? 'wait' : 'pointer',
+                                  border: isCopied ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                                  background: isCopied ? '#dcfce7' : '#ffffff',
+                                  color: isCopied ? '#15803d' : '#475569',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                              </button>
                             </div>
                           </div>
 
-                          {/* Row Actions */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
-                            {/* Toggle Paid / Manual Baixa */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleCobDestPaid(activeCob, dest)}
-                              disabled={isRowLoading}
-                              title={info.isPaid ? 'Reabrir cobrança para pendente' : 'Confirmar pagamento manualmente (Dar Baixa)'}
-                              style={{
-                                padding: '7px 11px',
-                                borderRadius: 9,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: isRowLoading ? 'wait' : 'pointer',
-                                border: info.isPaid ? '1px solid #cbd5e1' : '1px solid #16a34a',
-                                background: info.isPaid ? '#ffffff' : '#16a34a',
-                                color: info.isPaid ? '#475569' : '#ffffff',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5
-                              }}
-                            >
-                              {isRowLoading ? (
-                                <Loader2 size={13} />
-                              ) : info.isPaid ? (
-                                <RotateCcw size={13} />
-                              ) : (
-                                <CheckCircle2 size={13} />
+                          {/* Progressive Disclosure for Secondary Metadata */}
+                          <details className="cvm-cob-details" style={{ paddingLeft: 46 }}>
+                            <summary>
+                              <ChevronRight size={12} />
+                              <span>Mais detalhes</span>
+                            </summary>
+                            <div className="cvm-cob-details-grid">
+                              {info.matricula && (
+                                <span><strong>Mat:</strong> {info.matricula}</span>
                               )}
-                              <span>{info.isPaid ? 'Reabrir' : 'Dar Baixa'}</span>
-                            </button>
-
-                            {/* WhatsApp Reminder / Receipt */}
-                            <button
-                              type="button"
-                              onClick={() => handleWhatsAppCobReminder(activeCob, dest, info)}
-                              title={info.isPaid ? 'Enviar comprovante/confirmação por WhatsApp' : 'Enviar lembrete de pagamento por WhatsApp'}
-                              style={{
-                                padding: '7px 11px',
-                                borderRadius: 9,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                border: '1px solid #bbf7d0',
-                                background: '#ecfdf5',
-                                color: '#047857',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5
-                              }}
-                            >
-                              <MessageCircle size={13} />
-                              <span>WhatsApp</span>
-                            </button>
-
-                            {/* Open Invoice Link */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'open')}
-                              disabled={isLinkLoading}
-                              title="Abrir ou gerar link da fatura deste aluno"
-                              style={{
-                                padding: '7px 10px',
-                                borderRadius: 9,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: isLinkLoading ? 'wait' : 'pointer',
-                                border: '1px solid #cbd5e1',
-                                background: '#f8fafc',
-                                color: '#334155',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5
-                              }}
-                            >
-                              <ExternalLink size={13} />
-                              <span>{isLinkLoading ? 'Gerando...' : 'Fatura'}</span>
-                            </button>
-
-                            {/* Copy Invoice Link */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenOrCopyCobPaymentLink(activeCob, dest, 'copy')}
-                              disabled={isLinkLoading}
-                              title="Copiar link de pagamento"
-                              style={{
-                                padding: '7px 10px',
-                                borderRadius: 9,
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: isLinkLoading ? 'wait' : 'pointer',
-                                border: isCopied ? '1px solid #16a34a' : '1px solid #cbd5e1',
-                                background: isCopied ? '#dcfce7' : '#ffffff',
-                                color: isCopied ? '#15803d' : '#475569',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}
-                            >
-                              {isCopied ? <Check size={13} /> : <Copy size={13} />}
-                              <span>{isCopied ? 'Copiado!' : 'Copiar Link'}</span>
-                            </button>
-                          </div>
+                              <span>
+                                <strong>Responsável:</strong> {info.responsavel || 'Não informado'}
+                                {info.parentesco ? ` (${info.parentesco})` : ''}
+                              </span>
+                              {info.cpfResponsavel && (
+                                <span><strong>CPF:</strong> {info.cpfResponsavel}</span>
+                              )}
+                              {info.telefone && (
+                                <span><strong>Tel:</strong> {info.telefone}</span>
+                              )}
+                              {info.email && (
+                                <span><strong>E-mail:</strong> {info.email}</span>
+                              )}
+                              {info.createdAt && (
+                                <span><strong>Envio:</strong> {new Date(info.createdAt).toLocaleDateString('pt-BR')}</span>
+                              )}
+                              {info.origemPagamento && (
+                                <span>
+                                  <strong>Origem:</strong> {info.origemPagamento}
+                                  {info.transactionId ? ` (ID: ${info.transactionId.substring(0, 14)})` : ''}
+                                </span>
+                              )}
+                            </div>
+                          </details>
                         </div>
                       );
                     })
@@ -4902,16 +5118,16 @@ export function ComunicadoViewModal({
 
                 {/* Modal Footer */}
                 <div style={{
-                  padding: '14px 24px',
-                  background: '#f8fafc',
+                  padding: '10px 20px',
+                  background: '#ffffff',
                   borderTop: '1px solid #e2e8f0',
                   display: 'flex',
                   flexWrap: 'wrap',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 12
+                  gap: 10
                 }}>
-                  <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+                  <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
                     Exibindo <strong>{filteredRows.length}</strong> de <strong>{totalEnviados}</strong> destinatários • Pagantes: <strong style={{ color: '#15803d' }}>{totalPagos}/{totalEnviados}</strong>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -4919,32 +5135,32 @@ export function ComunicadoViewModal({
                       type="button"
                       onClick={() => handlePrintCobPayers(activeCob, cobModalFilter)}
                       style={{
-                        padding: '8px 14px',
-                        borderRadius: 10,
+                        padding: '7px 12px',
+                        borderRadius: 9,
                         border: '1px solid #cbd5e1',
                         background: '#ffffff',
                         color: '#334155',
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: 'pointer',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 6
+                        gap: 5
                       }}
                     >
-                      <Printer size={14} />
+                      <Printer size={13} />
                       <span>Imprimir Filtro Atual</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedCobrancaModalId(null)}
                       style={{
-                        padding: '8px 18px',
-                        borderRadius: 10,
+                        padding: '7px 16px',
+                        borderRadius: 9,
                         border: 'none',
                         background: '#0f172a',
                         color: '#ffffff',
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: 'pointer'
                       }}
