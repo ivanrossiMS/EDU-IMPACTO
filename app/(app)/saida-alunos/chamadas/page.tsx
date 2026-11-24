@@ -1400,84 +1400,80 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
             : undefined,
       }}
     >
-      {/* 1. PROFILE: Photo + Name + Class + Autonomy/Status */}
-      <div className="search-student-profile" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-        <div style={{
-          width: 50, height: 50, borderRadius: 14, flexShrink: 0,
-          background: (studentPhoto && !imgError) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 900, fontSize: 18, color: '#fff', fontFamily: 'Outfit, sans-serif',
-          position: 'relative', overflow: 'hidden',
-          border: (studentPhoto && !imgError) ? '1px solid hsl(var(--border-subtle))' : 'none',
-        }}>
+      {/* 1. PROFILE: Photo + Name + Class + Autonomy Badge */}
+      <div className="search-student-profile" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div
+          className="search-student-avatar"
+          style={{
+            borderRadius: 12, flexShrink: 0,
+            background: (studentPhoto && !imgError) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 900, color: '#fff', fontFamily: 'Outfit, sans-serif',
+            position: 'relative', overflow: 'hidden',
+            border: (studentPhoto && !imgError) ? '1px solid hsl(var(--border-subtle))' : 'none',
+          }}
+        >
           {(studentPhoto && !imgError) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={studentPhoto}
               alt={student.nome}
               onError={() => setImgError(true)}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             />
           ) : (
             initials
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
           <div style={{
             fontWeight: 800,
-            fontSize: 15,
-            lineHeight: 1.25,
+            fontSize: 13.5,
+            lineHeight: 1.22,
             color: 'hsl(var(--text-primary))',
-            overflowWrap: 'break-word',
-            textWrap: 'balance',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
           }}>
             {student.nome}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 6px', fontSize: 11.5 }}>
-            <span style={{ color: '#0891b2', fontWeight: 800 }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '3px 6px', fontSize: 11 }}>
+            <span style={{ color: '#0891b2', fontWeight: 800, minWidth: 0, overflowWrap: 'anywhere' }}>
               {student.turmaNome || student.turma}{student.turno ? ` · ${student.turno.toUpperCase()}` : ''}
             </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
             {autorizaSaida ? (
               <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 10, padding: '2px 9px', borderRadius: 100,
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: 9.5, padding: '1px 7px', borderRadius: 100,
                 background: 'rgba(16, 185, 129, 0.12)', color: '#059669',
                 fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.28)',
+                maxWidth: '100%',
               }}>
-                Pode sair sozinho
+                ✓ Sai sozinho
               </span>
             ) : (
               <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 10, padding: '2px 9px', borderRadius: 100,
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: 9.5, padding: '1px 7px', borderRadius: 100,
                 background: 'rgba(239, 68, 68, 0.08)', color: '#dc2626',
                 fontWeight: 800, border: '1px solid rgba(239, 68, 68, 0.22)',
+                maxWidth: '100%',
               }}>
-                Não pode sair sozinho
+                Não sai sozinho
               </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* 2. GUARDIANS: Responsive 1-2 col grid */}
-      <div className="search-student-guardians" style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            Responsáveis autorizados
-          </span>
-          {respList.length > 0 && !blocked && (
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
-              Toque para chamar
-            </span>
-          )}
-        </div>
+      {/* 2. GUARDIANS: Compact responsive grid (zero horizontal scroll) */}
+      <div className="search-student-guardians" style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <span className="search-guardians-heading" style={{ fontSize: 9.5, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          Responsáveis
+        </span>
 
         {respList.length === 0 ? (
-          <div style={{ fontSize: 11.5, color: 'hsl(var(--text-muted))', fontStyle: 'italic', padding: '6px 0' }}>
+          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic', padding: '2px 0' }}>
             Nenhum responsável configurado.
           </div>
         ) : (
@@ -1544,41 +1540,45 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                     opacity: (blocked && !pickedUpByThis) ? 0.65 : 1,
                   }}
                 >
-                  <span aria-hidden="true" style={{ fontSize: 13, flexShrink: 0, opacity: 0.85 }}>
+                  <span aria-hidden="true" style={{ fontSize: 12, flexShrink: 0, opacity: 0.85 }}>
                     {pickedUpByThis ? '✅' : isProibidoHoje ? '🚫' : '👤'}
                   </span>
 
-                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <span style={{
                       color: pickedUpByThis ? '#065f46' : isProibidoHoje ? '#b91c1c' : 'hsl(var(--text-primary))',
                       fontWeight: 700,
-                      fontSize: 12.5,
-                      lineHeight: 1.25,
-                      overflowWrap: 'break-word',
+                      fontSize: 12,
+                      lineHeight: 1.2,
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
                     }}>
                       {g.name}
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 3, minWidth: 0 }}>
                       <span style={{
-                        fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
                         background: 'rgba(148, 163, 184, 0.16)',
                         color: pickedUpByThis ? '#047857' : 'hsl(var(--text-secondary))',
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}>
                         {g.role}
                       </span>
                       {g.rfid && (
-                        <span style={{ fontSize: 9.5, color: '#2563eb', fontWeight: 700 }}>
+                        <span style={{ fontSize: 9, color: '#2563eb', fontWeight: 700 }}>
                           📡 RFID
                         </span>
                       )}
                       {isProibido && (
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.14)', color: '#dc2626' }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 4px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.14)', color: '#dc2626' }}>
                           PROIBIDO
                         </span>
                       )}
                       {!isProibido && diaRestrito && (
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, background: 'rgba(249, 115, 22, 0.14)', color: '#ea580c' }}>
+                        <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 4px', borderRadius: 4, background: 'rgba(249, 115, 22, 0.14)', color: '#ea580c' }}>
                           DIA RESTRITO
                         </span>
                       )}
@@ -1587,11 +1587,11 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 
                   <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                     {pickedUpByThis ? (
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#059669' }}>Retirou</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: '#059669' }}>Retirou</span>
                     ) : isProibidoHoje ? (
-                      <AlertCircle size={14} style={{ color: '#ef4444' }} />
+                      <AlertCircle size={13} style={{ color: '#ef4444' }} />
                     ) : (
-                      <ChevronRight size={14} style={{ opacity: blocked ? 0.35 : 0.65 }} />
+                      <ChevronRight size={13} style={{ opacity: blocked ? 0.35 : 0.65 }} />
                     )}
                   </div>
                 </button>
@@ -1601,7 +1601,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
         )}
       </div>
 
-      {/* 3. ASIDE: Confirmed / Waiting / Solo Exit (only rendered when relevant) */}
+      {/* 3. ASIDE: Confirmed / Waiting / Solo Exit (compact horizontal pill on mobile/tablet, side column on desktop) */}
       {hasAside && (
         <div className="search-student-aside" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', minWidth: 0 }}>
           {alreadyConfirmed ? (
@@ -1613,15 +1613,15 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                 background: 'rgba(16, 185, 129, 0.14)',
                 color: '#059669',
               }}>
-                {isSaiuSozinhoCall(confirmedCall) ? <UserCheck size={15} /> : <CheckCircle2 size={15} />}
+                {isSaiuSozinhoCall(confirmedCall) ? <UserCheck size={14} /> : <CheckCircle2 size={14} />}
               </div>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 800, fontSize: 10, letterSpacing: '0.04em', color: '#059669', textTransform: 'uppercase' }}>
+                  <span style={{ fontWeight: 800, fontSize: 9.5, letterSpacing: '0.04em', color: '#059669', textTransform: 'uppercase' }}>
                     {isSaiuSozinhoCall(confirmedCall) ? 'Saiu sozinho' : 'Retirado por'}
                   </span>
                   <span style={{
-                    fontSize: 10, fontWeight: 700, color: '#047857',
+                    fontSize: 9.5, fontWeight: 700, color: '#047857',
                     background: 'rgba(16, 185, 129, 0.13)', padding: '1px 6px', borderRadius: 999,
                     whiteSpace: 'nowrap',
                   }}>
@@ -1629,8 +1629,8 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                   </span>
                 </div>
                 <span style={{
-                  fontWeight: 700, fontSize: 12, color: '#065f46',
-                  overflowWrap: 'break-word', lineHeight: 1.25,
+                  fontWeight: 700, fontSize: 11.5, color: '#065f46',
+                  overflowWrap: 'anywhere', wordBreak: 'break-word', lineHeight: 1.2,
                 }}>
                   {isSaiuSozinhoCall(confirmedCall)
                     ? 'Saída autônoma confirmada'
@@ -1647,13 +1647,13 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                 background: 'rgba(245, 158, 11, 0.16)',
                 color: '#d97706',
               }}>
-                <Megaphone size={14} />
+                <Megaphone size={13} />
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <span style={{ fontWeight: 800, fontSize: 10.5, letterSpacing: '0.03em', color: '#b45309', textTransform: 'uppercase' }}>
+                <span style={{ fontWeight: 800, fontSize: 10, letterSpacing: '0.03em', color: '#b45309', textTransform: 'uppercase' }}>
                   Chamado na TV
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', lineHeight: 1.25 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#92400e', lineHeight: 1.2 }}>
                   Aguardando confirmação
                 </span>
               </div>
@@ -1670,17 +1670,17 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
               }}
             >
               <div className="search-aside-icon search-solo-icon">
-                <UserCheck size={15} />
+                <UserCheck size={14} />
               </div>
               <div style={{ flex: 1, minWidth: 0, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <span style={{ fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>
+                <span style={{ fontWeight: 800, fontSize: 11.5, lineHeight: 1.2 }}>
                   Registrar saiu sozinho
                 </span>
-                <span className="search-solo-sub" style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2 }}>
+                <span className="search-solo-sub" style={{ fontSize: 9.5, fontWeight: 600, lineHeight: 1.15 }}>
                   Confirmar saída autônoma
                 </span>
               </div>
-              <ChevronRight size={15} style={{ flexShrink: 0, opacity: 0.75 }} />
+              <ChevronRight size={14} style={{ flexShrink: 0, opacity: 0.75 }} />
             </button>
           ) : null}
         </div>
@@ -3825,6 +3825,9 @@ function ChamadasContent() {
           boxShadow: 'var(--shadow-sm)',
           marginBottom: 20,
           position: 'relative',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         {/* Left: Blue Megaphone Circle + Title */}
@@ -3882,20 +3885,23 @@ function ChamadasContent() {
           )}
         </div>
 
-        {/* OVERLAY DROPDOWN FOR RESULTS (ANCHORED TO FULL TOP BAR WIDTH) */}
+        {/* OVERLAY DROPDOWN FOR RESULTS (ANCHORED TO FULL TOP BAR WIDTH, ZERO HORIZONTAL OVERFLOW) */}
         {searchFocused && studentSearch.trim().length > 0 && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
             background: 'hsl(var(--bg-elevated))',
             border: '1px solid hsl(var(--border-subtle))',
-            borderRadius: 20,
+            borderRadius: 18,
             boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.24)',
             zIndex: 1000,
-            maxHeight: isMobile ? '70dvh' : '65vh',
+            maxHeight: isMobile ? 'calc(100dvh - 150px)' : 'min(70dvh, 640px)',
             overflowY: 'auto',
+            overflowX: 'hidden',
             overscrollBehavior: 'contain',
             display: 'flex', flexDirection: 'column',
-            padding: isMobile ? 4 : 6,
           }}>
             {studentSearch.trim().length < 3 && (
               <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
@@ -3910,11 +3916,34 @@ function ChamadasContent() {
             )}
 
             {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
-              <div className="search-results-list">
-                {schoolResults.map((a: any) => (
-                  <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
-                ))}
-              </div>
+              <>
+                <div className="search-results-topbar">
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {schoolResults.length} {schoolResults.length === 1 ? 'aluno' : 'alunos'} · Toque para chamar
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Fechar resultados da busca"
+                    onClick={() => setSearchFocused(false)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      background: 'hsl(var(--bg-surface))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 8, padding: '3px 8px',
+                      fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))',
+                      cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    <X size={12} />
+                    <span>Fechar</span>
+                  </button>
+                </div>
+                <div className="search-results-list">
+                  {schoolResults.map((a: any) => (
+                    <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
+                  ))}
+                </div>
+              </>
             )}
             
             {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
@@ -4615,45 +4644,77 @@ function ChamadasContent() {
           contain: layout style;
         }
 
+        .search-results-topbar {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 8px 12px;
+          background: hsl(var(--bg-elevated));
+          border-bottom: 1px solid hsl(var(--border-subtle));
+          width: 100%;
+          box-sizing: border-box;
+        }
         .search-results-list {
           container: search-results / inline-size;
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          padding: 6px;
+          gap: 8px;
+          padding: 8px;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
         }
         .search-student-card {
           background: hsl(var(--bg-surface));
           border: 1px solid hsl(var(--border-subtle));
-          border-radius: 16px;
-          padding: 12px 14px;
+          border-radius: 14px;
+          padding: 10px 11px;
           display: grid;
           grid-template-columns: minmax(0, 1fr);
-          gap: 12px;
+          gap: 8px;
           align-items: start;
-          box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
           transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
         .search-student-card:hover {
           box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
         }
+        .search-student-avatar {
+          width: 40px;
+          height: 40px;
+          font-size: 15px;
+        }
         .search-student-guardians-grid {
           display: grid;
           grid-template-columns: minmax(0, 1fr);
-          gap: 7px;
+          gap: 6px;
+          width: 100%;
+          min-width: 0;
         }
         .search-guardian-btn {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 9px;
+          gap: 8px;
           width: 100%;
-          min-height: 40px;
-          padding: 7px 12px;
+          max-width: 100%;
+          min-width: 0;
+          min-height: 38px;
+          padding: 6px 10px;
           border-radius: 10px;
           transition: all 0.15s ease;
           outline: none;
           box-sizing: border-box;
+          overflow: hidden;
         }
         .search-guardian-btn:not(.is-blocked):not(.is-restricted):hover {
           background: rgba(59, 130, 246, 0.14) !important;
@@ -4661,18 +4722,20 @@ function ChamadasContent() {
           transform: translateY(-1px);
         }
         .search-status-card {
-          border-radius: 12px;
-          padding: 8px 11px;
+          border-radius: 10px;
+          padding: 6px 10px;
           display: flex;
           align-items: center;
-          gap: 9px;
+          gap: 8px;
+          width: 100%;
+          max-width: 100%;
           min-width: 0;
           box-sizing: border-box;
         }
         .search-aside-icon {
-          width: 30px;
-          height: 30px;
-          border-radius: 9px;
+          width: 26px;
+          height: 26px;
+          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -4680,15 +4743,17 @@ function ChamadasContent() {
         }
         .search-solo-btn {
           width: 100%;
-          min-height: 42px;
-          border-radius: 12px;
-          padding: 7px 11px;
+          max-width: 100%;
+          min-width: 0;
+          min-height: 38px;
+          border-radius: 10px;
+          padding: 6px 10px;
           background: rgba(16, 185, 129, 0.09);
           border: 1px solid rgba(16, 185, 129, 0.34);
           color: #047857;
           display: flex;
           align-items: center;
-          gap: 9px;
+          gap: 8px;
           box-sizing: border-box;
           transition: all 0.16s ease;
           outline: none;
@@ -4719,17 +4784,29 @@ function ChamadasContent() {
         @media (pointer: coarse) {
           .search-guardian-btn,
           .search-solo-btn {
-            min-height: 44px;
+            min-height: 42px;
           }
         }
-        @container search-results (inline-size >= 540px) {
+        /* Celular largo / Tablet pequeno: 2 responsáveis lado a lado sem estourar */
+        @container search-results (inline-size >= 430px) {
+          .search-student-guardians-grid {
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+          }
+        }
+        /* Tablet: card compacto com perfil + status no topo e responsáveis em 2 colunas logo abaixo */
+        @container search-results (inline-size >= 580px) {
           .search-student-card {
             grid-template-columns: minmax(0, 1fr);
-            padding: 13px 16px;
-            gap: 12px 14px;
+            padding: 12px 14px;
+            gap: 10px 12px;
+          }
+          .search-student-avatar {
+            width: 44px;
+            height: 44px;
+            font-size: 16px;
           }
           .search-student-card:has(.search-student-aside) {
-            grid-template-columns: minmax(0, 1fr) minmax(190px, 235px);
+            grid-template-columns: minmax(0, 1fr) minmax(0, 215px);
           }
           .search-student-profile {
             grid-column: 1;
@@ -4745,17 +4822,23 @@ function ChamadasContent() {
             grid-row: 2;
           }
           .search-student-guardians-grid {
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
           }
         }
-        @container search-results (inline-size >= 900px) {
+        /* Desktop largo: 2 ou 3 colunas fluidas usando minmax(0, ...) para jamais criar barra horizontal */
+        @container search-results (inline-size >= 920px) {
           .search-student-card {
-            grid-template-columns: minmax(220px, 1fr) minmax(320px, 2fr);
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
             align-items: center;
-            gap: 16px;
+            gap: 14px;
+          }
+          .search-student-avatar {
+            width: 48px;
+            height: 48px;
+            font-size: 18px;
           }
           .search-student-card:has(.search-student-aside) {
-            grid-template-columns: minmax(215px, 0.98fr) minmax(300px, 1.72fr) minmax(205px, 0.85fr);
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 0.85fr);
           }
           .search-student-profile {
             grid-column: 1;
@@ -4770,7 +4853,7 @@ function ChamadasContent() {
             grid-row: 1;
           }
           .search-student-guardians-grid {
-            grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 195px), 1fr));
           }
         }
         
