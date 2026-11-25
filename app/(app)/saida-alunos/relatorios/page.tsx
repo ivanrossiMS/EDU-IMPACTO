@@ -558,15 +558,18 @@ function TabHistoricoChamadas() {
           </div>
         </div>
         
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: isMobile ? 'stretch' : 'flex-end', marginTop: 16 }}>
           <button onClick={handleBuscar} disabled={isLoading}
             style={{ 
-              padding: '10px 24px', borderRadius: 10, border: 'none', 
-              background: isLoading ? 'hsl(var(--bg-overlay))' : '#06b6d4', color: isLoading ? 'hsl(var(--text-muted))' : '#fff', cursor: isLoading ? 'not-allowed' : 'pointer', 
-              fontWeight: 700, fontSize: 12, display: 'flex', 
-              alignItems: 'center', justifyContent: 'center', gap: 6 
+              width: isMobile ? '100%' : 'auto',
+              padding: isMobile ? '12px 24px' : '10px 24px', borderRadius: 10, border: 'none', 
+              background: isLoading ? 'hsl(var(--bg-overlay))' : 'linear-gradient(135deg, #06b6d4, #0891b2)', color: isLoading ? 'hsl(var(--text-muted))' : '#fff', cursor: isLoading ? 'not-allowed' : 'pointer', 
+              fontWeight: 800, fontSize: 13, display: 'flex', 
+              alignItems: 'center', justifyContent: 'center', gap: 6,
+              boxShadow: isLoading ? 'none' : '0 4px 14px rgba(6,182,212,0.25)',
+              transition: 'all 0.2s'
             }}>
-            <Filter size={13}/> {isLoading ? 'Buscando...' : 'Buscar'}
+            <Filter size={14}/> {isLoading ? 'Buscando...' : 'Buscar Registros'}
           </button>
         </div>
       </div>
@@ -1389,9 +1392,15 @@ function RelatoriosDashboard() {
 
       {/* Tab bar */}
       <div style={{
-        display: 'flex', gap: 4, marginBottom: 28,
-        borderBottom: '1px solid hsl(var(--border-subtle))',
-        paddingBottom: 0,
+        display: isMobile ? 'grid' : 'flex',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : undefined,
+        gap: isMobile ? 6 : 4,
+        marginBottom: 24,
+        background: isMobile ? 'hsl(var(--bg-elevated))' : 'transparent',
+        padding: isMobile ? 4 : 0,
+        borderRadius: isMobile ? 14 : 0,
+        border: isMobile ? '1px solid hsl(var(--border-subtle))' : undefined,
+        borderBottom: isMobile ? undefined : '1px solid hsl(var(--border-subtle))',
       }}>
         {tabs.map(t => {
           const active = tab === t.key
@@ -1400,17 +1409,21 @@ function RelatoriosDashboard() {
               key={t.key}
               onClick={() => setTab(t.key)}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 18px', cursor: 'pointer',
-                fontWeight: active ? 800 : 600, fontSize: 13,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: isMobile ? '11px 12px' : '10px 18px', cursor: 'pointer',
+                fontWeight: active ? 800 : 600, fontSize: isMobile ? 12.5 : 13,
                 color: active ? '#06b6d4' : 'hsl(var(--text-muted))',
-                background: 'transparent', border: 'none',
-                borderBottom: active ? '2px solid #06b6d4' : '2px solid transparent',
-                marginBottom: -1, transition: 'all 0.15s',
+                background: isMobile ? (active ? 'hsl(var(--bg-base))' : 'transparent') : 'transparent',
+                borderRadius: isMobile ? 10 : 0,
+                border: 'none',
+                boxShadow: isMobile && active ? '0 1px 4px rgba(0,0,0,0.06)' : undefined,
+                borderBottom: isMobile ? undefined : (active ? '2px solid #06b6d4' : '2px solid transparent'),
+                marginBottom: isMobile ? 0 : -1,
+                transition: 'all 0.15s',
               }}
             >
               {t.icon}
-              {t.label}
+              <span>{t.label}</span>
             </button>
           )
         })}

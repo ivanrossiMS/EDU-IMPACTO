@@ -439,23 +439,97 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {!hideGlobalSidebar && isBelowDesktopNav && <Sidebar />}
           <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`} suppressHydrationWarning>
             {isMobile && !hideGlobalSidebar && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                height: 'calc(60px + env(safe-area-inset-top, 0px))',
-                padding: '0 16px',
-                paddingTop: 'env(safe-area-inset-top, 0px)',
-                background: 'hsl(var(--bg-surface))',
-                borderBottom: '1px solid hsl(var(--border-subtle))',
-                position: 'sticky',
-                top: 0,
-                zIndex: 40
-              }}>
-                <button onClick={toggleSidebar} style={{ background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Menu size={24} />
-                </button>
-                <div style={{ marginLeft: 12, fontWeight: 800, fontSize: 16, color: 'hsl(var(--text-primary))' }}>Impacto Edu</div>
-              </div>
+              <header
+                className="mobile-global-header"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 40,
+                  background: 'hsl(var(--bg-surface) / 0.95)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  borderBottom: '1px solid hsl(var(--border-subtle))',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+                }}
+              >
+                {/* Espaçador de segurança contra sobreposição da Status Bar (notch, relógio, bateria, Wi-Fi) */}
+                <div
+                  style={{
+                    height: 'max(env(safe-area-inset-top, 0px), 28px)',
+                    width: '100%',
+                    flexShrink: 0,
+                  }}
+                />
+                {/* Barra com ações e título */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    height: 52,
+                    padding: '0 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      onClick={toggleSidebar}
+                      aria-label="Menu principal"
+                      style={{
+                        background: 'hsl(var(--bg-elevated))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        color: 'hsl(var(--text-primary))',
+                        cursor: 'pointer',
+                        width: 38,
+                        height: 38,
+                        borderRadius: 10,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <Menu size={20} />
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 17,
+                          letterSpacing: '-0.02em',
+                          color: 'hsl(var(--text-primary))',
+                          fontFamily: 'Outfit, sans-serif',
+                        }}
+                      >
+                        Impacto Edu
+                      </span>
+                    </div>
+                  </div>
+                  {currentUser && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: 'hsl(var(--text-muted))',
+                          padding: '4px 10px',
+                          borderRadius: 8,
+                          background: 'hsl(var(--bg-elevated))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          maxWidth: 140,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {currentUser.nome?.split(' ')[0] || 'Usuário'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </header>
             )}
             {authState === 'offline_authorized' && (
               <div style={{

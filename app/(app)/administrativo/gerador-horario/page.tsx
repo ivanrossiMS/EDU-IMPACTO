@@ -12,11 +12,14 @@ import {
   RefreshCw,
   Save,
   Sparkles,
+  Trash2,
   UserCheck,
   Wand2,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useData } from '@/lib/dataContext'
+import { apiFetch } from '@/lib/api/apiClient'
 import { PageSkeleton } from '@/components/skeletons/PageSkeleton'
 import {
   AulaAlocada,
@@ -30,7 +33,13 @@ import {
   executarGeradorHorarioAsync,
   SolverProgress,
 } from '@/lib/horario/solver'
-import { buildDemoProjeto, buildProjetoFromSchoolData, sanitizeProjeto } from '@/lib/horario/presets'
+import {
+  buildDemoProjeto,
+  buildProjetoFromSchoolData,
+  hasDemoDataInProjeto,
+  sanitizeProjeto,
+  stripDemoDataFromProjeto,
+} from '@/lib/horario/presets'
 import { EstruturaSedesTab } from '@/components/horario/EstruturaSedesTab'
 import { ProfessoresRestricoesTab } from '@/components/horario/ProfessoresRestricoesTab'
 import { GradeCurricularTab } from '@/components/horario/GradeCurricularTab'
@@ -40,20 +49,84 @@ import '@/components/horario/horario.css'
 
 type TabId = 'estrutura' | 'professores' | 'curriculo' | 'gerador' | 'grade'
 
+const DRAFT_KEY_PREFIX = 'edu_gerador_horario_draft_v1_'
+const TAB_STORAGE_KEY = 'edu_gerador_horario_active_tab_v1'
+
+function readLocalDraft(ano: string): HorarioProjeto | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(`${DRAFT_KEY_PREFIX}${ano}`)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && parsed.anoLetivo ? sanitizeProjeto(parsed) : null
+  } catch {
+    return null
+  }
+}
+
+function writeLocalDraft(projeto: HorarioProjeto) {
+  if (typeof window === 'undefined' || !projeto?.anoLetivo) return
+  try {
+    window.localStorage.setItem(`${DRAFT_KEY_PREFIX}${projeto.anoLetivo}`, JSON.stringify(projeto))
+  } catch {}
+}
+
+function clearLocalDraft(ano: string) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(`${DRAFT_KEY_PREFIX}${ano}`)
+  } catch {}
+}
+
 export default function GeradorHorarioPage() {
   const { mantenedores = [], cfgCalendarioLetivo = [] } = useData() as any
+  const mantenedoresRef = useRef(mantenedores)
+  mantenedoresRef.current = mantenedores
+
   const anoVigente = useMemo(
     () => String(cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || new Date().getFullYear()),
     [cfgCalendarioLetivo]
   )
 
   const [anoLetivo, setAnoLetivo] = useState(anoVigente)
-  const [activeTab, setActiveTab] = useState<TabId>('estrutura')
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.sessionStorage.getItem(TAB_STORAGE_KEY) as TabId | null
+      if (saved && ['estrutura', 'professores', 'curriculo', 'gerador', 'grade'].includes(saved)) {
+        return saved
+      }
+    }
+    return 'estrutura'
+  })
   const [projeto, setProjeto] = useState<HorarioProjeto | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [confirmDeleteDemoOpen, setConfirmDeleteDemoOpen] = useState(false)
+  const [deletingDemo, setDeletingDemo] = useState(false)
+  const deleteDemoDialogRef = useRef<HTMLDialogElement>(null)
+
+  // Refs para auto-save seguro em background e flush ao sair da página
+  const projetoRef = useRef<HorarioProjeto | null>(null)
+  const dirtyRef = useRef(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    projetoRef.current = projeto
+  }, [projeto])
+
+  useEffect(() => {
+    dirtyRef.current = dirty
+  }, [dirty])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem(TAB_STORAGE_KEY, activeTab)
+      } catch {}
+    }
+  }, [activeTab])
 
   // Undo/Redo stack para edições manuais na grade ativa
   const [undoStack, setUndoStack] = useState<AulaAlocada[][]>([])
@@ -66,9 +139,9 @@ export default function GeradorHorarioPage() {
 
   const fetchSchoolBootstrapData = useCallback(async () => {
     const [turmasRes, funcsRes, discRes] = await Promise.all([
-      fetch('/api/turmas?all=true&stats=false').then(r => (r.ok ? r.json() : { data: [] })).catch(() => ({ data: [] })),
-      fetch('/api/rh/funcionarios?activeOnly=true').then(r => (r.ok ? r.json() : [])).catch(() => []),
-      fetch('/api/configuracoes?chave=cfgDisciplinas').then(r => (r.ok ? r.json() : { valor: [] })).catch(() => ({ valor: [] })),
+      apiFetch('/api/turmas?all=true&stats=false').then(r => (r.ok ? r.json() : { data: [] })).catch(() => ({ data: [] })),
+      apiFetch('/api/rh/funcionarios?activeOnly=true').then(r => (r.ok ? r.json() : [])).catch(() => []),
+      apiFetch('/api/configuracoes?chave=cfgDisciplinas').then(r => (r.ok ? r.json() : { valor: [] })).catch(() => ({ valor: [] })),
     ])
     const turmasRaw = Array.isArray(turmasRes) ? turmasRes : turmasRes?.data || []
     const funcionariosRaw = Array.isArray(funcsRes) ? funcsRes : funcsRes?.data || []
@@ -76,71 +149,174 @@ export default function GeradorHorarioPage() {
     return { turmasRaw, funcionariosRaw, disciplinasRaw }
   }, [])
 
+  const persistProjetoCloud = useCallback(
+    async (pToSave: HorarioProjeto, options?: { silent?: boolean; keepalive?: boolean }) => {
+      if (!pToSave?.anoLetivo) return false
+      if (!options?.silent) setSaving(true)
+      try {
+        const res = await apiFetch('/api/administrativo/gerador-horario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: options?.keepalive,
+          body: JSON.stringify({ action: 'save', projeto: pToSave }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || `Falha HTTP ${res.status} ao salvar`)
+        }
+        const data = await res.json()
+        const savedProj: HorarioProjeto = data?.projeto ? sanitizeProjeto(data.projeto) : pToSave
+
+        // Só limpa dirty se não houve edição mais recente enquanto salvava
+        const currentTs = projetoRef.current?.atualizadoEm || ''
+        if (!currentTs || currentTs <= (pToSave.atualizadoEm || '')) {
+          setDirty(false)
+          dirtyRef.current = false
+          clearLocalDraft(pToSave.anoLetivo)
+        }
+
+        if (!options?.silent) {
+          setProjeto(prev => {
+            if (prev && prev.atualizadoEm > savedProj.atualizadoEm) return prev
+            return savedProj
+          })
+          toast.success('Configuração de horário salva na nuvem!')
+        }
+        return true
+      } catch (e: any) {
+        if (!options?.silent) {
+          toast.error(e?.message || 'Erro ao salvar projeto na nuvem')
+        } else {
+          console.error('[GeradorHorario] Falha no auto-save:', e?.message)
+        }
+        return false
+      } finally {
+        if (!options?.silent) setSaving(false)
+      }
+    },
+    []
+  )
+
   const loadProjeto = useCallback(
     async (ano: string) => {
       setLoading(true)
       try {
-        const res = await fetch(`/api/administrativo/gerador-horario?ano=${encodeURIComponent(ano)}`, {
+        const localDraft = readLocalDraft(ano)
+        const res = await apiFetch(`/api/administrativo/gerador-horario?ano=${encodeURIComponent(ano)}`, {
           cache: 'no-store',
         })
-        const json = res.ok ? await res.json() : { projeto: null }
-        if (json?.projeto) {
-          setProjeto(sanitizeProjeto(json.projeto))
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          if (localDraft) {
+            setProjeto(localDraft)
+            setDirty(true)
+            toast.warning('Não foi possível sincronizar com o servidor; rascunho local restaurado.')
+            return
+          }
+          throw new Error(err.error || `Erro HTTP ${res.status} ao carregar horário`)
+        }
+
+        const json = await res.json()
+        const serverProjeto: HorarioProjeto | null = json?.projeto ? sanitizeProjeto(json.projeto) : null
+
+        if (serverProjeto && localDraft) {
+          const serverTime = Date.parse(serverProjeto.atualizadoEm || '') || 0
+          const draftTime = Date.parse(localDraft.atualizadoEm || '') || 0
+          if (draftTime > serverTime) {
+            setProjeto(localDraft)
+            setDirty(true)
+            // Sincroniza automaticamente o rascunho mais recente com o banco
+            void persistProjetoCloud(localDraft, { silent: true })
+          } else {
+            clearLocalDraft(ano)
+            setProjeto(serverProjeto)
+            setDirty(false)
+          }
+        } else if (serverProjeto) {
+          setProjeto(serverProjeto)
           setDirty(false)
+        } else if (localDraft) {
+          setProjeto(localDraft)
+          setDirty(true)
+          void persistProjetoCloud(localDraft, { silent: true })
         } else {
           const { turmasRaw, funcionariosRaw, disciplinasRaw } = await fetchSchoolBootstrapData()
           const bootstrapped = buildProjetoFromSchoolData({
             anoLetivo: ano,
-            mantenedores,
+            mantenedores: mantenedoresRef.current,
             turmasRaw,
             funcionariosRaw,
             disciplinasRaw,
           })
           setProjeto(bootstrapped)
           setDirty(false)
+          // Já persiste a estrutura inicial para o próximo reload vir direto do banco
+          void persistProjetoCloud(bootstrapped, { silent: true })
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error(e)
-        toast.error('Erro ao carregar dados do gerador de horário')
+        toast.error(e?.message || 'Erro ao carregar dados do gerador de horário')
       } finally {
         setLoading(false)
       }
     },
-    [fetchSchoolBootstrapData, mantenedores]
+    [fetchSchoolBootstrapData, persistProjetoCloud]
   )
 
   useEffect(() => {
     loadProjeto(anoLetivo)
   }, [anoLetivo, loadProjeto])
 
-  const updateProjeto = useCallback((next: HorarioProjeto) => {
-    setProjeto(next)
-    setDirty(true)
-  }, [])
+  const updateProjeto = useCallback(
+    (next: HorarioProjeto) => {
+      const stamped: HorarioProjeto = {
+        ...next,
+        atualizadoEm: new Date().toISOString(),
+      }
+      setProjeto(stamped)
+      projetoRef.current = stamped
+      setDirty(true)
+      dirtyRef.current = true
+      writeLocalDraft(stamped)
+
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = setTimeout(() => {
+        if (projetoRef.current) {
+          void persistProjetoCloud(projetoRef.current, { silent: true })
+        }
+      }, 900)
+    },
+    [persistProjetoCloud]
+  )
+
+  // Garantir gravação ao fechar aba, atualizar (F5) ou navegar para outro módulo
+  useEffect(() => {
+    const flushPending = () => {
+      if (dirtyRef.current && projetoRef.current) {
+        writeLocalDraft(projetoRef.current)
+        const payloadSize = JSON.stringify(projetoRef.current).length
+        void persistProjetoCloud(projetoRef.current, {
+          silent: true,
+          keepalive: payloadSize < 55000,
+        })
+      }
+    }
+    window.addEventListener('pagehide', flushPending)
+    window.addEventListener('beforeunload', flushPending)
+    return () => {
+      window.removeEventListener('pagehide', flushPending)
+      window.removeEventListener('beforeunload', flushPending)
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+      flushPending()
+    }
+  }, [persistProjetoCloud])
 
   const saveProjeto = async (targetProjeto?: HorarioProjeto) => {
-    const pToSave = targetProjeto || projeto
+    const pToSave = targetProjeto || projetoRef.current || projeto
     if (!pToSave) return
-    setSaving(true)
-    try {
-      const res = await fetch('/api/administrativo/gerador-horario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projeto: pToSave }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Falha ao salvar')
-      }
-      const data = await res.json()
-      if (data.projeto) setProjeto(data.projeto)
-      setDirty(false)
-      toast.success('Configuração de horário salva na nuvem!')
-    } catch (e: any) {
-      toast.error(e.message || 'Erro ao salvar projeto')
-    } finally {
-      setSaving(false)
-    }
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    await persistProjetoCloud(pToSave, { silent: false })
   }
 
   const sincronizarComErp = async () => {
@@ -148,7 +324,7 @@ export default function GeradorHorarioPage() {
     const { turmasRaw, funcionariosRaw, disciplinasRaw } = await fetchSchoolBootstrapData()
     const fresh = buildProjetoFromSchoolData({
       anoLetivo: projeto.anoLetivo,
-      mantenedores,
+      mantenedores: mantenedoresRef.current,
       turmasRaw,
       funcionariosRaw,
       disciplinasRaw,
@@ -177,6 +353,61 @@ export default function GeradorHorarioPage() {
     setUndoStack([])
     setRedoStack([])
     toast.success('Cenário de demonstração Multi-Sede carregado! Veja o Diagnóstico ou clique em Gerar Horário.')
+  }
+
+  const temDadosDemo = useMemo(() => hasDemoDataInProjeto(projeto), [projeto])
+
+  useEffect(() => {
+    const dlg = deleteDemoDialogRef.current
+    if (!dlg) return
+    if (confirmDeleteDemoOpen && !dlg.open) dlg.showModal()
+    else if (!confirmDeleteDemoOpen && dlg.open) dlg.close()
+  }, [confirmDeleteDemoOpen])
+
+  const excluirDadosDemo = async () => {
+    if (!projeto) return
+    setDeletingDemo(true)
+    try {
+      const stripped = stripDemoDataFromProjeto(projeto)
+      const { turmasRaw, funcionariosRaw, disciplinasRaw } = await fetchSchoolBootstrapData()
+      const realSchool = buildProjetoFromSchoolData({
+        anoLetivo: projeto.anoLetivo,
+        mantenedores: mantenedoresRef.current,
+        turmasRaw,
+        funcionariosRaw,
+        disciplinasRaw,
+      })
+
+      // Mesclar dados reais do ERP caso o projeto tenha ficado sem sedes/turmas/professores após remover demo
+      const existingSedesIds = new Set(stripped.sedes.map(s => s.id))
+      const existingProfIds = new Set(stripped.professores.map(p => p.id))
+      const existingDiscIds = new Set(stripped.disciplinas.map(d => d.id))
+      const existingTurmaIds = new Set(stripped.turmas.map(t => t.id))
+
+      const cleaned: HorarioProjeto = sanitizeProjeto({
+        ...stripped,
+        sedes: [...stripped.sedes, ...realSchool.sedes.filter(s => !existingSedesIds.has(s.id))],
+        professores: [...stripped.professores, ...realSchool.professores.filter(p => !existingProfIds.has(p.id))],
+        disciplinas: [...stripped.disciplinas, ...realSchool.disciplinas.filter(d => !existingDiscIds.has(d.id))],
+        turmas: [...stripped.turmas, ...realSchool.turmas.filter(t => !existingTurmaIds.has(t.id))],
+        atualizadoEm: new Date().toISOString(),
+      })
+
+      setUndoStack([])
+      setRedoStack([])
+      setProjeto(cleaned)
+      projetoRef.current = cleaned
+      clearLocalDraft(cleaned.anoLetivo)
+      await persistProjetoCloud(cleaned, { silent: true })
+      setDirty(false)
+      dirtyRef.current = false
+      setConfirmDeleteDemoOpen(false)
+      toast.success('Dados de demonstração excluídos e estrutura real do ERP restaurada!')
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao excluir dados demo')
+    } finally {
+      setDeletingDemo(false)
+    }
   }
 
   const diagnostico = useMemo(() => {
@@ -303,7 +534,7 @@ export default function GeradorHorarioPage() {
     if (!projeto || !cenarioAtivo) return
     setIsPublishing(true)
     try {
-      const res = await fetch('/api/administrativo/gerador-horario', {
+      const res = await apiFetch('/api/administrativo/gerador-horario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -315,7 +546,11 @@ export default function GeradorHorarioPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Erro ao publicar')
-      if (json.projeto) setProjeto(json.projeto)
+      if (json.projeto) {
+        const cleaned = sanitizeProjeto(json.projeto)
+        setProjeto(cleaned)
+        clearLocalDraft(cleaned.anoLetivo)
+      }
       setDirty(false)
       toast.success(
         syncRotina
@@ -396,6 +631,17 @@ export default function GeradorHorarioPage() {
           <button type="button" className="btn btn-secondary btn-sm" onClick={carregarDemonstracao}>
             <Wand2 size={13} /> Carregar Demo
           </button>
+
+          {temDadosDemo && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => setConfirmDeleteDemoOpen(true)}
+              title="Remover sedes, turmas, professores e cenários de demonstração"
+            >
+              <Trash2 size={13} /> Excluir Dados Demo
+            </button>
+          )}
 
           <button
             type="button"
@@ -489,6 +735,61 @@ export default function GeradorHorarioPage() {
           />
         )}
       </div>
+
+      {/* Confirmação acessível em <dialog> nativo para exclusão dos dados demo */}
+      <dialog
+        ref={deleteDemoDialogRef}
+        aria-labelledby="delete-demo-title"
+        onClose={() => setConfirmDeleteDemoOpen(false)}
+        style={{
+          margin: 'auto',
+          padding: 0,
+          borderRadius: 18,
+          border: '1px solid hsl(var(--border-default))',
+          background: 'hsl(var(--bg-surface))',
+          color: 'hsl(var(--text-primary))',
+          width: 'min(92vw, 440px)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.55)',
+        }}
+      >
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h1 id="delete-demo-title" style={{ fontSize: 17, fontWeight: 800, margin: 0, color: '#f87171' }}>
+              Excluir Dados de Demonstração?
+            </h1>
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon btn-sm"
+              onClick={() => setConfirmDeleteDemoOpen(false)}
+              aria-label="Fechar"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: 0, lineHeight: 1.5 }}>
+            Esta ação removerá as sedes, turmas, disciplinas, professores e cenários de demonstração e restaurará os dados reais do seu ERP.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 8 }}>
+            <button
+              type="button"
+              autoFocus
+              className="btn btn-secondary btn-sm"
+              disabled={deletingDemo}
+              onClick={() => setConfirmDeleteDemoOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              disabled={deletingDemo}
+              onClick={excluirDadosDemo}
+            >
+              <Trash2 size={13} /> {deletingDemo ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </button>
+          </div>
+        </div>
+      </dialog>
     </div>
   )
 }

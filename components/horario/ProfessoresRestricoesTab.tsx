@@ -131,9 +131,9 @@ export function ProfessoresRestricoesTab({ projeto, onChange }: Props) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(270px, 320px) 1fr', gap: 16, alignItems: 'start' }}>
+    <div className="horario-prof-layout">
       {/* Lista de Professores */}
-      <div className="card" style={{ padding: 16 }}>
+      <div className="card" style={{ padding: 16, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           <UserCheck size={16} style={{ color: '#3b82f6' }} />
           Docentes ({projeto.professores.length})
@@ -164,7 +164,7 @@ export function ProfessoresRestricoesTab({ projeto, onChange }: Props) {
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 520, overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridAutoRows: 'max-content', gap: 8, maxHeight: 540, overflowY: 'auto', paddingRight: 4 }}>
           {profsFiltrados.map(p => {
             const active = p.id === profSel?.id
             const carga = cargasPorProf.get(p.id) || 0
@@ -174,14 +174,18 @@ export function ProfessoresRestricoesTab({ projeto, onChange }: Props) {
               <button
                 key={p.id}
                 type="button"
+                className="no-click-anim"
+                data-no-ripple="true"
                 onClick={() => setProfSelId(p.id)}
                 style={{
+                  width: '100%',
+                  flexShrink: 0,
                   textAlign: 'left',
                   padding: '10px 12px',
                   borderRadius: 10,
                   cursor: 'pointer',
                   background: active ? 'rgba(59,130,246,0.14)' : 'hsl(var(--bg-elevated))',
-                  border: active ? '1px solid rgba(59,130,246,0.55)' : '1px solid hsl(var(--border-subtle))',
+                  border: active ? '1.5px solid rgba(59,130,246,0.65)' : '1px solid hsl(var(--border-subtle))',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -210,7 +214,7 @@ export function ProfessoresRestricoesTab({ projeto, onChange }: Props) {
 
       {/* Painel do Professor Selecionado */}
       {profSel ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
           {/* Regras & Limites do Professor */}
           <div className="card" style={{ padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -452,6 +456,8 @@ export function ProfessoresRestricoesTab({ projeto, onChange }: Props) {
                               <td key={dia} style={{ padding: 6, textAlign: 'center' }}>
                                 <button
                                   type="button"
+                                  className="no-click-anim"
+                                  data-no-ripple="true"
                                   onClick={() => toggleSlot(profSel, dia, faixa.inicio, faixa.fim)}
                                   style={{
                                     width: '100%',

@@ -4445,7 +4445,7 @@ select option {
 
   /* --- /academico/ocorrencias mobile --- */
   .ocorrencias-page-container {
-    padding: 12px 10px !important;
+    padding: 12px 10px calc(env(safe-area-inset-bottom, 0px) + 24px) 10px !important;
   }
   .ocorrencias-header {
     flex-direction: column !important;
@@ -4458,20 +4458,159 @@ select option {
   }
   .ocorrencias-header-toggle {
     width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
   }
-  .ocorrencias-header-toggle > div {
+  .ocorrencias-tabs-scroll {
     width: 100% !important;
     display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    flex-wrap: nowrap !important;
+    padding: 4px !important;
+    gap: 6px !important;
+    border-radius: 14px !important;
   }
-  .ocorrencias-header-toggle button {
+  .ocorrencias-tabs-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+  .ocorrencias-tabs-scroll button {
+    flex: none !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 0 14px !important;
+    height: 38px !important;
+    font-size: 12.5px !important;
+  }
+  .btn-nova-ocorrencia-header {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 42px !important;
+  }
+
+  /* Banner Interativo de Ocorrências Pendentes no Mobile */
+  .ocorrencias-banner-pendencias {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 14px 16px !important;
+    border-radius: 16px !important;
+    margin-bottom: 16px !important;
+  }
+  .ocorrencias-banner-pendencias .banner-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+  .ocorrencias-banner-pendencias .banner-actions > * {
     flex: 1 !important;
     justify-content: center !important;
+    text-align: center !important;
+    padding: 10px 8px !important;
+    font-size: 12px !important;
   }
+
+  /* Grid de Cards KPI */
   .ocorrencias-cards-grid {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
     margin-bottom: 16px !important;
   }
+
+  /* Card de Ocorrência Reutilizável Mobile */
+  .ocorrencia-card {
+    padding: 14px 14px !important;
+    gap: 10px !important;
+    border-radius: 14px !important;
+  }
+  .ocorrencia-card-desc {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    word-break: break-word !important;
+  }
+  .ocorrencia-card-footer {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+  .ocorrencia-card-meta {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px 12px !important;
+    font-size: 11.5px !important;
+  }
+  .ocorrencia-card-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+  .ocorrencia-card-actions .btn-action-main {
+    flex: 1 !important;
+    justify-content: center !important;
+    height: 32px !important;
+    font-size: 11.5px !important;
+  }
+  .ocorrencia-card-actions .btn-action-icon {
+    width: 32px !important;
+    height: 32px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Slide-Over Quick Drawer Mobile (100% tela + safe area) */
+  .ocorrencias-quick-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+    inset: 0 !important;
+  }
+  .ocorrencias-drawer-header {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-bottom: 16px !important;
+  }
+  .ocorrencias-drawer-body {
+    padding: 16px 12px !important;
+    gap: 14px !important;
+  }
+  .ocorrencias-drawer-footer {
+    padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 16px) 16px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .ocorrencias-drawer-footer .drawer-footer-actions-secondary {
+    display: flex !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .ocorrencias-drawer-footer .drawer-footer-actions-secondary > * {
+    flex: 1 !important;
+    justify-content: center !important;
+    height: 38px !important;
+    font-size: 12px !important;
+  }
+  .ocorrencias-drawer-footer .drawer-footer-actions-primary {
+    width: 100% !important;
+    height: 42px !important;
+    justify-content: center !important;
+    font-size: 13px !important;
+  }
+  .drawer-metadata-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .drawer-metadata-grid > div {
+    padding: 10px 12px !important;
+  }
+
+  /* Barras de Filtro no Mobile */
   .ocorrencias-filter-bar {
     flex-direction: column !important;
     gap: 8px !important;
@@ -4482,6 +4621,10 @@ select option {
     width: 100% !important;
     flex-direction: column !important;
     gap: 8px !important;
+  }
+  .ocorrencias-filter-bar > div > div {
+    width: 100% !important;
+    min-width: 0 !important;
   }
   .ocorrencias-filter-bar select,
   .ocorrencias-filter-bar input {

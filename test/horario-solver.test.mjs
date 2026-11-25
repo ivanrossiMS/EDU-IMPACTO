@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildDemoProjeto } from '../lib/horario/presets.ts'
+import { buildDemoProjeto, hasDemoDataInProjeto, stripDemoDataFromProjeto } from '../lib/horario/presets.ts'
 import { analisarViabilidade, avaliarGradeCompleta, executarGeradorHorarioAsync } from '../lib/horario/solver.ts'
 
 test('Diagnóstico detecta configuração demo como viável e identifica superlotação quando excedida', () => {
@@ -38,4 +38,25 @@ test('Motor gera grade completa do cenário Demo Multi-Sede com 0 choques, 0 vio
   // Reavaliar via avaliarGradeCompleta para garantir consistência
   const recheck = avaliarGradeCompleta(demo, result.aulas)
   assert.equal(recheck.metricas.choquesProfessor, 0)
+})
+
+test('hasDemoDataInProjeto e stripDemoDataFromProjeto removem todos os dados demo preservando dados reais', () => {
+  const demo = buildDemoProjeto('2026')
+  assert.equal(hasDemoDataInProjeto(demo), true)
+
+  demo.turmas.push({
+    id: 'REAL-9A',
+    nome: '9º Ano A Real',
+    turno: 'Matutino',
+    unidadeId: 'REAL-SEDE',
+    modeloHorarioId: 'MOD-MAT-5',
+    ativa: true,
+  })
+  demo.sedes.push({ id: 'REAL-SEDE', nome: 'Sede Real', cor: '#3b82f6' })
+
+  const cleaned = stripDemoDataFromProjeto(demo)
+  assert.equal(hasDemoDataInProjeto(cleaned), false)
+  assert.deepEqual(cleaned.sedes.map(s => s.id), ['REAL-SEDE'])
+  assert.deepEqual(cleaned.turmas.map(t => t.id), ['REAL-9A'])
+  assert.equal(cleaned.professores.length, 0)
 })

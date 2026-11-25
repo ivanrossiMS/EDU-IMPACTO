@@ -319,19 +319,43 @@ export function ImagePinchZoomModal({ src, alt = 'Anexo', onClose }: ImagePinchZ
         }}
         onClick={handleBackdropClick}
       >
+        <style>{`
+          .image-pinch-zoom-top-bar {
+            padding-top: max(56px, calc(env(safe-area-inset-top, 0px) + 18px)) !important;
+            padding-left: max(16px, calc(env(safe-area-inset-left, 0px) + 16px)) !important;
+            padding-right: max(16px, calc(env(safe-area-inset-right, 0px) + 16px)) !important;
+            padding-bottom: 20px !important;
+          }
+          @media (min-width: 768px) {
+            .image-pinch-zoom-top-bar {
+              padding-top: 24px !important;
+              padding-left: 28px !important;
+              padding-right: 28px !important;
+              padding-bottom: 20px !important;
+            }
+          }
+        `}</style>
+
         {/* Top Header Bar */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '20px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          zIndex: 100002,
-          pointerEvents: 'none'
-        }}>
+        <div
+          className="image-pinch-zoom-top-bar"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            paddingTop: 'max(56px, calc(env(safe-area-inset-top, 0px) + 18px))',
+            paddingBottom: '20px',
+            paddingLeft: 'max(16px, calc(env(safe-area-inset-left, 0px) + 16px))',
+            paddingRight: 'max(16px, calc(env(safe-area-inset-right, 0px) + 16px))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 100002,
+            pointerEvents: 'none',
+            background: 'linear-gradient(to bottom, rgba(5, 8, 20, 0.9) 0%, rgba(5, 8, 20, 0.5) 65%, transparent 100%)'
+          }}
+        >
           {/* Helper hint or badge */}
           <AnimatePresence>
             {showHint && (
@@ -343,20 +367,26 @@ export function ImagePinchZoomModal({ src, alt = 'Anexo', onClose }: ImagePinchZ
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  padding: '6px 14px',
+                  padding: '7px 14px',
                   borderRadius: 20,
-                  background: 'rgba(15, 23, 42, 0.75)',
+                  background: 'rgba(15, 23, 42, 0.85)',
                   backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
-                  color: 'rgba(255, 255, 255, 0.9)',
+                  color: 'rgba(255, 255, 255, 0.95)',
                   fontSize: 12,
                   fontWeight: 600,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  pointerEvents: 'auto'
+                  pointerEvents: 'auto',
+                  maxWidth: 'calc(100vw - 90px)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
                 }}
               >
-                <ZoomIn size={13} color="#818cf8" />
-                <span>Faça pinça com 2 dedos ou toque duplo</span>
+                <ZoomIn size={14} color="#818cf8" style={{ flexShrink: 0 }} />
+                <span className="hidden sm:inline">Faça pinça com 2 dedos ou toque duplo</span>
+                <span className="inline sm:hidden">Toque duplo ou pinça p/ zoom</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -383,7 +413,8 @@ export function ImagePinchZoomModal({ src, alt = 'Anexo', onClose }: ImagePinchZ
               cursor: 'pointer',
               transition: 'all 0.2s',
               boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              flexShrink: 0
             }}
             onMouseEnter={e => {
               e.currentTarget.style.background = 'rgba(239, 68, 68, 0.9)'
@@ -431,7 +462,7 @@ export function ImagePinchZoomModal({ src, alt = 'Anexo', onClose }: ImagePinchZ
               draggable={false}
               style={{
                 maxWidth: '92vw',
-                maxHeight: '84vh',
+                maxHeight: 'min(82vh, calc(100dvh - max(80px, calc(env(safe-area-inset-top, 0px) + 80px)) - max(80px, calc(env(safe-area-inset-bottom, 0px) + 70px))))',
                 objectFit: 'contain',
                 borderRadius: 14,
                 boxShadow: '0 24px 70px -10px rgba(0, 0, 0, 0.7)',
@@ -446,7 +477,7 @@ export function ImagePinchZoomModal({ src, alt = 'Anexo', onClose }: ImagePinchZ
         {/* Floating Zoom Controls Bar */}
         <div style={{
           position: 'absolute',
-          bottom: 28,
+          bottom: 'max(24px, calc(env(safe-area-inset-bottom, 0px) + 16px))',
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',

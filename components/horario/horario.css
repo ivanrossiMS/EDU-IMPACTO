@@ -65,6 +65,19 @@ dialog::backdrop {
   contain-intrinsic-size: auto 460px auto 340px;
 }
 
+.horario-prof-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .horario-prof-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @supports not (content-visibility: auto) {
   .timetable-column {
     contain: layout style paint;

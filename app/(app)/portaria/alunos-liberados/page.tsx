@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useApiQuery, useApiMutation } from '@/hooks/useApi'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import {
   UserCheck, RefreshCw, Upload, Trash2, Search, CheckCircle,
   XCircle, AlertTriangle, Scan, Users, Activity, Send, Terminal, Play, X
@@ -10,6 +11,7 @@ import {
 const ACCENT = '#06b6d4'
 
 export default function AlunosLiberadosPage() {
+  const isMobile = useIsMobile()
   const [busca, setBusca] = useState('')
   const [syncing, setSyncing] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -189,20 +191,29 @@ export default function AlunosLiberadosPage() {
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+      <div style={{
+        marginBottom: 24,
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 16
+      }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
             <div style={{
               width: 42, height: 42, borderRadius: 12,
               background: `linear-gradient(135deg, ${ACCENT}, #0891b2)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 4px 15px ${ACCENT}30`
+              boxShadow: `0 4px 15px ${ACCENT}30`,
+              flexShrink: 0
             }}>
               <UserCheck size={20} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Alunos Liberados</h1>
-              <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Alunos Liberados</h1>
+              <p style={{ fontSize: isMobile ? 11.5 : 12.5, color: '#64748b', margin: 0 }}>
                 {alunos.length} alunos ativos · {alunosComFoto} com foto · {alunosSincronizados} sincronizados no iDFace
               </p>
             </div>
@@ -213,12 +224,13 @@ export default function AlunosLiberadosPage() {
           <button
             onClick={() => handleSyncAllProgressive(dispositivos[0].id)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700,
               background: `linear-gradient(135deg, ${ACCENT}, #0891b2)`,
               border: 'none', color: '#fff', cursor: 'pointer',
-              boxShadow: `0 4px 15px ${ACCENT}20`,
-              transition: 'all 0.2s'
+              boxShadow: `0 4px 15px ${ACCENT}25`,
+              transition: 'all 0.2s',
+              width: isMobile ? '100%' : 'auto'
             }}
           >
             <Send size={14} />
@@ -329,16 +341,18 @@ export default function AlunosLiberadosPage() {
         borderRadius: 18, overflow: 'hidden',
         boxShadow: '0 4px 20px rgba(0,0,0,0.01)'
       }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: '90px 60px 1fr 140px 150px 110px',
-          gap: 12, padding: '14px 20px',
-          borderBottom: '1px solid hsl(var(--border-subtle))',
-          background: 'hsl(var(--bg-base))'
-        }}>
-          {['CÓDIGO', 'FOTO', 'NOME', 'STATUS SYNC', 'ÚLTIMA SYNC', 'AÇÕES'].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
-          ))}
-        </div>
+        {!isMobile && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: '90px 60px 1fr 140px 150px 110px',
+            gap: 12, padding: '14px 20px',
+            borderBottom: '1px solid hsl(var(--border-subtle))',
+            background: 'hsl(var(--bg-base))'
+          }}>
+            {['CÓDIGO', 'FOTO', 'NOME', 'STATUS SYNC', 'ÚLTIMA SYNC', 'AÇÕES'].map(h => (
+              <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
+            ))}
+          </div>
+        )}
 
         {loadingAlunos ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'hsl(var(--text-muted))' }}>
@@ -350,7 +364,116 @@ export default function AlunosLiberadosPage() {
             <Users size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
             <div style={{ fontSize: 13 }}>Nenhum aluno encontrado correspondente ao filtro.</div>
           </div>
+        ) : isMobile ? (
+          /* Visualização Mobile Ultra-Moderna em Cards */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+            {filtered.map((a: any) => {
+              const sync = syncMap[a.id]
+              const isSynced = sync?.status === 'sincronizado'
+              const hasPhoto = a.foto && a.foto.length > 50
+              const codigo = a.codigo || a.matricula || '—'
+
+              return (
+                <div key={a.id} style={{
+                  background: 'hsl(var(--bg-elevated))',
+                  border: '1px solid hsl(var(--border-subtle))',
+                  borderRadius: 14,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                }}>
+                  {/* Top: Foto + Nome + Código */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ flexShrink: 0 }}>
+                      {hasPhoto ? (
+                        <div style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', border: `2px solid ${ACCENT}35` }}>
+                          <img src={a.foto} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ) : (
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(244,63,94,0.06)', border: '1px solid rgba(244,63,94,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <XCircle size={18} color="#f43f5e" />
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.nome}
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: ACCENT, fontFamily: 'monospace', background: `${ACCENT}12`, padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>
+                          #{codigo}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                        {a.turma || 'Sem turma'} · {a.turno || 'Sem Turno'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status de Sincronização + Última Sync */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'hsl(var(--bg-base))', borderRadius: 8, fontSize: 11 }}>
+                    <div>
+                      {isSynced ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800, color: '#10b981' }}>
+                          <CheckCircle size={12} /> Sincronizado
+                        </span>
+                      ) : sync?.status === 'erro' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800, color: '#f43f5e' }} title={sync.erro_detalhe}>
+                          <AlertTriangle size={12} /> Erro de Envio
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800, color: '#94a3b8' }}>
+                          Pendente
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ color: 'hsl(var(--text-muted))', fontSize: 10.5, fontWeight: 600 }}>
+                      {sync?.ultima_sync ? new Date(sync.ultima_sync).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Nunca sincronizado'}
+                    </div>
+                  </div>
+
+                  {/* Botões de Ação */}
+                  {dispositivos.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
+                      <button
+                        onClick={() => handleSync(a.id, dispositivos[0].id)}
+                        disabled={syncing === a.id}
+                        style={{
+                          flex: 1, height: 36, borderRadius: 8,
+                          background: `${ACCENT}14`, border: `1px solid ${ACCENT}35`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          cursor: 'pointer', color: ACCENT, fontSize: 12, fontWeight: 700,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {syncing === a.id ? <Activity size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={13} />}
+                        <span>Sincronizar</span>
+                      </button>
+                      {hasPhoto && (
+                        <button
+                          onClick={() => handleSync(a.id, dispositivos[0].id)}
+                          style={{
+                            padding: '0 14px', height: 36, borderRadius: 8,
+                            background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            cursor: 'pointer', color: 'hsl(var(--text-muted))', fontSize: 12, fontWeight: 700,
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <Upload size={13} />
+                          <span>Foto</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         ) : (
+          /* Visualização Desktop em Grade */
           <div style={{ maxHeight: 520, overflow: 'auto' }}>
             {filtered.map((a: any) => {
               const sync = syncMap[a.id]

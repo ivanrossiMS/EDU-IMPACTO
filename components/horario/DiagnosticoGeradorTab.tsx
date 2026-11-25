@@ -111,7 +111,7 @@ export function DiagnosticoGeradorTab({
         )}
 
         {/* Itens de Diagnóstico */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridAutoRows: 'max-content', gap: 8, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
           {diagnostico.itens.map(item => {
             const color = item.nivel === 'viavel' ? '#10b981' : item.nivel === 'atencao' ? '#f59e0b' : '#ef4444'
             const Icon = item.nivel === 'viavel' ? CheckCircle2 : item.nivel === 'atencao' ? AlertTriangle : XCircle

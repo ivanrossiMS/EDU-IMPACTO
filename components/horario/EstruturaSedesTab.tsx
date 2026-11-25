@@ -366,7 +366,7 @@ export function EstruturaSedesTab({ projeto, onChange }: Props) {
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gridAutoRows: 'max-content', gap: 8, maxHeight: 260, overflowY: 'auto', paddingRight: 4 }}>
             {projeto.ambientes.map(amb => {
               const sedeNome = projeto.sedes.find(s => s.id === amb.unidadeId)?.nome || 'Sede'
               return (

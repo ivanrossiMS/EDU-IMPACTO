@@ -395,7 +395,7 @@ export function buildDemoProjeto(anoLetivo = '2026'): HorarioProjeto {
     { id: 'AL-32', turmaId: 'T-5A', disciplinaId: 'D-ART', professoresIds: ['PR-FERNANDA'], aulasSemana: 2, distribuicao: 'separadas' },
   ]
 
-  return {
+  return sanitizeProjeto({
     id: `PROJ-DEMO-${anoLetivo}`,
     nome: `Demonstração Multi-Sede (${anoLetivo})`,
     anoLetivo,
@@ -411,5 +411,51 @@ export function buildDemoProjeto(anoLetivo = '2026'): HorarioProjeto {
     parametros: { ...DEFAULT_PARAMETROS },
     cenarios: [],
     cenarioAtivoId: null,
+  })
+}
+
+const DEMO_SEDE_IDS = new Set(['SEDE-CENTRO', 'SEDE-NORTE'])
+const DEMO_MODELO_IDS = new Set(['MOD-MAT-CEDO'])
+const DEMO_AMB_IDS = new Set(['AMB-QUADRA-C', 'AMB-LAB-C', 'AMB-QUADRA-N'])
+const DEMO_DISC_IDS = new Set(['D-MAT', 'D-POR', 'D-HIS', 'D-GEO', 'D-CIE', 'D-ING', 'D-EDF', 'D-ART'])
+const DEMO_PROF_IDS = new Set(['PR-ANA', 'PR-BRUNO', 'PR-CARLOS', 'PR-DANIELA', 'PR-EDUARDO', 'PR-FERNANDA', 'PR-GABRIEL', 'PR-HELENA'])
+const DEMO_TURMA_IDS = new Set(['T-6A', 'T-6B', 'T-7A', 'T-5A'])
+
+export function hasDemoDataInProjeto(projeto: HorarioProjeto | null | undefined): boolean {
+  if (!projeto) return false
+  if (String(projeto.id || '').startsWith('PROJ-DEMO-')) return true
+  return (
+    projeto.sedes.some(s => DEMO_SEDE_IDS.has(s.id)) ||
+    projeto.turmas.some(t => DEMO_TURMA_IDS.has(t.id)) ||
+    projeto.professores.some(p => DEMO_PROF_IDS.has(p.id)) ||
+    projeto.disciplinas.some(d => DEMO_DISC_IDS.has(d.id))
+  )
+}
+
+export function stripDemoDataFromProjeto(projeto: HorarioProjeto): HorarioProjeto {
+  const nextMatriz: Record<string, number> = {}
+  for (const [k, v] of Object.entries(projeto.matrizDeslocamento || {})) {
+    const [a, b] = k.split('__')
+    if (!DEMO_SEDE_IDS.has(a) && !DEMO_SEDE_IDS.has(b)) {
+      nextMatriz[k] = v
+    }
   }
+
+  return sanitizeProjeto({
+    ...projeto,
+    id: String(projeto.id || '').startsWith('PROJ-DEMO-') ? `PROJ-${projeto.anoLetivo}` : projeto.id,
+    nome: String(projeto.id || '').startsWith('PROJ-DEMO-') ? `Grade Oficial ${projeto.anoLetivo}` : projeto.nome,
+    sedes: projeto.sedes.filter(s => !DEMO_SEDE_IDS.has(s.id)),
+    matrizDeslocamento: nextMatriz,
+    modelosHorario: projeto.modelosHorario.filter(m => !DEMO_MODELO_IDS.has(m.id)),
+    ambientes: projeto.ambientes.filter(a => !DEMO_AMB_IDS.has(a.id)),
+    professores: projeto.professores.filter(p => !DEMO_PROF_IDS.has(p.id)),
+    disciplinas: projeto.disciplinas.filter(d => !DEMO_DISC_IDS.has(d.id)),
+    turmas: projeto.turmas.filter(t => !DEMO_TURMA_IDS.has(t.id)),
+    alocacoes: projeto.alocacoes.filter(
+      al => !DEMO_TURMA_IDS.has(al.turmaId) && !DEMO_DISC_IDS.has(al.disciplinaId)
+    ),
+    cenarios: String(projeto.id || '').startsWith('PROJ-DEMO-') ? [] : projeto.cenarios,
+    cenarioAtivoId: String(projeto.id || '').startsWith('PROJ-DEMO-') ? null : projeto.cenarioAtivoId,
+  })
 }

@@ -627,7 +627,10 @@ export function Sidebar() {
                 <motion.button
                   whileHover={{ scale: 1.02, backgroundColor: 'rgba(6, 182, 212, 0.16)', color: '#ffffff' }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => setIsTrocarModuloOpen(true)}
+                  onClick={() => {
+                    setIsTrocarModuloOpen(true)
+                    if (isMobile) toggleSidebar()
+                  }}
                   title="Trocar Módulo"
                   style={{
                     display: 'flex',
@@ -723,7 +726,10 @@ export function Sidebar() {
                 <motion.button
                   whileHover={{ scale: 1.1, backgroundColor: 'rgba(6, 182, 212, 0.18)' }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setIsTrocarModuloOpen(true)}
+                  onClick={() => {
+                    setIsTrocarModuloOpen(true)
+                    if (isMobile) toggleSidebar()
+                  }}
                   title="Trocar Módulo"
                   style={{
                     width: 30,

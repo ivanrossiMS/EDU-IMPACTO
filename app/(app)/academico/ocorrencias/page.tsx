@@ -525,7 +525,7 @@ function OcorrenciaModal({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px calc(env(safe-area-inset-bottom, 0px) + 12px) 16px',
       }}
     >
       <div
@@ -533,7 +533,7 @@ function OcorrenciaModal({
           background: '#fff',
           width: '100%',
           maxWidth: 540,
-          maxHeight: '92vh',
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
           display: 'flex',
           flexDirection: 'column',
           borderRadius: '24px',
@@ -546,7 +546,7 @@ function OcorrenciaModal({
         <div
           style={{
             background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%)',
-            padding: '24px 28px',
+            padding: '20px 24px',
             color: '#fff',
             position: 'relative',
             flexShrink: 0,
@@ -1682,15 +1682,19 @@ export default function OcorrenciasPage() {
     const isConfirmed = Boolean(oc.ciencia_responsavel)
     const parsed = parseOcorrenciaDescricao(oc.descricao)
     const turmaLabel = oc.turmaNome || oc.turma || 'Sem turma'
+    const aId = cleanAlunoId(oc.alunoId || oc.aluno_id)
+    const oAno = getOcAno(oc, turmas)
 
     return (
       <div
         key={oc.id}
+        className="ocorrencia-card"
         onClick={() => setQuickDrawer({ type: 'ocorrencia', ocorrenciaId: oc.id })}
         style={{
           display: 'flex',
-          gap: 16,
-          padding: options?.compact ? '14px 16px' : '18px 22px',
+          flexDirection: 'column',
+          gap: 10,
+          padding: options?.compact ? '14px 16px' : '16px 18px',
           background: '#ffffff',
           border: '1px solid #e2e8f0',
           borderLeft: `4px solid ${isConfirmed ? '#10b981' : '#f59e0b'}`,
@@ -1710,133 +1714,200 @@ export default function OcorrenciasPage() {
           e.currentTarget.style.borderColor = '#e2e8f0'
         }}
       >
-        <div
-          style={{
-            width: options?.compact ? 38 : 44,
-            height: options?.compact ? 38 : 44,
-            borderRadius: '12px',
-            background: isConfirmed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.12)',
-            color: isConfirmed ? '#059669' : '#d97706',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: options?.compact ? '13px' : '14px',
-            fontFamily: 'Outfit, sans-serif',
-          }}
-        >
-          {getInitials(oc.alunoNome || 'AL')}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-            <button
-              type="button"
-              onClick={e => {
-                e.stopPropagation()
-                const aId = cleanAlunoId(oc.alunoId || oc.aluno_id)
-                setQuickDrawer({
-                  type: 'aluno',
-                  alunoId: aId,
-                  alunoNome: oc.alunoNome || 'Aluno',
-                  turma: turmaLabel,
-                })
-              }}
+        {/* Linha Superior: Avatar + Nome/Turma + Badge de Ciência */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+            <div
               style={{
-                background: 'transparent',
-                border: 'none',
-                padding: 0,
-                fontSize: options?.compact ? 14 : 15,
+                width: options?.compact ? 36 : 42,
+                height: options?.compact ? 36 : 42,
+                borderRadius: '12px',
+                background: isConfirmed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.12)',
+                color: isConfirmed ? '#059669' : '#d97706',
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 fontWeight: 800,
-                color: '#0f172a',
-                cursor: 'pointer',
-                textAlign: 'left',
+                fontSize: options?.compact ? '13px' : '14px',
+                fontFamily: 'Outfit, sans-serif',
               }}
-              title="Clique para abrir o dossiê deste aluno"
             >
-              {oc.alunoNome || 'Aluno sem nome'}
-            </button>
+              {getInitials(oc.alunoNome || 'AL')}
+            </div>
 
-            {options?.showTurmaBadge !== false && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: '#475569',
-                  background: '#f1f5f9',
-                  padding: '2px 8px',
-                  borderRadius: '6px',
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation()
+                  setQuickDrawer({
+                    type: 'aluno',
+                    alunoId: aId,
+                    alunoNome: oc.alunoNome || 'Aluno',
+                    turma: turmaLabel,
+                  })
                 }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: options?.compact ? 14 : 15,
+                  fontWeight: 800,
+                  color: '#0f172a',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'block',
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title="Clique para abrir o dossiê deste aluno"
               >
-                {turmaLabel}
-              </span>
-            )}
+                {oc.alunoNome || 'Aluno sem nome'}
+              </button>
 
-            {(() => {
-              const oAno = getOcAno(oc, turmas)
-              if (!oAno) return null
-              return (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: '#1d4ed8',
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    padding: '2px 7px',
-                    borderRadius: '6px',
-                  }}
-                >
-                  Ano {oAno}
-                </span>
-              )
-            })()}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
+                {options?.showTurmaBadge !== false && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#475569',
+                      background: '#f1f5f9',
+                      padding: '2px 7px',
+                      borderRadius: '6px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {turmaLabel}
+                  </span>
+                )}
 
-            {oc.anexoUrl && (
+                {oAno && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#1d4ed8',
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Ano {oAno}
+                  </span>
+                )}
+
+                {oc.anexoUrl && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 11,
+                      padding: '2px 7px',
+                      borderRadius: 6,
+                      background: '#eff6ff',
+                      color: '#2563eb',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Paperclip size={11} /> Anexo
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Badge de Ciência no topo direito */}
+          <div style={{ flexShrink: 0 }}>
+            {isConfirmed ? (
               <span
                 style={{
+                  padding: '3px 8px',
+                  background: '#ecfdf5',
+                  color: '#059669',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: 700,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 4,
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: 6,
-                  background: '#eff6ff',
-                  color: '#2563eb',
-                  fontWeight: 700,
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <Paperclip size={11} /> Anexo
+                <CheckCircle size={11} /> Confirmada
+              </span>
+            ) : (
+              <span
+                style={{
+                  padding: '3px 8px',
+                  background: '#fffbeb',
+                  color: '#d97706',
+                  border: '1px solid #fde68a',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <AlertTriangle size={11} /> Aguardando
               </span>
             )}
           </div>
+        </div>
 
-          <p
-            style={{
-              fontSize: 13.5,
-              color: '#334155',
-              lineHeight: 1.55,
-              margin: '6px 0 10px 0',
-              display: '-webkit-box',
-              WebkitLineClamp: options?.compact ? 2 : 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}
-          >
-            {parsed.textoLimpo}
-          </p>
+        {/* Descrição limpa - Ocupa 100% da largura, fácil leitura */}
+        <p
+          className="ocorrencia-card-desc"
+          style={{
+            fontSize: 13,
+            color: '#334155',
+            lineHeight: 1.55,
+            margin: '2px 0 0 0',
+            display: '-webkit-box',
+            WebkitLineClamp: options?.compact ? 2 : 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}
+        >
+          {parsed.textoLimpo}
+        </p>
 
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: '#64748b' }}>
+        {/* Rodapé do Card: Metadados + Botões de Ação */}
+        <div
+          className="ocorrencia-card-footer"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
+            paddingTop: 8,
+            borderTop: '1px solid #f1f5f9',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="ocorrencia-card-meta" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 11.5, color: '#64748b' }}>
             {oc.data && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 500 }}>
-                <Calendar size={13} style={{ color: '#94a3b8' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <Calendar size={12} style={{ color: '#94a3b8' }} />
                 {formatDateBR(oc.data)}
               </span>
             )}
             {oc.responsavel && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontWeight: 500 }}>
-                <User size={13} style={{ color: '#94a3b8' }} />
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <User size={12} style={{ color: '#94a3b8' }} />
                 {oc.responsavel}
               </span>
             )}
@@ -1846,64 +1917,25 @@ export default function OcorrenciasPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 4,
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: '#64748b',
                   background: '#f8fafc',
-                  padding: '2px 8px',
+                  padding: '2px 6px',
                   borderRadius: 6,
                   border: '1px solid #e2e8f0',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <Clock size={11} style={{ color: '#2563eb' }} />
+                <Clock size={10.5} style={{ color: '#2563eb' }} />
                 {parsed.lancado}
               </span>
             )}
           </div>
-        </div>
 
-        <div
-          style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', justifyContent: 'space-between', flexShrink: 0 }}
-          onClick={e => e.stopPropagation()}
-        >
-          {isConfirmed ? (
-            <span
-              style={{
-                padding: '4px 10px',
-                background: '#ecfdf5',
-                color: '#059669',
-                border: '1px solid #a7f3d0',
-                borderRadius: '20px',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <CheckCircle size={12} /> Confirmada
-            </span>
-          ) : (
-            <span
-              style={{
-                padding: '4px 10px',
-                background: '#fffbeb',
-                color: '#d97706',
-                border: '1px solid #fde68a',
-                borderRadius: '20px',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <AlertTriangle size={12} /> Aguardando
-            </span>
-          )}
-
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="ocorrencia-card-actions" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button
               type="button"
+              className="btn-action-main"
               onClick={() => setQuickDrawer({ type: 'ocorrencia', ocorrenciaId: oc.id })}
               style={{
                 height: '30px',
@@ -1918,6 +1950,7 @@ export default function OcorrenciasPage() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
+                whiteSpace: 'nowrap',
               }}
               title="Ver registro completo"
             >
@@ -1927,6 +1960,7 @@ export default function OcorrenciasPage() {
             {isConfirmed ? (
               <button
                 type="button"
+                className="btn-action-main"
                 onClick={() => desfazerCiencia(oc.id)}
                 style={{
                   height: '30px',
@@ -1941,6 +1975,7 @@ export default function OcorrenciasPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
+                  whiteSpace: 'nowrap',
                 }}
                 title="Desfazer confirmação de ciência"
               >
@@ -1949,6 +1984,7 @@ export default function OcorrenciasPage() {
             ) : (
               <button
                 type="button"
+                className="btn-action-main"
                 onClick={() => marcarCiencia(oc.id)}
                 style={{
                   height: '30px',
@@ -1963,6 +1999,7 @@ export default function OcorrenciasPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
+                  whiteSpace: 'nowrap',
                 }}
                 title="Confirmar ciência do responsável"
               >
@@ -1972,6 +2009,7 @@ export default function OcorrenciasPage() {
 
             <button
               type="button"
+              className="btn-action-icon"
               onClick={() => openEdit(oc.id)}
               style={{
                 border: '1px solid #e2e8f0',
@@ -1992,6 +2030,7 @@ export default function OcorrenciasPage() {
 
             <button
               type="button"
+              className="btn-action-icon"
               onClick={() => handleDelete(oc.id)}
               style={{
                 border: '1px solid #fee2e2',
@@ -2067,6 +2106,7 @@ export default function OcorrenciasPage() {
         ref={drawerDialogRef}
         {...({ closedby: 'any' } as any)}
         aria-labelledby="quickDrawerTitle"
+        className="ocorrencias-quick-drawer"
         style={{
           position: 'fixed',
           inset: '0 0 0 auto',
@@ -2098,17 +2138,18 @@ export default function OcorrenciasPage() {
 
               return (
                 <>
-                  {/* Header do Drawer de Ocorrência */}
+                  {/* Header do Drawer de Ocorrência (Safe Area Protegida) */}
                   <div
+                    className="ocorrencias-drawer-header"
                     style={{
-                      padding: '24px 28px',
+                      padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 24px 20px 24px',
                       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
                       color: '#fff',
                       flexShrink: 0,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
                         <div
                           style={{
                             width: 48,
@@ -2123,12 +2164,13 @@ export default function OcorrenciasPage() {
                             fontWeight: 900,
                             fontSize: 16,
                             color: '#fff',
+                            flexShrink: 0,
                           }}
                         >
                           {getInitials(activeOc.alunoNome || 'AL')}
                         </div>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                             <span
                               style={{
                                 fontSize: 10,
@@ -2161,6 +2203,7 @@ export default function OcorrenciasPage() {
                               fontSize: 20,
                               margin: 0,
                               color: '#fff',
+                              wordBreak: 'break-word',
                             }}
                           >
                             {activeOc.alunoNome}
@@ -2175,8 +2218,8 @@ export default function OcorrenciasPage() {
                         type="button"
                         onClick={() => setQuickDrawer(null)}
                         style={{
-                          width: 36,
-                          height: 36,
+                          width: 38,
+                          height: 38,
                           borderRadius: 10,
                           border: '1px solid rgba(255,255,255,0.15)',
                           background: 'rgba(255,255,255,0.08)',
@@ -2185,6 +2228,7 @@ export default function OcorrenciasPage() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
+                          flexShrink: 0,
                         }}
                       >
                         <X size={18} />
@@ -2223,9 +2267,9 @@ export default function OcorrenciasPage() {
                   </div>
 
                   {/* Corpo do Drawer de Ocorrência */}
-                  <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div className="ocorrencias-drawer-body" style={{ padding: '24px 28px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
                     {/* Metadados Rápidos */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="drawer-metadata-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div style={{ padding: '12px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
                           Data da Ocorrência
@@ -2396,8 +2440,9 @@ export default function OcorrenciasPage() {
 
                   {/* Footer de Ações Diretas */}
                   <div
+                    className="ocorrencias-drawer-footer"
                     style={{
-                      padding: '16px 28px',
+                      padding: '16px 24px calc(env(safe-area-inset-bottom, 0px) + 16px) 24px',
                       borderTop: '1px solid #e2e8f0',
                       background: '#f8fafc',
                       display: 'flex',
@@ -2407,7 +2452,7 @@ export default function OcorrenciasPage() {
                       flexWrap: 'wrap',
                     }}
                   >
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div className="drawer-footer-actions-secondary" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         onClick={() => openEdit(activeOc.id)}
@@ -2472,6 +2517,7 @@ export default function OcorrenciasPage() {
                     {isConfirmed ? (
                       <button
                         type="button"
+                        className="drawer-footer-actions-primary"
                         onClick={() => desfazerCiencia(activeOc.id)}
                         style={{
                           height: 38,
@@ -2493,6 +2539,7 @@ export default function OcorrenciasPage() {
                     ) : (
                       <button
                         type="button"
+                        className="drawer-footer-actions-primary"
                         onClick={() => marcarCiencia(activeOc.id)}
                         style={{
                           height: 38,
@@ -2523,15 +2570,16 @@ export default function OcorrenciasPage() {
         {quickDrawer?.type === 'aluno' && (
           <>
             <div
+              className="ocorrencias-drawer-header"
               style={{
-                padding: '24px 28px',
+                padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 24px 20px 24px',
                 background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
                 color: '#fff',
                 flexShrink: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
                   <div
                     style={{
                       width: 48,
@@ -2545,11 +2593,12 @@ export default function OcorrenciasPage() {
                       fontFamily: 'Outfit, sans-serif',
                       fontWeight: 900,
                       fontSize: 16,
+                      flexShrink: 0,
                     }}
                   >
                     {getInitials(quickDrawer.alunoNome)}
                   </div>
-                  <div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       style={{
                         fontSize: 10,
@@ -2564,7 +2613,7 @@ export default function OcorrenciasPage() {
                     </div>
                     <h2
                       id="quickDrawerTitle"
-                      style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff' }}
+                      style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff', wordBreak: 'break-word' }}
                     >
                       {quickDrawer.alunoNome}
                     </h2>
@@ -2577,8 +2626,8 @@ export default function OcorrenciasPage() {
                   type="button"
                   onClick={() => setQuickDrawer(null)}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.15)',
                     background: 'rgba(255,255,255,0.08)',
@@ -2587,6 +2636,7 @@ export default function OcorrenciasPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
+                    flexShrink: 0,
                   }}
                 >
                   <X size={18} />
@@ -2660,7 +2710,7 @@ export default function OcorrenciasPage() {
               </div>
             </div>
 
-            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+            <div className="ocorrencias-drawer-body" style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
               {drawerAlunoOcorrencias.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
                   Nenhuma ocorrência registrada para este aluno.
@@ -2677,15 +2727,16 @@ export default function OcorrenciasPage() {
         {quickDrawer?.type === 'turma' && (
           <>
             <div
+              className="ocorrencias-drawer-header"
               style={{
-                padding: '24px 28px',
+                padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 24px 20px 24px',
                 background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
                 color: '#fff',
                 flexShrink: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <div>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
                       fontSize: 10,
@@ -2698,10 +2749,10 @@ export default function OcorrenciasPage() {
                   >
                     Visualização Rápida da Turma
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <h2
                       id="quickDrawerTitle"
-                      style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff' }}
+                      style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff', wordBreak: 'break-word' }}
                     >
                       {quickDrawer.turmaNome}
                     </h2>
@@ -2728,8 +2779,8 @@ export default function OcorrenciasPage() {
                   type="button"
                   onClick={() => setQuickDrawer(null)}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.15)',
                     background: 'rgba(255,255,255,0.08)',
@@ -2738,13 +2789,14 @@ export default function OcorrenciasPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
+                    flexShrink: 0,
                   }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2797,7 +2849,7 @@ export default function OcorrenciasPage() {
               </div>
             </div>
 
-            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+            <div className="ocorrencias-drawer-body" style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
               {drawerTurmaOcorrencias.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
                   <CheckCircle size={36} style={{ color: '#10b981', margin: '0 auto 10px' }} />
@@ -2816,15 +2868,16 @@ export default function OcorrenciasPage() {
         {quickDrawer?.type === 'status' && (
           <>
             <div
+              className="ocorrencias-drawer-header"
               style={{
-                padding: '24px 28px',
+                padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 24px 20px 24px',
                 background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
                 color: '#fff',
                 flexShrink: 0,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <div>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
                       fontSize: 10,
@@ -2839,7 +2892,7 @@ export default function OcorrenciasPage() {
                   </div>
                   <h2
                     id="quickDrawerTitle"
-                    style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff' }}
+                    style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 20, margin: 0, color: '#fff', wordBreak: 'break-word' }}
                   >
                     {quickDrawer.statusFilter === 'pendentes'
                       ? 'Ocorrências Aguardando Ciência'
@@ -2855,8 +2908,8 @@ export default function OcorrenciasPage() {
                   type="button"
                   onClick={() => setQuickDrawer(null)}
                   style={{
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.15)',
                     background: 'rgba(255,255,255,0.08)',
@@ -2865,6 +2918,7 @@ export default function OcorrenciasPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
+                    flexShrink: 0,
                   }}
                 >
                   <X size={18} />
@@ -2872,7 +2926,7 @@ export default function OcorrenciasPage() {
               </div>
             </div>
 
-            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+            <div className="ocorrencias-drawer-body" style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {drawerStatusOcorrencias.map(oc => renderOcorrenciaCard(oc, { compact: true }))}
               </div>
@@ -2975,6 +3029,7 @@ export default function OcorrenciasPage() {
           >
             {/* Segmented Switcher de 3 Modos */}
             <div
+              className="ocorrencias-tabs-scroll"
               style={{
                 display: 'flex',
                 background: '#ffffff',
@@ -3096,6 +3151,7 @@ export default function OcorrenciasPage() {
             {/* Botão Global de Nova Ocorrência */}
             <button
               type="button"
+              className="btn-nova-ocorrencia-header"
               onClick={() => openNew()}
               style={{
                 height: '44px',
@@ -3125,6 +3181,7 @@ export default function OcorrenciasPage() {
         {/* Banner Interativo de Ocorrências Aguardando Ciência */}
         {modoHome !== 'configuracoes' && pendentes > 0 && (
           <div
+            className="ocorrencias-banner-pendencias"
             onClick={() => jumpToDirectRecords('pendentes')}
             role="button"
             tabIndex={0}
@@ -3154,30 +3211,33 @@ export default function OcorrenciasPage() {
               e.currentTarget.style.boxShadow = '0 4px 20px -4px rgba(245, 158, 11, 0.12)'
             }}
           >
-            <div
-              style={{
-                background: 'rgba(245, 158, 11, 0.16)',
-                color: '#d97706',
-                width: 44,
-                height: 44,
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <AlertTriangle size={22} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: '#92400e', fontFamily: 'Outfit, sans-serif' }}>
-                {pendentes} ocorrência{pendentes > 1 ? 's' : ''} aguardando ciência dos responsáveis
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  background: 'rgba(245, 158, 11, 0.16)',
+                  color: '#d97706',
+                  width: 44,
+                  height: 44,
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={22} />
               </div>
-              <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2 }}>
-                Clique aqui para visualizar os registros pendentes diretamente e confirmar o alinhamento com as famílias.
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, color: '#92400e', fontFamily: 'Outfit, sans-serif' }}>
+                  {pendentes} ocorrência{pendentes > 1 ? 's' : ''} aguardando ciência dos responsáveis
+                </div>
+                <div style={{ fontSize: 12.5, color: '#b45309', marginTop: 2, lineHeight: 1.4 }}>
+                  Clique aqui para visualizar os registros pendentes diretamente e confirmar o alinhamento com as famílias.
+                </div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+
+            <div className="banner-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <button
                 type="button"
                 onClick={e => {
@@ -3196,6 +3256,7 @@ export default function OcorrenciasPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <Eye size={14} /> Gaveta Rápida
@@ -3212,6 +3273,7 @@ export default function OcorrenciasPage() {
                   alignItems: 'center',
                   gap: 4,
                   boxShadow: '0 4px 10px rgba(217, 119, 6, 0.25)',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 Ver Pendências <ChevronRight size={14} />
@@ -5185,7 +5247,7 @@ export default function OcorrenciasPage() {
   }
 
   return (
-    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+    <div className="ocorrencias-page-container" style={{ padding: '28px 32px 48px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useData } from '@/lib/dataContext'
 import { useApiQuery } from '@/hooks/useApi'
 import { useApp } from '@/lib/context'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useQueryClient } from '@tanstack/react-query'
 import { 
   BookMarked, Plus, Search, Calendar, Edit, Trash2, Filter, 
@@ -55,6 +56,7 @@ const SEG_NAMES: Record<string,string> = {
 }
 
 export default function ConteudosTarefasPage() {
+  const isMobile = useIsMobile()
   const { turmas: rawTurmas, cfgCalendarioLetivo = [], cfgNiveisEnsino = [], logSystemAction } = useData()
   const turmas = rawTurmas || []
 
@@ -417,12 +419,21 @@ export default function ConteudosTarefasPage() {
           </div>
 
           {/* Barra de Filtros */}
-          <div className="conteudos-filter-bar" style={{ background: '#fff', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <div className="conteudos-filter-selects" style={{ display: 'flex', gap: '16px' }}>
-              <div style={{ width: '120px' }}>
+          <div className="conteudos-filter-bar" style={{
+            background: '#fff', padding: '16px', borderRadius: '16px',
+            border: '1px solid #e2e8f0', marginBottom: '24px',
+            display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? '10px' : '16px', alignItems: isMobile ? 'stretch' : 'center'
+          }}>
+            <div className="conteudos-filter-selects" style={{
+              display: isMobile ? 'grid' : 'flex',
+              gridTemplateColumns: isMobile ? '1fr 1fr' : undefined,
+              gap: isMobile ? '8px' : '16px'
+            }}>
+              <div style={{ width: isMobile ? '100%' : '120px' }}>
                 <select 
                   className="form-input" 
-                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px', width: '100%' }}
                   value={filtroAno}
                   onChange={e => setFiltroAno(e.target.value)}
                 >
@@ -440,10 +451,10 @@ export default function ConteudosTarefasPage() {
                 </select>
               </div>
 
-              <div style={{ width: '150px' }}>
+              <div style={{ width: isMobile ? '100%' : '150px' }}>
                 <select 
                   className="form-input" 
-                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px', width: '100%' }}
                   value={filtroSeg}
                   onChange={e => setFiltroSeg(e.target.value)}
                 >
@@ -455,11 +466,11 @@ export default function ConteudosTarefasPage() {
               </div>
             </div>
 
-            <div className="conteudos-filter-search" style={{ flex: 1, position: 'relative' }}>
+            <div className="conteudos-filter-search" style={{ flex: 1, position: 'relative', width: '100%' }}>
               <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="form-input" 
-                style={{ paddingLeft: 36, height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} 
+                style={{ paddingLeft: 36, height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px', width: '100%' }} 
                 placeholder="Buscar turma..."
                 value={busca}
                 onChange={e => setBusca(e.target.value)}
@@ -468,7 +479,7 @@ export default function ConteudosTarefasPage() {
           </div>
 
           {/* Tabela de Turmas */}
-          <div className="conteudos-table-container" style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <div className="conteudos-table-container" style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -540,31 +551,44 @@ export default function ConteudosTarefasPage() {
         /* ================= VISTA INTERNA (GERENCIAR TURMA) ================= */
         <div>
           {/* Header Interno */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            marginBottom: '24px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <button 
-                style={{ border: '1px solid #e2e8f0', background: '#fff', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a' }} 
+                style={{ border: '1px solid #e2e8f0', background: '#fff', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', flexShrink: 0 }} 
                 onClick={() => setTurmaSel(null)}
               >
                 <ArrowLeft size={18} />
               </button>
               <div>
-                <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, color: '#0f172a', margin: 0 }}>{turmaSel}</h1>
-                <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>Visualizando lançamentos da turma.</p>
+                <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 24, color: '#0f172a', margin: 0 }}>{turmaSel}</h1>
+                <p style={{ fontSize: isMobile ? 12 : 13, color: '#64748b', margin: '2px 0 0 0' }}>Visualizando lançamentos da turma.</p>
               </div>
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: isMobile ? '100%' : 'auto' }}>
               <button 
                 onClick={handlePrintConteudo}
-                style={{ height: '44px', padding: '0 16px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                style={{
+                  flex: isMobile ? 1 : 'none',
+                  height: '42px', padding: '0 16px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
               >
                 <Printer size={16} />
                 <span>Imprimir</span>
               </button>
               <button 
                 onClick={() => openNew()}
-                style={{ height: '44px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+                style={{
+                  flex: isMobile ? 1 : 'none',
+                  height: '42px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)'
+                }}
               >
                 <Plus size={16} />
                 <span>Novo Lançamento</span>
@@ -582,16 +606,23 @@ export default function ConteudosTarefasPage() {
           ) : (
             <div>
               {/* Controles de Paginação (Topo) */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: '#64748b' }}>
+              <div style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: isMobile ? 'flex-start' : 'center',
+                gap: 8,
+                marginBottom: '16px'
+              }}>
+                <div style={{ fontSize: '13px', color: '#64748b' }}>
                   Mostrando <strong>{paginatedItems.length}</strong> de <strong>{registrosOrdenados.length}</strong> lançamentos.
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', color: '#64748b' }}>Itens por página:</span>
+                  <span style={{ fontSize: '12.5px', color: '#64748b' }}>Itens por página:</span>
                   <select 
                     value={itensPorPagina} 
                     onChange={e => { setItensPorPagina(Number(e.target.value)); setPagina(1); }}
-                    style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}
+                    style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12px' }}
                   >
                     <option value={5}>5</option>
                     <option value={10}>10</option>
@@ -612,38 +643,82 @@ export default function ConteudosTarefasPage() {
                     <div 
                       key={r.id}
                       onClick={() => { setRegistroSelecionado(r); setViewModalOpen(true); }}
-                      style={{ background: '#fff', padding: '16px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}
+                      style={{
+                        background: '#fff',
+                        padding: isMobile ? '14px 16px' : '16px 24px',
+                        borderRadius: '14px',
+                        border: '1px solid #e2e8f0',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        alignItems: isMobile ? 'stretch' : 'center',
+                        justifyContent: 'space-between',
+                        gap: isMobile ? 10 : 16,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                      }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.background = '#f8fafc'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#fff'; }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '120px' }}>
-                          <Calendar size={16} style={{ color: '#2563eb' }} />
-                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>{r.data.split('T')[0].split('-').reverse().join('/')}</span>
+                      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: isMobile ? 8 : 24, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: isMobile ? 'auto' : '120px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Calendar size={16} style={{ color: '#2563eb' }} />
+                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '14px' }}>{r.data.split('T')[0].split('-').reverse().join('/')}</span>
+                          </div>
+                          {isMobile && (
+                            <div style={{ display: 'flex', gap: '6px' }} onClick={e => e.stopPropagation()}>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); openEdit(r); }}
+                                aria-label="Editar"
+                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}
+                                aria-label="Excluir"
+                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         
-                        <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Clock size={14} />
-                          <span>Registrado por: <strong>{usuario}</strong></span>
+                        <div style={{ fontSize: isMobile ? '12px' : '13px', color: '#64748b', display: 'flex', alignItems: 'flex-start', gap: '6px', lineHeight: 1.4 }}>
+                          <Clock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                          <span>Registrado por: <strong style={{ color: '#1e293b' }}>{usuario}</strong></span>
                         </div>
                       </div>
                       
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <span style={{ fontSize: '13px', color: '#2563eb', fontWeight: 600 }}>Ver Detalhes →</span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); openEdit(r); }}
-                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}
-                            style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: isMobile ? 'space-between' : 'flex-end',
+                        gap: '16px',
+                        borderTop: isMobile ? '1px solid #f1f5f9' : 'none',
+                        paddingTop: isMobile ? 8 : 0
+                      }}>
+                        <span style={{ fontSize: '13px', color: '#2563eb', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          Ver Detalhes →
+                        </span>
+                        {!isMobile && (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); openEdit(r); }}
+                              style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}
+                              style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

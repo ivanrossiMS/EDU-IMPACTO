@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import {
   FileText, Search, AlertTriangle, CheckCircle, XCircle,
   Activity, Eye, X, Code, Camera, ShieldAlert, Cpu, Calendar
@@ -18,6 +19,7 @@ const getTodayBRT = () => {
 }
 
 export default function PortariaLogsPage() {
+  const isMobile = useIsMobile()
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('Todos')
   const [filtroTipo, setFiltroTipo] = useState('Todos')
@@ -115,13 +117,14 @@ export default function PortariaLogsPage() {
               width: 42, height: 42, borderRadius: 12,
               background: `linear-gradient(135deg, ${ACCENT}, #0891b2)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 4px 15px ${ACCENT}30`
+              boxShadow: `0 4px 15px ${ACCENT}30`,
+              flexShrink: 0
             }}>
               <FileText size={20} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Logs & Auditoria</h1>
-              <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Logs & Auditoria</h1>
+              <p style={{ fontSize: isMobile ? 11.5 : 12.5, color: '#64748b', margin: 0 }}>
                 Histórico de tráfego de rede e payloads brutos do webhook ControliD iDFace
               </p>
             </div>
@@ -130,71 +133,95 @@ export default function PortariaLogsPage() {
       </div>
 
       {/* Status summary */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: isMobile ? 8 : 12,
+        marginBottom: 20
+      }}>
         {[
           { label: 'Total Hoje', value: statusCounts.total, color: 'hsl(var(--text-primary))', icon: <FileText size={14} /> },
           { label: 'Entradas', value: statusCounts.entradas, color: '#10b981', icon: <CheckCircle size={14} /> },
           { label: 'Saídas (Catraca)', value: statusCounts.saidas, color: '#a855f7', icon: <Activity size={14} /> },
           { label: 'Falhas / Bloqueados', value: statusCounts.falha, color: '#f43f5e', icon: <XCircle size={14} /> },
           { label: 'Inconsistências', value: statusCounts.inconsistencia, color: '#f59e0b', icon: <AlertTriangle size={14} /> },
-        ].map(s => (
+        ].map((s, idx) => (
           <div key={s.label} style={{
-            padding: '10px 18px', borderRadius: 12,
-            background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-            display: 'flex', alignItems: 'center', gap: 10,
-            boxShadow: '0 4px 15px rgba(0,0,0,0.01)'
+            padding: isMobile ? '10px 14px' : '10px 18px',
+            borderRadius: 12,
+            background: 'hsl(var(--bg-elevated))',
+            border: '1px solid hsl(var(--border-subtle))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.01)',
+            gridColumn: isMobile && idx === 0 ? 'span 2' : undefined
           }}>
-            <div style={{ color: s.color, display: 'flex', alignItems: 'center' }}>{s.icon}</div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</span>
-            <span style={{ fontSize: 16, fontWeight: 900, fontFamily: 'Outfit,sans-serif', color: s.color }}>{s.value}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div style={{ color: s.color, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{s.icon}</div>
+              <span style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {s.label}
+              </span>
+            </div>
+            <span style={{ fontSize: isMobile ? 16 : 16, fontWeight: 900, fontFamily: 'Outfit,sans-serif', color: s.color, flexShrink: 0 }}>
+              {s.value}
+            </span>
           </div>
         ))}
       </div>
 
       {/* Toolbar */}
       <div style={{
-        display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap',
-        padding: '10px 16px', borderRadius: 14,
-        background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: 10,
+        marginBottom: 16,
+        padding: isMobile ? '12px 14px' : '10px 16px',
+        borderRadius: 14,
+        background: 'hsl(var(--bg-elevated))',
+        border: '1px solid hsl(var(--border-subtle))',
       }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: isMobile ? 'auto' : 240, width: '100%' }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
           <input
             className="form-input"
-            placeholder="Buscar por aluno, código do leitor, dispositivo..."
+            placeholder="Buscar por aluno, código, dispositivo..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            style={{ width: '100%', paddingLeft: 36, height: 38, borderRadius: 10, fontSize: 13 }}
+            style={{ width: '100%', paddingLeft: 36, height: 40, borderRadius: 10, fontSize: 13 }}
           />
         </div>
-        <input
-          type="date"
-          className="form-input"
-          value={filtroData}
-          onChange={e => setFiltroData(e.target.value)}
-          style={{ height: 38, borderRadius: 10, fontSize: 12, fontWeight: 700, paddingLeft: 8, paddingRight: 8 }}
-        />
-        <select
-          className="form-input"
-          value={filtroStatus}
-          onChange={e => setFiltroStatus(e.target.value)}
-          style={{ height: 38, borderRadius: 10, fontSize: 12, fontWeight: 700, minWidth: 150 }}
-        >
-          <option value="Todos">Filtro por Status</option>
-          <option value="sucesso">Sucesso</option>
-          <option value="falha">Falha</option>
-          <option value="inconsistencia">Inconsistência</option>
-        </select>
-        <select
-          className="form-input"
-          value={filtroTipo}
-          onChange={e => setFiltroTipo(e.target.value)}
-          style={{ height: 38, borderRadius: 10, fontSize: 12, fontWeight: 700, minWidth: 150 }}
-        >
-          <option value="Todos">Todos os Sentidos</option>
-          <option value="entrada">🟢 Apenas Entradas</option>
-          <option value="saida">🚪 Apenas Saídas</option>
-        </select>
+        <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? '1fr 1fr' : undefined, gap: 8, width: isMobile ? '100%' : 'auto' }}>
+          <input
+            type="date"
+            className="form-input"
+            value={filtroData}
+            onChange={e => setFiltroData(e.target.value)}
+            style={{ height: 40, borderRadius: 10, fontSize: 12, fontWeight: 700, paddingLeft: 8, paddingRight: 8, gridColumn: isMobile ? 'span 2' : undefined }}
+          />
+          <select
+            className="form-input"
+            value={filtroStatus}
+            onChange={e => setFiltroStatus(e.target.value)}
+            style={{ height: 40, borderRadius: 10, fontSize: 12, fontWeight: 700, minWidth: isMobile ? 'auto' : 150, width: '100%' }}
+          >
+            <option value="Todos">Status: Todos</option>
+            <option value="sucesso">Sucesso</option>
+            <option value="falha">Falha</option>
+            <option value="inconsistencia">Inconsistência</option>
+          </select>
+          <select
+            className="form-input"
+            value={filtroTipo}
+            onChange={e => setFiltroTipo(e.target.value)}
+            style={{ height: 40, borderRadius: 10, fontSize: 12, fontWeight: 700, minWidth: isMobile ? 'auto' : 150, width: '100%' }}
+          >
+            <option value="Todos">Sentidos: Todos</option>
+            <option value="entrada">🟢 Entradas</option>
+            <option value="saida">🚪 Saídas</option>
+          </select>
+        </div>
       </div>
 
       {/* Log entries */}
@@ -204,16 +231,18 @@ export default function PortariaLogsPage() {
         borderRadius: 18, overflow: 'hidden',
         boxShadow: '0 4px 20px rgba(0,0,0,0.01)'
       }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
-          gap: 12, padding: '14px 20px',
-          borderBottom: '1px solid hsl(var(--border-subtle))',
-          background: 'hsl(var(--bg-base))'
-        }}>
-          {['HORÁRIO PING', 'ID LEITOR', 'ALUNO IDENTIFICADO', 'TURMA', 'DISPOSITIVO', 'SENTIDO', 'STATUS EVENTO', 'AÇÃO'].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
-          ))}
-        </div>
+        {!isMobile && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
+            gap: 12, padding: '14px 20px',
+            borderBottom: '1px solid hsl(var(--border-subtle))',
+            background: 'hsl(var(--bg-base))'
+          }}>
+            {['HORÁRIO PING', 'ID LEITOR', 'ALUNO IDENTIFICADO', 'TURMA', 'DISPOSITIVO', 'SENTIDO', 'STATUS EVENTO', 'AÇÃO'].map(h => (
+              <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
+            ))}
+          </div>
+        )}
 
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: 64, color: 'hsl(var(--text-muted))' }}>
@@ -226,7 +255,7 @@ export default function PortariaLogsPage() {
             <div style={{ fontSize: 13 }}>Nenhum log de conexão registrado para a data escolhida.</div>
           </div>
         ) : (
-          <div style={{ maxHeight: 520, overflow: 'auto' }}>
+          <div style={{ maxHeight: isMobile ? 650 : 520, overflow: 'auto' }}>
             {filtered.map((e, i) => {
               const badge = statusBadge(e.status)
               const isExpanded = expandedPayload === e.id
@@ -234,56 +263,118 @@ export default function PortariaLogsPage() {
               const isSaida = e.tipo === 'saida' || (e.dispositivo_nome && /sa[ií]da/i.test(e.dispositivo_nome))
               return (
                 <div key={e.id || i} style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                  <div
-                    style={{
-                      display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
-                      gap: 12, padding: '11px 20px', alignItems: 'center',
-                      transition: 'background 0.15s', cursor: 'pointer',
-                      background: e.status !== 'sucesso' ? badge.bg : 'transparent',
-                    }}
-                    onClick={() => handleExpand(e.id)}
-                    onMouseEnter={ev => {
-                      if (e.status === 'sucesso') ev.currentTarget.style.background = 'hsl(var(--bg-base))'
-                    }}
-                    onMouseLeave={ev => {
-                      if (e.status === 'sucesso') ev.currentTarget.style.background = 'transparent'
-                    }}
-                  >
-                    <div style={{ fontSize: 11.5, fontFamily: 'monospace', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                      {formatDateTimeUTC(e.data_hora)}
+                  {isMobile ? (
+                    /* Visualização Mobile em Card */
+                    <div
+                      style={{
+                        padding: '13px 15px',
+                        cursor: 'pointer',
+                        background: e.status !== 'sucesso' ? badge.bg : 'transparent',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 9,
+                        transition: 'background 0.15s',
+                      }}
+                      onClick={() => handleExpand(e.id)}
+                    >
+                      {/* Topo: Horário + Sentido + Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'hsl(var(--text-secondary))', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Calendar size={12} color={ACCENT} />
+                          {formatDateTimeUTC(e.data_hora)}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+                            background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(16,185,129,0.08)',
+                            border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(16,185,129,0.2)'}`,
+                            color: isSaida ? '#a855f7' : '#10b981',
+                          }}>
+                            {isSaida ? '🚪 Saída' : '🟢 Entrada'}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color }}>
+                            {badge.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Meio: Aluno + Turma */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {e.aluno_nome || 'Não identificado'}
+                        </div>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-base))', padding: '2px 8px', borderRadius: 6, flexShrink: 0, border: '1px solid hsl(var(--border-subtle))' }}>
+                          {nomeTurma}
+                        </span>
+                      </div>
+
+                      {/* Rodapé do Card: Leitor + Dispositivo + Botão de detalhes */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'hsl(var(--text-muted))', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 800, color: ACCENT, fontFamily: 'monospace' }}>ID {e.user_id_equipamento || '—'}</span>
+                          <span>·</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, whiteSpace: 'nowrap' }}>{e.dispositivo_nome || 'Catraca'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: isExpanded ? ACCENT : 'hsl(var(--text-muted))', fontWeight: 800, fontSize: 11 }}>
+                          <span>{isExpanded ? 'Ocultar' : 'Detalhes & Foto'}</span>
+                          <Code size={13} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: ACCENT, fontFamily: 'monospace' }}>
-                      {e.user_id_equipamento || '—'}
+                  ) : (
+                    /* Linha em Grade para Desktop */
+                    <div
+                      style={{
+                        display: 'grid', gridTemplateColumns: '150px 75px 1.2fr 1fr 1fr 100px 125px 40px',
+                        gap: 12, padding: '11px 20px', alignItems: 'center',
+                        transition: 'background 0.15s', cursor: 'pointer',
+                        background: e.status !== 'sucesso' ? badge.bg : 'transparent',
+                      }}
+                      onClick={() => handleExpand(e.id)}
+                      onMouseEnter={ev => {
+                        if (e.status === 'sucesso') ev.currentTarget.style.background = 'hsl(var(--bg-base))'
+                      }}
+                      onMouseLeave={ev => {
+                        if (e.status === 'sucesso') ev.currentTarget.style.background = 'transparent'
+                      }}
+                    >
+                      <div style={{ fontSize: 11.5, fontFamily: 'monospace', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                        {formatDateTimeUTC(e.data_hora)}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: ACCENT, fontFamily: 'monospace' }}>
+                        {e.user_id_equipamento || '—'}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {e.aluno_nome || 'Não identificado'}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {nomeTurma}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {e.dispositivo_nome || '—'}
+                      </div>
+                      <div>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                          background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(16,185,129,0.08)',
+                          border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(16,185,129,0.2)'}`,
+                          color: isSaida ? '#a855f7' : '#10b981',
+                        }}>
+                          {isSaida ? '🚪 Saída' : '🟢 Entrada'}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ display: 'block', fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 6, background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color, textAlign: 'center' }}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <Code size={14} style={{ color: isExpanded ? ACCENT : 'hsl(var(--text-muted))', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                      </div>
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {e.aluno_nome || 'Não identificado'}
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {nomeTurma}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {e.dispositivo_nome || '—'}
-                    </div>
-                    <div>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
-                        background: isSaida ? 'rgba(168,85,247,0.1)' : 'rgba(16,185,129,0.08)',
-                        border: `1px solid ${isSaida ? 'rgba(168,85,247,0.25)' : 'rgba(16,185,129,0.2)'}`,
-                        color: isSaida ? '#a855f7' : '#10b981',
-                      }}>
-                        {isSaida ? '🚪 Saída' : '🟢 Entrada'}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 6, background: badge.bg, border: `1px solid ${badge.border}`, color: badge.color, textAlign: 'center' }}>
-                        {badge.label}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <Code size={14} style={{ color: isExpanded ? ACCENT : 'hsl(var(--text-muted))', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                    </div>
-                  </div>
+                  )}
 
                   {/* Expanded Payload com Fotos Comparativas e JSON */}
                   {isExpanded && (

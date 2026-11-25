@@ -2235,7 +2235,7 @@ export function ComunicadoViewModal({
             }
             .cvm-header {
               padding: 18px 20px !important;
-              padding-top: max(54px, calc(env(safe-area-inset-top, 0px) + 18px)) !important;
+              padding-top: max(58px, calc(env(safe-area-inset-top, 0px) + 20px)) !important;
             }
           }
           .cvm-header {

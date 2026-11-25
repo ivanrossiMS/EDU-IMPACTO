@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import {
   FileSpreadsheet, Calendar, Users, FileText, ArrowLeft, RefreshCw,
   Search, Filter, Download, Activity, Scan, ChevronDown, CheckCircle,
@@ -22,6 +23,7 @@ const getTodayBRT = () => {
 import { Suspense } from 'react'
 
 function PortariaRelatoriosPageContent() {
+  const isMobile = useIsMobile()
   const [dataInicio, setDataInicio] = useState(getTodayBRT())
   const [dataFim, setDataFim] = useState(getTodayBRT())
   const [turmaId, setTurmaId] = useState('')
@@ -287,68 +289,79 @@ function PortariaRelatoriosPageContent() {
       `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }} className="no-print">
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'stretch' : 'center',
+        justifyContent: 'space-between',
+        marginBottom: 24,
+        gap: 16
+      }} className="no-print">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <div style={{
               width: 38, height: 38, borderRadius: 12,
               background: 'linear-gradient(135deg, rgba(6,182,212,0.15) 0%, rgba(6,182,212,0.05) 100%)',
               border: `1px solid ${ACCENT}30`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
             }}>
               <FileSpreadsheet size={18} color={ACCENT} />
             </div>
-            <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em' }}>
+            <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: isMobile ? 20 : 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em' }}>
               Relatórios de Acesso Facial
             </h1>
           </div>
-          <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+          <p style={{ fontSize: isMobile ? 12 : 13, color: '#64748b', fontWeight: 500 }}>
             Filtre, analise e audite o tráfego de alunos nas catracas inteligentes iDFace.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8, width: isMobile ? '100%' : 'auto', flexWrap: 'wrap' }}>
           <button
             onClick={() => { refetchEventos() }}
             disabled={loadingEventos}
             style={{
+              flex: isMobile ? 1 : 'none',
               height: 38, padding: '0 14px', borderRadius: 10,
               background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-              color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 700,
-              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-              transition: 'all 0.2s'
+              color: 'hsl(var(--text-secondary))', fontSize: 12.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+              transition: 'all 0.2s', minWidth: isMobile ? 90 : 'auto'
             }}
           >
             <RefreshCw size={14} style={{ animation: loadingEventos ? 'spin 1s linear infinite' : 'none' }} />
-            Atualizar
+            <span>Atualizar</span>
           </button>
           
           <button
             onClick={exportToCSV}
             style={{
+              flex: isMobile ? 1 : 'none',
               height: 38, padding: '0 14px', borderRadius: 10,
               background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
-              color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 700,
-              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-              transition: 'all 0.2s'
+              color: 'hsl(var(--text-secondary))', fontSize: 12.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+              transition: 'all 0.2s', minWidth: isMobile ? 90 : 'auto'
             }}
           >
             <Download size={14} />
-            Exportar CSV
+            <span>Exportar CSV</span>
           </button>
 
           <button
             onClick={handlePrint}
             style={{
+              flex: isMobile ? '1 1 100%' : 'none',
               height: 38, padding: '0 14px', borderRadius: 10,
               background: `linear-gradient(135deg, ${ACCENT} 0%, #0891b2 100%)`, border: 'none',
-              color: '#fff', fontSize: 13, fontWeight: 700,
-              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+              color: '#fff', fontSize: 12.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
               boxShadow: `0 4px 14px ${ACCENT}30`, transition: 'all 0.2s'
             }}
           >
             <Printer size={14} />
-            Imprimir Relatório
+            <span>Imprimir Relatório</span>
           </button>
         </div>
       </div>
@@ -357,9 +370,13 @@ function PortariaRelatoriosPageContent() {
       <div style={{
         background: 'hsl(var(--bg-elevated))',
         border: '1px solid hsl(var(--border-subtle))',
-        borderRadius: 18, padding: '20px 24px',
-        marginBottom: 28, display: 'flex', flexWrap: 'wrap', gap: 16,
-        alignItems: 'flex-end',
+        borderRadius: 18, padding: isMobile ? '16px' : '20px 24px',
+        marginBottom: 24,
+        display: isMobile ? 'grid' : 'flex',
+        gridTemplateColumns: isMobile ? '1fr' : undefined,
+        flexWrap: 'wrap',
+        gap: 14,
+        alignItems: isMobile ? 'stretch' : 'flex-end',
         boxShadow: '0 4px 20px rgba(0,0,0,0.01)'
       }} className="no-print">
         
@@ -473,27 +490,46 @@ function PortariaRelatoriosPageContent() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 1 }} className="no-print">
+      <div style={{
+        display: isMobile ? 'grid' : 'flex',
+        gridTemplateColumns: isMobile ? '1fr 1fr 1fr' : undefined,
+        gap: isMobile ? 6 : 4,
+        marginBottom: 24,
+        background: isMobile ? 'hsl(var(--bg-elevated))' : 'transparent',
+        padding: isMobile ? 4 : 0,
+        borderRadius: isMobile ? 12 : 0,
+        border: isMobile ? '1px solid hsl(var(--border-subtle))' : undefined,
+        borderBottom: isMobile ? undefined : '1px solid hsl(var(--border-subtle))',
+        paddingBottom: isMobile ? 4 : 1,
+      }} className="no-print">
         {[
-          { id: 'geral', label: 'Visão Geral & Métricas', icon: <BarChart3 size={15} /> },
-          { id: 'presenca', label: 'Presença & Faltosos', icon: <Users size={15} /> },
-          { id: 'logs', label: 'Logs de Eventos', icon: <FileText size={15} /> }
+          { id: 'geral', label: isMobile ? 'Métricas' : 'Visão Geral & Métricas', icon: <BarChart3 size={15} /> },
+          { id: 'presenca', label: isMobile ? 'Presença' : 'Presença & Faltosos', icon: <Users size={15} /> },
+          { id: 'logs', label: isMobile ? 'Logs' : 'Logs de Eventos', icon: <FileText size={15} /> }
         ].map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id as any)}
             style={{
-              padding: '10px 18px', fontSize: 13.5, fontWeight: 800,
-              color: activeTab === t.id ? ACCENT : 'hsl(var(--text-muted))',
-              background: 'transparent', border: 'none',
-              borderBottom: activeTab === t.id ? `3px solid ${ACCENT}` : '3px solid transparent',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+              padding: isMobile ? '10px 6px' : '10px 18px',
+              fontSize: isMobile ? 12 : 13.5,
+              fontWeight: 800,
+              color: activeTab === t.id ? (isMobile ? '#fff' : ACCENT) : 'hsl(var(--text-muted))',
+              background: isMobile ? (activeTab === t.id ? ACCENT : 'transparent') : 'transparent',
+              borderRadius: isMobile ? 8 : 0,
+              border: 'none',
+              borderBottom: isMobile ? undefined : (activeTab === t.id ? `3px solid ${ACCENT}` : '3px solid transparent'),
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
               transition: 'all 0.15s',
-              marginBottom: -2
+              marginBottom: isMobile ? 0 : -2
             }}
           >
             {t.icon}
-            {t.label}
+            <span>{t.label}</span>
           </button>
         ))}
       </div>

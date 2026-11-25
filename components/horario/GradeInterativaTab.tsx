@@ -955,7 +955,7 @@ export function GradeInterativaTab({
           {/* Relatório 2: Carga Horária das Turmas */}
           <div className="card" style={{ padding: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 12px' }}>Relatório de Carga Horária — Turmas & Disciplinas</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 540, overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridAutoRows: 'max-content', gap: 12, maxHeight: 540, overflowY: 'auto', paddingRight: 4 }}>
               {relatorio.porTurma.map(t => (
                 <div
                   key={t.turmaId}
