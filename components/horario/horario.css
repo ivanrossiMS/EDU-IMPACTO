@@ -1,0 +1,78 @@
+/* Modern Web Guidance: Native Modal Scroll Containment */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Modern Web Guidance: Tablist single-row horizontal scroll + non-color-only selected indicator */
+.horario-tablist {
+  display: flex;
+  overflow-x: auto;
+  gap: 6px;
+  border-bottom: 1px solid hsl(var(--border-subtle));
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.horario-tablist::-webkit-scrollbar {
+  display: none;
+}
+
+.horario-tab-btn {
+  flex: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: hsl(var(--text-muted));
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 10px 10px 0 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.horario-tab-btn:hover {
+  color: hsl(var(--text-primary));
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.horario-tab-btn[aria-selected="true"] {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.horario-tab-btn[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid #3b82f6;
+}
+
+/* Modern Web Guidance: Containment for complex timetable grids */
+.timetable-column {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 460px auto 340px;
+}
+
+@supports not (content-visibility: auto) {
+  .timetable-column {
+    contain: layout style paint;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

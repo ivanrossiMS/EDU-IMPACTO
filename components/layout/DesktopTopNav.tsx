@@ -12,7 +12,7 @@ import {
   CalendarDays, Banknote, AlertTriangle, DoorOpen, Scan,
   Monitor, ListChecks, ShieldCheck, LogOut, UserCircle, Laptop,
   ShieldAlert, History, Landmark, Coins, FileSpreadsheet, Building, Building2,
-  Tablet, FileStack, FileCheck2, Calculator, Library, Check, X, Clock3, FileText, Wallet
+  Tablet, FileStack, FileCheck2, Calculator, Library, Check, X, Clock3, FileText, Wallet, CalendarClock
 } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
@@ -113,6 +113,9 @@ export function DesktopTopNav() {
         return true
       }
       if ((href === '/configuracoes/financeiro/centro-custo' || href === '/configuracoes/financeiro/caixas' || href === '/configuracoes/financeiro/caixa') && (userPerms.includes('/configuracoes/financeiro/centro-custo') || userPerms.includes('/configuracoes/financeiro/caixas') || userPerms.includes('/configuracoes/financeiro/caixa') || userPerms.includes('configuracoes') || userPerms.includes('financeiro') || userPerms.includes('/configuracoes/financeiro/plano-contas'))) {
+        return true
+      }
+      if (href === '/administrativo/gerador-horario' && (userPerms.includes('administrativo') || userPerms.includes('/configuracoes/pedagogico/horario') || userPerms.includes('/academico/turmas'))) {
         return true
       }
       return userPerms.some(perm => href === perm || href.startsWith(perm + '/'))
@@ -243,6 +246,7 @@ export function DesktopTopNav() {
       hasSubmenu: true,
       columns: 1,
       items: [
+        { id: 'adm-gerador-horario', label: 'Gerador de Horário', href: '/administrativo/gerador-horario', icon: <CalendarClock size={15} />, badge: 'NOVO', badgeColor: 'green' },
         { id: 'adm-irpf', label: 'Declaração IRPF', href: '/administrativo/declaracao-irpf', icon: <FileCheck2 size={15} /> },
         { id: 'adm-docs', label: 'Docs Escolares', href: '/secretaria/documentos', icon: <FileStack size={15} /> },
         { id: 'adm-livros', label: 'Pedido Livros/Apost.', href: '/administrativo/pedidos-livros', icon: <Library size={15} /> },

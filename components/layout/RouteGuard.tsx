@@ -462,7 +462,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
      userPerms.includes('/financeiro/dre') ||
      userPerms.includes('/financeiro/renegociacao'))
 
-  if (matchedRoute && !userPerms.includes(matchedRoute) && !hasMatriculaInheritedAccess && !hasFinanceiroInheritedAccess && !perfisFailedOrEmpty) {
+  const hasAdministrativoGeradorAccess =
+    (matchedRoute === '/administrativo/gerador-horario' || pathname.startsWith('/administrativo/gerador-horario')) &&
+    (userPerms.includes('/administrativo/gerador-horario') ||
+     userPerms.includes('administrativo') ||
+     userPerms.includes('/configuracoes/pedagogico/horario') ||
+     userPerms.includes('/academico/turmas') ||
+     ['diretor geral', 'administrador', 'administrador master', 'coordenador'].includes(normalize(activePerfilName)))
+
+  if (matchedRoute && !userPerms.includes(matchedRoute) && !hasMatriculaInheritedAccess && !hasFinanceiroInheritedAccess && !hasAdministrativoGeradorAccess && !perfisFailedOrEmpty) {
     if (!showDenied) {
       return (
         <div style={{

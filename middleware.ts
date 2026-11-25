@@ -72,6 +72,8 @@ const PUBLIC_PATHS = [
   '/api/gestao-pessoas/materiais-divulgacao', // Central de materiais de divulgação (acesso público para incremento de visitas)
   '/gestao-pessoas/formularios/', // Links diretos para responder formulários (acesso público quando liberado)
   '/api/gestao-pessoas/formularios/', // API para carregar e submeter respostas de formulários
+  '/horario-publico',   // Portal público ao vivo para horários de professores e alunos/turmas
+  '/api/administrativo/gerador-horario/publico', // Snapshot público sanitizado do horário escolar
 ]
 
 function isPublicPath(pathname: string): boolean {
